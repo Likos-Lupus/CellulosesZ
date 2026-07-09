@@ -31,9 +31,12 @@ public final class ClassGraphModuleScanner implements ModuleScanner {
     }
 
     private ModuleDescriptor descriptor(ClassInfo info) {
-        var type = info.loadClass();
+        var type = loadModuleClass(info);
         var annotation = type.getAnnotation(CellulosesModule.class);
 
+        if (annotation == null) {
+            throw new ModuleLoadException("Class " + type.getName() + " was discovered as a CellulosesZ module, but its annotation could not be loaded by the CellulosesZ class loader");
+        }
         if (!CellulosesZModule.class.isAssignableFrom(type)) {
             throw new ModuleLoadException("Class " + type.getName() + " is annotated with @CellulosesModule but does not implement CellulosesZModule");
         }
@@ -49,6 +52,18 @@ public final class ClassGraphModuleScanner implements ModuleScanner {
                 annotation.enabledByDefault(),
                 type.asSubclass(CellulosesZModule.class)
         );
+    }
+
+    private Class<?> loadModuleClass(ClassInfo info) {
+        try {
+            return Class.forName(
+                    info.getName(),
+                    false,
+                    CellulosesZModule.class.getClassLoader()
+            );
+        } catch (ClassNotFoundException exception) {
+            throw new ModuleLoadException("Failed to load CellulosesZ module class " + info.getName(), exception);
+        }
     }
 
 }

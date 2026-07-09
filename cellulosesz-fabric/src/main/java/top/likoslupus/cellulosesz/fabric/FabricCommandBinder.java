@@ -72,7 +72,10 @@ public final class FabricCommandBinder {
             String label,
             String[] args
     ) {
-        return command.execute(new FabricCommandInvocation(source, bootstrap.permissionService(), label, args));
+        return bootstrap.commandRegistry().execute(
+                command,
+                new FabricCommandInvocation(source, bootstrap.permissionService(), label, args)
+        );
     }
 
     private String[] split(String input) {

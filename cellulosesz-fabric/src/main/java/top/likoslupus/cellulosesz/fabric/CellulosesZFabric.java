@@ -6,11 +6,14 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.server.permissions.Permission;
-import net.minecraft.server.permissions.PermissionLevel;
 import org.slf4j.LoggerFactory;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
+import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
+import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
+import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
+import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
+
+import java.util.ArrayList;
 
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
@@ -36,7 +39,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 new Slf4jCellulosesZLogger(LoggerFactory.getLogger("CellulosesZ"))
         );
         bootstrap.initialize();
-        bootstrap.permissionBackend(this::hasPermissionFallback);
+        bootstrap.permissionBackend(permissionBackend());
 
         CommandRegistrationCallback.EVENT.register((
                 dispatcher,
@@ -68,17 +71,21 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         ) -> bootstrap.onPlayerDisconnect(handler.getPlayer()));
     }
 
-    private boolean hasPermissionFallback(Object source, String permission) {
-        if (permission.isBlank()) return true;
-
-        if (source instanceof CommandSourceStack commandSource) {
-            var config = bootstrap.coreConfig();
-            int opLevel = config.permissions.opFallbackLevel;
-            return commandSource.permissions().hasPermission(
-                    new Permission.HasCommandLevel(PermissionLevel.byId(opLevel))
-            );
+    private PermissionBackend permissionBackend() {
+        var permissionConfig = bootstrap.configRegistry()
+                .optional("module.permission", PermissionConfig.class)
+                .orElseGet(PermissionConfig::new);
+        var backends = new ArrayList<PermissionBackend>();
+        if (permissionConfig.provider.preferLuckPerms && FabricLoader.getInstance().isModLoaded("luckperms")) {
+            backends.add(new ReflectionLuckPermsPermissionBackend());
         }
-        return false;
+        if (permissionConfig.provider.opFallback) {
+            backends.add(new FabricOpPermissionBackend(permissionConfig.provider.opLevel));
+        }
+        if (backends.isEmpty()) {
+            backends.add(new FabricOpPermissionBackend(bootstrap.coreConfig().permissions.opFallbackLevel));
+        }
+        return new CompositePermissionBackend(backends);
     }
 
 }

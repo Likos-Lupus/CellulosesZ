@@ -31,6 +31,14 @@ public final class JacksonCodecs {
         YAML.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
     }
 
+    public static <T> T readJson(Path path, Class<T> type) throws IOException {
+        return JSON.readValue(path.toFile(), type);
+    }
+
+    public static void writeJson(Path path, Object value) throws IOException {
+        JSON.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
+    }
+
     public static String toDebugString(Object value) {
         try {
             return YAML.writeValueAsString(value);

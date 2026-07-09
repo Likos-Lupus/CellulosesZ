@@ -111,7 +111,8 @@ public final class DefaultMessageService implements MessageService {
         root.put("schema", 1);
         root.put("common", Map.of(
                 "no-permission", "You do not have permission to use this command.",
-                "player-only", "This command can only be used by a player."
+                "player-only", "This command can only be used by a player.",
+                "console-only", "This command can only be used from the console."
         ));
         root.put("cellulosesz", Map.of(
                 "version", "CellulosesZ {version}",
@@ -127,7 +128,8 @@ public final class DefaultMessageService implements MessageService {
         root.put("schema", 1);
         root.put("common", Map.of(
                 "no-permission", "你没有权限执行此命令。",
-                "player-only", "此命令只能由玩家执行。"
+                "player-only", "此命令只能由玩家执行。",
+                "console-only", "此命令只能由控制台执行。"
         ));
         root.put("cellulosesz", Map.of(
                 "version", "CellulosesZ {version}",

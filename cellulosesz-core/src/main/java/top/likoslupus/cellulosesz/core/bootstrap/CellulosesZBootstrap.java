@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.core.bootstrap;
 
+import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
@@ -10,6 +11,7 @@ import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
+import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
 import top.likoslupus.cellulosesz.core.config.CoreConfig;
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
@@ -22,6 +24,7 @@ import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.runtime.DefaultRuntimeService;
 import top.likoslupus.cellulosesz.core.scheduler.DefaultScheduler;
 import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
+import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -37,16 +40,26 @@ public final class CellulosesZBootstrap {
     private final DefaultScheduler scheduler = new DefaultScheduler();
     private final DefaultCommandRegistry commands = new DefaultCommandRegistry();
     private final DefaultPermissionService permissions = new DefaultPermissionService();
+    private final JacksonStorageService storage;
     private final DefaultMessageService messages;
     private DefaultModuleManager modules;
     private CoreConfig coreConfig;
     private boolean initialized;
 
-    public CellulosesZBootstrap(Path configDirectory, String version, CellulosesZLogger logger) {
+    public CellulosesZBootstrap(
+            Path configDirectory,
+            String version,
+            CellulosesZLogger logger
+    ) {
         this.configDirectory = configDirectory;
         this.version = version;
         this.logger = logger;
         this.configs = new JacksonConfigRegistry(configDirectory, logger);
+        this.storage = new JacksonStorageService(
+                configDirectory.resolve("data"),
+                command -> scheduler.async(command),
+                logger
+        );
         this.messages = new DefaultMessageService(configDirectory.resolve("messages"), logger);
     }
 
@@ -67,7 +80,11 @@ public final class CellulosesZBootstrap {
         services.register(EventRegistry.class, events);
         services.register(Scheduler.class, scheduler);
         services.register(CommandRegistry.class, commands);
+        services.register(CommandMiddlewareRegistry.class, commands);
+        services.register(DefaultCommandRegistry.class, commands);
         services.register(PermissionService.class, permissions);
+        services.register(DefaultPermissionService.class, permissions);
+        services.register(StorageService.class, storage);
         services.register(MessageService.class, messages);
         services.register(RuntimeService.class, new DefaultRuntimeService(this));
 
@@ -136,6 +153,10 @@ public final class CellulosesZBootstrap {
 
     public CommandRegistry commandRegistry() {
         return commands;
+    }
+
+    public ConfigRegistry configRegistry() {
+        return configs;
     }
 
     public PermissionService permissionService() {

@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
+import top.likoslupus.cellulosesz.core.command.ModuleScopedCommandRegistry;
 
 import java.nio.file.Path;
 import java.util.function.Predicate;
@@ -39,7 +40,7 @@ public final class DefaultModuleContext implements ModuleContext {
         this.services = services;
         this.configs = configs;
         this.events = events;
-        this.commands = commands;
+        this.commands = new ModuleScopedCommandRegistry(moduleId, commands);
         this.scheduler = scheduler;
         this.logger = logger;
         this.enabledPredicate = enabledPredicate;
