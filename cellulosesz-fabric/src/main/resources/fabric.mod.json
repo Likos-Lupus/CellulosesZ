@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "cellulosesz",
+  "version": "${version}",
+  "name": "CellulosesZ",
+  "description": "A Fabric-native modular server essentials mod.",
+  "authors": [
+    "likoslupus"
+  ],
+  "contact": {},
+  "license": "GPL-3.0",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
+    ]
+  },
+  "mixins": [
+    "cellulosesz.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "${minecraft_version}",
+    "fabric-api": ">=${fabric_version}"
+  },
+  "suggests": {
+    "luckperms": "*"
+  }
+}

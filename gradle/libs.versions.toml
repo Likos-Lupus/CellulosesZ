@@ -1,0 +1,28 @@
+[versions]
+minecraft = "26.1.2"
+java = "25"
+
+fabric-loader = "0.19.3"
+fabric-api = "0.154.0+26.1.2"
+loom = "1.17.13"
+
+jackson = "3.2.0"
+jspecify = "1.0.0"
+lombok = "1.18.46"
+classgraph = "4.8.180"
+
+[libraries]
+minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
+
+fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
+fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
+
+jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
+jackson-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
+
+jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+classgraph = { module = "io.github.classgraph:classgraph", version.ref = "classgraph" }
+
+[plugins]
+fabric-loom = { id = "net.fabricmc.fabric-loom", version.ref = "loom" }
