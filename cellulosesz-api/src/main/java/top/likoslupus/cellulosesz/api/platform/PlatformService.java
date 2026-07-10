@@ -35,4 +35,11 @@ public interface PlatformService {
 
     Optional<CellLocation> targetLocation(CellPlayer player, int maxDistance);
 
+    default void sendMessage(CellPlayer player, String message) {
+    }
+
+    default boolean dispatchConsoleCommand(String command) {
+        return false;
+    }
+
 }

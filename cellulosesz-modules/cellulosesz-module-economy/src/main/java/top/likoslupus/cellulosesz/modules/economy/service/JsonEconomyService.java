@@ -1,0 +1,312 @@
+package top.likoslupus.cellulosesz.modules.economy.service;
+
+import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.economy.BalanceEntry;
+import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.economy.TransactionCause;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
+import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import top.likoslupus.cellulosesz.modules.economy.data.EconomyDocument;
+import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogDocument;
+import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogEntry;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
+import java.util.UUID;
+
+public final class JsonEconomyService implements EconomyService {
+
+    private static final int MAX_LOG_ENTRIES = 500;
+
+    private final StorageService storage;
+    private final EconomyConfig config;
+    private final Path accountsPath;
+    private final Path logPath;
+    private final CellulosesZLogger logger;
+    private final EconomyDocument document;
+    private final TransactionLogDocument log;
+
+    public JsonEconomyService(
+            StorageService storage,
+            EconomyConfig config,
+            Path directory,
+            CellulosesZLogger logger
+    ) {
+        this.storage = storage;
+        this.config = config;
+        this.accountsPath = directory.resolve("accounts.json");
+        this.logPath = directory.resolve("transactions.json");
+        this.logger = logger;
+        this.document = storage.load(accountsPath, EconomyDocument.class, EconomyDocument::new).join();
+        this.log = storage.load(logPath, TransactionLogDocument.class, TransactionLogDocument::new).join();
+    }
+
+    @Override
+    public synchronized BigDecimal balance(UUID uuid) {
+        return read(uuid);
+    }
+
+    @Override
+    public synchronized TransactionResult deposit(
+            UUID uuid,
+            BigDecimal amount,
+            TransactionCause cause
+    ) {
+        var normalized = normalizeAmount(amount);
+        if (normalized.signum() < 0) {
+            return record(
+                    null,
+                    uuid,
+                    normalized,
+                    cause,
+                    false,
+                    "金额不能为负数。",
+                    read(uuid)
+            );
+        }
+
+        var current = read(uuid);
+        var next = current.add(normalized);
+        var maximum = money(config.maximumBalance);
+        if (next.compareTo(maximum) > 0) {
+            return record(
+                    null,
+                    uuid,
+                    normalized,
+                    cause,
+                    false,
+                    "余额不能超过上限。",
+                    current
+            );
+        }
+
+        write(uuid, next);
+        save();
+        return record(
+                null,
+                uuid,
+                normalized,
+                cause,
+                true,
+                "存入成功。",
+                next
+        );
+    }
+
+    @Override
+    public synchronized TransactionResult withdraw(
+            UUID uuid,
+            BigDecimal amount,
+            TransactionCause cause
+    ) {
+        var normalized = normalizeAmount(amount);
+        if (normalized.signum() < 0) {
+            return record(
+                    uuid,
+                    null,
+                    normalized,
+                    cause,
+                    false,
+                    "金额不能为负数。",
+                    read(uuid)
+            );
+        }
+
+        var current = read(uuid);
+        var next = current.subtract(normalized);
+        var minimum = money(config.minimumBalance);
+        if (next.compareTo(minimum) < 0) {
+            return record(
+                    uuid,
+                    null,
+                    normalized,
+                    cause,
+                    false,
+                    "余额不足。",
+                    current
+            );
+        }
+
+        write(uuid, next);
+        save();
+        return record(
+                uuid,
+                null,
+                normalized,
+                cause,
+                true,
+                "扣款成功。",
+                next
+        );
+    }
+
+    @Override
+    public synchronized TransactionResult setBalance(
+            UUID uuid,
+            BigDecimal amount,
+            TransactionCause cause
+    ) {
+        var normalized = normalizeAmount(amount);
+        var minimum = money(config.minimumBalance);
+        var maximum = money(config.maximumBalance);
+        if (normalized.compareTo(minimum) < 0 || normalized.compareTo(maximum) > 0) {
+            return record(
+                    null,
+                    uuid,
+                    normalized,
+                    cause,
+                    false,
+                    "余额超出允许范围。",
+                    read(uuid)
+            );
+        }
+
+        write(uuid, normalized);
+        save();
+        return record(
+                null,
+                uuid,
+                normalized,
+                cause,
+                true,
+                "余额已设置。",
+                normalized
+        );
+    }
+
+    @Override
+    public synchronized TransactionResult transfer(
+            UUID from,
+            UUID to,
+            BigDecimal amount,
+            TransactionCause cause
+    ) {
+        if (from.equals(to)) {
+            return TransactionResult.failure("不能向自己付款。", normalizeAmount(amount), read(from));
+        }
+
+        var normalized = normalizeAmount(amount);
+        if (normalized.signum() <= 0) {
+            return TransactionResult.failure("金额必须大于 0。", normalized, read(from));
+        }
+
+        var fromBalance = read(from);
+        var nextFrom = fromBalance.subtract(normalized);
+        if (nextFrom.compareTo(money(config.minimumBalance)) < 0) {
+            return record(
+                    from,
+                    to,
+                    normalized,
+                    cause,
+                    false,
+                    "余额不足。",
+                    fromBalance
+            );
+        }
+
+        var toBalance = read(to);
+        var nextTo = toBalance.add(normalized);
+        if (nextTo.compareTo(money(config.maximumBalance)) > 0) {
+            return record(
+                    from,
+                    to,
+                    normalized,
+                    cause,
+                    false,
+                    "收款方余额超过上限。",
+                    fromBalance
+            );
+        }
+
+        write(from, nextFrom);
+        write(to, nextTo);
+        save();
+        return record(
+                from,
+                to,
+                normalized,
+                cause,
+                true,
+                "转账成功。",
+                nextFrom
+        );
+    }
+
+    @Override
+    public synchronized List<BalanceEntry> topBalances(int limit) {
+        return document.balances.entrySet().stream()
+                .map(entry -> new BalanceEntry(
+                        UUID.fromString(entry.getKey()), money(entry.getValue())
+                ))
+                .sorted(Comparator.comparing(BalanceEntry::balance).reversed())
+                .limit(Math.max(1, limit))
+                .toList();
+    }
+
+    private TransactionResult record(
+            @Nullable UUID from,
+            @Nullable UUID to,
+            BigDecimal amount,
+            TransactionCause cause,
+            boolean success,
+            String message,
+            BigDecimal resultingBalance
+    ) {
+        var entry = new TransactionLogEntry();
+        entry.from = from == null ? null : from.toString();
+        entry.to = to == null ? null : to.toString();
+        entry.amount = normalizeAmount(amount).toPlainString();
+        entry.causeType = cause.type();
+        entry.actor = cause.actor();
+        entry.note = cause.note();
+        entry.success = success;
+        entry.message = message;
+        log.entries.add(entry);
+
+        while (log.entries.size() > MAX_LOG_ENTRIES) log.entries.removeFirst();
+        storage.save(logPath, log);
+        return new TransactionResult(success, message, normalizeAmount(amount), resultingBalance);
+    }
+
+    private void write(UUID uuid, BigDecimal amount) {
+        document.balances.put(uuid.toString(), normalizeAmount(amount).toPlainString());
+    }
+
+    private void save() {
+        storage.save(accountsPath, document)
+                .exceptionally(exception -> {
+                    logger.error("Failed to save economy accounts", exception);
+                    return null;
+                });
+    }
+
+    private BigDecimal read(UUID uuid) {
+        var value = document.balances.computeIfAbsent(
+                uuid.toString(),
+                _ -> money(config.startingBalance).toPlainString()
+        );
+        return money(value);
+    }
+
+    private BigDecimal money(String value) {
+        try {
+            return normalizeAmount(new BigDecimal(value));
+        } catch (RuntimeException exception) {
+            return BigDecimal.ZERO.setScale(config.currency.scale, RoundingMode.HALF_UP);
+        }
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount) {
+        return amount.setScale(config.currency.scale, RoundingMode.HALF_UP);
+    }
+
+    public String format(BigDecimal amount) {
+        return config.currency.symbol + normalizeAmount(amount).toPlainString();
+    }
+
+}

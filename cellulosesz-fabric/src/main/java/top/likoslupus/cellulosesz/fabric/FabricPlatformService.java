@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.fabric;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -174,6 +175,21 @@ public final class FabricPlatformService implements PlatformService {
                 nativePlayer.getYRot(),
                 nativePlayer.getXRot()
         ));
+    }
+
+    @Override
+    public void sendMessage(CellPlayer player, String message) {
+        requireNative(player).sendSystemMessage(Component.literal(message));
+    }
+
+    @Override
+    public boolean dispatchConsoleCommand(String command) {
+        if (server == null || command.isBlank()) {
+            return false;
+        }
+        var normalized = command.startsWith("/") ? command : "/" + command;
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), normalized);
+        return true;
     }
 
     private boolean safe(ServerLevel level, BlockPos feet) {
