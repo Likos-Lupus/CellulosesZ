@@ -57,10 +57,14 @@ public final class CellulosesZBootstrap {
         this.configs = new JacksonConfigRegistry(configDirectory, logger);
         this.storage = new JacksonStorageService(
                 configDirectory.resolve("data"),
-                command -> scheduler.async(command),
+                scheduler::async,
                 logger
         );
         this.messages = new DefaultMessageService(configDirectory.resolve("messages"), logger);
+    }
+
+    public <T> void registerService(Class<T> type, T instance) {
+        services.register(type, instance);
     }
 
     public synchronized void initialize() {

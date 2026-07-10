@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.LoggerFactory;
+import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
     private CellulosesZBootstrap bootstrap;
+    private FabricPlatformService platform;
 
     @Override
     public void onInitializeServer() {
@@ -38,6 +40,10 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 version,
                 new Slf4jCellulosesZLogger(LoggerFactory.getLogger("CellulosesZ"))
         );
+        platform = new FabricPlatformService();
+
+        bootstrap.registerService(PlatformService.class, platform);
+        bootstrap.registerService(FabricPlatformService.class, platform);
         bootstrap.initialize();
         bootstrap.permissionBackend(permissionBackend());
 
@@ -47,9 +53,10 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 environment
         ) -> new FabricCommandBinder(bootstrap).bind(dispatcher, registryAccess, environment));
 
-        ServerLifecycleEvents.SERVER_STARTING.register(server ->
-                bootstrap.onServerStarting(server)
-        );
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            platform.server(server);
+            bootstrap.onServerStarting(server);
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 bootstrap.onServerStarted(server)
         );
@@ -76,6 +83,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 .optional("module.permission", PermissionConfig.class)
                 .orElseGet(PermissionConfig::new);
         var backends = new ArrayList<PermissionBackend>();
+
         if (permissionConfig.provider.preferLuckPerms && FabricLoader.getInstance().isModLoaded("luckperms")) {
             backends.add(new ReflectionLuckPermsPermissionBackend());
         }
@@ -85,6 +93,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         if (backends.isEmpty()) {
             backends.add(new FabricOpPermissionBackend(bootstrap.coreConfig().permissions.opFallbackLevel));
         }
+
         return new CompositePermissionBackend(backends);
     }
 
