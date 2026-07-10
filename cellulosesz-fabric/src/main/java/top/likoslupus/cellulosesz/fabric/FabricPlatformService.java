@@ -183,13 +183,98 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     @Override
+    public void kick(CellPlayer player, String reason) {
+        requireNative(player).connection.disconnect(Component.literal(
+                reason.isBlank()
+                        ? "Kicked by an operator."
+                        : reason
+        ));
+    }
+
+    @Override
+    public boolean setFlying(CellPlayer player, boolean enabled) {
+        var nativePlayer = requireNative(player);
+        var abilities = nativePlayer.getAbilities();
+        abilities.mayfly = enabled || nativePlayer.isCreative() || nativePlayer.isSpectator();
+        abilities.flying = enabled;
+        nativePlayer.onUpdateAbilities();
+        return true;
+    }
+
+    @Override
+    public boolean setInvulnerable(CellPlayer player, boolean enabled) {
+        var nativePlayer = requireNative(player);
+        nativePlayer.getAbilities().invulnerable = enabled;
+        nativePlayer.onUpdateAbilities();
+        return true;
+    }
+
+    @Override
+    public boolean heal(CellPlayer player) {
+        var nativePlayer = requireNative(player);
+        nativePlayer.setHealth(nativePlayer.getMaxHealth());
+        nativePlayer.clearFire();
+        return true;
+    }
+
+    @Override
+    public boolean feed(CellPlayer player) {
+        var nativePlayer = requireNative(player);
+        nativePlayer.getFoodData().setFoodLevel(20);
+        nativePlayer.getFoodData().setSaturation(20.0F);
+        return true;
+    }
+
+    @Override
+    public boolean setTime(String world, long time) {
+        var normalized = normalizeWorldName(world.isBlank() ? defaultWorld() : world);
+        return dispatchConsoleCommand("execute in " + normalized + " run time set " + time);
+    }
+
+    @Override
+    public boolean setWeather(String world, String weather, int seconds) {
+        var type = switch (weather.toLowerCase()) {
+            case "rain" -> "rain";
+            case "thunder" -> "thunder";
+            default -> "clear";
+        };
+        return dispatchConsoleCommand("weather " + type + " " + Math.max(1, seconds));
+    }
+
+    @Override
+    public int removeEntities(String selector, CellPlayer origin, int radius) {
+        var target = removeSelector(selector, radius);
+        if (target.isBlank()) return -1;
+
+        return dispatchConsoleCommand("execute as " + origin.name() + " at @s run kill " + target) ? 0 : -1;
+    }
+
+    @Override
     public boolean dispatchConsoleCommand(String command) {
-        if (server == null || command.isBlank()) {
-            return false;
-        }
+        if (server == null || command.isBlank()) return false;
+
         var normalized = command.startsWith("/") ? command : "/" + command;
         server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), normalized);
         return true;
+    }
+
+    private String removeSelector(String selector, int radius) {
+        var distance = ",distance=.." + Math.max(1, radius);
+        var normalized = selector.trim().toLowerCase();
+        return switch (normalized) {
+            case "all", "entities" -> "@e[type=!minecraft:player" + distance + "]";
+            case "item", "items", "drops" -> "@e[type=minecraft:item" + distance + "]";
+            case "xp", "experience" -> "@e[type=minecraft:experience_orb" + distance + "]";
+            case "mob", "mobs", "monsters" ->
+                    "@e[type=!minecraft:player,type=!minecraft:item,type=!minecraft:experience_orb%s]".formatted(distance);
+            default -> normalized.matches("[a-z0-9_.-]+(:[a-z0-9_./-]+)?")
+                    ? "@e[type=%s%s]".formatted(normalizeEntityType(normalized), distance)
+                    : "";
+        };
+    }
+
+    private String normalizeEntityType(String type) {
+        return type.indexOf(':') < 0 ? "minecraft:" + type : type;
     }
 
     private boolean safe(ServerLevel level, BlockPos feet) {
