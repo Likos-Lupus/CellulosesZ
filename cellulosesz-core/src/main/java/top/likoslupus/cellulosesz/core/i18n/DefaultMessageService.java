@@ -79,7 +79,7 @@ public final class DefaultMessageService implements MessageService {
     private Map<String, String> readFlattened(Path path) throws IOException {
         if (Files.notExists(path)) return Map.of();
 
-        Map<String, Object> raw = JacksonCodecs.yaml().readValue(path.toFile(), Map.class);
+        Map<String, Object> raw = JacksonCodecs.readYaml(path, Map.class);
         Map<String, String> flattened = new LinkedHashMap<>();
 
         flatten("", raw, flattened);

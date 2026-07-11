@@ -112,9 +112,9 @@ public final class JacksonStorageService implements StorageService {
 
     private <T> T read(Path path, Class<T> type) throws IOException {
         if (json(path)) {
-            return JacksonCodecs.json().readValue(path.toFile(), type);
+            return JacksonCodecs.readJson(path, type);
         }
-        return JacksonCodecs.yaml().readValue(path.toFile(), type);
+        return JacksonCodecs.readYaml(path, type);
     }
 
     private boolean json(Path path) {

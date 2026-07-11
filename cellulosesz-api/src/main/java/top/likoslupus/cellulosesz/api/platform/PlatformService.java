@@ -77,6 +77,80 @@ public interface PlatformService {
         return -1;
     }
 
+    default boolean giveItem(
+            CellPlayer player,
+            String itemArgument,
+            int count
+    ) {
+        return false;
+    }
+
+    default int countItem(CellPlayer player, String itemId) {
+        return 0;
+    }
+
+    default boolean takeItem(
+            CellPlayer player,
+            String itemId,
+            int count
+    ) {
+        return false;
+    }
+
+    default Optional<String> heldItemId(CellPlayer player) {
+        return Optional.empty();
+    }
+
+    default boolean enchantHeldItem(
+            CellPlayer player,
+            String enchantment,
+            int level
+    ) {
+        return false;
+    }
+
+    default int repairItems(CellPlayer player, boolean all) {
+        return 0;
+    }
+
+    default boolean openInventory(
+            CellPlayer viewer,
+            CellPlayer target
+    ) {
+        return false;
+    }
+
+    default boolean openEnderChest(
+            CellPlayer viewer,
+            CellPlayer target
+    ) {
+        return false;
+    }
+
+    default boolean dispatchPlayerCommand(
+            CellPlayer player,
+            String command
+    ) {
+        return false;
+    }
+
+    default void maintainItemCount(
+            CellPlayer player,
+            String itemId,
+            int minimum
+    ) {
+    }
+
+    default void setPlayerVisible(
+            CellPlayer viewer,
+            CellPlayer target,
+            boolean visible
+    ) {
+    }
+
+    default void setVanishedState(CellPlayer player, boolean vanished) {
+    }
+
     default boolean dispatchConsoleCommand(String command) {
         return false;
     }

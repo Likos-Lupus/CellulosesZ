@@ -16,9 +16,13 @@
       "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
     ]
   },
+  "mixins": [
+    "cellulosesz.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=${loader_version}",
     "minecraft": "~${minecraft_version}",
+    "java": ">=25",
     "fabric-api": ">=${fabric_version}"
   },
   "suggests": {

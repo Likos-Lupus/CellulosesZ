@@ -9,19 +9,26 @@ import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
+import top.likoslupus.cellulosesz.fabric.mixin.CommandNodeAccessor;
 
 public final class FabricCommandBinder {
 
     private final CellulosesZBootstrap bootstrap;
+    private final FabricVanillaCommandBridge vanillaCommands;
 
-    public FabricCommandBinder(CellulosesZBootstrap bootstrap) {
+    public FabricCommandBinder(
+            CellulosesZBootstrap bootstrap,
+            FabricVanillaCommandBridge vanillaCommands
+    ) {
         this.bootstrap = bootstrap;
+        this.vanillaCommands = vanillaCommands;
     }
 
     public void bind(
             CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext registryAccess,
             Commands.CommandSelection environment
     ) {
+        vanillaCommands.capture(dispatcher);
         bootstrap.commandRegistry().commands().forEach(command -> {
             register(dispatcher, command, command.name());
             command.aliases().forEach(alias ->
@@ -35,6 +42,9 @@ public final class FabricCommandBinder {
             CellCommand command,
             String label
     ) {
+        if (dispatcher.getRoot().getChild(label) != null) {
+            removeRootCommand(dispatcher, label);
+        }
         dispatcher.register(Commands.literal(label)
                 .requires(source -> permitted(source, command))
                 .executes(context -> execute(
@@ -52,6 +62,13 @@ public final class FabricCommandBinder {
                         ))
                 )
         );
+    }
+
+    private void removeRootCommand(CommandDispatcher<CommandSourceStack> dispatcher, String label) {
+        @SuppressWarnings("unchecked")
+        var root = (CommandNodeAccessor<CommandSourceStack>) dispatcher.getRoot();
+        root.cellulosesz$children().remove(label);
+        root.cellulosesz$literals().remove(label);
     }
 
     private boolean permitted(CommandSourceStack source, CellCommand command) {

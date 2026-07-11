@@ -7,5 +7,6 @@ public final class PlayerStateConfig {
     public boolean persistAfk = true;
     public boolean persistNick = true;
     public boolean persistFlyGod = true;
+    public boolean persistVanish = true;
 
 }

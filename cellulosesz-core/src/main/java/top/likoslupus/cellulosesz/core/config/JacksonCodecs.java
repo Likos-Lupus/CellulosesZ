@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.core.config;
 
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
@@ -15,14 +14,6 @@ public final class JacksonCodecs {
     private JacksonCodecs() {
     }
 
-    public static ObjectMapper yaml() {
-        return YAML;
-    }
-
-    public static ObjectMapper json() {
-        return JSON;
-    }
-
     public static <T> T readYaml(Path path, Class<T> type) throws IOException {
         return YAML.readValue(path.toFile(), type);
     }
@@ -33,6 +24,14 @@ public final class JacksonCodecs {
 
     public static <T> T readJson(Path path, Class<T> type) throws IOException {
         return JSON.readValue(path.toFile(), type);
+    }
+
+    public static <T> T readJson(String value, Class<T> type) throws IOException {
+        return JSON.readValue(value, type);
+    }
+
+    public static String writeJsonString(Object value) {
+        return JSON.writeValueAsString(value);
     }
 
     public static void writeJson(Path path, Object value) throws IOException {

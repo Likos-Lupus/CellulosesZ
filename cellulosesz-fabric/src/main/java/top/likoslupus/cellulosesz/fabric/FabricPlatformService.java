@@ -1,11 +1,22 @@
 package top.likoslupus.cellulosesz.fabric;
 
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.ContainerUser;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
@@ -13,16 +24,24 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
 public final class FabricPlatformService implements PlatformService {
 
+    private final FabricVanillaCommandBridge vanillaCommands;
     private @Nullable MinecraftServer server;
+
+    public FabricPlatformService(FabricVanillaCommandBridge vanillaCommands) {
+        this.vanillaCommands = vanillaCommands;
+    }
 
     public void server(MinecraftServer server) {
         this.server = server;
@@ -227,22 +246,41 @@ public final class FabricPlatformService implements PlatformService {
 
     @Override
     public boolean setTime(String world, long time) {
-        var normalized = normalizeWorldName(world.isBlank() ? defaultWorld() : world);
-        return dispatchConsoleCommand("execute in " + normalized + " run time set " + time);
+        var targetLevel = level(world.isBlank() ? defaultWorld() : world).orElse(null);
+        if (targetLevel == null || server == null) return false;
+
+        return vanillaCommands.execute(
+                "time set " + time,
+                server.createCommandSourceStack().withLevel(targetLevel)
+        ).isPresent();
     }
 
     @Override
-    public boolean setWeather(String world, String weather, int seconds) {
+    public boolean setWeather(
+            String world,
+            String weather,
+            int seconds
+    ) {
+        var targetLevel = level(world.isBlank() ? defaultWorld() : world).orElse(null);
+        if (targetLevel == null || server == null) return false;
+
         var type = switch (weather.toLowerCase()) {
             case "rain" -> "rain";
             case "thunder" -> "thunder";
             default -> "clear";
         };
-        return dispatchConsoleCommand("weather " + type + " " + Math.max(1, seconds));
+        return vanillaCommands.execute(
+                "weather " + type + " " + Math.max(1, seconds),
+                server.createCommandSourceStack().withLevel(targetLevel)
+        ).isPresent();
     }
 
     @Override
-    public int removeEntities(String selector, CellPlayer origin, int radius) {
+    public int removeEntities(
+            String selector,
+            CellPlayer origin,
+            int radius
+    ) {
         var target = removeSelector(selector, radius);
         if (target.isBlank()) return -1;
 
@@ -250,21 +288,173 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     @Override
+    public boolean giveItem(
+            CellPlayer player,
+            String itemArgument,
+            int count
+    ) {
+        if (itemArgument.isBlank() || count <= 0 || server == null) return false;
+        return vanillaCommands.execute(
+                "give %s %s %d".formatted(player.name(), itemArgument, count),
+                server.createCommandSourceStack()
+        ).orElse(0) > 0;
+    }
+
+    @Override
+    public int countItem(CellPlayer player, String itemArgument) {
+        if (itemArgument.isBlank() || server == null) return 0;
+        return Math.max(0, vanillaCommands.execute(
+                "clear %s %s 0".formatted(player.name(), itemArgument),
+                server.createCommandSourceStack()
+        ).orElse(0));
+    }
+
+    @Override
+    public boolean takeItem(
+            CellPlayer player,
+            String itemArgument,
+            int count
+    ) {
+        if (count <= 0 || server == null || countItem(player, itemArgument) < count) return false;
+        return vanillaCommands.execute(
+                "clear %s %s %d".formatted(player.name(), itemArgument, count),
+                server.createCommandSourceStack()
+        ).orElse(0) == count;
+    }
+
+    @Override
+    public Optional<String> heldItemId(CellPlayer player) {
+        var stack = requireNative(player).getMainHandItem();
+        return stack.isEmpty()
+                ? Optional.empty()
+                : Optional.of(itemId(stack));
+    }
+
+    @Override
+    public boolean enchantHeldItem(
+            CellPlayer player,
+            String enchantment,
+            int level
+    ) {
+        if (enchantment.isBlank() || level <= 0 || requireNative(player).getMainHandItem().isEmpty()) return false;
+        var normalized = enchantment.indexOf(':') < 0
+                ? "minecraft:%s".formatted(enchantment)
+                : enchantment;
+        if (server == null) return false;
+        return vanillaCommands.execute(
+                "enchant %s %s %d".formatted(player.name(), normalized, level),
+                server.createCommandSourceStack()
+        ).isPresent();
+    }
+
+    @Override
+    public int repairItems(CellPlayer player, boolean all) {
+        var nativePlayer = requireNative(player);
+        if (!all) return repair(nativePlayer.getMainHandItem()) ? 1 : 0;
+
+        var inventory = nativePlayer.getInventory();
+        int repaired = (int) IntStream.range(0, inventory.getContainerSize())
+                .filter(slot -> repair(inventory.getItem(slot)))
+                .count();
+        inventory.setChanged();
+        return repaired;
+    }
+
+    @Override
+    public boolean openInventory(CellPlayer viewer, CellPlayer target) {
+        var viewerNative = requireNative(viewer);
+        var targetNative = requireNative(target);
+        var mirror = new InventoryMirror(targetNative.getInventory(), 54);
+        viewerNative.openMenu(new SimpleMenuProvider(
+                (id, inventory, _) -> ChestMenu.sixRows(id, inventory, mirror),
+                Component.literal("%s 的背包".formatted(target.name()))
+        ));
+        return true;
+    }
+
+    @Override
+    public boolean openEnderChest(CellPlayer viewer, CellPlayer target) {
+        var viewerNative = requireNative(viewer);
+        var targetNative = requireNative(target);
+        var enderChest = targetNative.getEnderChestInventory();
+        viewerNative.openMenu(new SimpleMenuProvider(
+                (id, inventory, _) -> ChestMenu.threeRows(id, inventory, enderChest),
+                Component.literal("%s 的末影箱".formatted(target.name()))
+        ));
+        return true;
+    }
+
+    @Override
+    public boolean dispatchPlayerCommand(CellPlayer player, String command) {
+        if (server == null || command.isBlank()) return false;
+        return executeCommand(command, requireNative(player).createCommandSourceStack()).isPresent();
+    }
+
+    @Override
+    public void maintainItemCount(
+            CellPlayer player,
+            String itemId,
+            int minimum
+    ) {
+        var missing = Math.max(0, minimum - countItem(player, itemId));
+        if (missing > 0) giveItem(player, normalizeItemId(itemId), missing);
+    }
+
+    @Override
+    public void setPlayerVisible(
+            CellPlayer viewer,
+            CellPlayer target,
+            boolean visible
+    ) {
+        var viewerNative = requireNative(viewer);
+        var targetNative = requireNative(target);
+        if (viewerNative.getUUID().equals(targetNative.getUUID())) return;
+
+        if (visible) {
+            viewerNative.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(targetNative)));
+            targetNative.startSeenByPlayer(viewerNative);
+        } else {
+            viewerNative.connection.send(new ClientboundRemoveEntitiesPacket(targetNative.getId()));
+            viewerNative.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(targetNative.getUUID())));
+            targetNative.stopSeenByPlayer(viewerNative);
+        }
+    }
+
+    @Override
+    public void setVanishedState(CellPlayer player, boolean vanished) {
+        FabricVanishBridge.vanished(player.uuid(), vanished);
+    }
+
+    @Override
     public boolean dispatchConsoleCommand(String command) {
         if (server == null || command.isBlank()) return false;
+        return executeCommand(command, server.createCommandSourceStack()).isPresent();
+    }
 
-        var normalized = command.startsWith("/") ? command : "/" + command;
-        server.getCommands().performPrefixedCommand(server.createCommandSourceStack(), normalized);
+    private String normalizeItemId(String value) {
+        var normalized = value.trim().toLowerCase();
+        return normalized.indexOf(':') < 0
+                ? "minecraft:%s".formatted(normalized)
+                : normalized;
+    }
+
+    private boolean repair(ItemStack stack) {
+        if (stack.isEmpty() || !stack.isDamageableItem() || stack.getDamageValue() <= 0) return false;
+        stack.setDamageValue(0);
         return true;
+    }
+
+    private String itemId(ItemStack stack) {
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
     private String removeSelector(String selector, int radius) {
         var distance = ",distance=.." + Math.max(1, radius);
         var normalized = selector.trim().toLowerCase();
         return switch (normalized) {
-            case "all", "entities" -> "@e[type=!minecraft:player" + distance + "]";
-            case "item", "items", "drops" -> "@e[type=minecraft:item" + distance + "]";
-            case "xp", "experience" -> "@e[type=minecraft:experience_orb" + distance + "]";
+            case "all", "entities" -> "@e[type=!minecraft:player%s]".formatted(distance);
+            case "item", "items", "drops" -> "@e[type=minecraft:item%s]".formatted(distance);
+            case "xp", "experience" -> "@e[type=minecraft:experience_orb%s]".formatted(distance);
             case "mob", "mobs", "monsters" ->
                     "@e[type=!minecraft:player,type=!minecraft:item,type=!minecraft:experience_orb%s]".formatted(distance);
             default -> normalized.matches("[a-z0-9_.-]+(:[a-z0-9_./-]+)?")
@@ -274,7 +464,23 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     private String normalizeEntityType(String type) {
-        return type.indexOf(':') < 0 ? "minecraft:" + type : type;
+        return type.indexOf(':') < 0
+                ? "minecraft:%s".formatted(type)
+                : type;
+    }
+
+    private OptionalInt executeCommand(String command, CommandSourceStack source) {
+        if (server == null || command.isBlank()) return OptionalInt.empty();
+
+        var normalized = command.trim();
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
+        if (normalized.isBlank()) return OptionalInt.empty();
+
+        try {
+            return OptionalInt.of(server.getCommands().getDispatcher().execute(normalized, source));
+        } catch (CommandSyntaxException _) {
+            return OptionalInt.empty();
+        }
     }
 
     private boolean safe(ServerLevel level, BlockPos feet) {
@@ -314,7 +520,7 @@ public final class FabricPlatformService implements PlatformService {
     private String normalizeWorldName(String world) {
         var value = world.trim().toLowerCase();
         if (value.indexOf(':') < 0) {
-            return "minecraft:" + value;
+            return "minecraft:%s".formatted(value);
         }
         return value;
     }
@@ -332,6 +538,54 @@ public final class FabricPlatformService implements PlatformService {
                 player.getGameProfile().name(),
                 player
         );
+    }
+
+    private static final class InventoryMirror extends SimpleContainer {
+
+        private final Container target;
+        private final int mirroredSlots;
+        private boolean loading = true;
+
+        private InventoryMirror(
+                Container target,
+                int size
+        ) {
+            super(size);
+            this.target = target;
+            this.mirroredSlots = Math.min(target.getContainerSize(), size);
+            IntStream.range(0, mirroredSlots)
+                    .forEach(slot -> super.setItem(
+                            slot,
+                            target.getItem(slot).copy()
+                    ));
+            loading = false;
+        }
+
+        @Override
+        public void setChanged() {
+            super.setChanged();
+            if (!loading) synchronize();
+        }
+
+        private void synchronize() {
+            IntStream.range(0, mirroredSlots)
+                    .forEach(slot -> target.setItem(
+                            slot, getItem(slot).copy()
+                    ));
+            target.setChanged();
+        }
+
+        @Override
+        public void stopOpen(ContainerUser user) {
+            synchronize();
+            super.stopOpen(user);
+        }
+
+        @Override
+        public boolean canPlaceItem(int slot, ItemStack stack) {
+            return slot >= 0 && slot < mirroredSlots;
+        }
+
     }
 
 }

@@ -167,6 +167,10 @@ public final class CellulosesZBootstrap {
         return permissions;
     }
 
+    public ServiceRegistry serviceRegistry() {
+        return services;
+    }
+
     public MessageService messageService() {
         return messages;
     }
