@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 
+import java.util.Map;
+
 public final class WorldCommand extends AbstractTeleportCommand {
 
     public WorldCommand(
@@ -38,7 +40,10 @@ public final class WorldCommand extends AbstractTeleportCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length == 0) {
-            invocation.reply("可用世界: " + String.join(", ", platform.worlds()));
+            invocation.replyKey(
+                    "commands.teleport.world-command.reply.1",
+                    Map.of("value0", String.join(", ", platform.worlds()))
+            );
             return 1;
         }
 

@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
+
 public final class SetJailCommand extends AbstractAdminCommand {
 
     private final JailService jails;
@@ -42,13 +44,16 @@ public final class SetJailCommand extends AbstractAdminCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.set-jail-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.admin.set-jail-command.error.2");
             return 0;
         }
 

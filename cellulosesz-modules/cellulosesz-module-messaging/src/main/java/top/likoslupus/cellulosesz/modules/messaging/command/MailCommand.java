@@ -5,23 +5,32 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
+import java.util.Map;
 import java.util.UUID;
 
 public final class MailCommand extends AbstractMessagingCommand {
 
     private final MailService mail;
+    private final DisplayNameService displayNames;
+    private final MessageRenderer renderer;
 
     public MailCommand(
             PlatformService platform,
             UserService users,
             MessagingConfig config,
-            MailService mail
+            MailService mail,
+            DisplayNameService displayNames,
+            MessageRenderer renderer
     ) {
         super(platform, users, config);
         this.mail = mail;
+        this.displayNames = displayNames;
+        this.renderer = renderer;
     }
 
     @Override
@@ -53,14 +62,17 @@ public final class MailCommand extends AbstractMessagingCommand {
         if (args.length == 0 || args[0].equalsIgnoreCase("read")) {
             mail.inbox(self.get().uuid()).thenAccept(messages -> {
                 if (messages.isEmpty()) {
-                    invocation.reply("你没有邮件。 ");
+                    invocation.replyKey("commands.messaging.mail-command.reply.1");
                 } else {
-                    var builder = new StringBuilder("邮件:");
-                    messages.forEach(message -> builder.append("\n- ")
+                    var entries = new StringBuilder();
+                    messages.forEach(message -> entries.append("\n- ")
                             .append(message.fromName)
                             .append(": ")
                             .append(message.message));
-                    invocation.reply(builder.toString());
+                    invocation.replyKey(
+                            "commands.messaging.mail-list",
+                            Map.of("entries", entries.toString())
+                    );
                     mail.markRead(self.get().uuid());
                 }
             });
@@ -68,13 +80,14 @@ public final class MailCommand extends AbstractMessagingCommand {
         }
 
         if (args[0].equalsIgnoreCase("clear")) {
-            mail.clear(self.get().uuid()).thenRun(() -> invocation.reply("已清空邮件。"));
+            mail.clear(self.get().uuid())
+                    .thenRun(() -> invocation.replyKey("commands.messaging.mail-command.reply.2"));
             return 1;
         }
 
         if (args[0].equalsIgnoreCase("send")) {
             if (args.length < 3) {
-                invocation.error("用法: /mail send <player> <message>");
+                invocation.errorKey("commands.messaging.mail-command.error.1");
                 return 0;
             }
 
@@ -85,16 +98,26 @@ public final class MailCommand extends AbstractMessagingCommand {
             var message = new MailMessage();
             message.id = UUID.randomUUID().toString();
             message.fromUuid = self.get().uuid();
-            message.fromName = self.get().name();
+            message.fromName = displayNames.plainDisplayName(self.get());
             message.toUuid = recipient.get();
             message.message = messageText;
-            mail.send(recipient.get(), message).thenRun(() -> invocation.reply("邮件已发送给 " + args[1] + "。"));
-            platform.onlinePlayer(args[1])
-                    .ifPresent(player -> platform.sendMessage(player, "你收到了一封新邮件，使用 /mail read 查看。"));
+            mail.send(recipient.get(), message)
+                    .thenRun(() -> invocation.replyKey(
+                            "commands.messaging.mail-command.reply.3",
+                            Map.of("value0", args[1])
+                    ));
+            invocation.resolvePlayer(args[1]).online()
+                    .ifPresent(player -> platform.sendMessage(
+                            player,
+                            renderer.render(platform.locale(player), "messaging.mail-received")
+                    ));
             return 1;
         }
 
-        invocation.error("用法: " + usage());
+        invocation.errorKey(
+                "commands.messaging.mail-command.error.2",
+                Map.of("value0", usage())
+        );
         return 0;
     }
 

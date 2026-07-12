@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
 import java.util.List;
+import java.util.Map;
 
 public final class ReplyCommand extends AbstractMessagingCommand {
 
@@ -55,21 +56,22 @@ public final class ReplyCommand extends AbstractMessagingCommand {
         if (self.isEmpty()) return 0;
 
         if (args.length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.messaging.reply-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var targetUuid = privateMessages.lastReplyTarget(self.get().uuid());
         if (targetUuid.isEmpty()) {
-            invocation.error("没有可回复的玩家。 ");
+            invocation.errorKey("commands.messaging.reply-command.error.2");
             return 0;
         }
 
-        var target = platform.onlinePlayers().stream()
-                .filter(player -> player.uuid().equals(targetUuid.get()))
-                .findFirst();
+        var target = invocation.resolvePlayer(targetUuid.get().toString()).online();
         if (target.isEmpty()) {
-            invocation.error("可回复的玩家不在线。 ");
+            invocation.errorKey("commands.messaging.reply-command.error.3");
             return 0;
         }
 

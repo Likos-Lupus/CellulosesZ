@@ -47,7 +47,11 @@ public final class MsgToggleCommand extends AbstractMessagingCommand {
         user.preferences.privateMessages = !user.preferences.privateMessages;
         users.markDirty(self.get().uuid());
         users.save(self.get().uuid());
-        invocation.reply(user.preferences.privateMessages ? "已开启私聊。" : "已关闭私聊。 ");
+        invocation.replyKey(
+                user.preferences.privateMessages
+                        ? "commands.messaging.private-messages-enabled"
+                        : "commands.messaging.private-messages-disabled"
+        );
         return 1;
     }
 

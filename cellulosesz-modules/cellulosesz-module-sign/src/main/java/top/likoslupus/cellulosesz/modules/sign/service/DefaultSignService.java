@@ -49,14 +49,17 @@ public final class DefaultSignService implements SignService {
         if (handler == null || !enabled(id)) return SignUseResult.pass();
 
         if (!permissions.has(player.nativeHandle(), "cellulosesz.sign.use." + id)) {
-            return SignUseResult.failure("你没有权限使用 [%s] 告示牌。".formatted(handler.id()));
+            return SignUseResult.failure(
+                    "service.sign.no-permission",
+                    Map.of("sign", handler.id())
+            );
         }
 
         var now = System.currentTimeMillis();
         var cooldownMillis = Math.max(0, config.interaction.cooldownTicks) * 50L;
         var previous = lastUse.get(player.uuid());
         if (previous != null && now - previous < cooldownMillis) {
-            return SignUseResult.failure("告示牌使用过快，请稍后再试。");
+            return SignUseResult.failure("service.sign.cooldown");
         }
 
         try {
@@ -64,7 +67,10 @@ public final class DefaultSignService implements SignService {
             if (result.handled()) lastUse.put(player.uuid(), now);
             return result;
         } catch (RuntimeException exception) {
-            return SignUseResult.failure("告示牌执行失败: " + exception.getMessage());
+            return SignUseResult.failure(
+                    "service.sign.execution-failed",
+                    Map.of("reason", String.valueOf(exception.getMessage()))
+            );
         }
     }
 

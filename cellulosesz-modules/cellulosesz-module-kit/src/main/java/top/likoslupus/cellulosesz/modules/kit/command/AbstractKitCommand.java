@@ -23,7 +23,7 @@ abstract class AbstractKitCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) invocation.errorKey("commands.kit.abstract-kit-command.error.1");
         return player;
     }
 

@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
 
+import java.util.Map;
+
 public final class TempBanCommand extends AbstractAdminCommand {
 
     private final TempBanService bans;
@@ -38,18 +40,30 @@ public final class TempBanCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.temp-ban-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var duration = DurationParser.parseMillis(args[1]);
         if (duration.isEmpty()) {
-            invocation.error("时间格式错误，例如 10m、2h、7d。");
+            invocation.errorKey("commands.admin.temp-ban-command.error.2");
+            return 0;
+        }
+
+        var target = invocation.resolvePlayer(args[0]);
+        if (target.optionalUuid().isEmpty()) {
+            invocation.errorKey(
+                    "commands.admin.abstract-admin-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
         var result = bans.tempBan(
-                args[0],
+                target.name(),
                 actor(invocation),
                 duration.getAsLong(),
                 join(args, 2)

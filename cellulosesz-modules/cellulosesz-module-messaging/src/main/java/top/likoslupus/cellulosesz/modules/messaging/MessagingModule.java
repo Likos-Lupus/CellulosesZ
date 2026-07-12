@@ -9,7 +9,9 @@ import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.command.*;
 import top.likoslupus.cellulosesz.modules.messaging.service.DefaultPrivateMessageService;
@@ -45,7 +47,9 @@ public final class MessagingModule implements CellulosesZModule {
         var storage = context.services().require(StorageService.class);
         var root = context.dataDirectory().getParent().resolve("mails");
 
-        privateMessages = new DefaultPrivateMessageService(platform, users);
+        var displayNames = context.services().require(DisplayNameService.class);
+        var renderer = context.services().require(MessageRenderer.class);
+        privateMessages = new DefaultPrivateMessageService(platform, users, displayNames, renderer);
         mail = new JsonMailService(storage, config, root);
 
         context.services().register(PrivateMessageService.class, privateMessages);
@@ -59,17 +63,19 @@ public final class MessagingModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
+        var displayNames = context.services().require(DisplayNameService.class);
+        var renderer = context.services().require(MessageRenderer.class);
 
         context.commands().register(new MsgCommand(platform, users, config, privateMessages));
         context.commands().register(new ReplyCommand(platform, users, config, privateMessages));
         context.commands().register(new MsgToggleCommand(platform, users, config));
         context.commands().register(new IgnoreCommand(platform, users, config, privateMessages));
-        context.commands().register(new MailCommand(platform, users, config, mail));
+        context.commands().register(new MailCommand(platform, users, config, mail, displayNames, renderer));
         context.commands().register(new SocialSpyCommand(platform, users, config, privateMessages));
-        context.commands().register(new HelpOpCommand(platform, users, config, permissions));
-        context.commands().register(new BroadcastCommand(platform, users, config));
-        context.commands().register(new MeCommand(platform, users, config));
-        context.commands().register(new ListCommand(platform, users, config));
+        context.commands().register(new HelpOpCommand(platform, users, config, permissions, displayNames, renderer));
+        context.commands().register(new BroadcastCommand(platform, users, config, renderer));
+        context.commands().register(new MeCommand(platform, users, config, displayNames, renderer));
+        context.commands().register(new ListCommand(platform, users, config, displayNames, renderer));
     }
 
 }

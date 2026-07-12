@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 
+import java.util.Map;
+
 public final class DefaultWorldService implements WorldService {
 
     private final PlatformService platform;
@@ -18,9 +20,13 @@ public final class DefaultWorldService implements WorldService {
             String world,
             long time
     ) {
-        return platform.setTime(world, time)
-                ? AdminResult.success("已设置世界 %s 的时间为 %d。".formatted(world, time))
-                : AdminResult.failure("设置时间失败: %s".formatted(world));
+        return platform.setTime(world, time) ? AdminResult.success(
+                "service.world.time-set",
+                Map.of("world", world, "time", time)
+        ) : AdminResult.failure(
+                "service.world.time-failed",
+                Map.of("world", world)
+        );
     }
 
     @Override
@@ -29,9 +35,17 @@ public final class DefaultWorldService implements WorldService {
             WeatherType type,
             int seconds
     ) {
-        return platform.setWeather(world, type.name().toLowerCase(), seconds)
-                ? AdminResult.success("已设置世界 %s 的天气为 %s。".formatted(world, type.name().toLowerCase()))
-                : AdminResult.failure("设置天气失败: %s".formatted(world));
+        var weather = type.name().toLowerCase();
+        return platform.setWeather(world, weather, seconds) ? AdminResult.success(
+                "service.world.weather-set",
+                Map.of(
+                        "world", world,
+                        "weather", weather
+                )
+        ) : AdminResult.failure(
+                "service.world.weather-failed",
+                Map.of("world", world)
+        );
     }
 
 }

@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.world.EntityRemoveService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
+import java.util.Map;
+
 public final class RemoveCommand extends AbstractWorldCommand {
 
     private final EntityRemoveService remover;
@@ -43,7 +45,10 @@ public final class RemoveCommand extends AbstractWorldCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.world.remove-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -66,7 +71,7 @@ public final class RemoveCommand extends AbstractWorldCommand {
     private int parse(String value, int fallback) {
         try {
             return Math.max(1, Integer.parseInt(value));
-        } catch (NumberFormatException exception) {
+        } catch (NumberFormatException _) {
             return fallback;
         }
     }

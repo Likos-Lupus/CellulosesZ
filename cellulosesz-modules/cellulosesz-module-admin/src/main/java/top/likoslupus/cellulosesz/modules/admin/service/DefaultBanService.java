@@ -2,14 +2,27 @@ package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.admin.BanService;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+
+import java.util.Map;
 
 public final class DefaultBanService implements BanService {
 
     private final PlatformService platform;
+    private final MessageRenderer renderer;
+    private final LocaleResolver locales;
 
-    public DefaultBanService(PlatformService platform) {
+    public DefaultBanService(
+            PlatformService platform,
+            MessageRenderer renderer,
+            LocaleResolver locales
+    ) {
         this.platform = platform;
+        this.renderer = renderer;
+        this.locales = locales;
     }
 
     @Override
@@ -20,8 +33,9 @@ public final class DefaultBanService implements BanService {
     ) {
         return command(
                 "ban %s%s".formatted(target, suffix(reason)),
-                "已封禁 %s。".formatted(target),
-                "封禁失败: %s".formatted(target)
+                "service.admin.ban-success",
+                "service.admin.ban-failed",
+                Map.of("player", target)
         );
     }
 
@@ -29,8 +43,9 @@ public final class DefaultBanService implements BanService {
     public AdminResult unban(String target, String actor) {
         return command(
                 "pardon %s".formatted(target),
-                "已解除封禁 %s。".formatted(target),
-                "解除封禁失败: %s".formatted(target)
+                "service.admin.unban-success",
+                "service.admin.unban-failed",
+                Map.of("player", target)
         );
     }
 
@@ -42,8 +57,9 @@ public final class DefaultBanService implements BanService {
     ) {
         return command(
                 "ban-ip %s%s".formatted(target, suffix(reason)),
-                "已封禁 IP %s。".formatted(target),
-                "IP 封禁失败: %s".formatted(target)
+                "service.admin.ban-ip-success",
+                "service.admin.ban-ip-failed",
+                Map.of("address", target)
         );
     }
 
@@ -51,8 +67,9 @@ public final class DefaultBanService implements BanService {
     public AdminResult unbanIp(String target, String actor) {
         return command(
                 "pardon-ip %s".formatted(target),
-                "已解除 IP 封禁 %s。".formatted(target),
-                "解除 IP 封禁失败: %s".formatted(target)
+                "service.admin.unban-ip-success",
+                "service.admin.unban-ip-failed",
+                Map.of("address", target)
         );
     }
 
@@ -64,37 +81,49 @@ public final class DefaultBanService implements BanService {
     ) {
         var player = platform.onlinePlayer(target);
         if (player.isPresent()) {
-            platform.kick(player.get(), reason.isBlank() ? "Kicked by an operator." : reason);
-            return AdminResult.success("已踢出 %s。".formatted(player.get().name()));
+            platform.kick(player.get(), kickReason(player.get(), reason));
+            return AdminResult.success(
+                    "service.admin.kick-success",
+                    Map.of("player", player.get().name())
+            );
         }
 
         return command(
                 "kick %s%s".formatted(target, suffix(reason)),
-                "已踢出 %s。".formatted(target),
-                "踢出失败: %s".formatted(target)
+                "service.admin.kick-success",
+                "service.admin.kick-failed",
+                Map.of("player", target)
         );
     }
 
     @Override
     public AdminResult kickAll(String actor, String reason) {
-        var message = reason.isBlank() ? "Kicked by an operator." : reason;
         var count = platform.onlinePlayers().stream()
                 .mapToInt(player -> {
-                    platform.kick(player, message);
+                    platform.kick(player, kickReason(player, reason));
                     return 1;
                 })
                 .sum();
-        return AdminResult.success("已踢出 %d 名玩家。".formatted(count));
+        return AdminResult.success(
+                "service.admin.kick-all-success",
+                Map.of("count", count)
+        );
+    }
+
+    private String kickReason(CellPlayer player, String reason) {
+        if (!reason.isBlank()) return reason;
+        return renderer.render(locales.locale(player), "service.admin.kick-default").plainText();
     }
 
     private AdminResult command(
             String command,
-            String success,
-            String failure
+            String successKey,
+            String failureKey,
+            Map<String, ?> placeholders
     ) {
-        return platform.dispatchConsoleCommand(command)
-                ? AdminResult.success(success)
-                : AdminResult.failure(failure);
+        return platform.dispatchNativeConsoleCommand(command)
+                ? AdminResult.success(successKey, placeholders)
+                : AdminResult.failure(failureKey, placeholders);
     }
 
     private String suffix(String reason) {

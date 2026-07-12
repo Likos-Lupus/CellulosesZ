@@ -37,7 +37,7 @@ public final class TopCommand extends AbstractTeleportCommand {
         var current = platform.location(self.get());
         var top = platform.highestLocation(current.world, current.x, current.z);
         if (top.isEmpty()) {
-            invocation.error("找不到顶部位置。");
+            invocation.errorKey("commands.teleport.top-command.error.1");
             return 0;
         }
 

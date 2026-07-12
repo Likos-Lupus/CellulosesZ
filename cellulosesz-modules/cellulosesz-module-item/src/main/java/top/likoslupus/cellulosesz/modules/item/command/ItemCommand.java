@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
+
 public final class ItemCommand extends AbstractItemCommand {
 
     public ItemCommand(
@@ -45,16 +47,25 @@ public final class ItemCommand extends AbstractItemCommand {
 
         var descriptor = items.parse(join(invocation.args(), 0));
         if (descriptor.isEmpty()) {
-            invocation.error("无效物品描述。用法: " + usage());
+            invocation.errorKey(
+                    "commands.item.item-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         if (!items.give(self.get(), descriptor.get())) {
-            invocation.error("物品发放失败。");
+            invocation.errorKey("commands.item.item-command.error.2");
             return 0;
         }
 
-        invocation.reply("已获得 %d 个 %s。".formatted(descriptor.get().count, descriptor.get().normalizedItem()));
+        invocation.replyKey(
+                "commands.item.item-command.reply.1",
+                Map.of(
+                        "value0", descriptor.get().count,
+                        "value1", descriptor.get().normalizedItem()
+                )
+        );
         return 1;
     }
 

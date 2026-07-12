@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 
+import java.util.Map;
+
 public final class SellSignHandler extends AbstractTradeSignHandler {
 
     private final EconomyService economy;
@@ -29,15 +31,15 @@ public final class SellSignHandler extends AbstractTradeSignHandler {
         var price = price(context);
 
         if (descriptor.isEmpty() || price.isEmpty()) {
-            return SignUseResult.failure("[Sell] 格式: 第二行数量，第三行物品，第四行价格。");
+            return SignUseResult.failure("service.sign.sell-format");
         }
 
         if (items.count(context.player(), descriptor.get()) < descriptor.get().count) {
-            return SignUseResult.failure("物品数量不足。");
+            return SignUseResult.failure("service.sign.sell-not-enough");
         }
 
         if (!items.take(context.player(), descriptor.get())) {
-            return SignUseResult.failure("无法从背包扣除物品。");
+            return SignUseResult.failure("service.sign.sell-take-failed");
         }
 
         var deposit = economy.deposit(
@@ -53,11 +55,14 @@ public final class SellSignHandler extends AbstractTradeSignHandler {
             return SignUseResult.failure(deposit.message());
         }
 
-        return SignUseResult.success("出售成功: %d × %s，获得 %s。".formatted(
-                descriptor.get().count,
-                descriptor.get().normalizedItem(),
-                price.get().toPlainString()
-        ));
+        return SignUseResult.success(
+                "service.sign.sell-success",
+                Map.of(
+                        "count", descriptor.get().count,
+                        "item", descriptor.get().normalizedItem(),
+                        "price", price.get().toPlainString()
+                )
+        );
     }
 
 }

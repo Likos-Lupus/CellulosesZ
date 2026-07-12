@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
+import java.util.Map;
+
 public final class DelWarpCommand extends AbstractWarpCommand {
 
     public DelWarpCommand(
@@ -36,16 +38,25 @@ public final class DelWarpCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.warp.del-warp-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         if (warps.deleteWarp(args[0]).join()) {
-            invocation.reply("已删除 Warp: " + args[0]);
+            invocation.replyKey(
+                    "commands.warp.del-warp-command.reply.1",
+                    Map.of("value0", args[0])
+            );
             return 1;
         }
 
-        invocation.error("Warp 不存在: " + args[0]);
+        invocation.errorKey(
+                "commands.warp.del-warp-command.error.2",
+                Map.of("value0", args[0])
+        );
         return 0;
     }
 

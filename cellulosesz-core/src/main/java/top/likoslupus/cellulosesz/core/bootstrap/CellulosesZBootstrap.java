@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.core.bootstrap;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
+import top.likoslupus.cellulosesz.api.command.service.*;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.i18n.MessageService;
@@ -12,10 +14,14 @@ import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
+import top.likoslupus.cellulosesz.core.command.service.*;
 import top.likoslupus.cellulosesz.core.config.CoreConfig;
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
 import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry;
+import top.likoslupus.cellulosesz.core.i18n.DefaultLocaleResolver;
 import top.likoslupus.cellulosesz.core.i18n.DefaultMessageService;
 import top.likoslupus.cellulosesz.core.module.ClassGraphModuleScanner;
 import top.likoslupus.cellulosesz.core.module.DefaultModuleManager;
@@ -28,6 +34,7 @@ import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 
 public final class CellulosesZBootstrap {
 
@@ -38,12 +45,19 @@ public final class CellulosesZBootstrap {
     private final JacksonConfigRegistry configs;
     private final SimpleEventRegistry events = new SimpleEventRegistry();
     private final DefaultScheduler scheduler = new DefaultScheduler();
-    private final DefaultCommandRegistry commands = new DefaultCommandRegistry();
+    private final DefaultPermissionCatalog permissionCatalog = new DefaultPermissionCatalog();
+    private final DefaultCommandAliasRegistry aliasRegistry = new DefaultCommandAliasRegistry();
+    private final DefaultCommandSuggestionRegistry suggestionRegistry = new DefaultCommandSuggestionRegistry();
+    private final DefaultCommandRegistry commands = new DefaultCommandRegistry(permissionCatalog, aliasRegistry);
     private final DefaultPermissionService permissions = new DefaultPermissionService();
     private final JacksonStorageService storage;
     private final DefaultMessageService messages;
-    private DefaultModuleManager modules;
-    private CoreConfig coreConfig;
+    private final DefaultCooldownService cooldowns = new DefaultCooldownService(services);
+    private final DefaultConfirmationService confirmations = new DefaultConfirmationService();
+    private final DefaultCommandCostService commandCosts = new DefaultCommandCostService(services);
+    private @Nullable DefaultLocaleResolver localeResolver;
+    private @Nullable DefaultModuleManager modules;
+    private @Nullable CoreConfig coreConfig;
     private boolean initialized;
 
     public CellulosesZBootstrap(
@@ -77,7 +91,13 @@ public final class CellulosesZBootstrap {
                 CoreConfig::new
         );
         messages.locales(coreConfig.locale.defaultLocale, coreConfig.locale.fallback);
+        messages.theme(coreConfig.locale.primaryColor, coreConfig.locale.secondaryColor, coreConfig.locale.legacyColors);
         messages.reload();
+
+        var platform = services.require(top.likoslupus.cellulosesz.api.platform.PlatformService.class);
+        localeResolver = new DefaultLocaleResolver(platform, coreConfig.locale.defaultLocale, coreConfig.locale.useClientLocale);
+        commandCosts.configure(coreConfig.commands.costs);
+        aliasRegistry.configure(coreConfig.commands.aliases);
 
         services.register(ServiceRegistry.class, services);
         services.register(ConfigRegistry.class, configs);
@@ -90,6 +110,14 @@ public final class CellulosesZBootstrap {
         services.register(DefaultPermissionService.class, permissions);
         services.register(StorageService.class, storage);
         services.register(MessageService.class, messages);
+        services.register(MessageRenderer.class, messages);
+        services.register(LocaleResolver.class, localeResolver);
+        services.register(PermissionCatalog.class, permissionCatalog);
+        services.register(CommandAliasRegistry.class, aliasRegistry);
+        services.register(CommandSuggestionRegistry.class, suggestionRegistry);
+        services.register(CooldownService.class, cooldowns);
+        services.register(ConfirmationService.class, confirmations);
+        services.register(CommandCostService.class, commandCosts);
         services.register(RuntimeService.class, new DefaultRuntimeService(this));
 
         modules = new DefaultModuleManager(
@@ -112,17 +140,21 @@ public final class CellulosesZBootstrap {
 
     public void onServerStarting(Object server) {
         logger.info("CellulosesZ server starting.");
-        modules.onServerStarting();
+        requireModules().onServerStarting();
+    }
+
+    private DefaultModuleManager requireModules() {
+        return Objects.requireNonNull(modules, "CellulosesZ is not initialized");
     }
 
     public void onServerStarted(Object server) {
         logger.info("CellulosesZ server started.");
-        modules.onServerStarted();
+        requireModules().onServerStarted();
     }
 
     public void onServerStopping(Object server) {
         logger.info("CellulosesZ server stopping.");
-        modules.onServerStopping();
+        requireModules().onServerStopping();
         scheduler.close();
     }
 
@@ -142,9 +174,18 @@ public final class CellulosesZBootstrap {
         configs.reload();
         coreConfig = configs.require("core", CoreConfig.class);
         messages.locales(coreConfig.locale.defaultLocale, coreConfig.locale.fallback);
+        messages.theme(coreConfig.locale.primaryColor, coreConfig.locale.secondaryColor, coreConfig.locale.legacyColors);
         messages.reload();
-        modules.onReload();
+        requireLocaleResolver().configure(coreConfig.locale.defaultLocale, coreConfig.locale.useClientLocale);
+        commandCosts.configure(coreConfig.commands.costs);
+        aliasRegistry.configure(coreConfig.commands.aliases);
+        requireModules().onReload();
+        services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
         logger.info("CellulosesZ reloaded.");
+    }
+
+    private DefaultLocaleResolver requireLocaleResolver() {
+        return Objects.requireNonNull(localeResolver, "CellulosesZ is not initialized");
     }
 
     public String version() {
@@ -152,7 +193,7 @@ public final class CellulosesZBootstrap {
     }
 
     public List<LoadedModuleInfo> modules() {
-        return modules.modules();
+        return requireModules().modules();
     }
 
     public CommandRegistry commandRegistry() {
@@ -175,8 +216,12 @@ public final class CellulosesZBootstrap {
         return messages;
     }
 
+    public CellulosesZLogger logger() {
+        return logger;
+    }
+
     public CoreConfig coreConfig() {
-        return coreConfig;
+        return Objects.requireNonNull(coreConfig, "CellulosesZ is not initialized");
     }
 
     public record PlayerJoinEvent(

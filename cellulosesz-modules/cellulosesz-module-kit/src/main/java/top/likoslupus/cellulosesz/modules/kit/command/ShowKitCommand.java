@@ -4,6 +4,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
+import java.util.Map;
+
 public final class ShowKitCommand extends AbstractKitCommand {
 
     public ShowKitCommand(
@@ -32,22 +34,34 @@ public final class ShowKitCommand extends AbstractKitCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.kit.show-kit-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var kit = kits.kit(args[0]);
         if (kit.isEmpty()) {
-            invocation.error("Kit 不存在: " + args[0]);
+            invocation.errorKey(
+                    "commands.kit.show-kit-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
-        var builder = new StringBuilder("Kit ").append(kit.get().displayName).append(':');
-        kit.get().items.forEach(item -> builder.append("\n- ")
+        var entries = new StringBuilder();
+        kit.get().items.forEach(item -> entries.append("\n- ")
                 .append(item.normalizedItem())
                 .append(" x")
                 .append(item.count));
-        invocation.reply(builder.toString());
+        invocation.replyKey(
+                "commands.kit.details",
+                Map.of(
+                        "kit", kit.get().displayName,
+                        "entries", entries.toString()
+                )
+        );
         return 1;
     }
 

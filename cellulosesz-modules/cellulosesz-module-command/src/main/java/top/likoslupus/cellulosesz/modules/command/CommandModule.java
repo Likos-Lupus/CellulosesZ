@@ -2,15 +2,14 @@ package top.likoslupus.cellulosesz.modules.command;
 
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
+import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
-import top.likoslupus.cellulosesz.modules.command.middleware.AuditCommandMiddleware;
-import top.likoslupus.cellulosesz.modules.command.middleware.ModuleEnabledCommandMiddleware;
-import top.likoslupus.cellulosesz.modules.command.middleware.PermissionCommandMiddleware;
-import top.likoslupus.cellulosesz.modules.command.middleware.SourceKindCommandMiddleware;
+import top.likoslupus.cellulosesz.modules.command.middleware.*;
 
 @CellulosesModule(
         id = "command",
@@ -44,6 +43,10 @@ public final class CommandModule implements CellulosesZModule {
         middlewares.addMiddleware(new SourceKindCommandMiddleware(messages));
         middlewares.addMiddleware(new ModuleEnabledCommandMiddleware(context));
         middlewares.addMiddleware(new PermissionCommandMiddleware(messages));
+        middlewares.addMiddleware(new CommandCostMiddleware(
+                context.services().require(PlatformService.class),
+                context.services().require(CommandCostService.class)
+        ));
 
         if (config.auditCommands) {
             middlewares.addMiddleware(new AuditCommandMiddleware(context.logger()));

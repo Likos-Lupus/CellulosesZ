@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.world.EntityRemoveService;
 
+import java.util.Map;
 import java.util.Optional;
 
 public final class DefaultEntityRemoveService implements EntityRemoveService {
@@ -21,15 +22,13 @@ public final class DefaultEntityRemoveService implements EntityRemoveService {
             Optional<CellPlayer> origin,
             int radius
     ) {
-        if (origin.isEmpty()) return AdminResult.failure("/remove 需要玩家作为半径中心。");
-        var removed = platform.removeEntities(
-                selector,
-                origin.get(),
-                radius
-        );
-        return removed >= 0
-                ? AdminResult.success("已移除 " + removed + " 个实体。")
-                : AdminResult.failure("实体移除失败。");
+        if (origin.isEmpty()) return AdminResult.failure("service.world.remove-player-required");
+
+        var removed = platform.removeEntities(selector, origin.get(), radius);
+        return removed >= 0 ? AdminResult.success(
+                "service.world.remove-success",
+                Map.of("count", removed)
+        ) : AdminResult.failure("service.world.remove-failed");
     }
 
 }

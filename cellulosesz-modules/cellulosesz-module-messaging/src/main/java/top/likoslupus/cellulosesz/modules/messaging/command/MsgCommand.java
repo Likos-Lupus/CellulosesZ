@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
 import java.util.List;
+import java.util.Map;
 
 public final class MsgCommand extends AbstractMessagingCommand {
 
@@ -46,7 +47,10 @@ public final class MsgCommand extends AbstractMessagingCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.messaging.msg-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 

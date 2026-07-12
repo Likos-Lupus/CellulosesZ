@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
+
 public final class InvSeeCommand extends AbstractItemCommand {
 
     public InvSeeCommand(
@@ -45,7 +47,10 @@ public final class InvSeeCommand extends AbstractItemCommand {
 
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: %s".formatted(usage()));
+            invocation.errorKey(
+                    "commands.item.inv-see-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -53,16 +58,19 @@ public final class InvSeeCommand extends AbstractItemCommand {
         if (target.isEmpty()) return 0;
 
         if (target.get().uuid().equals(self.get().uuid())) {
-            invocation.error("不能查看自己的背包。");
+            invocation.errorKey("commands.item.inv-see-command.error.2");
             return 0;
         }
 
         if (!platform.openInventory(self.get(), target.get())) {
-            invocation.error("无法打开目标背包。");
+            invocation.errorKey("commands.item.inv-see-command.error.3");
             return 0;
         }
 
-        invocation.reply("正在查看 %s 的背包。".formatted(target.get().name()));
+        invocation.replyKey(
+                "commands.item.inv-see-command.reply.1",
+                Map.of("value0", target.get().name())
+        );
         return 1;
     }
 

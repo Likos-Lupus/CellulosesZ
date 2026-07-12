@@ -6,10 +6,13 @@ import top.likoslupus.cellulosesz.api.admin.TempBanService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.admin.data.TempBanDocument;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -19,18 +22,24 @@ public final class JsonTempBanService implements TempBanService {
     private final Path path;
     private final PlatformService platform;
     private final UserService users;
+    private final MessageRenderer renderer;
+    private final LocaleResolver locales;
     private final TempBanDocument document;
 
     public JsonTempBanService(
             StorageService storage,
             Path path,
             PlatformService platform,
-            UserService users
+            UserService users,
+            MessageRenderer renderer,
+            LocaleResolver locales
     ) {
         this.storage = storage;
         this.path = path;
         this.platform = platform;
         this.users = users;
+        this.renderer = renderer;
+        this.locales = locales;
         this.document = storage.load(path, TempBanDocument.class, TempBanDocument::new).join();
     }
 
@@ -56,9 +65,18 @@ public final class JsonTempBanService implements TempBanService {
         document.records.add(record);
         save();
 
-        platform.onlinePlayer(target)
-                .ifPresent(player -> platform.kick(player, "临时封禁: %s".formatted(record.reason)));
-        return AdminResult.success("已临时封禁 %s。".formatted(target));
+        platform.onlinePlayer(target).ifPresent(player -> platform.kick(
+                player,
+                renderer.render(
+                        locales.locale(player),
+                        "service.admin.temp-ban-kick",
+                        Map.of("reason", reason)
+                ).plainText()
+        ));
+        return AdminResult.success(
+                "service.admin.temp-ban-success",
+                Map.of("player", target)
+        );
     }
 
     @Override
@@ -81,7 +99,10 @@ public final class JsonTempBanService implements TempBanService {
         document.records.add(record);
         save();
 
-        return AdminResult.success("已临时封禁 IP %s。".formatted(target));
+        return AdminResult.success(
+                "service.admin.temp-ban-ip-success",
+                Map.of("address", target)
+        );
     }
 
     @Override

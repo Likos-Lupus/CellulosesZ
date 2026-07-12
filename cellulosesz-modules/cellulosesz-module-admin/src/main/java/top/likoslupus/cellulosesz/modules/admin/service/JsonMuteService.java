@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.admin.data.MuteDocument;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -57,7 +58,10 @@ public final class JsonMuteService implements MuteService {
         });
         save();
 
-        return AdminResult.success("已禁言 %s。".formatted(name));
+        return AdminResult.success(
+                "service.admin.mute-success",
+                Map.of("player", name)
+        );
     }
 
     @Override
@@ -73,7 +77,10 @@ public final class JsonMuteService implements MuteService {
         });
         save();
 
-        return AdminResult.success("已解除禁言 %s。".formatted(name));
+        return AdminResult.success(
+                "service.admin.unmute-success",
+                Map.of("player", name)
+        );
     }
 
     @Override

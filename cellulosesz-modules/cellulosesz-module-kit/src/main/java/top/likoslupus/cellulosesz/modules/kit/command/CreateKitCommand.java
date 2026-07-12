@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
+import java.util.Map;
+
 public final class CreateKitCommand extends AbstractKitCommand {
 
     private final ItemService items;
@@ -39,13 +41,16 @@ public final class CreateKitCommand extends AbstractKitCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2 || args.length > 3) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.kit.create-kit-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var descriptor = items.parse(args[1] + (args.length == 3 ? " " + args[2] : ""));
         if (descriptor.isEmpty()) {
-            invocation.error("物品格式错误。 ");
+            invocation.errorKey("commands.kit.create-kit-command.error.2");
             return 0;
         }
 
@@ -54,7 +59,10 @@ public final class CreateKitCommand extends AbstractKitCommand {
         kit.displayName = args[0];
         kit.permission = "cellulosesz.kit." + args[0].toLowerCase();
         kit.items.add(new KitItem(descriptor.get().normalizedItem(), descriptor.get().count));
-        kits.save(kit).thenRun(() -> invocation.reply("已创建 Kit: " + kit.id));
+        kits.save(kit).thenRun(() -> invocation.replyKey(
+                "commands.kit.create-kit-command.reply.1",
+                Map.of("value0", kit.id)
+        ));
         return 1;
     }
 

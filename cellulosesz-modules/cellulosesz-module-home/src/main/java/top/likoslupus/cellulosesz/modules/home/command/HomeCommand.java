@@ -1,22 +1,31 @@
 package top.likoslupus.cellulosesz.modules.home.command;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.home.HomeService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 public final class HomeCommand extends AbstractHomeCommand {
+
+    private static final String COOLDOWN_KEY = "home.teleport";
+
+    private final CooldownService cooldowns;
 
     public HomeCommand(
             PlatformService platform,
             HomeService homes,
             TeleportService teleports,
-            HomeConfig config
+            HomeConfig config,
+            CooldownService cooldowns
     ) {
         super(platform, homes, teleports, config);
+        this.cooldowns = cooldowns;
     }
 
     @Override
@@ -31,7 +40,7 @@ public final class HomeCommand extends AbstractHomeCommand {
 
     @Override
     public String usage() {
-        return "/home [name] 或 /homes";
+        return "/home [name] | /homes";
     }
 
     @Override
@@ -47,21 +56,60 @@ public final class HomeCommand extends AbstractHomeCommand {
         var args = invocation.args();
         if (invocation.label().equalsIgnoreCase("homes")) {
             var names = homes.homes(self.get().uuid()).join().keySet();
-            invocation.reply(names.isEmpty() ? "你还没有设置 Home。" : "Home: " + String.join(", ", names));
+            if (names.isEmpty()) {
+                invocation.replyKey("commands.home.list-empty");
+            } else {
+                invocation.replyKey(
+                        "commands.home.list",
+                        Map.of("homes", String.join(", ", names))
+                );
+            }
             return 1;
         }
 
         var name = nameOrDefault(args);
         var location = homes.home(self.get().uuid(), name).join();
         if (location.isEmpty()) {
-            invocation.error("Home 不存在: " + name);
+            invocation.errorKey(
+                    "commands.home.home-command.error.1",
+                    Map.of("value0", name)
+            );
             return 0;
+        }
+
+        if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown")) {
+            var remaining = cooldowns.remaining(self.get().uuid(), COOLDOWN_KEY);
+            if (!remaining.isZero()) {
+                invocation.errorKey(
+                        "commands.home.cooldown",
+                        Map.of("seconds", Math.max(1L, remaining.toSeconds() + (remaining.toMillisPart() > 0 ? 1 : 0)))
+                );
+                return 0;
+            }
         }
 
         teleports.teleport(self.get(), location.get(), options(invocation))
                 .thenAccept(result -> {
-                    if (result.success()) invocation.reply("已传送到 Home: " + name);
-                    else invocation.error("传送失败: " + result.message());
+                    if (result.success()) {
+                        if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown")
+                                && config.teleport.cooldownSeconds > 0
+                        ) {
+                            cooldowns.start(
+                                    self.get().uuid(),
+                                    COOLDOWN_KEY,
+                                    Duration.ofSeconds(config.teleport.cooldownSeconds)
+                            );
+                        }
+                        invocation.replyKey(
+                                "commands.home.home-command.reply.1",
+                                Map.of("value0", name)
+                        );
+                    } else {
+                        invocation.errorKey(
+                                "commands.home.home-command.error.2",
+                                Map.of("value0", result.message())
+                        );
+                    }
                 });
 
         return 1;

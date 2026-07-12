@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
+import java.util.Map;
+
 public final class SetHomeCommand extends AbstractHomeCommand {
 
     public SetHomeCommand(
@@ -45,12 +47,18 @@ public final class SetHomeCommand extends AbstractHomeCommand {
                 && existing.size() >= config.limits.defaultMaxHomes
                 && !invocation.hasPermission("cellulosesz.home.bypass-limit")
         ) {
-            invocation.error("Home 数量已达到上限: " + config.limits.defaultMaxHomes);
+            invocation.errorKey(
+                    "commands.home.set-home-command.error.1",
+                    Map.of("value0", config.limits.defaultMaxHomes)
+            );
             return 0;
         }
 
         homes.setHome(self.get().uuid(), name, platform.location(self.get())).join();
-        invocation.reply("已设置 Home: " + name);
+        invocation.replyKey(
+                "commands.home.set-home-command.reply.1",
+                Map.of("value0", name)
+        );
 
         return 1;
     }

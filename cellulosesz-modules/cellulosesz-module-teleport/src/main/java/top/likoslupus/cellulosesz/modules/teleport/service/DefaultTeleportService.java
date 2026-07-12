@@ -46,11 +46,15 @@ public final class DefaultTeleportService implements TeleportService {
             platform.teleport(player, destination)
                     .whenComplete((success, throwable) -> {
                         if (throwable != null) {
-                            future.complete(TeleportResult.failed(throwable.getMessage(), destination));
+                            future.complete(TeleportResult.failed(
+                                    "service.teleport.exception",
+                                    java.util.Map.of("reason", String.valueOf(throwable.getMessage())),
+                                    destination
+                            ));
                         } else if (Boolean.TRUE.equals(success)) {
                             future.complete(TeleportResult.success(destination));
                         } else {
-                            future.complete(TeleportResult.failed("Teleport failed", destination));
+                            future.complete(TeleportResult.failed("service.teleport.failed", destination));
                         }
                     });
         };

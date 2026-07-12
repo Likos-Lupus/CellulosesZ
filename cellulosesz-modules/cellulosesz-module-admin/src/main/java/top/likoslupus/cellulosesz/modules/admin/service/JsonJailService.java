@@ -11,10 +11,7 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.modules.admin.data.JailDocument;
 
 import java.nio.file.Path;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
 public final class JsonJailService implements JailService {
 
@@ -49,7 +46,10 @@ public final class JsonJailService implements JailService {
         document.jails.add(jail);
         save();
 
-        return AdminResult.success("已设置监狱 " + jail.name + "。");
+        return AdminResult.success(
+                "service.admin.jail-set",
+                Map.of("jail", jail.name)
+        );
     }
 
     @Override
@@ -59,9 +59,13 @@ public final class JsonJailService implements JailService {
         document.jailed.removeIf(jailed -> jailed.jail.equalsIgnoreCase(normalized));
         save();
 
-        return removed
-                ? AdminResult.success("已删除监狱 " + normalized + "。")
-                : AdminResult.failure("找不到监狱: " + normalized);
+        return removed ? AdminResult.success(
+                "service.admin.jail-deleted",
+                Map.of("jail", normalized)
+        ) : AdminResult.failure(
+                "service.admin.jail-not-found",
+                Map.of("jail", normalized)
+        );
     }
 
     @Override
@@ -87,7 +91,10 @@ public final class JsonJailService implements JailService {
     ) {
         purgeExpired();
         var jail = jail(jailName);
-        if (jail.isEmpty()) return AdminResult.failure("找不到监狱: " + jailName);
+        if (jail.isEmpty()) return AdminResult.failure(
+                "service.admin.jail-not-found",
+                Map.of("jail", jailName)
+        );
 
         var record = new JailedPlayer();
         record.uuid = player.uuid();
@@ -104,7 +111,13 @@ public final class JsonJailService implements JailService {
         save();
 
         platform.teleport(player, jail.get().location);
-        return AdminResult.success("已将 %s 关入 %s。".formatted(player.name(), jail.get().name));
+        return AdminResult.success(
+                "service.admin.player-jailed",
+                Map.of(
+                        "player", player.name(),
+                        "jail", jail.get().name
+                )
+        );
     }
 
     @Override
@@ -115,9 +128,13 @@ public final class JsonJailService implements JailService {
     ) {
         var removed = document.jailed.removeIf(jailed -> uuid.equals(jailed.uuid));
         save();
-        return removed
-                ? AdminResult.success("已释放 %s。".formatted(name))
-                : AdminResult.failure("%s 未被关押。".formatted(name));
+        return removed ? AdminResult.success(
+                "service.admin.player-unjailed",
+                Map.of("player", name)
+        ) : AdminResult.failure(
+                "service.admin.player-not-jailed",
+                Map.of("player", name)
+        );
     }
 
     @Override

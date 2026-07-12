@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
+
 public final class UnlimitedCommand extends AbstractItemCommand {
 
     public UnlimitedCommand(
@@ -46,9 +48,14 @@ public final class UnlimitedCommand extends AbstractItemCommand {
         var args = invocation.args();
         if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
             var configured = automation.unlimitedItems(self.get().uuid());
-            invocation.reply(configured.isEmpty()
-                    ? "没有无限物品。"
-                    : "无限物品: %s".formatted(String.join(", ", configured)));
+            if (configured.isEmpty()) {
+                invocation.replyKey("commands.item.unlimited-list-empty");
+            } else {
+                invocation.replyKey(
+                        "commands.item.unlimited-list",
+                        Map.of("items", String.join(", ", configured))
+                );
+            }
             return 1;
         }
 
@@ -59,18 +66,21 @@ public final class UnlimitedCommand extends AbstractItemCommand {
                             itemId,
                             false
                     ));
-            invocation.reply("已清除全部无限物品。");
+            invocation.replyKey("commands.item.unlimited-command.reply.1");
             return 1;
         }
 
         if (args.length > 1) {
-            invocation.error("用法: %s".formatted(usage()));
+            invocation.errorKey(
+                    "commands.item.unlimited-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var held = items.heldItemId(self.get());
         if (held.isEmpty()) {
-            invocation.error("请先手持一个物品。");
+            invocation.errorKey("commands.item.unlimited-command.error.2");
             return 0;
         }
 
@@ -84,7 +94,10 @@ public final class UnlimitedCommand extends AbstractItemCommand {
                         || args[0].equalsIgnoreCase("disable")
                         || args[0].equalsIgnoreCase("false")
         )) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.item.unlimited-command.error.3",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -94,7 +107,12 @@ public final class UnlimitedCommand extends AbstractItemCommand {
                 enabled
         );
         automation.maintainUnlimited(self.get());
-        invocation.reply("%s%s 的无限补充。".formatted(enabled ? "已启用 " : "已禁用 ", held.get()));
+        invocation.replyKey(
+                enabled
+                        ? "commands.item.unlimited-command.enabled"
+                        : "commands.item.unlimited-command.disabled",
+                Map.of("item", held.get())
+        );
         return 1;
     }
 

@@ -8,10 +8,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 public final class JacksonStorageService implements StorageService {
 
@@ -78,15 +78,14 @@ public final class JacksonStorageService implements StorageService {
                             .filter(path -> path.getFileName().toString().endsWith(".json")
                                     || path.getFileName().toString().endsWith(".yml")
                                     || path.getFileName().toString().endsWith(".yaml"))
-                            .map(path -> {
+                            .flatMap(path -> {
                                 try {
-                                    return read(path, type);
+                                    return Stream.of(read(path, type));
                                 } catch (IOException exception) {
                                     logger.error("Failed to load document at " + path, exception);
-                                    return null;
+                                    return Stream.empty();
                                 }
                             })
-                            .filter(Objects::nonNull)
                             .toList();
                 }
             } catch (IOException exception) {

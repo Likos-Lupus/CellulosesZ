@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 
+import java.util.Map;
+
 public final class KitSignHandler implements CellSignHandler {
 
     private final KitService kits;
@@ -27,15 +29,17 @@ public final class KitSignHandler implements CellSignHandler {
     @Override
     public SignUseResult use(SignUseContext context) {
         var id = context.line(1).toLowerCase();
-        if (id.isBlank()) return SignUseResult.failure("[Kit] 第二行必须填写 Kit 名称。");
+        if (id.isBlank()) return SignUseResult.failure("service.sign.kit-name-required");
 
         var kit = kits.kit(id);
-        if (kit.isEmpty()) return SignUseResult.failure("Kit 不存在: " + id);
+        if (kit.isEmpty()) {
+            return SignUseResult.failure("service.sign.kit-not-found", Map.of("kit", id));
+        }
 
         if (!kit.get().permission.isBlank()
                 && !permissions.has(context.player().nativeHandle(), kit.get().permission)
         ) {
-            return SignUseResult.failure("你没有权限领取此 Kit。");
+            return SignUseResult.failure("service.sign.kit-no-permission");
         }
 
         var result = kits.claim(context.player(), kit.get()).join();

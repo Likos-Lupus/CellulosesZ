@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
 import java.util.Optional;
 
 abstract class AbstractPlayerStateCommand implements CellCommand {
@@ -32,12 +33,17 @@ abstract class AbstractPlayerStateCommand implements CellCommand {
     ) {
         if (invocation.args().length > index) {
             if (!invocation.hasPermission(otherPermission)) {
-                invocation.error("你没有权限操作其他玩家。");
+                invocation.errorKey("commands.playerstate.abstract-player-state-command.error.1");
                 return Optional.empty();
             }
 
-            var player = platform.onlinePlayer(invocation.args()[index]);
-            if (player.isEmpty()) invocation.error("找不到在线玩家: " + invocation.args()[index]);
+            var player = invocation.resolvePlayer(invocation.args()[index]).online();
+            if (player.isEmpty()) {
+                invocation.errorKey(
+                        "commands.playerstate.abstract-player-state-command.error.2",
+                        Map.of("value0", invocation.args()[index])
+                );
+            }
             return player;
         }
         return self(invocation);
@@ -45,7 +51,9 @@ abstract class AbstractPlayerStateCommand implements CellCommand {
 
     protected Optional<CellPlayer> self(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) {
+            invocation.errorKey("commands.playerstate.abstract-player-state-command.error.3");
+        }
         return player;
     }
 

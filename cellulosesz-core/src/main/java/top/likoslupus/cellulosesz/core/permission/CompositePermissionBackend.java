@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.core.permission;
 
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 
 public final class CompositePermissionBackend implements PermissionBackend {
@@ -21,19 +20,18 @@ public final class CompositePermissionBackend implements PermissionBackend {
     @Override
     public int intOption(Object source, String key, int fallback) {
         return backends.stream()
-                .map(backend -> backend.stringOption(source, key))
-                .filter(Optional::isPresent)
-                .map(Optional::get)
-                .map(s -> {
-                    try {
-                        return Integer.parseInt(s);
-                    } catch (NumberFormatException ignored) {
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
+                .flatMap(backend -> backend.stringOption(source, key).stream())
+                .flatMap(value -> parseInteger(value).stream())
                 .findFirst()
                 .orElse(fallback);
+    }
+
+    private Optional<Integer> parseInteger(String value) {
+        try {
+            return Optional.of(Integer.parseInt(value));
+        } catch (NumberFormatException _) {
+            return Optional.empty();
+        }
     }
 
     @Override

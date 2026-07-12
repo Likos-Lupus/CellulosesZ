@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
+
 public final class RepairCommand extends AbstractItemCommand {
 
     public RepairCommand(
@@ -46,22 +48,28 @@ public final class RepairCommand extends AbstractItemCommand {
         var args = invocation.args();
         var all = args.length == 1 && args[0].equalsIgnoreCase("all");
         if (args.length > 1 || (args.length == 1 && !all && !args[0].equalsIgnoreCase("hand"))) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.item.repair-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         if (all && (!config.repairAllEnabled || !invocation.hasPermission("cellulosesz.item.repair.all"))) {
-            invocation.error("你没有权限修复全部物品。");
+            invocation.errorKey("commands.item.repair-command.error.2");
             return 0;
         }
 
         var repaired = platform.repairItems(self.get(), all);
         if (repaired <= 0) {
-            invocation.error("没有可修复的物品。");
+            invocation.errorKey("commands.item.repair-command.error.3");
             return 0;
         }
 
-        invocation.reply("已修复 %d 件物品。".formatted(repaired));
+        invocation.replyKey(
+                "commands.item.repair-command.reply.1",
+                Map.of("value0", repaired)
+        );
         return 1;
     }
 

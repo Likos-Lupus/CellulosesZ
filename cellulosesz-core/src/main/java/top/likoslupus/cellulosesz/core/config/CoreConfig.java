@@ -1,7 +1,10 @@
 package top.likoslupus.cellulosesz.core.config;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class CoreConfig {
 
@@ -16,6 +19,10 @@ public final class CoreConfig {
 
         public String defaultLocale = "zh_cn";
         public String fallback = "en_us";
+        public boolean useClientLocale = true;
+        public String primaryColor = "#55FF55";
+        public String secondaryColor = "#FFFF55";
+        public boolean legacyColors = true;
 
     }
 
@@ -36,6 +43,8 @@ public final class CoreConfig {
     public static final class CommandsConfig {
 
         public RootCommandConfig root = new RootCommandConfig();
+        public Map<String, BigDecimal> costs = new LinkedHashMap<>();
+        public Map<String, List<String>> aliases = new LinkedHashMap<>();
 
     }
 

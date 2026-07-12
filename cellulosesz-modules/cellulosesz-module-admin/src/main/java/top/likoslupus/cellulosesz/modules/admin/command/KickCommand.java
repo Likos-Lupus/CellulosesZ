@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
+
 public final class KickCommand extends AbstractAdminCommand {
 
     private final BanService bans;
@@ -36,12 +38,24 @@ public final class KickCommand extends AbstractAdminCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.kick-command.error.1",
+                    Map.of("value0", usage())
+            );
+            return 0;
+        }
+
+        var target = invocation.resolvePlayer(invocation.args()[0]).online();
+        if (target.isEmpty()) {
+            invocation.errorKey(
+                    "commands.admin.abstract-admin-command.error.1",
+                    Map.of("value0", invocation.args()[0])
+            );
             return 0;
         }
 
         var result = bans.kick(
-                invocation.args()[0],
+                target.get().name(),
                 actor(invocation),
                 join(invocation.args(), 1)
         );

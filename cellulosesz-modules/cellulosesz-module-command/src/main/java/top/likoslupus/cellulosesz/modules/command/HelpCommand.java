@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 
+import java.util.Map;
+
 public final class HelpCommand implements CellCommand {
 
     private final ModuleContext context;
@@ -31,10 +33,18 @@ public final class HelpCommand implements CellCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         var registry = context.services().require(CommandRegistry.class);
-        invocation.reply("CellulosesZ commands:");
+        invocation.replyKey("commands.command.help-command.reply.1");
         registry.commands().stream()
-                .filter(command -> command.permission().isBlank() || invocation.hasPermission(command.permission()))
-                .forEach(command -> invocation.reply(" /" + command.name() + " - " + command.description()));
+                .filter(command -> command.permission().isBlank()
+                        || invocation.hasPermission(command.permission())
+                )
+                .forEach(command -> invocation.replyKey(
+                        "commands.command.help-command.reply.2",
+                        Map.of(
+                                "value0", command.name(),
+                                "value1", command.description()
+                        )
+                ));
         return 1;
     }
 

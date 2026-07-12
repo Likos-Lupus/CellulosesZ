@@ -65,7 +65,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "金额不能为负数。",
+                    "service.economy.negative-amount",
                     read(uuid)
             );
         }
@@ -80,7 +80,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "余额不能超过上限。",
+                    "service.economy.balance-maximum",
                     current
             );
         }
@@ -93,7 +93,7 @@ public final class JsonEconomyService implements EconomyService {
                 normalized,
                 cause,
                 true,
-                "存入成功。",
+                "service.economy.deposit-success",
                 next
         );
     }
@@ -112,7 +112,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "金额不能为负数。",
+                    "service.economy.negative-amount",
                     read(uuid)
             );
         }
@@ -127,7 +127,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "余额不足。",
+                    "service.economy.insufficient-funds",
                     current
             );
         }
@@ -140,7 +140,7 @@ public final class JsonEconomyService implements EconomyService {
                 normalized,
                 cause,
                 true,
-                "扣款成功。",
+                "service.economy.withdraw-success",
                 next
         );
     }
@@ -161,7 +161,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "余额超出允许范围。",
+                    "service.economy.balance-out-of-range",
                     read(uuid)
             );
         }
@@ -174,7 +174,7 @@ public final class JsonEconomyService implements EconomyService {
                 normalized,
                 cause,
                 true,
-                "余额已设置。",
+                "service.economy.balance-set",
                 normalized
         );
     }
@@ -187,12 +187,12 @@ public final class JsonEconomyService implements EconomyService {
             TransactionCause cause
     ) {
         if (from.equals(to)) {
-            return TransactionResult.failure("不能向自己付款。", normalizeAmount(amount), read(from));
+            return TransactionResult.failure("service.economy.self-payment", normalizeAmount(amount), read(from));
         }
 
         var normalized = normalizeAmount(amount);
         if (normalized.signum() <= 0) {
-            return TransactionResult.failure("金额必须大于 0。", normalized, read(from));
+            return TransactionResult.failure("service.economy.amount-positive", normalized, read(from));
         }
 
         var fromBalance = read(from);
@@ -204,7 +204,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "余额不足。",
+                    "service.economy.insufficient-funds",
                     fromBalance
             );
         }
@@ -218,7 +218,7 @@ public final class JsonEconomyService implements EconomyService {
                     normalized,
                     cause,
                     false,
-                    "收款方余额超过上限。",
+                    "service.economy.recipient-maximum",
                     fromBalance
             );
         }
@@ -232,7 +232,7 @@ public final class JsonEconomyService implements EconomyService {
                 normalized,
                 cause,
                 true,
-                "转账成功。",
+                "service.economy.transfer-success",
                 nextFrom
         );
     }
@@ -270,7 +270,9 @@ public final class JsonEconomyService implements EconomyService {
 
         while (log.entries.size() > MAX_LOG_ENTRIES) log.entries.removeFirst();
         storage.save(logPath, log);
-        return new TransactionResult(success, message, normalizeAmount(amount), resultingBalance);
+        return success
+                ? TransactionResult.success(message, normalizeAmount(amount), resultingBalance)
+                : TransactionResult.failure(message, normalizeAmount(amount), resultingBalance);
     }
 
     private void write(UUID uuid, BigDecimal amount) {
@@ -279,9 +281,10 @@ public final class JsonEconomyService implements EconomyService {
 
     private void save() {
         storage.save(accountsPath, document)
-                .exceptionally(exception -> {
-                    logger.error("Failed to save economy accounts", exception);
-                    return null;
+                .whenComplete((_, exception) -> {
+                    if (exception != null) {
+                        logger.error("Failed to save economy accounts", exception);
+                    }
                 });
     }
 

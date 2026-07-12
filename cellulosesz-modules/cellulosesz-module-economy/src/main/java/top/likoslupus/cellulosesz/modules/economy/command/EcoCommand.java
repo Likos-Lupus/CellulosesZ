@@ -2,9 +2,13 @@ package top.likoslupus.cellulosesz.modules.economy.command;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+
+import java.util.Map;
+import java.util.Optional;
 
 public final class EcoCommand extends AbstractEconomyCommand {
 
@@ -36,7 +40,10 @@ public final class EcoCommand extends AbstractEconomyCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 3) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.economy.eco-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -45,23 +52,33 @@ public final class EcoCommand extends AbstractEconomyCommand {
         if (target.isEmpty() || amount.isEmpty()) return 0;
 
         var cause = cause(invocation, "eco " + args[0]);
-        var result = switch (args[0].toLowerCase()) {
-            case "give", "add", "deposit" -> economy.deposit(target.get(), amount.get(), cause);
-            case "take", "remove", "withdraw" -> economy.withdraw(target.get(), amount.get(), cause);
-            case "set" -> economy.setBalance(target.get(), amount.get(), cause);
-            default -> null;
+        Optional<TransactionResult> result = switch (args[0].toLowerCase()) {
+            case "give", "add", "deposit" -> Optional.of(economy.deposit(target.get(), amount.get(), cause));
+            case "take", "remove", "withdraw" -> Optional.of(economy.withdraw(target.get(), amount.get(), cause));
+            case "set" -> Optional.of(economy.setBalance(target.get(), amount.get(), cause));
+            default -> Optional.empty();
         };
 
-        if (result == null) {
-            invocation.error("用法: " + usage());
+        if (result.isEmpty()) {
+            invocation.errorKey(
+                    "commands.economy.eco-command.error.2",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
-        if (!result.success()) {
-            invocation.error(result.message());
+        var transaction = result.orElseThrow();
+        if (!transaction.success()) {
+            invocation.error(transaction.message());
             return 0;
         }
 
-        invocation.reply(result.message() + " 当前余额: " + format(economy.balance(target.get())));
+        invocation.replyKey(
+                "commands.economy.eco-result",
+                Map.of(
+                        "result", transaction.message(),
+                        "balance", format(transaction.balance())
+                )
+        );
         return 1;
     }
 

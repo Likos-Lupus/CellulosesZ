@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
+import java.util.Map;
+
 public final class WarpInfoCommand extends AbstractWarpCommand {
 
     public WarpInfoCommand(
@@ -36,17 +38,29 @@ public final class WarpInfoCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.warp.warp-info-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var warp = warps.warp(args[0]).join();
         if (warp.isEmpty()) {
-            invocation.error("Warp 不存在: " + args[0]);
+            invocation.errorKey(
+                    "commands.warp.warp-info-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
-        invocation.reply("Warp %s 位于 %s".formatted(warp.get().name, warp.get().location.compact()));
+        invocation.replyKey(
+                "commands.warp.warp-info-command.reply.1",
+                Map.of(
+                        "value0", warp.get().name,
+                        "value1", warp.get().location.compact()
+                )
+        );
         return 1;
     }
 

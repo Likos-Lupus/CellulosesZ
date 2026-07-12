@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -33,17 +34,20 @@ abstract class AbstractWarpCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) invocation.errorKey("commands.warp.abstract-warp-command.error.1");
         return player;
     }
 
     protected boolean validName(CommandInvocation invocation, String name) {
         if (name.isBlank() || name.length() > config.naming.maxLength) {
-            invocation.error("Warp 名称不能为空，且长度不能超过 " + config.naming.maxLength + "。");
+            invocation.errorKey(
+                    "commands.warp.abstract-warp-command.error.2",
+                    Map.of("value0", config.naming.maxLength)
+            );
             return false;
         }
         if (!Pattern.matches(config.naming.pattern, name)) {
-            invocation.error("Warp 名称只能包含允许的字符。");
+            invocation.errorKey("commands.warp.abstract-warp-command.error.3");
             return false;
         }
         return true;

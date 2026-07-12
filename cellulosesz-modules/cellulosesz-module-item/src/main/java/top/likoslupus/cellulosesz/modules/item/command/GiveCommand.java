@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
+
 public final class GiveCommand extends AbstractItemCommand {
 
     public GiveCommand(
@@ -36,7 +38,10 @@ public final class GiveCommand extends AbstractItemCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.item.give-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -45,20 +50,23 @@ public final class GiveCommand extends AbstractItemCommand {
 
         var descriptor = items.parse(join(args, 1));
         if (descriptor.isEmpty()) {
-            invocation.error("无效物品描述。");
+            invocation.errorKey("commands.item.give-command.error.2");
             return 0;
         }
 
         if (!items.give(target.get(), descriptor.get())) {
-            invocation.error("物品发放失败。");
+            invocation.errorKey("commands.item.give-command.error.3");
             return 0;
         }
 
-        invocation.reply("已给予 %s %d 个 %s。".formatted(
-                target.get().name(),
-                descriptor.get().count,
-                descriptor.get().normalizedItem()
-        ));
+        invocation.replyKey(
+                "commands.item.give-command.reply.1",
+                Map.of(
+                        "value0", target.get().name(),
+                        "value1", descriptor.get().count,
+                        "value2", descriptor.get().normalizedItem()
+                )
+        );
         return 1;
     }
 

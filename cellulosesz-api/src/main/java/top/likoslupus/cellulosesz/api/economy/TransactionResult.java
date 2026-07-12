@@ -1,28 +1,49 @@
 package top.likoslupus.cellulosesz.api.economy;
 
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+
 import java.math.BigDecimal;
+import java.util.Map;
 
 public record TransactionResult(
         boolean success,
-        String message,
+        LocalizedMessage message,
         BigDecimal amount,
         BigDecimal balance
 ) {
 
     public static TransactionResult success(
-            String message,
+            String key,
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(true, message, amount, balance);
+        return new TransactionResult(true, LocalizedMessage.of(key), amount, balance);
+    }
+
+    public static TransactionResult success(
+            String key,
+            Map<String, ?> placeholders,
+            BigDecimal amount,
+            BigDecimal balance
+    ) {
+        return new TransactionResult(true, LocalizedMessage.of(key, placeholders), amount, balance);
     }
 
     public static TransactionResult failure(
-            String message,
+            String key,
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(false, message, amount, balance);
+        return new TransactionResult(false, LocalizedMessage.of(key), amount, balance);
+    }
+
+    public static TransactionResult failure(
+            String key,
+            Map<String, ?> placeholders,
+            BigDecimal amount,
+            BigDecimal balance
+    ) {
+        return new TransactionResult(false, LocalizedMessage.of(key, placeholders), amount, balance);
     }
 
 }

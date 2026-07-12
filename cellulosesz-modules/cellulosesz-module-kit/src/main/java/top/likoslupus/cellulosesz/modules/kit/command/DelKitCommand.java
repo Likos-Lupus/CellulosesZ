@@ -4,6 +4,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
+import java.util.Map;
+
 public final class DelKitCommand extends AbstractKitCommand {
 
     public DelKitCommand(
@@ -32,13 +34,25 @@ public final class DelKitCommand extends AbstractKitCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.kit.del-kit-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         kits.delete(args[0]).thenAccept(deleted -> {
-            if (deleted) invocation.reply("已删除 Kit: " + args[0]);
-            else invocation.error("Kit 不存在: " + args[0]);
+            if (deleted) {
+                invocation.replyKey(
+                        "commands.kit.del-kit-command.reply.1",
+                        Map.of("value0", args[0])
+                );
+            } else {
+                invocation.errorKey(
+                        "commands.kit.del-kit-command.error.2",
+                        Map.of("value0", args[0])
+                );
+            }
         });
         return 1;
     }

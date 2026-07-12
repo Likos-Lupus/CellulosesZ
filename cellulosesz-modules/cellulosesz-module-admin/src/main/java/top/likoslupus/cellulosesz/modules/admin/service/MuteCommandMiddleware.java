@@ -35,7 +35,7 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
         if (BLOCKED.contains(command.name().toLowerCase())) {
             var player = platform.player(invocation);
             if (player.isPresent() && mutes.muted(player.get().uuid())) {
-                invocation.error("你当前处于禁言状态，不能使用此命令。");
+                invocation.errorKey("commands.admin.mute-command-middleware.error.1");
                 return 0;
             }
         }

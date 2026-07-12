@@ -8,12 +8,16 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
+import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
+import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.hook.FabricGameplayHooks;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
@@ -52,22 +56,32 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         bootstrap.registerService(PlatformService.class, platform);
         bootstrap.registerService(FabricPlatformService.class, platform);
         bootstrap.initialize();
+        platform.messages(
+                bootstrap.serviceRegistry().require(MessageRenderer.class),
+                bootstrap.serviceRegistry().require(LocaleResolver.class)
+        );
         bootstrap.permissionBackend(permissionBackend());
 
-        gameplayHooks = new FabricGameplayHooks(bootstrap.serviceRegistry(), platform);
+        gameplayHooks = new FabricGameplayHooks(
+                bootstrap.serviceRegistry(),
+                platform,
+                bootstrap.serviceRegistry().require(MessageRenderer.class),
+                bootstrap.serviceRegistry().require(LocaleResolver.class)
+        );
         gameplayHooks.register();
-        FabricVanishBridge.visibility((viewer, target) -> bootstrap.serviceRegistry()
-                .optional(VanishService.class)
-                .flatMap(service -> platform.player(viewer)
-                        .map(wrapped -> service.canSee(wrapped, target.getUUID())))
-                .orElse(true));
+        FabricVanishBridge.visibility((viewer, target) ->
+                bootstrap.serviceRegistry()
+                        .optional(VanishService.class)
+                        .flatMap(service ->
+                                platform.player(viewer)
+                                        .map(wrapped -> service.canSee(wrapped, target.getUUID()))
+                        )
+                        .orElse(true)
+        );
 
-        CommandRegistrationCallback.EVENT.register((
-                dispatcher,
-                registryAccess,
-                environment
-        ) -> new FabricCommandBinder(bootstrap, vanillaCommands)
-                .bind(dispatcher, registryAccess, environment));
+        var binder = new FabricCommandBinder(bootstrap, vanillaCommands);
+        bootstrap.registerService(CommandTreeService.class, binder);
+        CommandRegistrationCallback.EVENT.register(binder::bind);
 
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             platform.server(server);
@@ -84,15 +98,13 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
             gameplayHooks.tick(server);
         });
 
-        ServerPlayConnectionEvents.JOIN.register((
-                handler,
-                _,
-                _
-        ) -> bootstrap.onPlayerJoin(handler.getPlayer()));
-        ServerPlayConnectionEvents.DISCONNECT.register((
-                handler,
-                _
-        ) -> bootstrap.onPlayerDisconnect(handler.getPlayer()));
+        ServerPlayConnectionEvents.JOIN.register((handler, _, _) ->
+                bootstrap.onPlayerJoin(handler.getPlayer())
+        );
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, _) -> {
+            FabricDisplayNameBridge.clear(handler.getPlayer().getUUID());
+            bootstrap.onPlayerDisconnect(handler.getPlayer());
+        });
     }
 
     private PermissionBackend permissionBackend() {

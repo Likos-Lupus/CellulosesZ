@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -15,6 +16,8 @@ import top.likoslupus.cellulosesz.modules.playerstate.command.*;
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultPlayerStateService;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishService;
+
+import java.util.Objects;
 
 @CellulosesModule(
         id = "playerstate",
@@ -45,8 +48,9 @@ public final class PlayerStateModule implements CellulosesZModule {
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
 
-        states = new DefaultPlayerStateService(platform, users);
-        vanish = new DefaultVanishService(platform, users, permissions);
+        var displayNames = context.services().require(DisplayNameService.class);
+        states = new DefaultPlayerStateService(platform, users, displayNames);
+        vanish = new DefaultVanishService(platform, users, permissions, displayNames);
 
         context.services().register(PlayerStateService.class, states);
         context.services().register(DefaultPlayerStateService.class, (DefaultPlayerStateService) states);
@@ -61,7 +65,10 @@ public final class PlayerStateModule implements CellulosesZModule {
         );
         context.events().listen(CellulosesZBootstrap.PlayerDisconnectEvent.class, event -> {
             var platform = context.services().require(PlatformService.class);
-            platform.player(event.player()).ifPresent(player -> platform.setVanishedState(player, false));
+            platform.player(event.player())
+                    .ifPresent(player ->
+                            platform.setVanishedState(player, false)
+                    );
         });
     }
 
@@ -70,16 +77,35 @@ public final class PlayerStateModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
 
+        Objects.requireNonNull(states, "PlayerStateService has not been initialized");
+        Objects.requireNonNull(vanish, "VanishService has not been initialized");
+
         context.commands().register(new FlyCommand(platform, users, states));
         context.commands().register(new GodCommand(platform, users, states));
         context.commands().register(new HealCommand(platform, users, states));
         context.commands().register(new FeedCommand(platform, users, states));
         context.commands().register(new AfkCommand(platform, users, states));
-        context.commands().register(new NickCommand(platform, users, states));
-        context.commands().register(new VanishCommand(platform, users, states, vanish));
+        context.commands().register(new NickCommand(
+                platform,
+                users,
+                states,
+                context.services().require(DisplayNameService.class)
+        ));
+        context.commands().register(new VanishCommand(
+                platform,
+                users,
+                states,
+                vanish,
+                context.services().require(top.likoslupus.cellulosesz.api.text.MessageRenderer.class),
+                context.services().require(top.likoslupus.cellulosesz.api.text.LocaleResolver.class)
+        ));
     }
 
-    private void restoreJoinedState(ModuleContext context, Object nativePlayer, int attempt) {
+    private void restoreJoinedState(
+            ModuleContext context,
+            Object nativePlayer,
+            int attempt
+    ) {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
         var wrapped = platform.player(nativePlayer);
@@ -99,6 +125,10 @@ public final class PlayerStateModule implements CellulosesZModule {
             }
             return;
         }
+
+        Objects.requireNonNull(config, "PlayerStateConfig has not been initialized");
+        Objects.requireNonNull(states, "PlayerStateService has not been initialized");
+        Objects.requireNonNull(vanish, "VanishService has not been initialized");
 
         var user = loaded.get();
         if (config.persistFlyGod) {

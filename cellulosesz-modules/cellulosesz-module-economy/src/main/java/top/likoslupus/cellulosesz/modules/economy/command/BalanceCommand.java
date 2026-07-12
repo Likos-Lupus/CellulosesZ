@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.util.List;
+import java.util.Map;
 
 public final class BalanceCommand extends AbstractEconomyCommand {
 
@@ -45,18 +46,27 @@ public final class BalanceCommand extends AbstractEconomyCommand {
         if (args.length == 0) {
             var self = player(invocation);
             if (self.isEmpty()) return 0;
-            invocation.reply("余额: " + format(economy.balance(self.get().uuid())));
+            invocation.replyKey(
+                    "commands.economy.balance-command.reply.1",
+                    Map.of("value0", format(economy.balance(self.get().uuid())))
+            );
             return 1;
         }
 
         if (!invocation.hasPermission("cellulosesz.economy.balance.other")) {
-            invocation.error("你没有权限查看其他玩家余额。");
+            invocation.errorKey("commands.economy.balance-command.error.1");
             return 0;
         }
 
         var target = uuid(invocation, args[0]);
         if (target.isEmpty()) return 0;
-        invocation.reply(args[0] + " 的余额: " + format(economy.balance(target.get())));
+        invocation.replyKey(
+                "commands.economy.balance-other",
+                Map.of(
+                        "player", args[0],
+                        "balance", format(economy.balance(target.get()))
+                )
+        );
         return 1;
     }
 

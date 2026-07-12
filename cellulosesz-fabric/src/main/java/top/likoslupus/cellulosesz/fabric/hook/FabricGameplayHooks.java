@@ -15,6 +15,8 @@ import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.sign.SignService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -23,14 +25,20 @@ public final class FabricGameplayHooks {
 
     private final ServiceRegistry services;
     private final PlatformService platform;
+    private final MessageRenderer renderer;
+    private final LocaleResolver locales;
     private long ticks;
 
     public FabricGameplayHooks(
             ServiceRegistry services,
-            PlatformService platform
+            PlatformService platform,
+            MessageRenderer renderer,
+            LocaleResolver locales
     ) {
         this.services = services;
         this.platform = platform;
+        this.renderer = renderer;
+        this.locales = locales;
     }
 
     public void register() {
@@ -101,7 +109,10 @@ public final class FabricGameplayHooks {
         }
         if (!result.handled()) return InteractionResult.PASS;
 
-        if (!result.message().isBlank()) platform.sendMessage(wrapped.get(), result.message());
+        result.optionalMessage().ifPresent(message -> platform.sendMessage(
+                wrapped.get(),
+                renderer.render(locales.locale(wrapped.get()), message.key(), message.placeholders())
+        ));
         return InteractionResult.SUCCESS;
     }
 

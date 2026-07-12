@@ -21,7 +21,7 @@ public final class PermissionCommandMiddleware implements CommandMiddleware {
             CommandContinuation continuation
     ) {
         if (!command.permission().isBlank() && !invocation.hasPermission(command.permission())) {
-            invocation.error(messages.message("common.no-permission"));
+            invocation.errorKey("common.no-permission");
             return 0;
         }
         return continuation.proceed();

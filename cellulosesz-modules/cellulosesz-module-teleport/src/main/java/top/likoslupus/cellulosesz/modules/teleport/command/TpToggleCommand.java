@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+
 public final class TpToggleCommand implements CellCommand {
 
     private final PlatformService platform;
@@ -38,14 +39,17 @@ public final class TpToggleCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tp-toggle-command.error.1");
             return 0;
         }
 
         var user = users.load(self.get().uuid()).join();
         user.preferences.teleportRequests = !user.preferences.teleportRequests;
         users.markDirty(self.get().uuid());
-        invocation.reply("传送请求接收状态: " + (user.preferences.teleportRequests ? "开启" : "关闭"));
+        invocation.replyKey(user.preferences.teleportRequests
+                ? "commands.teleport.tp-toggle-command.enabled"
+                : "commands.teleport.tp-toggle-command.disabled"
+        );
         return 1;
     }
 

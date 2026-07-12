@@ -12,6 +12,7 @@ import top.likoslupus.cellulosesz.modules.economy.service.JsonEconomyService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -36,45 +37,51 @@ abstract class AbstractEconomyCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) invocation.errorKey("commands.economy.abstract-economy-command.error.1");
         return player;
     }
 
     protected Optional<CellPlayer> online(CommandInvocation invocation, String name) {
-        var player = platform.onlinePlayer(name);
-        if (player.isEmpty()) invocation.error("找不到在线玩家: " + name);
+        var player = invocation.resolvePlayer(name).online();
+        if (player.isEmpty()) {
+            invocation.errorKey(
+                    "commands.economy.abstract-economy-command.error.2",
+                    Map.of("value0", name)
+            );
+        }
         return player;
     }
 
     protected Optional<UUID> uuid(CommandInvocation invocation, String name) {
-        var online = platform.onlinePlayer(name);
-        if (online.isPresent()) return Optional.of(online.get().uuid());
-
-        var cached = users.findUuidByName(name);
-        if (cached.isEmpty()) invocation.error("找不到玩家: " + name);
-        return cached;
+        var uuid = invocation.resolvePlayer(name).optionalUuid();
+        if (uuid.isEmpty()) {
+            invocation.errorKey(
+                    "commands.economy.abstract-economy-command.error.3",
+                    Map.of("value0", name)
+            );
+        }
+        return uuid;
     }
 
     protected Optional<BigDecimal> amount(CommandInvocation invocation, String value) {
         try {
             var amount = new BigDecimal(value);
             if (amount.signum() <= 0) {
-                invocation.error("金额必须大于 0。");
+                invocation.errorKey("commands.economy.abstract-economy-command.error.4");
                 return Optional.empty();
             }
             return Optional.of(amount);
-        } catch (NumberFormatException exception) {
-            invocation.error("金额格式错误: " + value);
+        } catch (NumberFormatException _) {
+            invocation.errorKey(
+                    "commands.economy.abstract-economy-command.error.5",
+                    Map.of("value0", value)
+            );
             return Optional.empty();
         }
     }
 
     protected TransactionCause cause(CommandInvocation invocation, String note) {
-        return TransactionCause.command(actor(invocation), note);
-    }
-
-    protected String actor(CommandInvocation invocation) {
-        return invocation.playerName().orElse("console");
+        return TransactionCause.command(invocation.playerName().orElse("console"), note);
     }
 
     protected String format(BigDecimal amount) {

@@ -5,7 +5,7 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.economy.WorthService;
 
 import java.math.BigDecimal;
-import java.text.MessageFormat;
+import java.util.Map;
 
 public final class SetWorthCommand implements CellCommand {
 
@@ -34,23 +34,38 @@ public final class SetWorthCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 2) {
-            invocation.error(MessageFormat.format("用法: {0}", usage()));
+            invocation.errorKey(
+                    "common.usage",
+                    Map.of("usage", usage())
+            );
             return 0;
         }
 
         if (args[1].equalsIgnoreCase("remove")) {
             worths.removeWorth(args[0]);
-            invocation.reply(MessageFormat.format("已移除 {0} 的价值。 ", args[0]));
+            invocation.replyKey(
+                    "commands.economy.worth-removed",
+                    Map.of("item", args[0])
+            );
             return 1;
         }
 
         try {
             var amount = new BigDecimal(args[1]);
             worths.setWorth(args[0], amount);
-            invocation.reply("已设置 %s 价值为 %s。 ".formatted(args[0], amount.toPlainString()));
+            invocation.replyKey(
+                    "commands.economy.set-worth-command.reply.1",
+                    Map.of(
+                            "value0", args[0],
+                            "value1", amount.toPlainString()
+                    )
+            );
             return 1;
         } catch (NumberFormatException exception) {
-            invocation.error("金额格式错误: %s".formatted(args[1]));
+            invocation.errorKey(
+                    "commands.economy.set-worth-command.error.1",
+                    Map.of("value0", args[1])
+            );
             return 0;
         }
     }

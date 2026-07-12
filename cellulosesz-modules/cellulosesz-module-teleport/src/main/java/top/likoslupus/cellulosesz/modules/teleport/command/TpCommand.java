@@ -4,6 +4,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 
+import java.util.Map;
+
 public final class TpCommand extends AbstractTeleportCommand {
 
     public TpCommand(
@@ -20,7 +22,7 @@ public final class TpCommand extends AbstractTeleportCommand {
 
     @Override
     public String usage() {
-        return "/tp <target> 或 /tp <player> <target>";
+        return "/tp <target> | /tp <player> <target>";
     }
 
     @Override
@@ -45,7 +47,10 @@ public final class TpCommand extends AbstractTeleportCommand {
             return teleport(invocation, subject.get(), platform.location(target.get()));
         }
 
-        invocation.error("用法: " + usage());
+        invocation.errorKey(
+                "commands.teleport.tp-command.error.1",
+                Map.of("value0", usage())
+        );
         return 0;
     }
 

@@ -2,13 +2,12 @@ package top.likoslupus.cellulosesz.modules.user.service;
 
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
-import top.likoslupus.cellulosesz.api.user.*;
+import top.likoslupus.cellulosesz.api.user.CellUser;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
+import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -92,6 +91,11 @@ public final class JsonUserService implements UserService {
     }
 
     @Override
+    public Collection<CellUser> cachedUsers() {
+        return List.copyOf(users.values());
+    }
+
+    @Override
     public Optional<UUID> findUuidByName(String name) {
         return nameCache.findUuid(name);
     }
@@ -122,9 +126,10 @@ public final class JsonUserService implements UserService {
 
         return CompletableFuture.allOf(userFutures)
                 .thenCompose(_ -> nameCache.save())
-                .exceptionally(exception -> {
-                    logger.error("Failed to save user data", exception);
-                    return null;
+                .whenComplete((_, exception) -> {
+                    if (exception != null) {
+                        logger.error("Failed to save user data", exception);
+                    }
                 });
     }
 
@@ -139,11 +144,6 @@ public final class JsonUserService implements UserService {
         if (user.uuid.getLeastSignificantBits() == 0L && user.uuid.getMostSignificantBits() == 0L) {
             user.uuid = fallbackUuid;
         }
-        if (user.timestamps == null) user.timestamps = new UserTimestamps();
-        if (user.state == null) user.state = new UserState();
-        if (user.preferences == null) user.preferences = new UserPreferences();
-        if (user.relations == null) user.relations = new UserRelations();
-        if (user.cooldowns == null) user.cooldowns = new LinkedHashMap<>();
     }
 
     private Path userPath(UUID uuid) {

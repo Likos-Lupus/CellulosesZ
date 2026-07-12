@@ -38,16 +38,16 @@ public final class TpDenyCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tp-deny-command.error.1");
             return 0;
         }
 
         if (requests.removeFor(self.get().uuid()).isPresent()) {
-            invocation.reply("已拒绝传送请求。");
+            invocation.replyKey("commands.teleport.tp-deny-command.reply.1");
             return 1;
         }
 
-        invocation.error("没有待处理的传送请求。");
+        invocation.errorKey("commands.teleport.tp-deny-command.error.2");
         return 0;
     }
 

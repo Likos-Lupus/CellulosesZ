@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportRequestService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
 
+import java.util.Map;
+
 public final class TpaCommand implements CellCommand {
 
     private final PlatformService platform;
@@ -28,7 +30,9 @@ public final class TpaCommand implements CellCommand {
 
     @Override
     public String permission() {
-        return here ? "cellulosesz.teleport.tpahere" : "cellulosesz.teleport.tpa";
+        return here
+                ? "cellulosesz.teleport.tpahere"
+                : "cellulosesz.teleport.tpa";
     }
 
     @Override
@@ -50,24 +54,30 @@ public final class TpaCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.teleport.tpa-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
         var requester = platform.player(invocation);
-        var target = platform.onlinePlayer(args[0]);
+        var target = invocation.resolvePlayer(args[0]).online();
         if (requester.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tpa-command.error.2");
             return 0;
         }
 
         if (target.isEmpty()) {
-            invocation.error("找不到在线玩家: " + args[0]);
+            invocation.errorKey(
+                    "commands.teleport.tpa-command.error.3",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
         if (target.get().uuid().equals(requester.get().uuid())) {
-            invocation.error("不能向自己发送传送请求。");
+            invocation.errorKey("commands.teleport.tpa-command.error.4");
             return 0;
         }
 
@@ -78,7 +88,12 @@ public final class TpaCommand implements CellCommand {
                 timeoutSeconds
         );
 
-        invocation.reply("已向 " + target.get().name() + " 发送传送请求。请求将在 " + timeoutSeconds + " 秒后过期。");
+        invocation.replyKey(
+                "commands.teleport.tpa-command.reply.1",
+                Map.of(
+                        "value0", target.get().name(),
+                        "value1", timeoutSeconds)
+        );
         return 1;
     }
 

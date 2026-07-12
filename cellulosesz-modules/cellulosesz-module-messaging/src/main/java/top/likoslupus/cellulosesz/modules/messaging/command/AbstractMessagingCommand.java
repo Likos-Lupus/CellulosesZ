@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
 import java.util.Arrays;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,24 +30,32 @@ abstract class AbstractMessagingCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) {
+            invocation.errorKey("commands.messaging.abstract-messaging-command.error.1");
+        }
         return player;
     }
 
     protected Optional<CellPlayer> online(CommandInvocation invocation, String name) {
-        var player = platform.onlinePlayer(name);
-        if (player.isEmpty()) invocation.error("找不到在线玩家: " + name);
+        var player = invocation.resolvePlayer(name).online();
+        if (player.isEmpty()) {
+            invocation.errorKey(
+                    "commands.messaging.abstract-messaging-command.error.2",
+                    Map.of("value0", name)
+            );
+        }
         return player;
     }
 
     protected Optional<UUID> uuid(CommandInvocation invocation, String name) {
-        var online = platform.onlinePlayer(name);
-        if (online.isPresent()) return Optional.of(online.get().uuid());
-
-        var cached = users.findUuidByName(name);
-        if (cached.isEmpty()) invocation.error("找不到玩家: " + name);
-
-        return cached;
+        var uuid = invocation.resolvePlayer(name).optionalUuid();
+        if (uuid.isEmpty()) {
+            invocation.errorKey(
+                    "commands.messaging.abstract-messaging-command.error.3",
+                    Map.of("value0", name)
+            );
+        }
+        return uuid;
     }
 
     protected String join(String[] args, int start) {
@@ -55,11 +64,14 @@ abstract class AbstractMessagingCommand implements CellCommand {
 
     protected boolean validLength(CommandInvocation invocation, String message) {
         if (message.isBlank()) {
-            invocation.error("消息不能为空。 ");
+            invocation.errorKey("commands.messaging.abstract-messaging-command.error.4");
             return false;
         }
         if (message.length() > config.maxMessageLength) {
-            invocation.error("消息太长，最大长度为 " + config.maxMessageLength + "。 ");
+            invocation.errorKey(
+                    "commands.messaging.abstract-messaging-command.error.5",
+                    Map.of("value0", config.maxMessageLength)
+            );
             return false;
         }
         return true;

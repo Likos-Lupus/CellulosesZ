@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
+import java.util.Map;
+
 public final class DelHomeCommand extends AbstractHomeCommand {
 
     public DelHomeCommand(
@@ -36,16 +38,28 @@ public final class DelHomeCommand extends AbstractHomeCommand {
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
+
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.home.del-home-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
+
         if (homes.deleteHome(self.get().uuid(), args[0]).join()) {
-            invocation.reply("已删除 Home: " + args[0]);
+            invocation.replyKey(
+                    "commands.home.del-home-command.reply.1",
+                    Map.of("value0", args[0])
+            );
             return 1;
         }
-        invocation.error("Home 不存在: " + args[0]);
+
+        invocation.errorKey(
+                "commands.home.del-home-command.error.2",
+                Map.of("value0", args[0])
+        );
         return 0;
     }
 

@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
 
+import java.util.Map;
+
 public final class MuteCommand extends AbstractAdminCommand {
 
     private final MuteService mutes;
@@ -42,7 +44,10 @@ public final class MuteCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.mute-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 

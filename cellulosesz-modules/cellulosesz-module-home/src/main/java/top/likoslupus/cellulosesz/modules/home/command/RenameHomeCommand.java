@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
+import java.util.Map;
+
 public final class RenameHomeCommand extends AbstractHomeCommand {
 
     public RenameHomeCommand(
@@ -39,16 +41,27 @@ public final class RenameHomeCommand extends AbstractHomeCommand {
 
         var args = invocation.args();
         if (args.length != 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.home.rename-home-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
+
         if (!validName(invocation, args[1])) return 0;
+
         if (homes.renameHome(self.get().uuid(), args[0], args[1]).join()) {
-            invocation.reply("已将 Home " + args[0] + " 重命名为 " + args[1]);
+            invocation.replyKey(
+                    "commands.home.rename-home-command.reply.1",
+                    Map.of(
+                            "value0", args[0],
+                            "value1", args[1]
+                    )
+            );
             return 1;
         }
 
-        invocation.error("无法重命名 Home，可能旧名称不存在或新名称已存在。");
+        invocation.errorKey("commands.home.rename-home-command.error.2");
         return 0;
     }
 

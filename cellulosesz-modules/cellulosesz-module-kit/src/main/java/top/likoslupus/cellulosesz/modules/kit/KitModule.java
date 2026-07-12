@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.modules.kit;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
+import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.kit.KitService;
@@ -13,6 +15,9 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.kit.command.*;
 import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
+
+import java.util.Collection;
+import java.util.function.Function;
 
 @CellulosesModule(
         id = "kit",
@@ -61,6 +66,16 @@ public final class KitModule implements CellulosesZModule {
         context.commands().register(new CreateKitCommand(platform, kits, items));
         context.commands().register(new DelKitCommand(platform, kits));
         context.commands().register(new KitResetCommand(platform, kits, users));
+
+        var suggestions = context.services().require(CommandSuggestionRegistry.class);
+        var kitNames = (Function<CommandSuggestionContext, Collection<String>>) _ ->
+                kits.kits().stream()
+                        .map(kit -> kit.id)
+                        .toList();
+        suggestions.register("kit", "name", kitNames);
+        suggestions.register("showkit", "name", kitNames);
+        suggestions.register("delkit", "name", kitNames);
+        suggestions.register("kitreset", "kit", kitNames);
     }
 
     @Override

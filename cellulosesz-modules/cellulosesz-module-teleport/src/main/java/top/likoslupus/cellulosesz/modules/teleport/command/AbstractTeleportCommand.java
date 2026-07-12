@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 
+import java.util.Map;
 import java.util.Optional;
 
 abstract class AbstractTeleportCommand implements CellCommand {
@@ -26,15 +27,18 @@ abstract class AbstractTeleportCommand implements CellCommand {
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
         if (player.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.abstract-teleport-command.error.1");
         }
         return player;
     }
 
     protected Optional<CellPlayer> online(CommandInvocation invocation, String name) {
-        var player = platform.onlinePlayer(name);
+        var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty()) {
-            invocation.error("找不到在线玩家: " + name);
+            invocation.errorKey(
+                    "commands.teleport.abstract-teleport-command.error.2",
+                    Map.of("value0", name)
+            );
         }
         return player;
     }
@@ -47,9 +51,15 @@ abstract class AbstractTeleportCommand implements CellCommand {
         teleports.teleport(player, location, new TeleportOptions())
                 .thenAccept(result -> {
                     if (result.success()) {
-                        invocation.reply("已传送到 " + result.location().compact());
+                        invocation.replyKey(
+                                "commands.teleport.abstract-teleport-command.reply.1",
+                                Map.of("value0", result.location().compact())
+                        );
                     } else {
-                        invocation.error("传送失败: " + result.message());
+                        invocation.errorKey(
+                                "commands.teleport.abstract-teleport-command.error.3",
+                                Map.of("value0", result.message())
+                        );
                     }
                 });
         return 1;
@@ -63,7 +73,13 @@ abstract class AbstractTeleportCommand implements CellCommand {
         try {
             return Optional.of(Double.parseDouble(value));
         } catch (NumberFormatException exception) {
-            invocation.error(name + " 必须是数字: " + value);
+            invocation.errorKey(
+                    "commands.teleport.invalid-number",
+                    Map.of(
+                            "name", name,
+                            "value", value
+                    )
+            );
             return Optional.empty();
         }
     }
@@ -76,7 +92,13 @@ abstract class AbstractTeleportCommand implements CellCommand {
         try {
             return Optional.of(Integer.parseInt(value));
         } catch (NumberFormatException exception) {
-            invocation.error(name + " 必须是整数: " + value);
+            invocation.errorKey(
+                    "commands.teleport.invalid-integer",
+                    Map.of(
+                            "name", name,
+                            "value", value
+                    )
+            );
             return Optional.empty();
         }
     }

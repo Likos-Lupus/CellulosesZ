@@ -4,9 +4,11 @@ import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
 import java.util.UUID;
 
 public final class DefaultVanishService implements VanishService {
@@ -14,15 +16,18 @@ public final class DefaultVanishService implements VanishService {
     private final PlatformService platform;
     private final UserService users;
     private final PermissionService permissions;
+    private final DisplayNameService displayNames;
 
     public DefaultVanishService(
             PlatformService platform,
             UserService users,
-            PermissionService permissions
+            PermissionService permissions,
+            DisplayNameService displayNames
     ) {
         this.platform = platform;
         this.users = users;
         this.permissions = permissions;
+        this.displayNames = displayNames;
     }
 
     @Override
@@ -35,7 +40,12 @@ public final class DefaultVanishService implements VanishService {
     @Override
     public AdminResult setVanished(CellPlayer player, boolean vanished) {
         var user = users.cached(player.uuid());
-        if (user.isEmpty()) return AdminResult.failure("玩家数据尚未加载: " + player.name());
+        if (user.isEmpty()) {
+            return AdminResult.failure(
+                    "service.playerstate.user-not-loaded",
+                    Map.of("player", displayNames.plainDisplayName(player))
+            );
+        }
 
         user.get().state.vanished = vanished;
         users.markDirty(player.uuid());
@@ -51,7 +61,10 @@ public final class DefaultVanishService implements VanishService {
                         platform.setPlayerVisible(viewer, player, true);
                     }
                 });
-        return AdminResult.success((vanished ? "已隐身: " : "已显身: ") + player.name());
+        return AdminResult.success(
+                vanished ? "service.playerstate.vanish-enabled" : "service.playerstate.vanish-disabled",
+                Map.of("player", displayNames.plainDisplayName(player))
+        );
     }
 
     @Override

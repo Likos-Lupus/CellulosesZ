@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
+
 public final class JailsCommand extends AbstractAdminCommand {
 
     private final JailService jails;
@@ -34,7 +36,14 @@ public final class JailsCommand extends AbstractAdminCommand {
                 .map(jail -> jail.name)
                 .sorted()
                 .toList();
-        invocation.reply(names.isEmpty() ? "没有已设置的监狱。" : "监狱: " + String.join(", ", names));
+        if (names.isEmpty()) {
+            invocation.replyKey("commands.admin.jails-empty");
+        } else {
+            invocation.replyKey(
+                    "commands.admin.jails",
+                    Map.of("jails", String.join(", ", names))
+            );
+        }
         return 1;
     }
 

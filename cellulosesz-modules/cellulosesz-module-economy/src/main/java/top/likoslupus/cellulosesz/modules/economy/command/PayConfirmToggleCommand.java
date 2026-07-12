@@ -42,7 +42,11 @@ public final class PayConfirmToggleCommand extends AbstractEconomyCommand {
         user.preferences.confirmLargePayments = !user.preferences.confirmLargePayments;
         users.markDirty(self.get().uuid());
         users.save(self.get().uuid());
-        invocation.reply(user.preferences.confirmLargePayments ? "已开启大额付款确认偏好。" : "已关闭大额付款确认偏好。");
+        invocation.replyKey(
+                user.preferences.confirmLargePayments
+                        ? "commands.economy.pay-confirm-enabled"
+                        : "commands.economy.pay-confirm-disabled"
+        );
         return 1;
     }
 

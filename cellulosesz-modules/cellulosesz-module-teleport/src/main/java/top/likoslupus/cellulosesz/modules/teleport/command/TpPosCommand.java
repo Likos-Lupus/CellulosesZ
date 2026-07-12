@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 
+import java.util.Map;
+
 public final class TpPosCommand extends AbstractTeleportCommand {
 
     public TpPosCommand(
@@ -39,7 +41,10 @@ public final class TpPosCommand extends AbstractTeleportCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 3 || args.length > 4) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.teleport.tp-pos-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 

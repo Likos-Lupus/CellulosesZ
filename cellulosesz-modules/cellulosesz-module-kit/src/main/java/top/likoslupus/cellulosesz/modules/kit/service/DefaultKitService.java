@@ -90,11 +90,12 @@ public final class DefaultKitService implements KitService {
             removed = kits.remove(key(id)) != null;
         }
         if (!removed) return CompletableFuture.completedFuture(false);
+
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Files.deleteIfExists(path(id));
                 return true;
-            } catch (IOException exception) {
+            } catch (IOException _) {
                 return false;
             }
         });
@@ -109,12 +110,15 @@ public final class DefaultKitService implements KitService {
             var availableAt = user.cooldowns.getOrDefault(cooldownKey, 0L);
             if (availableAt > now) {
                 var seconds = Math.max(1L, (availableAt - now + 999L) / 1000L);
-                return KitClaimResult.failure("Kit 仍在冷却中，剩余 " + seconds + " 秒。 ");
+                return KitClaimResult.failure(
+                        "service.kit.cooldown",
+                        Map.of("seconds", seconds)
+                );
             }
 
             var cost = parseMoney(kit.cost);
             if (config.chargeKitCost && cost.signum() > 0) {
-                if (economy.isEmpty()) return KitClaimResult.failure("该 Kit 需要经济服务，但经济模块不可用。 ");
+                if (economy.isEmpty()) return KitClaimResult.failure("service.kit.economy-unavailable");
                 var withdraw = economy.get()
                         .withdraw(player.uuid(), cost, TransactionCause.command(player.name(), "kit " + kit.id));
                 if (!withdraw.success()) return KitClaimResult.failure(withdraw.message());
@@ -122,7 +126,10 @@ public final class DefaultKitService implements KitService {
 
             for (var item : kit.items) {
                 if (!items.give(player, item)) {
-                    return KitClaimResult.failure("发放物品失败: " + item.normalizedItem());
+                    return KitClaimResult.failure(
+                            "service.kit.item-failed",
+                            Map.of("item", item.normalizedItem())
+                    );
                 }
             }
 
@@ -131,7 +138,10 @@ public final class DefaultKitService implements KitService {
                 users.markDirty(player.uuid());
                 users.save(player.uuid());
             }
-            return KitClaimResult.success("已领取 Kit: " + kit.displayName);
+            return KitClaimResult.success(
+                    "service.kit.claimed",
+                    Map.of("kit", kit.displayName)
+            );
         });
     }
 
@@ -151,7 +161,7 @@ public final class DefaultKitService implements KitService {
     private BigDecimal parseMoney(String value) {
         try {
             return new BigDecimal(value);
-        } catch (NumberFormatException exception) {
+        } catch (NumberFormatException _) {
             return BigDecimal.ZERO;
         }
     }

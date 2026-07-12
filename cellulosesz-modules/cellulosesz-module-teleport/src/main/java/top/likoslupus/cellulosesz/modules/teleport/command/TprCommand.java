@@ -49,19 +49,19 @@ public final class TprCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tpr-command.error.1");
             return 0;
         }
 
         var current = platform.location(self.get());
         var location = randomTeleports.randomLocation(current.world, minRadius, maxRadius);
         if (location.isEmpty()) {
-            invocation.error("无法找到随机传送位置。");
+            invocation.errorKey("commands.teleport.tpr-command.error.2");
             return 0;
         }
 
         teleports.teleport(self.get(), location.get(), new TeleportOptions());
-        invocation.reply("正在随机传送...");
+        invocation.replyKey("commands.teleport.tpr-command.reply.1");
         return 1;
     }
 

@@ -6,6 +6,9 @@ import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
+import java.util.Map;
+import java.util.Optional;
+
 public final class WeatherCommand extends AbstractWorldCommand {
 
     private final WorldService worlds;
@@ -38,18 +41,19 @@ public final class WeatherCommand extends AbstractWorldCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.world.weather-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
-        var type = switch (args[0].toLowerCase()) {
-            case "clear", "sun" -> WeatherType.CLEAR;
-            case "rain", "storm" -> WeatherType.RAIN;
-            case "thunder" -> WeatherType.THUNDER;
-            default -> null;
-        };
-        if (type == null) {
-            invocation.error("未知天气: " + args[0]);
+        var type = weatherType(args[0]);
+        if (type.isEmpty()) {
+            invocation.errorKey(
+                    "commands.world.weather-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
@@ -58,7 +62,7 @@ public final class WeatherCommand extends AbstractWorldCommand {
                 : config.defaultWeatherSeconds;
         var result = worlds.setWeather(
                 world(invocation, 2),
-                type,
+                type.orElseThrow(),
                 seconds
         );
         if (result.success()) {
@@ -67,6 +71,15 @@ public final class WeatherCommand extends AbstractWorldCommand {
             invocation.error(result.message());
         }
         return result.success() ? 1 : 0;
+    }
+
+    private Optional<WeatherType> weatherType(String value) {
+        return switch (value.toLowerCase()) {
+            case "clear", "sun" -> Optional.of(WeatherType.CLEAR);
+            case "rain", "storm" -> Optional.of(WeatherType.RAIN);
+            case "thunder" -> Optional.of(WeatherType.THUNDER);
+            default -> Optional.empty();
+        };
     }
 
     private int parse(String value, int fallback) {

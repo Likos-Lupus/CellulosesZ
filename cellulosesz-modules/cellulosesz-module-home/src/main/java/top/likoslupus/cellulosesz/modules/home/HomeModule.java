@@ -2,6 +2,9 @@ package top.likoslupus.cellulosesz.modules.home;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
+import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
+import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.home.HomeService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
@@ -14,6 +17,11 @@ import top.likoslupus.cellulosesz.modules.home.command.HomeCommand;
 import top.likoslupus.cellulosesz.modules.home.command.RenameHomeCommand;
 import top.likoslupus.cellulosesz.modules.home.command.SetHomeCommand;
 import top.likoslupus.cellulosesz.modules.home.service.JsonHomeService;
+
+import java.util.Collection;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
 
 @CellulosesModule(
         id = "home",
@@ -51,11 +59,25 @@ public final class HomeModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var teleports = context.services().require(TeleportService.class);
+        var cooldowns = context.services().require(CooldownService.class);
 
-        context.commands().register(new HomeCommand(platform, homes, teleports, config));
+        Objects.requireNonNull(homes, "HomeService has not been initialized");
+        Objects.requireNonNull(config, "HomeConfig has not been initialized");
+
+        context.commands().register(new HomeCommand(platform, homes, teleports, config, cooldowns));
         context.commands().register(new SetHomeCommand(platform, homes, teleports, config));
         context.commands().register(new DelHomeCommand(platform, homes, teleports, config));
         context.commands().register(new RenameHomeCommand(platform, homes, teleports, config));
+
+        var suggestions = context.services().require(CommandSuggestionRegistry.class);
+        var homeNames = (Function<CommandSuggestionContext, Collection<String>>) suggestion ->
+                suggestion.playerName()
+                        .flatMap(platform::onlinePlayer)
+                        .map(player -> homes.homes(player.uuid()).join().keySet())
+                        .orElseGet(Set::of);
+        suggestions.register("home", "name", homeNames);
+        suggestions.register("delhome", "name", homeNames);
+        suggestions.register("renamehome", "old", homeNames);
     }
 
 }

@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
@@ -32,13 +33,17 @@ abstract class AbstractItemCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) invocation.errorKey("commands.item.abstract-item-command.error.1");
         return player;
     }
 
     protected Optional<CellPlayer> target(CommandInvocation invocation, String name) {
-        var player = platform.onlinePlayer(name);
-        if (player.isEmpty()) invocation.error("玩家不在线: %s".formatted(name));
+        var player = invocation.resolvePlayer(name).online();
+        if (player.isEmpty())
+            invocation.errorKey(
+                    "commands.item.abstract-item-command.error.2",
+                    Map.of("value0", name)
+            );
         return player;
     }
 

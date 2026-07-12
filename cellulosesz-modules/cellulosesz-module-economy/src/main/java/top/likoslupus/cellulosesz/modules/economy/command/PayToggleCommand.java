@@ -42,7 +42,11 @@ public final class PayToggleCommand extends AbstractEconomyCommand {
         user.preferences.payments = !user.preferences.payments;
         users.markDirty(self.get().uuid());
         users.save(self.get().uuid());
-        invocation.reply(user.preferences.payments ? "已开启收款。" : "已关闭收款。");
+        invocation.replyKey(
+                user.preferences.payments
+                        ? "commands.economy.payments-enabled"
+                        : "commands.economy.payments-disabled"
+        );
         return 1;
     }
 

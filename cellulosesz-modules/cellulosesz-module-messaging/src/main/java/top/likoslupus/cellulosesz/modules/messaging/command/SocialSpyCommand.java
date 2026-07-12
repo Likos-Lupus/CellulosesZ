@@ -43,7 +43,11 @@ public final class SocialSpyCommand extends AbstractMessagingCommand {
 
         var enabled = !privateMessages.socialSpy(self.get().uuid());
         privateMessages.setSocialSpy(self.get().uuid(), enabled);
-        invocation.reply(enabled ? "已开启 SocialSpy。" : "已关闭 SocialSpy。 ");
+        invocation.replyKey(
+                enabled
+                        ? "commands.messaging.social-spy-enabled"
+                        : "commands.messaging.social-spy-disabled"
+        );
         return 1;
     }
 

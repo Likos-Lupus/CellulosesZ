@@ -2,9 +2,10 @@ package top.likoslupus.cellulosesz.modules.kit.command;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.kit.KitService;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+
+import java.util.Map;
 
 public final class KitResetCommand extends AbstractKitCommand {
 
@@ -38,19 +39,25 @@ public final class KitResetCommand extends AbstractKitCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.kit.kit-reset-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
-        var online = platform.onlinePlayer(args[0]);
-        var uuid = online.map(CellPlayer::uuid)
-                .or(() -> users.findUuidByName(args[0]));
+        var resolved = invocation.resolvePlayer(args[0]);
+        var uuid = resolved.optionalUuid();
         if (uuid.isEmpty()) {
-            invocation.error("找不到玩家: " + args[0]);
+            invocation.errorKey(
+                    "commands.kit.kit-reset-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 
-        kits.resetCooldown(uuid.get(), args[1]).thenRun(() -> invocation.reply("已重置 Kit 冷却。"));
+        kits.resetCooldown(uuid.get(), args[1])
+                .thenRun(() -> invocation.replyKey("commands.kit.kit-reset-command.reply.1"));
         return 1;
     }
 

@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
+import java.util.Map;
+
 public final class IgnoreCommand extends AbstractMessagingCommand {
 
     private final PrivateMessageService privateMessages;
@@ -45,7 +47,10 @@ public final class IgnoreCommand extends AbstractMessagingCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.messaging.ignore-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -55,7 +60,12 @@ public final class IgnoreCommand extends AbstractMessagingCommand {
 
         var nowIgnored = !privateMessages.ignored(self.get().uuid(), target.get());
         privateMessages.setIgnored(self.get().uuid(), target.get(), nowIgnored);
-        invocation.reply(nowIgnored ? "已忽略 " + args[0] + "。" : "已取消忽略 " + args[0] + "。 ");
+        invocation.replyKey(
+                nowIgnored
+                        ? "commands.messaging.ignore-enabled"
+                        : "commands.messaging.ignore-disabled",
+                Map.of("player", args[0])
+        );
         return 1;
     }
 

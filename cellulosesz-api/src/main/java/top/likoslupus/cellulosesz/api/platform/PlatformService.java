@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.api.platform;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.api.text.RichText;
 
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +37,17 @@ public interface PlatformService {
     Optional<CellLocation> targetLocation(CellPlayer player, int maxDistance);
 
     default void sendMessage(CellPlayer player, String message) {
+        sendMessage(player, RichText.plain(message));
+    }
+
+    default void sendMessage(CellPlayer player, RichText message) {
+    }
+
+    default String locale(CellPlayer player) {
+        return "";
+    }
+
+    default void setDisplayName(CellPlayer player, RichText displayName) {
     }
 
     default void kick(CellPlayer player, String reason) {
@@ -151,7 +163,19 @@ public interface PlatformService {
     default void setVanishedState(CellPlayer player, boolean vanished) {
     }
 
+    default void refreshCommandTree() {
+    }
+
     default boolean dispatchConsoleCommand(String command) {
+        return false;
+    }
+
+    /**
+     * Executes a command against the platform command tree captured before CellulosesZ replaces roots with the same
+     * labels. Use this only for internal calls that must reach the native platform implementation rather than a
+     * CellulosesZ command with the same name.
+     */
+    default boolean dispatchNativeConsoleCommand(String command) {
         return false;
     }
 

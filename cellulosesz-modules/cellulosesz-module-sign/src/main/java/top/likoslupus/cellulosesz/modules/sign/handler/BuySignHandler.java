@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 
+import java.util.Map;
+
 public final class BuySignHandler extends AbstractTradeSignHandler {
 
     private final EconomyService economy;
@@ -28,7 +30,7 @@ public final class BuySignHandler extends AbstractTradeSignHandler {
         var descriptor = item(context);
         var price = price(context);
         if (descriptor.isEmpty() || price.isEmpty()) {
-            return SignUseResult.failure("[Buy] 格式: 第二行数量，第三行物品，第四行价格。");
+            return SignUseResult.failure("service.sign.buy-format");
         }
 
         var cause = TransactionCause.command(
@@ -48,14 +50,17 @@ public final class BuySignHandler extends AbstractTradeSignHandler {
                     price.get(),
                     TransactionCause.system("refund failed buy sign")
             );
-            return SignUseResult.failure("背包无法接收物品，交易已退款。");
+            return SignUseResult.failure("service.sign.buy-inventory-full");
         }
 
-        return SignUseResult.success("购买成功: %d × %s，花费 %s。".formatted(
-                descriptor.get().count,
-                descriptor.get().normalizedItem(),
-                price.get().toPlainString()
-        ));
+        return SignUseResult.success(
+                "service.sign.buy-success",
+                Map.of(
+                        "count", descriptor.get().count,
+                        "item", descriptor.get().normalizedItem(),
+                        "price", price.get().toPlainString()
+                )
+        );
     }
 
 }

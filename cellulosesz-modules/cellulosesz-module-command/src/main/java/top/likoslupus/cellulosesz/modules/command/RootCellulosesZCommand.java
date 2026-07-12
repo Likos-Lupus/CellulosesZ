@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.command;
 
 import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 
@@ -46,23 +45,28 @@ public final class RootCellulosesZCommand implements CellCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         var runtime = context.services().require(RuntimeService.class);
-        var messages = context.services().require(MessageService.class);
         var args = invocation.args();
 
         if (args.length == 0) {
-            invocation.reply(messages.message("cellulosesz.version", Map.of("version", runtime.version())));
-            invocation.reply("Usage: " + usage());
+            invocation.replyKey(
+                    "cellulosesz.version",
+                    Map.of("version", runtime.version())
+            );
+            invocation.replyKey(
+                    "commands.command.root-celluloses-z-command.reply.1",
+                    Map.of("value0", usage())
+            );
             return 1;
         }
 
         var subcommand = args[0].toLowerCase(Locale.ROOT);
         return switch (subcommand) {
-            case "version" -> version(invocation, runtime, messages);
-            case "reload" -> reload(invocation, runtime, messages);
-            case "modules" -> modules(invocation, runtime, messages);
+            case "version" -> version(invocation, runtime);
+            case "reload" -> reload(invocation, runtime);
+            case "modules" -> modules(invocation, runtime);
             case "debug" -> debug(invocation, runtime);
             default -> {
-                invocation.error(messages.message("cellulosesz.unknown-subcommand"));
+                invocation.errorKey("cellulosesz.unknown-subcommand");
                 yield 0;
             }
         };
@@ -70,38 +74,38 @@ public final class RootCellulosesZCommand implements CellCommand {
 
     private int version(
             CommandInvocation invocation,
-            RuntimeService runtime,
-            MessageService messages
+            RuntimeService runtime
     ) {
-        invocation.reply(messages.message("cellulosesz.version", Map.of("version", runtime.version())));
+        invocation.replyKey(
+                "cellulosesz.version",
+                Map.of("version", runtime.version())
+        );
         return 1;
     }
 
     private int reload(
             CommandInvocation invocation,
-            RuntimeService runtime,
-            MessageService messages
+            RuntimeService runtime
     ) {
         if (!invocation.hasPermission("cellulosesz.command.reload")) {
-            invocation.error(messages.message("common.no-permission"));
+            invocation.errorKey("common.no-permission");
             return 0;
         }
         runtime.reload();
-        invocation.reply(messages.message("cellulosesz.reloaded"));
+        invocation.replyKey("cellulosesz.reloaded");
         return 1;
     }
 
     private int modules(
             CommandInvocation invocation,
-            RuntimeService runtime,
-            MessageService messages
+            RuntimeService runtime
     ) {
         if (!invocation.hasPermission("cellulosesz.command.modules")) {
-            invocation.error(messages.message("common.no-permission"));
+            invocation.errorKey("common.no-permission");
             return 0;
         }
 
-        invocation.reply(messages.message("cellulosesz.modules-header"));
+        invocation.replyKey("cellulosesz.modules-header");
         runtime.modules().stream()
                 .map(module -> " - %s [%s] %s".formatted(
                         module.id(),
@@ -110,16 +114,25 @@ public final class RootCellulosesZCommand implements CellCommand {
                                 : "disabled",
                         module.phase()
                 ))
-                .forEach(invocation::reply);
+                .forEach(row -> invocation.replyKey(
+                        "cellulosesz.module-row",
+                        Map.of("module", row)
+                ));
         return 1;
     }
 
     private int debug(CommandInvocation invocation, RuntimeService runtime) {
         if (!invocation.hasPermission("cellulosesz.command.debug")) {
-            invocation.error(context.services().require(MessageService.class).message("common.no-permission"));
+            invocation.errorKey("common.no-permission");
             return 0;
         }
-        invocation.reply("CellulosesZ debug: version=" + runtime.version() + ", modules=" + runtime.modules().size());
+        invocation.replyKey(
+                "commands.command.root-celluloses-z-command.reply.2",
+                Map.of(
+                        "value0", runtime.version(),
+                        "value1", runtime.modules().size()
+                )
+        );
         return 1;
     }
 

@@ -38,16 +38,16 @@ public final class TpCancelCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tp-cancel-command.error.1");
             return 0;
         }
 
         if (requests.cancel(self.get().uuid())) {
-            invocation.reply("已取消传送请求。");
+            invocation.replyKey("commands.teleport.tp-cancel-command.reply.1");
             return 1;
         }
 
-        invocation.error("没有可取消的传送请求。");
+        invocation.errorKey("commands.teleport.tp-cancel-command.error.2");
         return 0;
     }
 

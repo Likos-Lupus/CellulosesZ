@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
+import java.util.Map;
+
 public final class TimeCommand extends AbstractWorldCommand {
 
     private final WorldService worlds;
@@ -37,7 +39,10 @@ public final class TimeCommand extends AbstractWorldCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.world.time-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 
@@ -49,7 +54,10 @@ public final class TimeCommand extends AbstractWorldCommand {
             default -> parse(args[0]);
         };
         if (time < 0L) {
-            invocation.error("时间格式错误: " + args[0]);
+            invocation.errorKey(
+                    "commands.world.time-command.error.2",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
 

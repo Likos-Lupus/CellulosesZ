@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.api.command;
 
+import top.likoslupus.cellulosesz.api.command.spec.CommandSpec;
+
 import java.util.List;
 
 public interface CellCommand {
@@ -25,6 +27,10 @@ public interface CellCommand {
     }
 
     String name();
+
+    default CommandSpec commandSpec() {
+        return CommandSpec.auto();
+    }
 
     int execute(CommandInvocation invocation);
 

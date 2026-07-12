@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
+
 public final class DelJailCommand extends AbstractAdminCommand {
 
     private final JailService jails;
@@ -36,7 +38,10 @@ public final class DelJailCommand extends AbstractAdminCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.del-jail-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 

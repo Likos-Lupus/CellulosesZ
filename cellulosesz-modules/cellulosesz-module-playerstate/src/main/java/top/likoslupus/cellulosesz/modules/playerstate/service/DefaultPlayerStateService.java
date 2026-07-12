@@ -3,9 +3,11 @@ package top.likoslupus.cellulosesz.modules.playerstate.service;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -13,47 +15,64 @@ public final class DefaultPlayerStateService implements PlayerStateService {
 
     private final PlatformService platform;
     private final UserService users;
+    private final DisplayNameService displayNames;
 
     public DefaultPlayerStateService(
             PlatformService platform,
-            UserService users
+            UserService users,
+            DisplayNameService displayNames
     ) {
         this.platform = platform;
         this.users = users;
+        this.displayNames = displayNames;
     }
 
     @Override
     public AdminResult setFlying(CellPlayer player, boolean enabled) {
-        if (!platform.setFlying(player, enabled)) return AdminResult.failure("无法修改飞行状态。");
+        if (!platform.setFlying(player, enabled)) return AdminResult.failure("service.playerstate.fly-failed");
         users.cached(player.uuid()).ifPresent(user -> {
             user.state.flying = enabled;
             users.markDirty(player.uuid());
         });
-        return AdminResult.success((enabled ? "已开启" : "已关闭") + "飞行: " + player.name());
+        return AdminResult.success(
+                enabled ? "service.playerstate.fly-enabled" : "service.playerstate.fly-disabled",
+                Map.of("player", displayNames.plainDisplayName(player))
+        );
     }
 
     @Override
     public AdminResult setGod(CellPlayer player, boolean enabled) {
-        if (!platform.setInvulnerable(player, enabled)) return AdminResult.failure("无法修改无敌状态。");
+        if (!platform.setInvulnerable(player, enabled)) return AdminResult.failure("service.playerstate.god-failed");
         users.cached(player.uuid()).ifPresent(user -> {
             user.state.god = enabled;
             users.markDirty(player.uuid());
         });
-        return AdminResult.success((enabled ? "已开启" : "已关闭") + "无敌: " + player.name());
+        return AdminResult.success(
+                enabled ? "service.playerstate.god-enabled" : "service.playerstate.god-disabled",
+                Map.of("player", displayNames.plainDisplayName(player))
+        );
     }
 
     @Override
     public AdminResult heal(CellPlayer player) {
-        return platform.heal(player)
-                ? AdminResult.success("已治疗 " + player.name() + "。")
-                : AdminResult.failure("治疗失败: " + player.name());
+        return platform.heal(player) ? AdminResult.success(
+                "service.playerstate.heal-success",
+                Map.of("player", displayNames.plainDisplayName(player))
+        ) : AdminResult.failure(
+                "service.playerstate.heal-failed",
+                Map.of("player", displayNames.plainDisplayName(player))
+        );
     }
 
     @Override
     public AdminResult feed(CellPlayer player) {
-        return platform.feed(player)
-                ? AdminResult.success("已喂饱 " + player.name() + "。")
-                : AdminResult.failure("喂食失败: " + player.name());
+        return platform.feed(player) ? AdminResult.success(
+                "service.playerstate.feed-success",
+                Map.of("player", displayNames.plainDisplayName(player))
+        ) : AdminResult.failure(
+                "service.playerstate.feed-failed",
+                Map.of("player", displayNames.plainDisplayName(player))
+        );
     }
 
     @Override
@@ -66,7 +85,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
             user.state.afk = afk;
             users.markDirty(uuid);
         });
-        return AdminResult.success("%s%s".formatted(name, afk ? " 现在离开。" : " 回来了。"));
+        return AdminResult.success(
+                afk ? "service.playerstate.afk-enabled" : "service.playerstate.afk-disabled",
+                Map.of("player", name)
+        );
     }
 
     @Override
@@ -82,15 +104,31 @@ public final class DefaultPlayerStateService implements PlayerStateService {
             String name,
             Optional<String> nickname
     ) {
+        var online = platform.onlinePlayers().stream()
+                .filter(player -> player.uuid().equals(uuid))
+                .findFirst();
+        var normalized = nickname.filter(value -> !value.isBlank());
+        if (online.isPresent() && normalized.isPresent()) {
+            var sanitized = displayNames.sanitizeNickname(online.get(), normalized.get());
+            if (!displayNames.validNickname(online.get(), sanitized)) {
+                return AdminResult.failure("player.nick-invalid");
+            }
+            normalized = Optional.of(sanitized);
+        }
+
+        var stored = normalized;
         users.cached(uuid).ifPresent(user -> {
-            user.state.nickname = nickname
-                    .filter(value -> !value.isBlank())
-                    .orElse(null);
+            user.state.nickname = stored.orElse(null);
             users.markDirty(uuid);
         });
-        return AdminResult.success(nickname.filter(value -> !value.isBlank())
-                .map(value -> "已将 %s 的昵称设为 %s。".formatted(name, value))
-                .orElse("已清除 %s 的昵称。".formatted(name)));
+        online.ifPresent(displayNames::refresh);
+
+        return stored
+                .map(value -> AdminResult.success(
+                        "player.nick-set",
+                        Map.of("nickname", value)
+                ))
+                .orElseGet(() -> AdminResult.success("player.nick-cleared"));
     }
 
     @Override

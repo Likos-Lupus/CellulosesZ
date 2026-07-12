@@ -18,11 +18,11 @@ public final class SourceKindCommandMiddleware implements CommandMiddleware {
             CommandContinuation continuation
     ) {
         if (command.sourceKind() == CommandSourceKind.PLAYER_ONLY && !invocation.player()) {
-            invocation.error(messages.message("common.player-only"));
+            invocation.errorKey("common.player-only");
             return 0;
         }
         if (command.sourceKind() == CommandSourceKind.CONSOLE_ONLY && invocation.player()) {
-            invocation.error(messages.message("common.console-only"));
+            invocation.errorKey("common.console-only");
             return 0;
         }
         return continuation.proceed();

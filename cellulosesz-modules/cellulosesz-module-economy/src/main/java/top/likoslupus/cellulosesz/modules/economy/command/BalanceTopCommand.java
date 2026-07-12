@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.IntStream;
 
 public final class BalanceTopCommand extends AbstractEconomyCommand {
@@ -48,7 +49,7 @@ public final class BalanceTopCommand extends AbstractEconomyCommand {
             try {
                 page = Math.max(1, Integer.parseInt(args[0]));
             } catch (NumberFormatException exception) {
-                invocation.error("页码必须是整数。");
+                invocation.errorKey("commands.economy.balance-top-command.error.1");
                 return 0;
             }
         }
@@ -57,25 +58,31 @@ public final class BalanceTopCommand extends AbstractEconomyCommand {
         var entries = economy.topBalances(page * pageSize);
         var from = (page - 1) * pageSize;
         if (from >= entries.size()) {
-            invocation.error("此页没有余额排行记录。");
+            invocation.errorKey("commands.economy.balance-top-command.error.2");
             return 0;
         }
 
-        var builder = new StringBuilder("余额排行 #").append(page).append(':');
+        var rows = new StringBuilder();
         IntStream.range(from, Math.min(entries.size(), from + pageSize)).forEach(index -> {
             var entry = entries.get(index);
             var name = users.cached(entry.uuid())
                     .filter(user -> user.lastKnownName != null)
                     .map(user -> user.lastKnownName)
                     .orElse(entry.uuid().toString());
-            builder.append("\n")
+            rows.append("\n")
                     .append(index + 1)
                     .append(". ")
                     .append(name)
                     .append(" - ")
                     .append(format(entry.balance()));
         });
-        invocation.reply(builder.toString());
+        invocation.replyKey(
+                "commands.economy.balance-top",
+                Map.of(
+                        "page", page,
+                        "rows", rows.toString()
+                )
+        );
         return 1;
     }
 

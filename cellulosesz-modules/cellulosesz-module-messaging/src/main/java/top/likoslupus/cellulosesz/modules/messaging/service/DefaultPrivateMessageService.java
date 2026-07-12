@@ -4,8 +4,11 @@ import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -15,15 +18,21 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
 
     private final PlatformService platform;
     private final UserService users;
+    private final DisplayNameService displayNames;
+    private final MessageRenderer renderer;
     private final ConcurrentHashMap<UUID, UUID> replyTargets = new ConcurrentHashMap<>();
     private final Set<UUID> socialSpy = ConcurrentHashMap.newKeySet();
 
     public DefaultPrivateMessageService(
             PlatformService platform,
-            UserService users
+            UserService users,
+            DisplayNameService displayNames,
+            MessageRenderer renderer
     ) {
         this.platform = platform;
         this.users = users;
+        this.displayNames = displayNames;
+        this.renderer = renderer;
     }
 
     @Override
@@ -33,24 +42,48 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
             String message
     ) {
         if (ignored(target.uuid(), sender.uuid())) {
-            return MessageResult.failure("该玩家忽略了你。 ");
+            return MessageResult.failure("service.messaging.ignored");
         }
 
         var targetUser = users.load(target.uuid()).join();
         if (!targetUser.preferences.privateMessages) {
-            return MessageResult.failure("该玩家当前不接收私聊。 ");
+            return MessageResult.failure("service.messaging.private-messages-disabled");
         }
 
-        platform.sendMessage(target, "[私聊] " + sender.name() + " -> 你: " + message);
-        platform.sendMessage(sender, "[私聊] 你 -> " + target.name() + ": " + message);
+        platform.sendMessage(target, renderer.render(
+                platform.locale(target),
+                "messaging.private-incoming",
+                Map.of(
+                        "sender", displayNames.displayName(sender),
+                        "message", message
+                )
+        ));
+        platform.sendMessage(sender, renderer.render(
+                platform.locale(sender),
+                "messaging.private-outgoing",
+                Map.of(
+                        "target", displayNames.displayName(target),
+                        "message", message
+                )
+        ));
         setLastReplyTarget(sender.uuid(), target.uuid());
         setLastReplyTarget(target.uuid(), sender.uuid());
 
         platform.onlinePlayers().stream()
-                .filter(player -> !player.uuid().equals(sender.uuid()) && !player.uuid().equals(target.uuid()))
+                .filter(player -> !player.uuid().equals(sender.uuid())
+                        && !player.uuid().equals(target.uuid())
+                )
                 .filter(player -> socialSpy(player.uuid()))
-                .forEach(player -> platform.sendMessage(player, "[SocialSpy] %s -> %s: %s".formatted(sender.name(), target.name(), message)));
-        return MessageResult.success("消息已发送。 ");
+                .forEach(player -> platform.sendMessage(player, renderer.render(
+                        platform.locale(player),
+                        "messaging.social-spy",
+                        Map.of(
+                                "sender", displayNames.displayName(sender),
+                                "target", displayNames.displayName(target),
+                                "message", message
+                        )
+                )));
+        return MessageResult.success("service.messaging.sent");
     }
 
     @Override

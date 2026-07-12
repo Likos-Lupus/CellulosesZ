@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.fabric.mixin;
 
+import com.mojang.brigadier.tree.ArgumentCommandNode;
 import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,5 +19,8 @@ public interface CommandNodeAccessor<S> {
 
     @Accessor("literals")
     Map<String, LiteralCommandNode<S>> cellulosesz$literals();
+
+    @Accessor("arguments")
+    Map<String, ArgumentCommandNode<S, ?>> cellulosesz$arguments();
 
 }

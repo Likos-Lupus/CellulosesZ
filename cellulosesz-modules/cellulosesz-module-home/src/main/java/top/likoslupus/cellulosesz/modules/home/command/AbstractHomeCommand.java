@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
@@ -39,7 +40,7 @@ abstract class AbstractHomeCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.error("此命令只能由玩家执行。");
+        if (player.isEmpty()) invocation.errorKey("commands.home.abstract-home-command.error.1");
         return player;
     }
 
@@ -49,11 +50,17 @@ abstract class AbstractHomeCommand implements CellCommand {
 
     protected boolean validName(CommandInvocation invocation, String name) {
         if (name.length() < config.naming.minLength || name.length() > config.naming.maxLength) {
-            invocation.error("Home 名称长度必须在 %d 到 %d 之间。".formatted(config.naming.minLength, config.naming.maxLength));
+            invocation.errorKey(
+                    "commands.home.abstract-home-command.error.2",
+                    Map.of(
+                            "value0", config.naming.minLength,
+                            "value1", config.naming.maxLength
+                    )
+            );
             return false;
         }
         if (!Pattern.matches(config.naming.pattern, name)) {
-            invocation.error("Home 名称只能包含允许的字符。");
+            invocation.errorKey("commands.home.abstract-home-command.error.3");
             return false;
         }
         return true;

@@ -44,13 +44,13 @@ public final class TpAcceptCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var target = platform.player(invocation);
         if (target.isEmpty()) {
-            invocation.error("此命令只能由玩家执行。");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.1");
             return 0;
         }
 
         var request = requests.removeFor(target.get().uuid());
         if (request.isEmpty()) {
-            invocation.error("没有待处理的传送请求。");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.2");
             return 0;
         }
 
@@ -58,7 +58,7 @@ public final class TpAcceptCommand implements CellCommand {
                 .filter(player -> player.uuid().equals(request.get().requester()))
                 .findFirst();
         if (requester.isEmpty()) {
-            invocation.error("请求玩家已经离线。");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.3");
             return 0;
         }
 
@@ -68,7 +68,7 @@ public final class TpAcceptCommand implements CellCommand {
             teleports.teleport(target.get(), platform.location(requester.get()), new TeleportOptions());
         }
 
-        invocation.reply("已接受传送请求。");
+        invocation.replyKey("commands.teleport.tp-accept-command.reply.1");
         return 1;
     }
 

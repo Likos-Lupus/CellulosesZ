@@ -24,12 +24,13 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 
-import java.util.List;
-import java.util.Optional;
-import java.util.OptionalInt;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
@@ -38,6 +39,8 @@ public final class FabricPlatformService implements PlatformService {
 
     private final FabricVanillaCommandBridge vanillaCommands;
     private @Nullable MinecraftServer server;
+    private @Nullable MessageRenderer renderer;
+    private @Nullable LocaleResolver locales;
 
     public FabricPlatformService(FabricVanillaCommandBridge vanillaCommands) {
         this.vanillaCommands = vanillaCommands;
@@ -45,6 +48,14 @@ public final class FabricPlatformService implements PlatformService {
 
     public void server(MinecraftServer server) {
         this.server = server;
+    }
+
+    public void messages(
+            MessageRenderer renderer,
+            LocaleResolver locales
+    ) {
+        this.renderer = renderer;
+        this.locales = locales;
     }
 
     @Override
@@ -198,16 +209,38 @@ public final class FabricPlatformService implements PlatformService {
 
     @Override
     public void sendMessage(CellPlayer player, String message) {
-        requireNative(player).sendSystemMessage(Component.literal(message));
+        sendMessage(player, RichText.plain(message));
+    }
+
+    @Override
+    public void sendMessage(CellPlayer player, RichText message) {
+        requireNative(player).sendSystemMessage(FabricTextAdapter.toComponent(message));
+    }
+
+    @Override
+    public String locale(CellPlayer player) {
+        return requireNative(player).clientInformation().language();
+    }
+
+    @Override
+    public void setDisplayName(CellPlayer player, RichText displayName) {
+        var nativePlayer = requireNative(player);
+        var component = FabricTextAdapter.toComponent(displayName);
+        FabricDisplayNameBridge.displayName(player.uuid(), component);
+        if (server != null) {
+            var packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(nativePlayer));
+            server.getPlayerList().getPlayers().stream()
+                    .filter(viewer -> !FabricVanishBridge.hiddenFrom(viewer, nativePlayer))
+                    .forEach(viewer -> viewer.connection.send(packet));
+        }
     }
 
     @Override
     public void kick(CellPlayer player, String reason) {
-        requireNative(player).connection.disconnect(Component.literal(
-                reason.isBlank()
-                        ? "Kicked by an operator."
-                        : reason
-        ));
+        var rendered = reason.isBlank()
+                ? message(player, "service.admin.kick-default", Map.of()).plainText()
+                : reason;
+        requireNative(player).connection.disconnect(Component.literal(rendered));
     }
 
     @Override
@@ -367,7 +400,11 @@ public final class FabricPlatformService implements PlatformService {
         var mirror = new InventoryMirror(targetNative.getInventory(), 54);
         viewerNative.openMenu(new SimpleMenuProvider(
                 (id, inventory, _) -> ChestMenu.sixRows(id, inventory, mirror),
-                Component.literal("%s 的背包".formatted(target.name()))
+                FabricTextAdapter.toComponent(message(
+                        viewer,
+                        "platform.inventory.title",
+                        Map.of("player", target.name())
+                ))
         ));
         return true;
     }
@@ -379,7 +416,11 @@ public final class FabricPlatformService implements PlatformService {
         var enderChest = targetNative.getEnderChestInventory();
         viewerNative.openMenu(new SimpleMenuProvider(
                 (id, inventory, _) -> ChestMenu.threeRows(id, inventory, enderChest),
-                Component.literal("%s 的末影箱".formatted(target.name()))
+                FabricTextAdapter.toComponent(message(
+                        viewer,
+                        "platform.ender-chest.title",
+                        Map.of("player", target.name())
+                ))
         ));
         return true;
     }
@@ -426,9 +467,24 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     @Override
+    public void refreshCommandTree() {
+        var current = server;
+        if (current == null) return;
+        current.getPlayerList().getPlayers().forEach(player ->
+                current.getCommands().sendCommands(player)
+        );
+    }
+
+    @Override
     public boolean dispatchConsoleCommand(String command) {
         if (server == null || command.isBlank()) return false;
         return executeCommand(command, server.createCommandSourceStack()).isPresent();
+    }
+
+    @Override
+    public boolean dispatchNativeConsoleCommand(String command) {
+        if (server == null || command.isBlank()) return false;
+        return vanillaCommands.execute(command, server.createCommandSourceStack()).isPresent();
     }
 
     private String normalizeItemId(String value) {
@@ -481,6 +537,16 @@ public final class FabricPlatformService implements PlatformService {
         } catch (CommandSyntaxException _) {
             return OptionalInt.empty();
         }
+    }
+
+    private RichText message(
+            CellPlayer viewer,
+            String key,
+            Map<String, ?> placeholders
+    ) {
+        var currentRenderer = Objects.requireNonNull(renderer, "Message renderer is not initialized");
+        var currentLocales = Objects.requireNonNull(locales, "Locale resolver is not initialized");
+        return currentRenderer.render(currentLocales.locale(viewer), key, placeholders);
     }
 
     private boolean safe(ServerLevel level, BlockPos feet) {

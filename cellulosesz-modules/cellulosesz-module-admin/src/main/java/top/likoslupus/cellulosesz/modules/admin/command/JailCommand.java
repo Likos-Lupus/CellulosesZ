@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
 
 import java.util.List;
+import java.util.Map;
 
 public final class JailCommand extends AbstractAdminCommand {
 
@@ -49,7 +50,10 @@ public final class JailCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2) {
-            invocation.error("用法: " + usage());
+            invocation.errorKey(
+                    "commands.admin.jail-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
 

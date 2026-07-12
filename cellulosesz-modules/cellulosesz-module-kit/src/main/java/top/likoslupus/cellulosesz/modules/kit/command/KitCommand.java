@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
 import java.util.List;
+import java.util.Map;
 
 public final class KitCommand extends AbstractKitCommand {
 
@@ -33,7 +34,7 @@ public final class KitCommand extends AbstractKitCommand {
 
     @Override
     public String usage() {
-        return "/kit [name] 或 /kits";
+        return "/kit [name] | /kits";
     }
 
     @Override
@@ -52,17 +53,28 @@ public final class KitCommand extends AbstractKitCommand {
                     .filter(kit -> kit.permission.isBlank() || invocation.hasPermission(kit.permission))
                     .map(kit -> kit.id)
                     .toList();
-            invocation.reply(names.isEmpty() ? "当前没有可用 Kit。" : "Kit: " + String.join(", ", names));
+            if (names.isEmpty()) {
+                invocation.replyKey("commands.kit.list-empty");
+            } else {
+                invocation.replyKey(
+                        "commands.kit.list",
+                        Map.of("kits", String.join(", ", names))
+                );
+            }
             return 1;
         }
 
         var kit = kits.kit(args[0]);
         if (kit.isEmpty()) {
-            invocation.error("Kit 不存在: " + args[0]);
+            invocation.errorKey(
+                    "commands.kit.kit-command.error.1",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
+
         if (!kit.get().permission.isBlank() && !invocation.hasPermission(kit.get().permission)) {
-            invocation.error("你没有权限领取此 Kit。 ");
+            invocation.errorKey("commands.kit.kit-command.error.2");
             return 0;
         }
 
