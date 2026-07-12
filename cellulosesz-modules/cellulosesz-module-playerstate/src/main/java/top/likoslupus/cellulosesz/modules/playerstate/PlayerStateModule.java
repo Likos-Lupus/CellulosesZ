@@ -2,16 +2,18 @@ package top.likoslupus.cellulosesz.modules.playerstate;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.modules.playerstate.command.*;
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultPlayerStateService;
@@ -60,16 +62,13 @@ public final class PlayerStateModule implements CellulosesZModule {
 
     @Override
     public void registerEvents(ModuleContext context) {
-        context.events().listen(CellulosesZBootstrap.PlayerJoinEvent.class, event ->
+        context.events().listen(PlayerJoinEvent.class, event ->
                 restoreJoinedState(context, event.player(), 0)
         );
-        context.events().listen(CellulosesZBootstrap.PlayerDisconnectEvent.class, event -> {
-            var platform = context.services().require(PlatformService.class);
-            platform.player(event.player())
-                    .ifPresent(player ->
-                            platform.setVanishedState(player, false)
-                    );
-        });
+        context.events().listen(PlayerDisconnectEvent.class, event ->
+                context.services().require(PlatformService.class)
+                        .setVanishedState(event.player(), false)
+        );
     }
 
     @Override
@@ -103,15 +102,11 @@ public final class PlayerStateModule implements CellulosesZModule {
 
     private void restoreJoinedState(
             ModuleContext context,
-            Object nativePlayer,
+            CellPlayer player,
             int attempt
     ) {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
-        var wrapped = platform.player(nativePlayer);
-        if (wrapped.isEmpty()) return;
-
-        var player = wrapped.get();
         if (platform.onlinePlayers().stream()
                 .noneMatch(online -> online.uuid().equals(player.uuid()))
         ) return;
@@ -119,7 +114,7 @@ public final class PlayerStateModule implements CellulosesZModule {
         var loaded = users.cached(player.uuid());
         if (loaded.isEmpty()) {
             if (attempt < 100) {
-                context.scheduler().syncLater(() -> restoreJoinedState(context, nativePlayer, attempt + 1), 1L);
+                context.scheduler().syncLater(() -> restoreJoinedState(context, player, attempt + 1), 1L);
             } else {
                 context.logger().warn("Timed out waiting for player data before restoring state: " + player.name());
             }

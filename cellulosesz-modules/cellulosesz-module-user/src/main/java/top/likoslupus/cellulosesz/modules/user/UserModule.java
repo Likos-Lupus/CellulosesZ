@@ -1,6 +1,9 @@
 package top.likoslupus.cellulosesz.modules.user;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
@@ -13,11 +16,12 @@ import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultDisplayNameService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultNameCacheService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultPlayerResolver;
 import top.likoslupus.cellulosesz.modules.user.service.JsonUserService;
+
+import java.util.Objects;
 
 @CellulosesModule(
         id = "user",
@@ -28,9 +32,9 @@ import top.likoslupus.cellulosesz.modules.user.service.JsonUserService;
 )
 public final class UserModule implements CellulosesZModule {
 
-    private UserConfig config;
-    private JsonUserService users;
-    private DisplayNameService displayNames;
+    private @Nullable UserConfig config;
+    private @Nullable JsonUserService users;
+    private @Nullable DisplayNameService displayNames;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -57,6 +61,8 @@ public final class UserModule implements CellulosesZModule {
                 context.logger()
         );
 
+        Objects.requireNonNull(config, "UserConfig has not been initialized");
+
         var platform = context.services().require(PlatformService.class);
         var permissions = context.services().require(PermissionService.class);
         var renderer = context.services().require(MessageRenderer.class);
@@ -75,11 +81,14 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void registerEvents(ModuleContext context) {
-        context.events().listen(CellulosesZBootstrap.PlayerJoinEvent.class, event ->
-                users.loadFromPlayer(event.player())
+        Objects.requireNonNull(users, "JsonUserService has not been initialized");
+        Objects.requireNonNull(displayNames, "DisplayNameService has not been initialized");
+        Objects.requireNonNull(config, "UserConfig has not been initialized");
+
+        context.events().listen(PlayerJoinEvent.class, event ->
+                users.loadFromPlayer(event.player().nativeHandle())
                         .thenApply(user -> {
-                            context.services().require(PlatformService.class).player(event.player())
-                                    .ifPresent(displayNames::refresh);
+                            displayNames.refresh(event.player());
                             return user;
                         })
                         .thenCompose(user -> users.save(user.uuid))
@@ -89,8 +98,8 @@ public final class UserModule implements CellulosesZModule {
                             }
                         })
         );
-        context.events().listen(CellulosesZBootstrap.PlayerDisconnectEvent.class, event -> {
-            users.markQuit(event.player());
+        context.events().listen(PlayerDisconnectEvent.class, event -> {
+            users.markQuit(event.player().nativeHandle());
             if (config.saveOnQuit) {
                 users.saveAll();
             }
@@ -99,6 +108,9 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void onServerStarted(ModuleContext context) {
+        Objects.requireNonNull(users, "JsonUserService has not been initialized");
+        Objects.requireNonNull(config, "UserConfig has not been initialized");
+
         context.scheduler().syncRepeating(
                 () -> users.saveAll(),
                 config.autosaveIntervalSeconds * 20L,
@@ -108,11 +120,13 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void onReload(ModuleContext context) {
+        Objects.requireNonNull(displayNames, "DisplayNameService has not been initialized");
         displayNames.refreshAll();
     }
 
     @Override
     public void onServerStopping(ModuleContext context) {
+        Objects.requireNonNull(users, "JsonUserService has not been initialized");
         users.saveAll().join();
     }
 

@@ -7,5 +7,6 @@ public final class AdminConfig {
     public long defaultJailSeconds = 0L;
     public boolean tempBanKickOnlinePlayers = true;
     public int jailedPlayerCheckSeconds = 5;
+    public double jailConfinementRadius = 3.0D;
 
 }

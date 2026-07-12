@@ -2,6 +2,10 @@ package top.likoslupus.cellulosesz.modules.teleport;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.event.PlayerDamageEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerDeathEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerMoveEvent;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
@@ -10,6 +14,8 @@ import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.teleport.command.*;
 import top.likoslupus.cellulosesz.modules.teleport.service.*;
+
+import java.util.Objects;
 
 @CellulosesModule(
         id = "teleport",
@@ -55,11 +61,35 @@ public final class TeleportModule implements CellulosesZModule {
     }
 
     @Override
+    public void registerEvents(ModuleContext context) {
+        var teleports = context.services().require(TeleportService.class);
+
+        context.events().listen(PlayerMoveEvent.class, event -> {
+            if (event.changedBlock()) {
+                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-move");
+            }
+        });
+        context.events().listen(PlayerDamageEvent.class, event ->
+                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-damage")
+        );
+        context.events().listen(PlayerDeathEvent.class, event -> {
+            teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-death");
+            teleports.rememberBackLocation(event.player().uuid(), event.location());
+        });
+        context.events().listen(PlayerDisconnectEvent.class, event ->
+                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-disconnect")
+        );
+    }
+
+    @Override
     public void registerCommands(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var teleports = context.services().require(TeleportService.class);
         var randomTeleports = context.services().require(RandomTeleportService.class);
         var users = context.services().require(UserService.class);
+
+        Objects.requireNonNull(requests,"TeleportRequestService has not been initialized");
+        Objects.requireNonNull(config,"TeleportConfig has not been initialized");
 
         context.commands().register(new TpCommand(platform, teleports));
         context.commands().register(new TpHereCommand(platform, teleports));
@@ -86,6 +116,7 @@ public final class TeleportModule implements CellulosesZModule {
 
     @Override
     public void onServerStarted(ModuleContext context) {
+        Objects.requireNonNull(requests,"TeleportRequestService has not been initialized");
         context.scheduler().syncRepeating(
                 () -> requests.clearExpired(),
                 20L,

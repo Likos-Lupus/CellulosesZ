@@ -6,10 +6,13 @@ import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.command.service.*;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
+import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
+import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.LoadedModuleInfo;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
+import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
@@ -94,7 +97,7 @@ public final class CellulosesZBootstrap {
         messages.theme(coreConfig.locale.primaryColor, coreConfig.locale.secondaryColor, coreConfig.locale.legacyColors);
         messages.reload();
 
-        var platform = services.require(top.likoslupus.cellulosesz.api.platform.PlatformService.class);
+        var platform = services.require(PlatformService.class);
         localeResolver = new DefaultLocaleResolver(platform, coreConfig.locale.defaultLocale, coreConfig.locale.useClientLocale);
         commandCosts.configure(coreConfig.commands.costs);
         aliasRegistry.configure(coreConfig.commands.aliases);
@@ -159,11 +162,15 @@ public final class CellulosesZBootstrap {
     }
 
     public void onPlayerJoin(Object player) {
-        events.fire(new PlayerJoinEvent(player));
+        services.require(PlatformService.class)
+                .player(player)
+                .ifPresent(wrapped -> events.fire(new PlayerJoinEvent(wrapped)));
     }
 
     public void onPlayerDisconnect(Object player) {
-        events.fire(new PlayerDisconnectEvent(player));
+        services.require(PlatformService.class)
+                .player(player)
+                .ifPresent(wrapped -> events.fire(new PlayerDisconnectEvent(wrapped)));
     }
 
     public void tick() {
@@ -212,6 +219,10 @@ public final class CellulosesZBootstrap {
         return services;
     }
 
+    public EventRegistry eventRegistry() {
+        return events;
+    }
+
     public MessageService messageService() {
         return messages;
     }
@@ -222,18 +233,6 @@ public final class CellulosesZBootstrap {
 
     public CoreConfig coreConfig() {
         return Objects.requireNonNull(coreConfig, "CellulosesZ is not initialized");
-    }
-
-    public record PlayerJoinEvent(
-            Object player
-    ) {
-
-    }
-
-    public record PlayerDisconnectEvent(
-            Object player
-    ) {
-
     }
 
 }

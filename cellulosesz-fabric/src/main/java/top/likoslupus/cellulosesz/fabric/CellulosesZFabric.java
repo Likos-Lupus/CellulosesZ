@@ -18,11 +18,13 @@ import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
+import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
 import top.likoslupus.cellulosesz.fabric.hook.FabricGameplayHooks;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
+import java.util.Objects;
 
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
@@ -30,6 +32,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
     private @Nullable FabricPlatformService platform;
     private @Nullable FabricVanillaCommandBridge vanillaCommands;
     private @Nullable FabricGameplayHooks gameplayHooks;
+    private @Nullable FabricPlatformEventBridge platformEvents;
 
     @Override
     public void onInitializeServer() {
@@ -69,6 +72,8 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 bootstrap.serviceRegistry().require(LocaleResolver.class)
         );
         gameplayHooks.register();
+        platformEvents = new FabricPlatformEventBridge(bootstrap.eventRegistry(), platform);
+        platformEvents.register();
         FabricVanishBridge.visibility((viewer, target) ->
                 bootstrap.serviceRegistry()
                         .optional(VanishService.class)
@@ -96,18 +101,22 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             bootstrap.tick();
             gameplayHooks.tick(server);
+            platformEvents.tick(server);
         });
 
-        ServerPlayConnectionEvents.JOIN.register((handler, _, _) ->
-                bootstrap.onPlayerJoin(handler.getPlayer())
-        );
+        ServerPlayConnectionEvents.JOIN.register((handler, _, _) -> {
+            platformEvents.playerJoined(handler.getPlayer());
+            bootstrap.onPlayerJoin(handler.getPlayer());
+        });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, _) -> {
+            platformEvents.playerDisconnected(handler.getPlayer());
             FabricDisplayNameBridge.clear(handler.getPlayer().getUUID());
             bootstrap.onPlayerDisconnect(handler.getPlayer());
         });
     }
 
     private PermissionBackend permissionBackend() {
+        Objects.requireNonNull(bootstrap, "CellulosesZBootstrap has not been initialized");
         var permissionConfig = bootstrap.configRegistry()
                 .optional("module.permission", PermissionConfig.class)
                 .orElseGet(PermissionConfig::new);

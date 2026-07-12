@@ -240,6 +240,11 @@ final class BuiltInCommandMessages {
         messages.put("service.teleport.success", "<primary>Teleported.");
         messages.put("service.teleport.failed", "<red>Teleport failed.");
         messages.put("service.teleport.exception", "<red>Teleport failed: <secondary>{reason}<red>");
+        messages.put("service.teleport.cancelled-replaced", "<red>Your pending teleport was replaced by another teleport.");
+        messages.put("service.teleport.cancelled-move", "<red>Teleport cancelled because you moved.");
+        messages.put("service.teleport.cancelled-damage", "<red>Teleport cancelled because you took damage.");
+        messages.put("service.teleport.cancelled-death", "<red>Teleport cancelled because you died.");
+        messages.put("service.teleport.cancelled-disconnect", "<red>Teleport cancelled because you disconnected.");
         messages.put("service.world.time-set", "<primary>Set the time in <secondary>{world}<primary> to <secondary>{time}<primary>.");
         messages.put("service.world.time-failed", "<red>Failed to set the time in <secondary>{world}<red>.");
         messages.put("service.world.weather-set", "<primary>Set the weather in <secondary>{world}<primary> to <secondary>{weather}<primary>.");
@@ -264,6 +269,7 @@ final class BuiltInCommandMessages {
         messages.put("service.admin.temp-ban-ip-success", "<primary>Temporarily banned IP <secondary>{address}<primary>.");
         messages.put("service.admin.mute-success", "<primary>Muted <secondary>{player}<primary>.");
         messages.put("service.admin.unmute-success", "<primary>Unmuted <secondary>{player}<primary>.");
+        messages.put("service.admin.muted-chat", "<red>You are muted and cannot chat.");
         messages.put("service.admin.jail-set", "<primary>Set jail <secondary>{jail}<primary>.");
         messages.put("service.admin.jail-deleted", "<primary>Deleted jail <secondary>{jail}<primary>.");
         messages.put("service.admin.jail-not-found", "<red>Jail not found: <secondary>{jail}<red>");
@@ -554,6 +560,11 @@ final class BuiltInCommandMessages {
         messages.put("service.teleport.success", "<primary>传送成功。");
         messages.put("service.teleport.failed", "<red>传送失败。");
         messages.put("service.teleport.exception", "<red>传送失败：<secondary>{reason}<red>");
+        messages.put("service.teleport.cancelled-replaced", "<red>待执行的传送已被新的传送替换。");
+        messages.put("service.teleport.cancelled-move", "<red>你移动了，传送已取消。");
+        messages.put("service.teleport.cancelled-damage", "<red>你受到了伤害，传送已取消。");
+        messages.put("service.teleport.cancelled-death", "<red>你已经死亡，传送已取消。");
+        messages.put("service.teleport.cancelled-disconnect", "<red>你已断开连接，传送已取消。");
         messages.put("service.world.time-set", "<primary>已将世界 <secondary>{world}<primary> 的时间设置为 <secondary>{time}<primary>。");
         messages.put("service.world.time-failed", "<red>设置世界 <secondary>{world}<red> 的时间失败。");
         messages.put("service.world.weather-set", "<primary>已将世界 <secondary>{world}<primary> 的天气设置为 <secondary>{weather}<primary>。");
@@ -578,6 +589,7 @@ final class BuiltInCommandMessages {
         messages.put("service.admin.temp-ban-ip-success", "<primary>已临时封禁 IP <secondary>{address}<primary>。");
         messages.put("service.admin.mute-success", "<primary>已禁言 <secondary>{player}<primary>。");
         messages.put("service.admin.unmute-success", "<primary>已解除禁言 <secondary>{player}<primary>。");
+        messages.put("service.admin.muted-chat", "<red>你当前处于禁言状态，无法聊天。");
         messages.put("service.admin.jail-set", "<primary>已设置监狱 <secondary>{jail}<primary>。");
         messages.put("service.admin.jail-deleted", "<primary>已删除监狱 <secondary>{jail}<primary>。");
         messages.put("service.admin.jail-not-found", "<red>找不到监狱：<secondary>{jail}<red>");
