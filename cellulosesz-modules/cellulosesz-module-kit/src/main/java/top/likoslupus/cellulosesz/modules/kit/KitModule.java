@@ -19,6 +19,8 @@ import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
 import java.util.Collection;
 import java.util.function.Function;
 
+import static java.util.Objects.requireNonNull;
+
 @CellulosesModule(
         id = "kit",
         name = "Kit",
@@ -50,6 +52,8 @@ public final class KitModule implements CellulosesZModule {
         var economy = context.services().optional(EconomyService.class);
         var root = context.dataDirectory().getParent().resolve("kits");
 
+        requireNonNull(config, "KitConfig has not been initialized");
+
         kits = new DefaultKitService(storage, users, items, economy, config, root);
         context.services().register(KitService.class, kits);
         context.services().register(DefaultKitService.class, (DefaultKitService) kits);
@@ -59,11 +63,12 @@ public final class KitModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
-        var items = context.services().require(ItemService.class);
+
+        requireNonNull(kits, "KitService has not been initialized");
 
         context.commands().register(new KitCommand(platform, kits));
         context.commands().register(new ShowKitCommand(platform, kits));
-        context.commands().register(new CreateKitCommand(platform, kits, items));
+        context.commands().register(new CreateKitCommand(platform, kits));
         context.commands().register(new DelKitCommand(platform, kits));
         context.commands().register(new KitResetCommand(platform, kits, users));
 
@@ -72,6 +77,7 @@ public final class KitModule implements CellulosesZModule {
                 kits.kits().stream()
                         .map(kit -> kit.id)
                         .toList();
+
         suggestions.register("kit", "name", kitNames);
         suggestions.register("showkit", "name", kitNames);
         suggestions.register("delkit", "name", kitNames);

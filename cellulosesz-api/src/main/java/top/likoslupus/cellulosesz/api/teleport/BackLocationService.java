@@ -11,6 +11,8 @@ public interface BackLocationService {
 
     void remember(UUID uuid, CellLocation location);
 
+    void forget(UUID uuid);
+
     Optional<CellLocation> location(UUID uuid);
 
 }

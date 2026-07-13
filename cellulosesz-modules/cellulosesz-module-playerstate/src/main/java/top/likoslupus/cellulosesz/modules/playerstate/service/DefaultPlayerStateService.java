@@ -29,7 +29,9 @@ public final class DefaultPlayerStateService implements PlayerStateService {
 
     @Override
     public AdminResult setFlying(CellPlayer player, boolean enabled) {
-        if (!platform.setFlying(player, enabled)) return AdminResult.failure("service.playerstate.fly-failed");
+        if (!platform.setFlying(player, enabled)) {
+            return AdminResult.failure("service.playerstate.fly-failed");
+        }
         users.cached(player.uuid()).ifPresent(user -> {
             user.state.flying = enabled;
             users.markDirty(player.uuid());
@@ -42,7 +44,9 @@ public final class DefaultPlayerStateService implements PlayerStateService {
 
     @Override
     public AdminResult setGod(CellPlayer player, boolean enabled) {
-        if (!platform.setInvulnerable(player, enabled)) return AdminResult.failure("service.playerstate.god-failed");
+        if (!platform.setInvulnerable(player, enabled)) {
+            return AdminResult.failure("service.playerstate.god-failed");
+        }
         users.cached(player.uuid()).ifPresent(user -> {
             user.state.god = enabled;
             users.markDirty(player.uuid());
@@ -117,10 +121,17 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         }
 
         var stored = normalized;
-        users.cached(uuid).ifPresent(user -> {
-            user.state.nickname = stored.orElse(null);
+        var user = users.load(uuid).join();
+        var previous = user.state.nickname;
+        user.state.nickname = stored.orElse(null);
+        users.markDirty(uuid);
+        try {
+            users.save(uuid).join();
+        } catch (RuntimeException _) {
+            user.state.nickname = previous;
             users.markDirty(uuid);
-        });
+            return AdminResult.failure("service.user.persistence-failed");
+        }
         online.ifPresent(displayNames::refresh);
 
         return stored

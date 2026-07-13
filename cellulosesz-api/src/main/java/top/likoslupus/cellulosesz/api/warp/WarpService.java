@@ -21,6 +21,8 @@ public interface WarpService {
 
     CompletableFuture<Boolean> deleteWarp(String name);
 
+    Optional<String> requiredPermission(Warp warp);
+
     CompletableFuture<Void> reload();
 
 }

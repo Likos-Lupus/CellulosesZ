@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.core.config;
 
+import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
@@ -8,26 +9,46 @@ import java.nio.file.Path;
 
 public final class JacksonCodecs {
 
-    private static final YAMLMapper YAML = YAMLMapper.builder().build();
-    private static final JsonMapper JSON = JsonMapper.builder().build();
+    private static final YAMLMapper YAML = YAMLMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
+    private static final JsonMapper JSON = JsonMapper.builder()
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
 
     private JacksonCodecs() {
     }
 
     public static <T> T readYaml(Path path, Class<T> type) throws IOException {
-        return YAML.readValue(path.toFile(), type);
+        try {
+            return YAML.readValue(path.toFile(), type);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to read YAML: " + path, exception);
+        }
     }
 
     public static void writeYaml(Path path, Object value) throws IOException {
-        YAML.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
+        try {
+            YAML.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to write YAML: " + path, exception);
+        }
     }
 
     public static <T> T readJson(Path path, Class<T> type) throws IOException {
-        return JSON.readValue(path.toFile(), type);
+        try {
+            return JSON.readValue(path.toFile(), type);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to read JSON: " + path, exception);
+        }
     }
 
     public static <T> T readJson(String value, Class<T> type) throws IOException {
-        return JSON.readValue(value, type);
+        try {
+            return JSON.readValue(value, type);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to read JSON value", exception);
+        }
     }
 
     public static String writeJsonString(Object value) {
@@ -35,7 +56,11 @@ public final class JacksonCodecs {
     }
 
     public static void writeJson(Path path, Object value) throws IOException {
-        JSON.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
+        try {
+            JSON.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to write JSON: " + path, exception);
+        }
     }
 
     public static String toDebugString(Object value) {

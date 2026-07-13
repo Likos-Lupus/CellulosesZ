@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.api.economy;
 
 import java.math.BigDecimal;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +31,13 @@ public interface EconomyService {
             UUID from,
             UUID to,
             BigDecimal amount,
+            TransactionCause cause
+    );
+
+    TransactionResult transferMany(
+            UUID from,
+            Collection<UUID> recipients,
+            BigDecimal amountEach,
             TransactionCause cause
     );
 

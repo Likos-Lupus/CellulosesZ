@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -47,7 +48,7 @@ public final class JacksonStorageService implements StorageService {
                 return read(resolved, type);
             } catch (IOException exception) {
                 logger.error("Failed to load document at " + resolved, exception);
-                return defaultSupplier.get();
+                throw new CompletionException(exception);
             }
         }, executor);
     }
@@ -61,6 +62,7 @@ public final class JacksonStorageService implements StorageService {
                 write(resolved, value);
             } catch (IOException exception) {
                 logger.error("Failed to save document at " + resolved, exception);
+                throw new CompletionException(exception);
             }
         }, executor);
     }
@@ -83,14 +85,14 @@ public final class JacksonStorageService implements StorageService {
                                     return Stream.of(read(path, type));
                                 } catch (IOException exception) {
                                     logger.error("Failed to load document at " + path, exception);
-                                    return Stream.empty();
+                                    throw new CompletionException(exception);
                                 }
                             })
                             .toList();
                 }
             } catch (IOException exception) {
                 logger.error("Failed to load document directory at " + resolved, exception);
-                return List.of();
+                throw new CompletionException(exception);
             }
         }, executor);
     }

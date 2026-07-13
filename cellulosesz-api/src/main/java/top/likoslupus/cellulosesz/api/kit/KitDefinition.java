@@ -5,7 +5,6 @@ import java.util.List;
 
 public final class KitDefinition {
 
-    public int schema = 1;
     public String id = "starter";
     public String displayName = "Starter";
     public String permission = "";

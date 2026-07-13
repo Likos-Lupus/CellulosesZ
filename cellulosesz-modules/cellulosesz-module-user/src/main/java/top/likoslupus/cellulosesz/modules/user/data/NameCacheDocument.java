@@ -5,7 +5,6 @@ import java.util.Map;
 
 public final class NameCacheDocument {
 
-    public int schema = 1;
     public Map<String, String> names = new LinkedHashMap<>();
 
 }

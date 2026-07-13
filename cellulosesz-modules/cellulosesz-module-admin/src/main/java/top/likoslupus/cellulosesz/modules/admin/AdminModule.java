@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -23,16 +24,17 @@ import top.likoslupus.cellulosesz.modules.admin.service.*;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "admin",
         name = "Admin",
         description = "Administration, punishments, mute, and jail services.",
         phase = ModulePhase.FEATURE,
-        requires = {"user", "command"}
+        requires = {"user", "command", "permission"}
 )
 public final class AdminModule implements CellulosesZModule {
 
@@ -41,6 +43,7 @@ public final class AdminModule implements CellulosesZModule {
     private @Nullable TempBanService tempBans;
     private @Nullable MuteService mutes;
     private @Nullable JailService jails;
+    private @Nullable MuteCommandMiddleware muteCommandPolicy;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -58,9 +61,11 @@ public final class AdminModule implements CellulosesZModule {
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
         var root = context.dataDirectory().getParent().resolve("admin");
-
         var renderer = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
+
+        requireNonNull(config, "AdminConfig has not been initialized");
+
         bans = new DefaultBanService(platform, renderer, locales);
         tempBans = new JsonTempBanService(
                 storage,
@@ -70,16 +75,16 @@ public final class AdminModule implements CellulosesZModule {
                 renderer,
                 locales
         );
-        mutes = new JsonMuteService(storage, root.resolve("mutes.json"), users);
-        jails = new JsonJailService(storage, root.resolve("jails.json"), platform);
+        mutes = new JsonMuteService(storage, root.resolve("mutes.json"));
+        jails = new JsonJailService(storage, root.resolve("jails.json"), platform, config);
 
         context.services().register(BanService.class, bans);
         context.services().register(TempBanService.class, tempBans);
         context.services().register(MuteService.class, mutes);
         context.services().register(JailService.class, jails);
 
-        context.services().require(CommandMiddlewareRegistry.class)
-                .addMiddleware(new MuteCommandMiddleware(platform, mutes));
+        muteCommandPolicy = new MuteCommandMiddleware(platform, mutes, config);
+        context.services().require(CommandMiddlewareRegistry.class).addMiddleware(muteCommandPolicy);
     }
 
     @Override
@@ -87,13 +92,15 @@ public final class AdminModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var renderer = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
-        var tempBanService = Objects.requireNonNull(tempBans, "TempBanService has not been initialized");
-        var muteService = Objects.requireNonNull(mutes, "MuteService has not been initialized");
-        var jailService = Objects.requireNonNull(jails, "JailService has not been initialized");
+        var permissions = context.services().require(PermissionService.class);
+
+        requireNonNull(tempBans, "TempBanService has not been initialized");
+        requireNonNull(mutes, "MuteService has not been initialized");
+        requireNonNull(jails, "JailService has not been initialized");
 
         context.events().listen(PlayerJoinEvent.class, event -> {
             var player = event.player();
-            tempBanService.active(player.uuid(), player.name())
+            tempBans.active(player.uuid(), player.name())
                     .ifPresent(record -> platform.kick(
                             player,
                             renderer.render(
@@ -102,11 +109,14 @@ public final class AdminModule implements CellulosesZModule {
                                     Map.of("reason", record.reason)
                             ).plainText()
                     ));
-            enforceJail(platform, jailService, player);
+            enforceJail(platform, jails, player);
         });
 
         context.events().listen(PlayerChatEvent.class, event -> {
-            if (!muteService.muted(event.player().uuid())) return;
+            if (permissions.has(event.player().nativeHandle(), "cellulosesz.admin.mute.bypass")
+                    || !mutes.muted(event.player().uuid())
+            ) return;
+
             event.cancel();
             platform.sendMessage(
                     event.player(),
@@ -118,28 +128,53 @@ public final class AdminModule implements CellulosesZModule {
             );
         });
 
+        context.events().listen(PlayerCommandPreprocessEvent.class, event -> {
+            if (permissions.has(event.player().nativeHandle(), "cellulosesz.admin.mute.bypass")
+                    || !mutes.muted(event.player().uuid())
+            ) return;
+
+            var raw = event.command().trim();
+            while (raw.startsWith("/")) raw = raw.substring(1);
+
+            var separator = raw.indexOf(' ');
+            var root = separator < 0 ? raw : raw.substring(0, separator);
+            var namespace = root.indexOf(':');
+            if (namespace >= 0) root = root.substring(namespace + 1);
+
+            requireNonNull(muteCommandPolicy, "MuteCommandMiddleware has not been initialized");
+            if (!muteCommandPolicy.blocked(root)) return;
+
+            event.cancel();
+            platform.sendMessage(event.player(), renderer.render(
+                    locales.locale(event.player()),
+                    "commands.admin.mute-command-middleware.error.1",
+                    Map.of()
+            ));
+        });
+
         context.events().listen(PlayerMoveEvent.class, event ->
-                jail(jailService, event.player()).ifPresent(jail -> {
-                    if (!inside(jail.location, event.to(), jailRadius())) {
-                        event.to(jail.location);
-                        event.cancel();
-                    }
-                })
+                jail(jails, event.player())
+                        .ifPresent(jail -> {
+                            if (!inside(jail.location, event.to(), jailRadius())) {
+                                event.to(jail.location);
+                                event.cancel();
+                            }
+                        })
         );
         context.events().listen(PlayerRespawnEvent.class, event ->
-                jail(jailService, event.player())
+                jail(jails, event.player())
                         .ifPresent(jail -> event.location(jail.location))
         );
         context.events().listen(PlayerWorldChangeEvent.class, event ->
-                enforceJail(platform, jailService, event.player())
+                enforceJail(platform, jails, event.player())
         );
         context.events().listen(PlayerGameModeChangeEvent.class, event -> {
-            if (jailService.jailed(event.player().uuid()).isPresent()) {
+            if (jails.jailed(event.player().uuid()).isPresent()) {
                 event.cancel();
             }
         });
         context.events().listen(PlayerAttackEvent.class, event -> {
-            if (jailService.jailed(event.player().uuid()).isPresent()) {
+            if (jails.jailed(event.player().uuid()).isPresent()) {
                 event.cancel();
             }
         });
@@ -150,11 +185,11 @@ public final class AdminModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
 
-        Objects.requireNonNull(bans, "BanService has not been initialized");
-        Objects.requireNonNull(tempBans, "TempBanService has not been initialized");
-        Objects.requireNonNull(mutes, "MuteService has not been initialized");
-        Objects.requireNonNull(config, "Config has not been initialized");
-        Objects.requireNonNull(jails, "JailService has not been initialized");
+        requireNonNull(bans, "BanService has not been initialized");
+        requireNonNull(tempBans, "TempBanService has not been initialized");
+        requireNonNull(mutes, "MuteService has not been initialized");
+        requireNonNull(config, "Config has not been initialized");
+        requireNonNull(jails, "JailService has not been initialized");
 
         context.commands().register(new BanCommand(platform, users, bans));
         context.commands().register(new TempBanCommand(platform, users, tempBans));
@@ -177,18 +212,26 @@ public final class AdminModule implements CellulosesZModule {
 
     @Override
     public void onServerStarted(ModuleContext context) {
-        var tempBanService = Objects.requireNonNull(tempBans, "TempBanService has not been initialized");
-        var muteService = Objects.requireNonNull(mutes, "MuteService has not been initialized");
-        var adminConfig = Objects.requireNonNull(config, "Config has not been initialized");
-        var jailService = Objects.requireNonNull(jails, "JailService has not been initialized");
         var platform = context.services().require(PlatformService.class);
 
-        context.scheduler().syncRepeating(() -> {
-            tempBanService.purgeExpired();
-            muteService.purgeExpired();
-            jailService.purgeExpired();
-            platform.onlinePlayers().forEach(player -> enforceJail(platform, jailService, player));
-        }, 20L, Math.max(20L, adminConfig.jailedPlayerCheckSeconds * 20L));
+        requireNonNull(tempBans, "TempBanService has not been initialized");
+        requireNonNull(mutes, "MuteService has not been initialized");
+        requireNonNull(config, "Config has not been initialized");
+        requireNonNull(jails, "JailService has not been initialized");
+
+        context.scheduler().syncRepeating(
+                () -> {
+                    tempBans.purgeExpired();
+                    mutes.purgeExpired();
+                    jails.purgeExpired();
+                    platform.onlinePlayers()
+                            .forEach(player ->
+                                    enforceJail(platform, jails, player)
+                            );
+                },
+                20L,
+                Math.max(20L, config.jailedPlayerCheckSeconds * 20L)
+        );
     }
 
     private void enforceJail(
@@ -196,11 +239,12 @@ public final class AdminModule implements CellulosesZModule {
             JailService jailService,
             CellPlayer player
     ) {
-        jail(jailService, player).ifPresent(jail -> {
-            if (!inside(jail.location, platform.location(player), jailRadius())) {
-                platform.teleport(player, jail.location);
-            }
-        });
+        jail(jailService, player)
+                .ifPresent(jail -> {
+                    if (!inside(jail.location, platform.location(player), jailRadius())) {
+                        platform.teleport(player, jail.location);
+                    }
+                });
     }
 
     private Optional<Jail> jail(
@@ -211,7 +255,11 @@ public final class AdminModule implements CellulosesZModule {
                 .flatMap(record -> jailService.jail(record.jail));
     }
 
-    private boolean inside(CellLocation jail, CellLocation actual, double radius) {
+    private boolean inside(
+            CellLocation jail,
+            CellLocation actual,
+            double radius
+    ) {
         if (!jail.world.equals(actual.world)) return false;
         var dx = jail.x - actual.x;
         var dy = jail.y - actual.y;
@@ -220,7 +268,7 @@ public final class AdminModule implements CellulosesZModule {
     }
 
     private double jailRadius() {
-        return Objects.requireNonNull(config, "Config has not been initialized").jailConfinementRadius;
+        return requireNonNull(config, "Config has not been initialized").jailConfinementRadius;
     }
 
 }

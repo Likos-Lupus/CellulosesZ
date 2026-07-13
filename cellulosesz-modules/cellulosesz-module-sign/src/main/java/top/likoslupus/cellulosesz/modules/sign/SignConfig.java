@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.sign;
 
 public final class SignConfig {
 
-    public int schema = 1;
     public boolean enabled = true;
     public Interaction interaction = new Interaction();
     public Signs signs = new Signs();

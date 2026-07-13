@@ -7,7 +7,6 @@ import java.util.List;
 
 public final class MuteDocument {
 
-    public int schema = 1;
     public List<BanRecord> records = new ArrayList<>();
 
 }

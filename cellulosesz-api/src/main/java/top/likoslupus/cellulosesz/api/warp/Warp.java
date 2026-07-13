@@ -7,10 +7,8 @@ import java.util.UUID;
 
 public final class Warp {
 
-    public int schema = 1;
     public String name = "";
     public String displayName = "";
-    public @Nullable String permission;
     public String cost = "0.00";
     public CellLocation location = new CellLocation();
     public @Nullable UUID createdBy;

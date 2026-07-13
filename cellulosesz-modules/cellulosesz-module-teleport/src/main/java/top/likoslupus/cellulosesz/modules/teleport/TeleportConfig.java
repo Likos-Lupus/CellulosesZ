@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.teleport;
 
 public final class TeleportConfig {
 
-    public int schema = 1;
     public Warmup warmup = new Warmup();
     public Requests requests = new Requests();
     public RandomTeleport randomTeleport = new RandomTeleport();

@@ -8,7 +8,6 @@ import java.util.UUID;
 
 public final class CellUser {
 
-    public int schema = 1;
     public UUID uuid;
     public @Nullable String lastKnownName;
     public UserTimestamps timestamps = new UserTimestamps();

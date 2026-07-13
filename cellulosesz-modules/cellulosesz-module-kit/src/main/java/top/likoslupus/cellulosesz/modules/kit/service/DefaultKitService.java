@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 
@@ -18,8 +19,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 public final class DefaultKitService implements KitService {
+
+    private static final int CLAIM_LOCK_COUNT = 64;
 
     private final StorageService storage;
     private final UserService users;
@@ -28,6 +32,7 @@ public final class DefaultKitService implements KitService {
     private final KitConfig config;
     private final Path kitsDirectory;
     private final LinkedHashMap<String, KitDefinition> kits = new LinkedHashMap<>();
+    private final Object[] claimLocks = new Object[CLAIM_LOCK_COUNT];
 
     public DefaultKitService(
             StorageService storage,
@@ -43,6 +48,7 @@ public final class DefaultKitService implements KitService {
         this.economy = economy;
         this.config = config;
         this.kitsDirectory = kitsDirectory;
+        Arrays.setAll(claimLocks, _ -> new Object());
         reload().join();
     }
 
@@ -57,9 +63,11 @@ public final class DefaultKitService implements KitService {
                                 .sorted(Comparator.comparing(kit -> kit.id))
                                 .forEach(kit -> kits.put(key(kit.id), kit));
                     }
+
                     if (loaded.isEmpty() && config.createStarterKitWhenEmpty) {
                         return save(starterKit());
                     }
+
                     return CompletableFuture.completedFuture(null);
                 });
     }
@@ -77,72 +85,188 @@ public final class DefaultKitService implements KitService {
     @Override
     public CompletableFuture<Void> save(KitDefinition kit) {
         normalize(kit);
+        var id = key(kit.id);
+        KitDefinition previous;
         synchronized (this) {
-            kits.put(key(kit.id), kit);
+            previous = kits.put(id, kit);
         }
-        return storage.save(path(kit.id), kit);
+        return storage.save(path(kit.id), kit)
+                .whenComplete((_, exception) -> {
+                    if (exception == null) return;
+
+                    synchronized (this) {
+                        if (kits.get(id) != kit) return;
+
+                        if (previous == null) {
+                            kits.remove(id);
+                        } else {
+                            kits.put(id, previous);
+                        }
+                    }
+                });
     }
 
     @Override
     public CompletableFuture<Boolean> delete(String id) {
-        var removed = false;
+        var key = key(id);
+        KitDefinition previous;
         synchronized (this) {
-            removed = kits.remove(key(id)) != null;
+            previous = kits.remove(key);
         }
-        if (!removed) return CompletableFuture.completedFuture(false);
+        if (previous == null) return CompletableFuture.completedFuture(false);
 
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Files.deleteIfExists(path(id));
                 return true;
-            } catch (IOException _) {
-                return false;
+            } catch (IOException exception) {
+                synchronized (this) {
+                    kits.putIfAbsent(key, previous);
+                }
+                throw new CompletionException(exception);
             }
         });
     }
 
     @Override
     public CompletableFuture<KitClaimResult> claim(CellPlayer player, KitDefinition kit) {
-        return users.load(player.uuid()).thenApply(user -> {
-            normalize(kit);
-            var now = System.currentTimeMillis();
-            var cooldownKey = cooldownKey(kit.id);
-            var availableAt = user.cooldowns.getOrDefault(cooldownKey, 0L);
-            if (availableAt > now) {
-                var seconds = Math.max(1L, (availableAt - now + 999L) / 1000L);
+        var cached = users.cached(player.uuid());
+        if (cached.isEmpty()) {
+            return CompletableFuture.completedFuture(
+                    KitClaimResult.failure("service.kit.user-not-loaded")
+            );
+        }
+
+        synchronized (claimLock(player.uuid())) {
+            return CompletableFuture.completedFuture(claimLoaded(player, kit, cached.orElseThrow()));
+        }
+    }
+
+    private Object claimLock(UUID uuid) {
+        return claimLocks[Math.floorMod(uuid.hashCode(), claimLocks.length)];
+    }
+
+    private KitClaimResult claimLoaded(
+            CellPlayer player,
+            KitDefinition kit,
+            CellUser user
+    ) {
+        normalize(kit);
+
+        var now = System.currentTimeMillis();
+        var cooldownKey = cooldownKey(kit.id);
+        var alreadyClaimed = user.cooldowns.containsKey(cooldownKey);
+        var availableAt = user.cooldowns.getOrDefault(cooldownKey, 0L);
+
+        if (kit.cooldownSeconds < 0L && alreadyClaimed) {
+            return KitClaimResult.failure("service.kit.once");
+        }
+
+        if (kit.cooldownSeconds >= 0L && availableAt > now) {
+            var seconds = Math.max(1L, (availableAt - now + 999L) / 1000L);
+            return KitClaimResult.failure(
+                    "service.kit.cooldown",
+                    Map.of("seconds", seconds)
+            );
+        }
+
+        var hadPreviousClaim = user.cooldowns.containsKey(cooldownKey);
+        var previousClaim = user.cooldowns.getOrDefault(cooldownKey, 0L);
+        if (kit.cooldownSeconds != 0L) {
+            user.cooldowns.put(
+                    cooldownKey,
+                    kit.cooldownSeconds < 0L ? Long.MAX_VALUE : now + kit.cooldownSeconds * 1000L
+            );
+            users.markDirty(player.uuid());
+            try {
+                users.save(player.uuid()).join();
+            } catch (RuntimeException _) {
+                restoreClaim(user.cooldowns, cooldownKey, hadPreviousClaim, previousClaim);
+                users.markDirty(player.uuid());
+                return KitClaimResult.failure("service.kit.persistence-failed");
+            }
+        }
+
+        var cost = parseMoney(kit.cost);
+        if (config.chargeKitCost && cost.signum() > 0) {
+            if (economy.isEmpty()) {
+                if (kit.cooldownSeconds != 0L) {
+                    rollbackClaim(player.uuid(), user.cooldowns, cooldownKey, hadPreviousClaim, previousClaim);
+                }
+                return KitClaimResult.failure("service.kit.economy-unavailable");
+            }
+
+            var withdraw = economy.get().withdraw(
+                    player.uuid(),
+                    cost,
+                    TransactionCause.command(player.name(), "kit " + kit.id)
+            );
+
+            if (!withdraw.success()) {
+                if (kit.cooldownSeconds != 0L) {
+                    rollbackClaim(player.uuid(), user.cooldowns, cooldownKey, hadPreviousClaim, previousClaim);
+                }
+                return KitClaimResult.failure(withdraw.message());
+            }
+        }
+
+        for (var item : kit.items) {
+            if (!items.give(player, item)) {
+                // Keep the persisted claim marker. Some earlier items may already have been delivered, so clearing
+                // it here would make one-time kits and cooldown kits repeatable after a partial inventory failure.
                 return KitClaimResult.failure(
-                        "service.kit.cooldown",
-                        Map.of("seconds", seconds)
+                        "service.kit.item-failed",
+                        Map.of("item", item.normalizedItem())
                 );
             }
+        }
 
-            var cost = parseMoney(kit.cost);
-            if (config.chargeKitCost && cost.signum() > 0) {
-                if (economy.isEmpty()) return KitClaimResult.failure("service.kit.economy-unavailable");
-                var withdraw = economy.get()
-                        .withdraw(player.uuid(), cost, TransactionCause.command(player.name(), "kit " + kit.id));
-                if (!withdraw.success()) return KitClaimResult.failure(withdraw.message());
-            }
+        return KitClaimResult.success(
+                "service.kit.claimed",
+                Map.of("kit", kit.displayName)
+        );
+    }
 
-            for (var item : kit.items) {
-                if (!items.give(player, item)) {
-                    return KitClaimResult.failure(
-                            "service.kit.item-failed",
-                            Map.of("item", item.normalizedItem())
-                    );
-                }
-            }
+    private String cooldownKey(String kitId) {
+        return "kit:" + key(kitId);
+    }
 
-            if (kit.cooldownSeconds > 0L) {
-                user.cooldowns.put(cooldownKey, now + kit.cooldownSeconds * 1000L);
-                users.markDirty(player.uuid());
-                users.save(player.uuid());
-            }
-            return KitClaimResult.success(
-                    "service.kit.claimed",
-                    Map.of("kit", kit.displayName)
-            );
-        });
+    private void restoreClaim(
+            Map<String, Long> cooldowns,
+            String cooldownKey,
+            boolean hadPrevious,
+            long previous
+    ) {
+        if (hadPrevious) {
+            cooldowns.put(cooldownKey, previous);
+        } else {
+            cooldowns.remove(cooldownKey);
+        }
+    }
+
+    private BigDecimal parseMoney(String value) {
+        try {
+            return new BigDecimal(value);
+        } catch (NumberFormatException _) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    private void rollbackClaim(
+            UUID uuid,
+            Map<String, Long> cooldowns,
+            String cooldownKey,
+            boolean hadPrevious,
+            long previous
+    ) {
+        restoreClaim(cooldowns, cooldownKey, hadPrevious, previous);
+        users.markDirty(uuid);
+        try {
+            users.save(uuid).join();
+        } catch (RuntimeException _) {
+            // The failed operation returned no items. Leaving the restored value dirty allows the normal save cycle to
+            // retry without falsely reporting a successful claim.
+        }
     }
 
     @Override
@@ -152,18 +276,6 @@ public final class DefaultKitService implements KitService {
             users.markDirty(uuid);
             return users.save(uuid);
         });
-    }
-
-    private String cooldownKey(String kitId) {
-        return "kit:" + key(kitId);
-    }
-
-    private BigDecimal parseMoney(String value) {
-        try {
-            return new BigDecimal(value);
-        } catch (NumberFormatException _) {
-            return BigDecimal.ZERO;
-        }
     }
 
     private void normalize(KitDefinition kit) {

@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
-import java.util.List;
 
 public final class MsgToggleCommand extends AbstractMessagingCommand {
 
@@ -16,11 +15,6 @@ public final class MsgToggleCommand extends AbstractMessagingCommand {
             MessagingConfig config
     ) {
         super(platform, users, config);
-    }
-
-    @Override
-    public List<String> aliases() {
-        return List.of("rtoggle");
     }
 
     @Override

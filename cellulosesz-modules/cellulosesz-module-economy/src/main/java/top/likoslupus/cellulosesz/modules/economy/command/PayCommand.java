@@ -4,8 +4,10 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
@@ -14,6 +16,8 @@ import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -56,7 +60,7 @@ public final class PayCommand extends AbstractEconomyCommand {
 
     @Override
     public String usage() {
-        return "/pay <player> <amount> [confirmation]";
+        return "/pay <player[,player...]> <amount> [confirmation]";
     }
 
     @Override
@@ -79,21 +83,6 @@ public final class PayCommand extends AbstractEconomyCommand {
         var amount = amount(invocation, args[1]);
         if (sender.isEmpty() || amount.isEmpty()) return 0;
 
-        var resolved = players.resolveKnown(args[0], sender.get());
-        if (resolved.state() == ResolvedPlayerState.UNKNOWN || resolved.optionalUuid().isEmpty()) {
-            invocation.errorKey(
-                    "commands.economy.abstract-economy-command.error.3",
-                    Map.of("value0", args[0])
-            );
-            return 0;
-        }
-
-        var targetUuid = resolved.optionalUuid().orElseThrow();
-        if (targetUuid.equals(sender.get().uuid())) {
-            invocation.errorKey("commands.economy.pay-self");
-            return 0;
-        }
-
         var minimum = decimal(config.pay.minimum, BigDecimal.valueOf(0.01));
         if (amount.get().compareTo(minimum) < 0) {
             invocation.errorKey(
@@ -103,17 +92,73 @@ public final class PayCommand extends AbstractEconomyCommand {
             return 0;
         }
 
-        var recipientUser = users.load(targetUuid).join();
-        if (!recipientUser.preferences.payments) {
-            invocation.errorKey("commands.economy.pay-command.error.3");
+        var resolvedTargets = resolveTargets(invocation, sender.get(), args[0]);
+        if (resolvedTargets.isEmpty()) return 0;
+
+        if (resolvedTargets.size() > 1 && !invocation.hasPermission("cellulosesz.economy.pay.multiple")) {
+            invocation.errorKey("commands.economy.pay-multiple-denied");
             return 0;
         }
 
+        if (resolvedTargets.size() > Math.max(1, config.pay.maximumRecipients)) {
+            invocation.errorKey(
+                    "commands.economy.pay-too-many",
+                    Map.of("maximum", config.pay.maximumRecipients)
+            );
+            return 0;
+        }
+
+        for (var target : resolvedTargets) {
+            var uuid = target.optionalUuid().orElseThrow();
+            if (uuid.equals(sender.get().uuid())) {
+                invocation.errorKey("commands.economy.pay-self");
+                return 0;
+            }
+
+            if (target.state() == ResolvedPlayerState.OFFLINE
+                    && !config.pay.allowOfflineByDefault
+                    && !invocation.hasPermission("cellulosesz.economy.pay.offline")
+            ) {
+                invocation.errorKey(
+                        "commands.economy.pay-offline-denied",
+                        Map.of("player", target.name())
+                );
+                return 0;
+            }
+
+            var recipientUser = users.load(uuid).join();
+            if (!recipientUser.preferences.payments) {
+                invocation.errorKey(
+                        "commands.economy.pay-command.error.3",
+                        Map.of("player", target.name())
+                );
+                return 0;
+            }
+
+            if (config.pay.respectIgnore
+                    && recipientUser.relations.ignored.contains(sender.get().uuid())
+            ) {
+                invocation.errorKey(
+                        "commands.economy.pay-ignored",
+                        Map.of("player", target.name())
+                );
+                return 0;
+            }
+        }
+
+        var recipientIds = resolvedTargets.stream()
+                .map(target -> target.optionalUuid().orElseThrow())
+                .toList();
+        var total = amount.get().multiply(BigDecimal.valueOf(recipientIds.size()));
+        var names = resolvedTargets.stream()
+                .map(ResolvedPlayer::name)
+                .toList();
         var confirmationThreshold = decimal(config.pay.requireConfirmAbove, BigDecimal.ZERO);
         if (users.load(sender.get().uuid()).join().preferences.confirmLargePayments
                 && confirmationThreshold.signum() > 0
-                && amount.get().compareTo(confirmationThreshold) >= 0) {
-            var pending = new PendingPayment(targetUuid, amount.get());
+                && total.compareTo(confirmationThreshold) >= 0
+        ) {
+            var pending = new PendingPayment(recipientIds, amount.get());
             if (args.length == 2) {
                 var token = confirmations.request(
                         sender.get().uuid(),
@@ -124,8 +169,8 @@ public final class PayCommand extends AbstractEconomyCommand {
                 invocation.replyKey(
                         "commands.economy.pay-confirm-required",
                         Map.of(
-                                "player", resolved.name(),
-                                "amount", format(amount.get()),
+                                "player", String.join(", ", names),
+                                "amount", format(total),
                                 "token", token,
                                 "seconds", CONFIRM_TTL.toSeconds()
                         )
@@ -140,8 +185,9 @@ public final class PayCommand extends AbstractEconomyCommand {
                     PendingPayment.class
             );
             if (confirmed.isEmpty()
-                    || !confirmed.get().target().equals(targetUuid)
-                    || confirmed.get().amount().compareTo(amount.get()) != 0) {
+                    || !confirmed.get().targets().equals(recipientIds)
+                    || confirmed.get().amountEach().compareTo(amount.get()) != 0
+            ) {
                 invocation.errorKey("commands.economy.pay-confirm-invalid");
                 return 0;
             }
@@ -150,11 +196,11 @@ public final class PayCommand extends AbstractEconomyCommand {
             return 0;
         }
 
-        var result = economy.transfer(
+        var result = economy.transferMany(
                 sender.get().uuid(),
-                targetUuid,
+                recipientIds,
                 amount.get(),
-                cause(invocation, "pay " + resolved.name())
+                cause(invocation, "pay " + String.join(",", names))
         );
         if (!result.success()) {
             invocation.error(result.message());
@@ -164,22 +210,26 @@ public final class PayCommand extends AbstractEconomyCommand {
         invocation.replyKey(
                 "commands.economy.pay-command.reply.1",
                 Map.of(
-                        "value0", resolved.name(),
-                        "value1", format(amount.get()),
+                        "value0", String.join(", ", names),
+                        "value1", format(total),
                         "value2", format(result.balance())
                 )
         );
-        resolved.online().ifPresent(targetPlayer -> platform.sendMessage(
-                targetPlayer,
-                messages.render(
-                        locales.locale(targetPlayer),
-                        "commands.economy.pay-received",
-                        Map.of(
-                                "player", sender.get().name(),
-                                "amount", format(amount.get())
+        resolvedTargets.forEach(target ->
+                target.online().ifPresent(targetPlayer ->
+                        platform.sendMessage(
+                                targetPlayer,
+                                messages.render(
+                                        locales.locale(targetPlayer),
+                                        "commands.economy.pay-received",
+                                        Map.of(
+                                                "player", sender.get().name(),
+                                                "amount", format(amount.get())
+                                        )
+                                )
                         )
                 )
-        ));
+        );
         return 1;
     }
 
@@ -191,10 +241,49 @@ public final class PayCommand extends AbstractEconomyCommand {
         }
     }
 
-    private record PendingPayment(
-            UUID target,
-            BigDecimal amount
+    private List<ResolvedPlayer> resolveTargets(
+            CommandInvocation invocation,
+            CellPlayer sender,
+            String input
     ) {
+        var unique = new LinkedHashMap<UUID, ResolvedPlayer>();
+
+        for (var token : input.split(",")) {
+            var name = token.trim();
+            if (name.isEmpty()) continue;
+
+            var resolved = players.resolveKnown(name, sender);
+            if (resolved.state() == ResolvedPlayerState.UNKNOWN
+                    || resolved.optionalUuid().isEmpty()
+            ) {
+                invocation.errorKey(
+                        "commands.economy.abstract-economy-command.error.3",
+                        Map.of("value0", name)
+                );
+                return List.of();
+            }
+
+            unique.putIfAbsent(resolved.optionalUuid().orElseThrow(), resolved);
+        }
+
+        if (unique.isEmpty()) {
+            invocation.errorKey(
+                    "commands.economy.pay-command.error.1",
+                    Map.of("value0", usage())
+            );
+            return List.of();
+        }
+        return List.copyOf(unique.values());
+    }
+
+    private record PendingPayment(
+            List<UUID> targets,
+            BigDecimal amountEach
+    ) {
+
+        private PendingPayment {
+            targets = List.copyOf(targets);
+        }
 
     }
 

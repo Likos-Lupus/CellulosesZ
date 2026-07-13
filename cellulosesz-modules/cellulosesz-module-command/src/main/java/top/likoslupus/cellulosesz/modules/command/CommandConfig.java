@@ -5,7 +5,6 @@ import java.util.Set;
 
 public final class CommandConfig {
 
-    public int schema = 1;
     public Set<String> disabledCommands = new LinkedHashSet<>();
     public boolean auditCommands = true;
 

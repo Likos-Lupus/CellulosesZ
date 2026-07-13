@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.api.admin;
 
+import org.jspecify.annotations.Nullable;
+
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
@@ -25,7 +27,7 @@ public interface JailService {
             CellPlayer player,
             String jail,
             String actor,
-            Long durationMillis,
+            @Nullable Long durationMillis,
             String reason
     );
 

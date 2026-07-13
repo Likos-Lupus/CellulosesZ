@@ -41,14 +41,24 @@ public final class DefaultTeleportService implements TeleportService {
             TeleportOptions options
     ) {
         var future = new CompletableFuture<TeleportResult>();
-        var destination = options.safe()
-                ? safeLocations.safeLocation(target).orElse(target)
-                : target;
+        var resolvedOptions = ResolvedOptions.from(options);
+        var origin = platform.location(player);
+        if (!resolvedOptions.allowCrossWorld && !origin.world.equals(target.world)) {
+            future.complete(TeleportResult.failed("service.teleport.cross-world-disabled", target));
+            return future;
+        }
 
-        cancelWarmup(player.uuid(), "service.teleport.cancelled-replaced");
+        var destination = resolvedOptions.safe
+                ? safeLocations.safeLocation(target)
+                : Optional.of(target);
+        if (destination.isEmpty()) {
+            future.complete(TeleportResult.failed("service.teleport.unsafe", target));
+            return future;
+        }
 
-        if (options.warmupSeconds() <= 0) {
-            scheduler.sync(() -> execute(player, destination, options, future));
+        if (resolvedOptions.warmupSeconds <= 0) {
+            cancelWarmup(player.uuid(), "service.teleport.cancelled-replaced");
+            scheduler.sync(() -> execute(player, destination.get(), resolvedOptions, future));
             return future;
         }
 
@@ -56,40 +66,126 @@ public final class DefaultTeleportService implements TeleportService {
         Runnable action = () -> {
             var pending = pendingRef.get();
             if (pending == null || !warmups.remove(player.uuid(), pending)) return;
-            execute(player, destination, options, future);
+            execute(player, destination.get(), resolvedOptions, future);
         };
 
-        var handle = scheduler.syncLater(action, options.warmupSeconds() * 20L);
-        var pending = new PendingWarmup(handle, future, destination);
+        var handle = scheduler.syncLater(action, resolvedOptions.warmupSeconds * 20L);
+        var pending = new PendingWarmup(handle, future, destination.get());
         pendingRef.set(pending);
-        warmups.put(player.uuid(), pending);
+        var replaced = warmups.put(player.uuid(), pending);
+        if (replaced != null) {
+            cancelPending(replaced, "service.teleport.cancelled-replaced");
+        }
         return future;
     }
 
     private void execute(
             CellPlayer player,
             CellLocation destination,
-            TeleportOptions options,
+            ResolvedOptions options,
             CompletableFuture<TeleportResult> future
     ) {
         if (future.isDone()) return;
-        if (options.rememberBack()) {
-            backLocations.remember(player);
+
+        var checkedDestination = options.safe
+                ? safeLocations.safeLocation(destination)
+                : Optional.of(destination);
+        if (checkedDestination.isEmpty()) {
+            future.complete(TeleportResult.failed("service.teleport.unsafe", destination));
+            return;
         }
-        platform.teleport(player, destination)
-                .whenComplete((success, throwable) -> {
-                    if (throwable != null) {
-                        future.complete(TeleportResult.failed(
-                                "service.teleport.exception",
-                                Map.of("reason", String.valueOf(throwable.getMessage())),
-                                destination
-                        ));
-                    } else if (Boolean.TRUE.equals(success)) {
-                        future.complete(TeleportResult.success(destination));
-                    } else {
-                        future.complete(TeleportResult.failed("service.teleport.failed", destination));
-                    }
-                });
+
+        var target = checkedDestination.orElseThrow();
+        var origin = platform.location(player);
+        if (!options.allowCrossWorld && !origin.world.equals(target.world)) {
+            future.complete(TeleportResult.failed("service.teleport.cross-world-disabled", target));
+            return;
+        }
+
+        var previousBack = backLocations.location(player.uuid());
+        if (options.rememberBack) {
+            try {
+                // Pre-commit the return location. A storage failure aborts before the platform can move the player,
+                // while a failed platform teleport restores the previous value below.
+                backLocations.remember(player.uuid(), origin);
+            } catch (RuntimeException _) {
+                future.complete(TeleportResult.failed(
+                        "service.teleport.back-persistence-failed",
+                        target
+                ));
+                return;
+            }
+        }
+
+        CompletableFuture<Boolean> platformTeleport;
+        try {
+            platformTeleport = platform.teleport(player, target);
+        } catch (RuntimeException exception) {
+            if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
+                future.complete(TeleportResult.failed(
+                        "service.teleport.back-rollback-failed",
+                        target
+                ));
+                return;
+            }
+            future.complete(TeleportResult.failed(
+                    "service.teleport.exception",
+                    Map.of("reason", String.valueOf(exception.getMessage())),
+                    target
+            ));
+            return;
+        }
+
+        platformTeleport.whenComplete((success, throwable) -> {
+            if (throwable != null) {
+                if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
+                    future.complete(TeleportResult.failed(
+                            "service.teleport.back-rollback-failed",
+                            target
+                    ));
+                    return;
+                }
+                future.complete(TeleportResult.failed(
+                        "service.teleport.exception",
+                        Map.of("reason", String.valueOf(throwable.getMessage())),
+                        target
+                ));
+            } else if (Boolean.TRUE.equals(success)) {
+                future.complete(TeleportResult.success(target));
+            } else {
+                if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
+                    future.complete(TeleportResult.failed(
+                            "service.teleport.back-rollback-failed",
+                            target
+                    ));
+                    return;
+                }
+                future.complete(TeleportResult.failed("service.teleport.failed", target));
+            }
+        });
+    }
+
+    private void cancelPending(PendingWarmup pending, String messageKey) {
+        pending.handle.cancel();
+        pending.future.complete(TeleportResult.failed(messageKey, pending.destination));
+    }
+
+    private boolean restoreBack(
+            UUID uuid,
+            Optional<CellLocation> previous,
+            boolean changed
+    ) {
+        if (!changed) return true;
+        try {
+            if (previous.isPresent()) {
+                backLocations.remember(uuid, previous.orElseThrow());
+            } else {
+                backLocations.forget(uuid);
+            }
+            return true;
+        } catch (RuntimeException _) {
+            return false;
+        }
     }
 
     @Override
@@ -97,8 +193,7 @@ public final class DefaultTeleportService implements TeleportService {
         var pending = warmups.remove(uuid);
         if (pending == null) return false;
 
-        pending.handle.cancel();
-        pending.future.complete(TeleportResult.failed(messageKey, pending.destination));
+        cancelPending(pending, messageKey);
         return true;
     }
 
@@ -127,6 +222,24 @@ public final class DefaultTeleportService implements TeleportService {
             CompletableFuture<TeleportResult> future,
             CellLocation destination
     ) {
+
+    }
+
+    private record ResolvedOptions(
+            boolean safe,
+            boolean rememberBack,
+            boolean allowCrossWorld,
+            int warmupSeconds
+    ) {
+
+        private static ResolvedOptions from(TeleportOptions options) {
+            return new ResolvedOptions(
+                    options.safe(),
+                    options.rememberBack(),
+                    options.allowCrossWorld(),
+                    Math.max(0, options.warmupSeconds())
+            );
+        }
 
     }
 

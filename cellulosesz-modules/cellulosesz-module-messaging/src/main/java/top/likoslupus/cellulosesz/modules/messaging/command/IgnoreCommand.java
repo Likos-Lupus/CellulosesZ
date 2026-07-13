@@ -59,7 +59,13 @@ public final class IgnoreCommand extends AbstractMessagingCommand {
         if (self.isEmpty() || target.isEmpty()) return 0;
 
         var nowIgnored = !privateMessages.ignored(self.get().uuid(), target.get());
-        privateMessages.setIgnored(self.get().uuid(), target.get(), nowIgnored);
+        try {
+            privateMessages.setIgnored(self.get().uuid(), target.get(), nowIgnored);
+        } catch (RuntimeException _) {
+            invocation.errorKey("service.user.persistence-failed");
+            return 0;
+        }
+
         invocation.replyKey(
                 nowIgnored
                         ? "commands.messaging.ignore-enabled"

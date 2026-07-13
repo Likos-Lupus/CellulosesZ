@@ -7,7 +7,6 @@ import java.util.List;
 
 public final class TempBanDocument {
 
-    public int schema = 1;
     public List<BanRecord> records = new ArrayList<>();
 
 }

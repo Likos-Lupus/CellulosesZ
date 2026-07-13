@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.api.admin;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.Optional;
 import java.util.UUID;
 
@@ -9,7 +11,7 @@ public interface MuteService {
             UUID uuid,
             String name,
             String actor,
-            Long durationMillis,
+            @Nullable Long durationMillis,
             String reason
     );
 

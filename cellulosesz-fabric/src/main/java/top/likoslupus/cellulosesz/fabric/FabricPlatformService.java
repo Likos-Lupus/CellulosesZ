@@ -21,6 +21,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.Heightmap;
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -364,12 +365,44 @@ public final class FabricPlatformService implements PlatformService {
     }
 
     @Override
+    public List<ItemDescriptor> inventoryItems(CellPlayer player) {
+        var inventory = requireNative(player).getInventory();
+        var counts = new LinkedHashMap<String, Integer>();
+        IntStream.range(0, inventory.getContainerSize())
+                .mapToObj(inventory::getItem)
+                .filter(stack -> !stack.isEmpty())
+                .forEach(stack ->
+                        counts.merge(itemId(stack), stack.getCount(), Integer::sum)
+                );
+        return counts.entrySet().stream()
+                .map(entry -> new ItemDescriptor(entry.getKey(), entry.getValue()))
+                .toList();
+    }
+
+    @Override
+    public void sendChatMessage(CellPlayer player, String message) {
+        if (server == null || message.isBlank()) return;
+        var nativePlayer = requireNative(player);
+        server.getPlayerList().broadcastSystemMessage(
+                Component.translatable(
+                        "chat.type.text",
+                        nativePlayer.getDisplayName(),
+                        Component.literal(message)
+                ),
+                false
+        );
+    }
+
+    @Override
     public boolean enchantHeldItem(
             CellPlayer player,
             String enchantment,
             int level
     ) {
-        if (enchantment.isBlank() || level <= 0 || requireNative(player).getMainHandItem().isEmpty()) return false;
+        if (enchantment.isBlank()
+                || level <= 0
+                || requireNative(player).getMainHandItem().isEmpty()
+        ) return false;
         var normalized = enchantment.indexOf(':') < 0
                 ? "minecraft:%s".formatted(enchantment)
                 : enchantment;

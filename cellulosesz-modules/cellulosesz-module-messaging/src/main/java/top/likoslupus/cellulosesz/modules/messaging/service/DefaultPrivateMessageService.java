@@ -20,7 +20,8 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     private final UserService users;
     private final DisplayNameService displayNames;
     private final MessageRenderer renderer;
-    private final ConcurrentHashMap<UUID, UUID> replyTargets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UUID> incomingReplyTargets = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, UUID> outgoingReplyTargets = new ConcurrentHashMap<>();
     private final Set<UUID> socialSpy = ConcurrentHashMap.newKeySet();
 
     public DefaultPrivateMessageService(
@@ -66,8 +67,9 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                         "message", message
                 )
         ));
-        setLastReplyTarget(sender.uuid(), target.uuid());
-        setLastReplyTarget(target.uuid(), sender.uuid());
+
+        outgoingReplyTargets.put(sender.uuid(), target.uuid());
+        incomingReplyTargets.put(target.uuid(), sender.uuid());
 
         platform.onlinePlayers().stream()
                 .filter(player -> !player.uuid().equals(sender.uuid())
@@ -88,12 +90,19 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
 
     @Override
     public Optional<UUID> lastReplyTarget(UUID uuid) {
-        return Optional.ofNullable(replyTargets.get(uuid));
+        var replyToRecipient = users.load(uuid).join().preferences.replyToLastRecipient;
+        var preferred = replyToRecipient
+                ? outgoingReplyTargets.get(uuid)
+                : incomingReplyTargets.get(uuid);
+        var fallback = replyToRecipient
+                ? incomingReplyTargets.get(uuid)
+                : outgoingReplyTargets.get(uuid);
+        return Optional.ofNullable(preferred != null ? preferred : fallback);
     }
 
     @Override
     public void setLastReplyTarget(UUID uuid, UUID target) {
-        replyTargets.put(uuid, target);
+        incomingReplyTargets.put(uuid, target);
     }
 
     @Override
@@ -108,13 +117,24 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
             boolean ignored
     ) {
         var user = users.load(viewer).join();
+        var previouslyIgnored = user.relations.ignored.contains(target);
         if (ignored) {
             user.relations.ignored.add(target);
         } else {
             user.relations.ignored.remove(target);
         }
         users.markDirty(viewer);
-        users.save(viewer);
+        try {
+            users.save(viewer).join();
+        } catch (RuntimeException exception) {
+            if (previouslyIgnored) {
+                user.relations.ignored.add(target);
+            } else {
+                user.relations.ignored.remove(target);
+            }
+            users.markDirty(viewer);
+            throw exception;
+        }
     }
 
     @Override

@@ -14,7 +14,6 @@ import java.util.Map;
  */
 public class ItemDescriptor {
 
-    public int schema = 1;
     public String item = "minecraft:air";
     public int count = 1;
     public Map<String, Object> components = new LinkedHashMap<>();
@@ -84,7 +83,6 @@ public class ItemDescriptor {
 
     public ItemDescriptor copy() {
         var copy = new ItemDescriptor(normalizedItem(), count, normalizedComponents());
-        copy.schema = schema;
         return copy;
     }
 

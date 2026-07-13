@@ -8,7 +8,6 @@ import java.util.List;
 
 public final class JailDocument {
 
-    public int schema = 1;
     public List<Jail> jails = new ArrayList<>();
     public List<JailedPlayer> jailed = new ArrayList<>();
 

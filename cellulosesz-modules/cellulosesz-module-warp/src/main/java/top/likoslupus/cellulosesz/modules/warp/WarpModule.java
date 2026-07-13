@@ -19,8 +19,9 @@ import top.likoslupus.cellulosesz.modules.warp.command.WarpInfoCommand;
 import top.likoslupus.cellulosesz.modules.warp.service.JsonWarpService;
 
 import java.util.Collection;
-import java.util.Objects;
 import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "warp",
@@ -48,8 +49,12 @@ public final class WarpModule implements CellulosesZModule {
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var root = context.dataDirectory().getParent();
-        warps = new JsonWarpService(storage, root.resolve("warps"));
+
+        requireNonNull(config, "WarpConfig has not been initialized");
+
+        warps = new JsonWarpService(storage, root.resolve("warps"), config);
         warps.reload().join();
+
         context.services().register(WarpService.class, warps);
         context.services().register(JsonWarpService.class, (JsonWarpService) warps);
     }
@@ -60,8 +65,8 @@ public final class WarpModule implements CellulosesZModule {
         var teleports = context.services().require(TeleportService.class);
         var cooldowns = context.services().require(CooldownService.class);
 
-        Objects.requireNonNull(warps, "WarpService has not been initialized");
-        Objects.requireNonNull(config, "WarpConfig has not been initialized");
+        requireNonNull(warps, "WarpService has not been initialized");
+        requireNonNull(config, "WarpConfig has not been initialized");
 
         context.commands().register(new WarpCommand(platform, warps, teleports, config, cooldowns));
         context.commands().register(new SetWarpCommand(platform, warps, teleports, config));
@@ -80,7 +85,7 @@ public final class WarpModule implements CellulosesZModule {
 
     @Override
     public void onReload(ModuleContext context) {
-        Objects.requireNonNull(warps, "WarpService has not been initialized");
+        requireNonNull(warps, "WarpService has not been initialized");
         warps.reload().join();
     }
 

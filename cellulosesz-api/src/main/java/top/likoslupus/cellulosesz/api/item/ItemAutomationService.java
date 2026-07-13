@@ -2,29 +2,61 @@ package top.likoslupus.cellulosesz.api.item;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 public interface ItemAutomationService {
 
-    Optional<String> powerTool(UUID uuid, String itemId);
+    List<String> powerTool(UUID uuid, String itemId);
 
-    Map<String, String> powerTools(UUID uuid);
+    Map<String, List<String>> powerTools(UUID uuid);
 
-    void setPowerTool(UUID uuid, String itemId, String command);
+    void setPowerTool(
+            UUID uuid,
+            String itemId,
+            String command
+    );
 
-    void clearPowerTool(UUID uuid, String itemId);
+    void addPowerTool(
+            UUID uuid,
+            String itemId,
+            String command
+    );
 
-    boolean executePowerTool(CellPlayer player);
+    boolean removePowerTool(
+            UUID uuid,
+            String itemId,
+            String command
+    );
+
+    void clearPowerTool(
+            UUID uuid,
+            String itemId
+    );
+
+    default boolean executePowerTool(CellPlayer player) {
+        return executePowerTool(player, "");
+    }
+
+    boolean executePowerTool(CellPlayer player, String clickedPlayerName);
+
+    boolean powerToolsEnabled(UUID uuid);
+
+    void setPowerToolsEnabled(UUID uuid, boolean enabled);
 
     boolean unlimited(UUID uuid, String itemId);
 
-    Set<String> unlimitedItems(UUID uuid);
-
     void setUnlimited(UUID uuid, String itemId, boolean enabled);
 
-    void maintainUnlimited(CellPlayer player);
+    default void maintainUnlimited(CellPlayer player) {
+        unlimitedItems(player.uuid())
+                .forEach(itemId -> maintainUnlimited(player, itemId));
+    }
+
+    Set<String> unlimitedItems(UUID uuid);
+
+    void maintainUnlimited(CellPlayer player, String itemId);
 
 }

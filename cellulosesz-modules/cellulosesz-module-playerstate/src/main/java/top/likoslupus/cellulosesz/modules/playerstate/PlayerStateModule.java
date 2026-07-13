@@ -13,13 +13,15 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.playerstate.command.*;
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultPlayerStateService;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishService;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "playerstate",
@@ -49,8 +51,8 @@ public final class PlayerStateModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
-
         var displayNames = context.services().require(DisplayNameService.class);
+
         states = new DefaultPlayerStateService(platform, users, displayNames);
         vanish = new DefaultVanishService(platform, users, permissions, displayNames);
 
@@ -76,8 +78,8 @@ public final class PlayerStateModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
 
-        Objects.requireNonNull(states, "PlayerStateService has not been initialized");
-        Objects.requireNonNull(vanish, "VanishService has not been initialized");
+        requireNonNull(states, "PlayerStateService has not been initialized");
+        requireNonNull(vanish, "VanishService has not been initialized");
 
         context.commands().register(new FlyCommand(platform, users, states));
         context.commands().register(new GodCommand(platform, users, states));
@@ -95,8 +97,8 @@ public final class PlayerStateModule implements CellulosesZModule {
                 users,
                 states,
                 vanish,
-                context.services().require(top.likoslupus.cellulosesz.api.text.MessageRenderer.class),
-                context.services().require(top.likoslupus.cellulosesz.api.text.LocaleResolver.class)
+                context.services().require(MessageRenderer.class),
+                context.services().require(LocaleResolver.class)
         ));
     }
 
@@ -114,18 +116,22 @@ public final class PlayerStateModule implements CellulosesZModule {
         var loaded = users.cached(player.uuid());
         if (loaded.isEmpty()) {
             if (attempt < 100) {
-                context.scheduler().syncLater(() -> restoreJoinedState(context, player, attempt + 1), 1L);
+                context.scheduler().syncLater(
+                        () -> restoreJoinedState(context, player, attempt + 1),
+                        1L
+                );
             } else {
                 context.logger().warn("Timed out waiting for player data before restoring state: " + player.name());
             }
             return;
         }
 
-        Objects.requireNonNull(config, "PlayerStateConfig has not been initialized");
-        Objects.requireNonNull(states, "PlayerStateService has not been initialized");
-        Objects.requireNonNull(vanish, "VanishService has not been initialized");
+        requireNonNull(config, "PlayerStateConfig has not been initialized");
+        requireNonNull(states, "PlayerStateService has not been initialized");
+        requireNonNull(vanish, "VanishService has not been initialized");
 
         var user = loaded.get();
+        context.services().require(DisplayNameService.class).refresh(player);
         if (config.persistFlyGod) {
             if (user.state.flying) states.setFlying(player, true);
             if (user.state.god) states.setGod(player, true);

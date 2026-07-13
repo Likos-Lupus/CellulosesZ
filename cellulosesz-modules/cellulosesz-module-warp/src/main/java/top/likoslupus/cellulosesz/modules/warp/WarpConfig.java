@@ -2,10 +2,10 @@ package top.likoslupus.cellulosesz.modules.warp;
 
 public final class WarpConfig {
 
-    public int schema = 1;
     public Teleport teleport = new Teleport();
     public ListConfig list = new ListConfig();
     public Naming naming = new Naming();
+    public boolean perWarpPermission;
 
     public static final class Teleport {
 

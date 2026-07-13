@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.api.platform;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.RichText;
 
@@ -111,6 +112,13 @@ public interface PlatformService {
 
     default Optional<String> heldItemId(CellPlayer player) {
         return Optional.empty();
+    }
+
+    default List<ItemDescriptor> inventoryItems(CellPlayer player) {
+        return List.of();
+    }
+
+    default void sendChatMessage(CellPlayer player, String message) {
     }
 
     default boolean enchantHeldItem(

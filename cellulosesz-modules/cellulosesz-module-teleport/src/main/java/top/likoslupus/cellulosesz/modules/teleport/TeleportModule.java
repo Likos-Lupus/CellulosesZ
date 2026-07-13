@@ -10,12 +10,17 @@ import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.teleport.command.*;
 import top.likoslupus.cellulosesz.modules.teleport.service.*;
 
-import java.util.Objects;
+import java.util.Map;
+
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "teleport",
@@ -42,7 +47,15 @@ public final class TeleportModule implements CellulosesZModule {
     @Override
     public void registerServices(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
-        var backLocations = new DefaultBackLocationService(platform);
+        var storage = context.services().require(StorageService.class);
+
+        requireNonNull(config, "TeleportConfig has not been initialized");
+
+        var backLocations = new DefaultBackLocationService(
+                platform,
+                storage,
+                context.dataDirectory().getParent().resolve("teleport/back-locations.json")
+        );
         var safeLocations = new DefaultSafeLocationFinder(platform);
         var teleports = new DefaultTeleportService(
                 platform,
@@ -63,21 +76,50 @@ public final class TeleportModule implements CellulosesZModule {
     @Override
     public void registerEvents(ModuleContext context) {
         var teleports = context.services().require(TeleportService.class);
+        var platform = context.services().require(PlatformService.class);
+        var renderer = context.services().require(MessageRenderer.class);
+        var locales = context.services().require(LocaleResolver.class);
 
         context.events().listen(PlayerMoveEvent.class, event -> {
             if (event.changedBlock()) {
-                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-move");
+                teleports.cancelWarmup(
+                        event.player().uuid(),
+                        "service.teleport.cancelled-move"
+                );
             }
         });
         context.events().listen(PlayerDamageEvent.class, event ->
-                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-damage")
+                teleports.cancelWarmup(
+                        event.player().uuid(),
+                        "service.teleport.cancelled-damage"
+                )
         );
         context.events().listen(PlayerDeathEvent.class, event -> {
-            teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-death");
-            teleports.rememberBackLocation(event.player().uuid(), event.location());
+            teleports.cancelWarmup(
+                    event.player().uuid(),
+                    "service.teleport.cancelled-death"
+            );
+            try {
+                teleports.rememberBackLocation(
+                        event.player().uuid(),
+                        event.location()
+                );
+            } catch (RuntimeException _) {
+                platform.sendMessage(
+                        event.player(),
+                        renderer.render(
+                                locales.locale(event.player()),
+                                "service.teleport.back-persistence-failed",
+                                Map.of()
+                        )
+                );
+            }
         });
         context.events().listen(PlayerDisconnectEvent.class, event ->
-                teleports.cancelWarmup(event.player().uuid(), "service.teleport.cancelled-disconnect")
+                teleports.cancelWarmup(
+                        event.player().uuid(),
+                        "service.teleport.cancelled-disconnect"
+                )
         );
     }
 
@@ -88,14 +130,14 @@ public final class TeleportModule implements CellulosesZModule {
         var randomTeleports = context.services().require(RandomTeleportService.class);
         var users = context.services().require(UserService.class);
 
-        Objects.requireNonNull(requests,"TeleportRequestService has not been initialized");
-        Objects.requireNonNull(config,"TeleportConfig has not been initialized");
+        requireNonNull(requests, "TeleportRequestService has not been initialized");
+        requireNonNull(config, "TeleportConfig has not been initialized");
 
         context.commands().register(new TpCommand(platform, teleports));
         context.commands().register(new TpHereCommand(platform, teleports));
         context.commands().register(new TpPosCommand(platform, teleports));
-        context.commands().register(new TpaCommand(platform, requests, config.requests.timeoutSeconds, false));
-        context.commands().register(new TpaCommand(platform, requests, config.requests.timeoutSeconds, true));
+        context.commands().register(new TpaCommand(platform, requests, users, config.requests.timeoutSeconds, false));
+        context.commands().register(new TpaCommand(platform, requests, users, config.requests.timeoutSeconds, true));
         context.commands().register(new TpAcceptCommand(platform, teleports, requests));
         context.commands().register(new TpDenyCommand(platform, requests));
         context.commands().register(new TpCancelCommand(platform, requests));
@@ -116,7 +158,7 @@ public final class TeleportModule implements CellulosesZModule {
 
     @Override
     public void onServerStarted(ModuleContext context) {
-        Objects.requireNonNull(requests,"TeleportRequestService has not been initialized");
+        requireNonNull(requests, "TeleportRequestService has not been initialized");
         context.scheduler().syncRepeating(
                 () -> requests.clearExpired(),
                 20L,

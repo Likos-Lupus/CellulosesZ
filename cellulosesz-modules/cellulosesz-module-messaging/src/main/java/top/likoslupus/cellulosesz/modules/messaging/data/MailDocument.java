@@ -7,7 +7,6 @@ import java.util.List;
 
 public final class MailDocument {
 
-    public int schema = 1;
     public List<MailMessage> messages = new ArrayList<>();
 
 }

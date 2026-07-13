@@ -27,7 +27,7 @@ public final class KitResetCommand extends AbstractKitCommand {
 
     @Override
     public String usage() {
-        return "/kitreset <player> <kit>";
+        return "/kitreset <kit> [player]";
     }
 
     @Override
@@ -38,7 +38,7 @@ public final class KitResetCommand extends AbstractKitCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
-        if (args.length != 2) {
+        if (args.length < 1 || args.length > 2) {
             invocation.errorKey(
                     "commands.kit.kit-reset-command.error.1",
                     Map.of("value0", usage())
@@ -46,18 +46,53 @@ public final class KitResetCommand extends AbstractKitCommand {
             return 0;
         }
 
-        var resolved = invocation.resolvePlayer(args[0]);
-        var uuid = resolved.optionalUuid();
-        if (uuid.isEmpty()) {
+        if (kits.kit(args[0]).isEmpty()) {
             invocation.errorKey(
-                    "commands.kit.kit-reset-command.error.2",
-                    Map.of("value0", args[0])
+                    "commands.kit.kit-reset-command.error.kit",
+                    Map.of("kit", args[0])
             );
             return 0;
         }
 
-        kits.resetCooldown(uuid.get(), args[1])
-                .thenRun(() -> invocation.replyKey("commands.kit.kit-reset-command.reply.1"));
+        var targetName = args.length == 2
+                ? args[1]
+                : invocation.playerName().orElse("");
+        if (targetName.isBlank()) {
+            invocation.errorKey("commands.kit.kit-reset-command.error.player-required");
+            return 0;
+        }
+
+        if (args.length == 2
+                && !invocation.hasPermission("cellulosesz.kit.reset.others")
+        ) {
+            invocation.errorKey("commands.kit.kit-reset-command.error.others");
+            return 0;
+        }
+
+        var resolved = invocation.resolvePlayer(targetName);
+        var uuid = resolved.optionalUuid();
+        if (uuid.isEmpty()) {
+            invocation.errorKey(
+                    "commands.kit.kit-reset-command.error.2",
+                    Map.of("value0", targetName)
+            );
+            return 0;
+        }
+
+        try {
+            kits.resetCooldown(uuid.get(), args[0]).join();
+        } catch (RuntimeException _) {
+            invocation.errorKey("service.kit.persistence-failed");
+            return 0;
+        }
+
+        invocation.replyKey(
+                "commands.kit.kit-reset-command.reply.1",
+                Map.of(
+                        "kit", args[0],
+                        "player", resolved.name()
+                )
+        );
         return 1;
     }
 

@@ -5,7 +5,6 @@ import java.util.Map;
 
 public final class WorthDocument {
 
-    public int schema = 1;
     public Map<String, String> prices = new LinkedHashMap<>();
 
 }

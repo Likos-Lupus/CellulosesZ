@@ -5,10 +5,11 @@
   "mixins": [
     "ChunkMapTrackedEntityMixin",
     "CommandNodeAccessor",
-    "ServerPlayerDisplayNameMixin",
-    "ServerGamePacketListenerEventMixin",
+    "FishingHookEventMixin",
     "ItemEntityPickupMixin",
-    "FishingHookEventMixin"
+    "PlayerDisplayNameMixin",
+    "ServerGamePacketListenerEventMixin",
+    "ServerPlayerDisplayNameMixin"
   ],
   "injectors": {
     "defaultRequire": 1

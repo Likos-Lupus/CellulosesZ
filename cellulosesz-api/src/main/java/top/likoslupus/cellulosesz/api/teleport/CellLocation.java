@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.api.teleport;
 
 public final class CellLocation {
 
-    public int schema = 1;
     public String world = "minecraft:overworld";
     public double x;
     public double y;

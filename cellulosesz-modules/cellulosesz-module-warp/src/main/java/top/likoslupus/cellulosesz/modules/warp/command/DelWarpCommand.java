@@ -45,7 +45,15 @@ public final class DelWarpCommand extends AbstractWarpCommand {
             return 0;
         }
 
-        if (warps.deleteWarp(args[0]).join()) {
+        boolean deleted;
+        try {
+            deleted = warps.deleteWarp(args[0]).join();
+        } catch (RuntimeException _) {
+            invocation.errorKey("service.warp.persistence-failed");
+            return 0;
+        }
+
+        if (deleted) {
             invocation.replyKey(
                     "commands.warp.del-warp-command.reply.1",
                     Map.of("value0", args[0])

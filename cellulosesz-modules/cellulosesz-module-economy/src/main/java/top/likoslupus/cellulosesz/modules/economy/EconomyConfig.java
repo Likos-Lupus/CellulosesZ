@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.economy;
 
 public final class EconomyConfig {
 
-    public int schema = 1;
     public Currency currency = new Currency();
     public String startingBalance = "0.00";
     public String minimumBalance = "0.00";
@@ -23,6 +22,9 @@ public final class EconomyConfig {
 
         public String minimum = "0.01";
         public String requireConfirmAbove = "10000.00";
+        public boolean respectIgnore = true;
+        public boolean allowOfflineByDefault;
+        public int maximumRecipients = 10;
 
     }
 

@@ -67,7 +67,7 @@ public final class NickCommand extends AbstractPlayerStateCommand {
                 nick
         );
         if (!result.success()) {
-            invocation.errorKey("player.nick-invalid");
+            invocation.error(result.message());
             return 0;
         }
 

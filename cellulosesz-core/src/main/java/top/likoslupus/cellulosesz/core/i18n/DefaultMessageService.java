@@ -330,6 +330,14 @@ public final class DefaultMessageService implements MessageService, MessageRende
         Map<String, Object> raw = JacksonCodecs.readYaml(path, Map.class);
         Map<String, String> flattened = new LinkedHashMap<>();
         flatten("", raw, flattened);
+
+        Map<String, String> defaults = new LinkedHashMap<>();
+        flatten("", defaultEnglish(), defaults);
+        var unknown = new TreeSet<>(flattened.keySet());
+        unknown.removeAll(defaults.keySet());
+        if (!unknown.isEmpty()) {
+            throw new IOException("Unknown message keys in " + path + ": " + String.join(", ", unknown));
+        }
         return flattened;
     }
 
@@ -346,7 +354,7 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
             if (value instanceof Map<?, ?> map) {
                 flatten(key, (Map<String, Object>) map, flattened);
-            } else if (!key.equals("schema")) {
+            } else {
                 flattened.put(key, String.valueOf(value));
             }
         });
@@ -354,7 +362,6 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     private Map<String, Object> defaultEnglish() {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("schema", 1);
         root.put("common", Map.ofEntries(
                 Map.entry("no-permission", "<red>You do not have permission to use this command."),
                 Map.entry("player-only", "<red>This command can only be used by a player."),
@@ -393,7 +400,6 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     private Map<String, Object> defaultChinese() {
         Map<String, Object> root = new LinkedHashMap<>();
-        root.put("schema", 1);
         root.put("common", Map.ofEntries(
                 Map.entry("no-permission", "<red>你没有权限执行此命令。"),
                 Map.entry("player-only", "<red>此命令只能由玩家执行。"),

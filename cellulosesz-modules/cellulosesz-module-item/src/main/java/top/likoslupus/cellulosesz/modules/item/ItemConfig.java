@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.item;
 
 public final class ItemConfig {
 
-    public int schema = 1;
     public int maxCommandCount = 6400;
     public boolean allowUnsafeEnchantments;
     public boolean repairAllEnabled = true;

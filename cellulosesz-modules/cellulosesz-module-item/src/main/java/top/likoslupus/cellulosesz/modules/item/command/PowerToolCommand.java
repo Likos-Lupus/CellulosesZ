@@ -38,7 +38,7 @@ public final class PowerToolCommand extends AbstractItemCommand {
 
     @Override
     public String usage() {
-        return "/powertool <command|clear|list|clearall>";
+        return "/powertool <command|a:command|r:command|c:message|l:|d:|toggle|list|clearall>";
     }
 
     @Override
@@ -52,6 +52,16 @@ public final class PowerToolCommand extends AbstractItemCommand {
         if (self.isEmpty()) return 0;
 
         var args = invocation.args();
+
+        if (args.length == 1 && args[0].equalsIgnoreCase("toggle")) {
+            var enabled = !automation.powerToolsEnabled(self.get().uuid());
+            automation.setPowerToolsEnabled(self.get().uuid(), enabled);
+            invocation.replyKey(enabled
+                    ? "commands.item.power-tool-command.enabled"
+                    : "commands.item.power-tool-command.disabled");
+            return 1;
+        }
+
         if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
             var configured = automation.powerTools(self.get().uuid());
             if (configured.isEmpty()) {
@@ -61,11 +71,15 @@ public final class PowerToolCommand extends AbstractItemCommand {
                         "commands.item.power-tool-command.reply.2",
                         Map.of(
                                 "value0",
-                                configured.entrySet()
-                                        .stream()
-                                        .map(entry -> entry.getKey() + " -> /" + entry.getValue())
+                                configured.entrySet().stream()
+                                        .map(entry ->
+                                                "%s -> %s".formatted(
+                                                        entry.getKey(),
+                                                        String.join(" | ", entry.getValue())
+                                                )
+                                        )
                                         .sorted()
-                                        .reduce((left, right) -> left + "; " + right)
+                                        .reduce("%s; %s"::formatted)
                                         .orElse("")
                         )
                 );
@@ -75,7 +89,9 @@ public final class PowerToolCommand extends AbstractItemCommand {
 
         if (args.length == 1 && args[0].equalsIgnoreCase("clearall")) {
             automation.powerTools(self.get().uuid()).keySet()
-                    .forEach(itemId -> automation.clearPowerTool(self.get().uuid(), itemId));
+                    .forEach(itemId ->
+                            automation.clearPowerTool(self.get().uuid(), itemId)
+                    );
             invocation.replyKey("commands.item.power-tool-command.reply.3");
             return 1;
         }
@@ -86,7 +102,11 @@ public final class PowerToolCommand extends AbstractItemCommand {
             return 0;
         }
 
-        if (args.length == 0 || (args.length == 1 && args[0].equalsIgnoreCase("clear"))) {
+        var input = join(args, 0).trim();
+        if (input.isEmpty()
+                || input.equalsIgnoreCase("clear")
+                || input.equalsIgnoreCase("d:")
+        ) {
             automation.clearPowerTool(self.get().uuid(), held.get());
             invocation.replyKey(
                     "commands.item.power-tool-command.reply.4",
@@ -95,20 +115,72 @@ public final class PowerToolCommand extends AbstractItemCommand {
             return 1;
         }
 
-        var command = join(args, 0).replaceFirst("^/+", "").trim();
-        if (command.isBlank()) {
-            invocation.errorKey(
-                    "commands.item.power-tool-command.error.2",
-                    Map.of("value0", usage())
+        if (input.equalsIgnoreCase("l:")) {
+            var commands = automation.powerTool(self.get().uuid(), held.get());
+            invocation.replyKey(
+                    "commands.item.power-tool-command.held-list",
+                    Map.of(
+                            "item", held.get(),
+                            "commands", commands.isEmpty() ? "-" : String.join(" | ", commands)
+                    )
             );
-            return 0;
+            return 1;
         }
 
+        if (input.regionMatches(true, 0, "a:", 0, 2)) {
+            var command = input.substring(2).trim();
+            if (command.isEmpty()) return usageError(invocation);
+
+            automation.addPowerTool(self.get().uuid(), held.get(), command);
+            return configured(invocation, held.get(), command);
+        }
+
+        if (input.regionMatches(true, 0, "r:", 0, 2)) {
+            var command = input.substring(2).trim();
+            if (!automation.removePowerTool(self.get().uuid(), held.get(), command)) {
+                invocation.errorKey("commands.item.power-tool-command.error.not-found");
+                return 0;
+            }
+
+            invocation.replyKey(
+                    "commands.item.power-tool-command.removed",
+                    Map.of("command", command)
+            );
+            return 1;
+        }
+
+        if (input.regionMatches(true, 0, "c:", 0, 2)) {
+            var message = input.substring(2).trim();
+            if (message.isEmpty()) return usageError(invocation);
+
+            automation.setPowerTool(self.get().uuid(), held.get(), "c:" + message);
+            return configured(invocation, held.get(), "c:" + message);
+        }
+
+        var command = input.replaceFirst("^/+", "").trim();
+        if (command.isBlank()) return usageError(invocation);
+
         automation.setPowerTool(self.get().uuid(), held.get(), command);
+        return configured(invocation, held.get(), command);
+    }
+
+    private int usageError(CommandInvocation invocation) {
+        invocation.errorKey(
+                "commands.item.power-tool-command.error.2",
+                Map.of("value0", usage())
+        );
+        return 0;
+    }
+
+    private int configured(
+            CommandInvocation invocation,
+            String item,
+            String command
+    ) {
         invocation.replyKey(
                 "commands.item.power-tool-command.reply.5",
                 Map.of(
-                        "value0", held.get(),
+                        "value0", item,
                         "value1", command
                 )
         );

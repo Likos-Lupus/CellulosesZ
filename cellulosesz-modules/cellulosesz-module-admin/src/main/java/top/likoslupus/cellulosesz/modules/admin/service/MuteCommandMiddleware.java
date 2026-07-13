@@ -6,24 +6,24 @@ import top.likoslupus.cellulosesz.api.command.CommandContinuation;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
-import java.util.Set;
+import java.util.Locale;
 
 public final class MuteCommandMiddleware implements CommandMiddleware {
 
-    private static final Set<String> BLOCKED = Set.of(
-            "msg", "tell", "w", "r", "reply", "mail", "me", "helpop"
-    );
-
     private final PlatformService platform;
     private final MuteService mutes;
+    private final AdminConfig config;
 
     public MuteCommandMiddleware(
             PlatformService platform,
-            MuteService mutes
+            MuteService mutes,
+            AdminConfig config
     ) {
         this.platform = platform;
         this.mutes = mutes;
+        this.config = config;
     }
 
     @Override
@@ -32,7 +32,9 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
             CommandInvocation invocation,
             CommandContinuation next
     ) {
-        if (BLOCKED.contains(command.name().toLowerCase())) {
+        if (blocked(command.name())
+                && !invocation.hasPermission("cellulosesz.admin.mute.bypass")
+        ) {
             var player = platform.player(invocation);
             if (player.isPresent() && mutes.muted(player.get().uuid())) {
                 invocation.errorKey("commands.admin.mute-command-middleware.error.1");
@@ -40,6 +42,13 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
             }
         }
         return next.proceed();
+    }
+
+    public boolean blocked(String root) {
+        var normalized = root.trim().toLowerCase(Locale.ROOT);
+        return config.muteCommands.stream().anyMatch(value ->
+                value.equals("*") || value.equalsIgnoreCase(normalized)
+        );
     }
 
 }

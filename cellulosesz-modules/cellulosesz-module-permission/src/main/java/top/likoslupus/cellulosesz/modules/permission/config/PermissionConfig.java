@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.permission.config;
 
 public final class PermissionConfig {
 
-    public int schema = 1;
     public Provider provider = new Provider();
     public Cache cache = new Cache();
 

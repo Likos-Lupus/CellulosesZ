@@ -167,7 +167,7 @@ public final class DefaultCommandSpecFactory {
             );
             case "createkit" -> routes(route(
                     required("name", STRING),
-                    required("item", ITEM)
+                    required("cooldown", WORD)
             ));
             case "delkit", "showkit" -> routes(route(
                     required("name", STRING)
@@ -176,10 +176,13 @@ public final class DefaultCommandSpecFactory {
                     route(),
                     route(required("name", STRING))
             );
-            case "kitreset" -> routes(route(
-                    required("player", KNOWN_PLAYER),
-                    required("kit", STRING)
-            ));
+            case "kitreset" -> routes(
+                    route(required("kit", STRING)),
+                    route(
+                            required("kit", STRING),
+                            required("player", KNOWN_PLAYER)
+                    )
+            );
 
             // Messaging
             case "broadcast", "helpop", "me", "r" -> routes(route(

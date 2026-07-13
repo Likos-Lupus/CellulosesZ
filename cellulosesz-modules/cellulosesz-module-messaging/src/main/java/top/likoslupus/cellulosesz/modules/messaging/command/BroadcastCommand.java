@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
-import java.util.List;
 import java.util.Map;
 
 public final class BroadcastCommand extends AbstractMessagingCommand {
@@ -21,11 +20,6 @@ public final class BroadcastCommand extends AbstractMessagingCommand {
     ) {
         super(platform, users, config);
         this.renderer = renderer;
-    }
-
-    @Override
-    public List<String> aliases() {
-        return List.of("broadcastworld");
     }
 
     @Override

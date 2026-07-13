@@ -15,9 +15,7 @@ import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogEntry;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Path;
-import java.util.Comparator;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 public final class JsonEconomyService implements EconomyService {
 
@@ -70,6 +68,7 @@ public final class JsonEconomyService implements EconomyService {
             );
         }
 
+        var snapshot = snapshotBalances();
         var current = read(uuid);
         var next = current.add(normalized);
         var maximum = money(config.maximumBalance);
@@ -86,7 +85,17 @@ public final class JsonEconomyService implements EconomyService {
         }
 
         write(uuid, next);
-        save();
+        if (!persistAccounts(snapshot)) {
+            return record(
+                    null,
+                    uuid,
+                    normalized,
+                    cause,
+                    false,
+                    "service.economy.persistence-failed",
+                    current
+            );
+        }
         return record(
                 null,
                 uuid,
@@ -117,6 +126,7 @@ public final class JsonEconomyService implements EconomyService {
             );
         }
 
+        var snapshot = snapshotBalances();
         var current = read(uuid);
         var next = current.subtract(normalized);
         var minimum = money(config.minimumBalance);
@@ -133,7 +143,17 @@ public final class JsonEconomyService implements EconomyService {
         }
 
         write(uuid, next);
-        save();
+        if (!persistAccounts(snapshot)) {
+            return record(
+                    uuid,
+                    null,
+                    normalized,
+                    cause,
+                    false,
+                    "service.economy.persistence-failed",
+                    current
+            );
+        }
         return record(
                 uuid,
                 null,
@@ -166,8 +186,20 @@ public final class JsonEconomyService implements EconomyService {
             );
         }
 
+        var snapshot = snapshotBalances();
+        var current = read(uuid);
         write(uuid, normalized);
-        save();
+        if (!persistAccounts(snapshot)) {
+            return record(
+                    null,
+                    uuid,
+                    normalized,
+                    cause,
+                    false,
+                    "service.economy.persistence-failed",
+                    current
+            );
+        }
         return record(
                 null,
                 uuid,
@@ -186,22 +218,44 @@ public final class JsonEconomyService implements EconomyService {
             BigDecimal amount,
             TransactionCause cause
     ) {
-        if (from.equals(to)) {
-            return TransactionResult.failure("service.economy.self-payment", normalizeAmount(amount), read(from));
-        }
+        return transferMany(from, List.of(to), amount, cause);
+    }
 
-        var normalized = normalizeAmount(amount);
+    @Override
+    public synchronized TransactionResult transferMany(
+            UUID from,
+            Collection<UUID> recipients,
+            BigDecimal amountEach,
+            TransactionCause cause
+    ) {
+        var snapshot = snapshotBalances();
+        var uniqueRecipients = new LinkedHashSet<>(recipients);
+        uniqueRecipients.remove(from);
+        var normalized = normalizeAmount(amountEach);
+
+        if (uniqueRecipients.isEmpty()) {
+            return TransactionResult.failure(
+                    "service.economy.self-payment",
+                    normalized,
+                    read(from)
+            );
+        }
         if (normalized.signum() <= 0) {
-            return TransactionResult.failure("service.economy.amount-positive", normalized, read(from));
+            return TransactionResult.failure(
+                    "service.economy.amount-positive",
+                    normalized,
+                    read(from)
+            );
         }
 
+        var total = normalized.multiply(BigDecimal.valueOf(uniqueRecipients.size()));
         var fromBalance = read(from);
-        var nextFrom = fromBalance.subtract(normalized);
+        var nextFrom = fromBalance.subtract(total);
         if (nextFrom.compareTo(money(config.minimumBalance)) < 0) {
             return record(
                     from,
-                    to,
-                    normalized,
+                    null,
+                    total,
                     cause,
                     false,
                     "service.economy.insufficient-funds",
@@ -209,39 +263,59 @@ public final class JsonEconomyService implements EconomyService {
             );
         }
 
-        var toBalance = read(to);
-        var nextTo = toBalance.add(normalized);
-        if (nextTo.compareTo(money(config.maximumBalance)) > 0) {
+        var nextRecipients = new LinkedHashMap<UUID, BigDecimal>();
+        var maximum = money(config.maximumBalance);
+        for (var recipient : uniqueRecipients) {
+            var next = read(recipient).add(normalized);
+            if (next.compareTo(maximum) > 0) {
+                return record(
+                        from,
+                        recipient,
+                        normalized,
+                        cause,
+                        false,
+                        "service.economy.recipient-maximum",
+                        fromBalance
+                );
+            }
+            nextRecipients.put(recipient, next);
+        }
+
+        write(from, nextFrom);
+        nextRecipients.forEach(this::write);
+
+        if (!persistAccounts(snapshot)) {
             return record(
                     from,
-                    to,
-                    normalized,
+                    null,
+                    total,
                     cause,
                     false,
-                    "service.economy.recipient-maximum",
+                    "service.economy.persistence-failed",
                     fromBalance
             );
         }
 
-        write(from, nextFrom);
-        write(to, nextTo);
-        save();
-        return record(
-                from,
-                to,
-                normalized,
-                cause,
-                true,
-                "service.economy.transfer-success",
-                nextFrom
+        uniqueRecipients.forEach(recipient ->
+                record(
+                        from,
+                        recipient,
+                        normalized,
+                        cause,
+                        true,
+                        "service.economy.transfer-success",
+                        nextFrom
+                )
         );
+        return TransactionResult.success("service.economy.transfer-success", total, nextFrom);
     }
 
     @Override
     public synchronized List<BalanceEntry> topBalances(int limit) {
         return document.balances.entrySet().stream()
                 .map(entry -> new BalanceEntry(
-                        UUID.fromString(entry.getKey()), money(entry.getValue())
+                        UUID.fromString(entry.getKey()),
+                        money(entry.getValue())
                 ))
                 .sorted(Comparator.comparing(BalanceEntry::balance).reversed())
                 .limit(Math.max(1, limit))
@@ -269,23 +343,37 @@ public final class JsonEconomyService implements EconomyService {
         log.entries.add(entry);
 
         while (log.entries.size() > MAX_LOG_ENTRIES) log.entries.removeFirst();
-        storage.save(logPath, log);
+        var snapshot = new TransactionLogDocument();
+        snapshot.entries.addAll(log.entries);
+        storage.save(logPath, snapshot)
+                .whenComplete((_, exception) -> {
+                    if (exception != null) {
+                        logger.error("Failed to save economy transaction log", exception);
+                    }
+                });
         return success
                 ? TransactionResult.success(message, normalizeAmount(amount), resultingBalance)
                 : TransactionResult.failure(message, normalizeAmount(amount), resultingBalance);
+    }
+
+    private Map<String, String> snapshotBalances() {
+        return new LinkedHashMap<>(document.balances);
     }
 
     private void write(UUID uuid, BigDecimal amount) {
         document.balances.put(uuid.toString(), normalizeAmount(amount).toPlainString());
     }
 
-    private void save() {
-        storage.save(accountsPath, document)
-                .whenComplete((_, exception) -> {
-                    if (exception != null) {
-                        logger.error("Failed to save economy accounts", exception);
-                    }
-                });
+    private boolean persistAccounts(Map<String, String> snapshot) {
+        try {
+            storage.save(accountsPath, document).join();
+            return true;
+        } catch (RuntimeException exception) {
+            document.balances.clear();
+            document.balances.putAll(snapshot);
+            logger.error("Failed to persist economy accounts; in-memory balances were rolled back", exception);
+            return false;
+        }
     }
 
     private BigDecimal read(UUID uuid) {
@@ -299,7 +387,7 @@ public final class JsonEconomyService implements EconomyService {
     private BigDecimal money(String value) {
         try {
             return normalizeAmount(new BigDecimal(value));
-        } catch (RuntimeException exception) {
+        } catch (RuntimeException _) {
             return BigDecimal.ZERO.setScale(config.currency.scale, RoundingMode.HALF_UP);
         }
     }

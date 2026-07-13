@@ -1,25 +1,22 @@
 package top.likoslupus.cellulosesz.modules.kit.command;
 
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
+import java.util.Locale;
 import java.util.Map;
 
 public final class CreateKitCommand extends AbstractKitCommand {
 
-    private final ItemService items;
-
     public CreateKitCommand(
             PlatformService platform,
-            KitService kits,
-            ItemService items
+            KitService kits
     ) {
         super(platform, kits);
-        this.items = items;
     }
 
     @Override
@@ -28,8 +25,13 @@ public final class CreateKitCommand extends AbstractKitCommand {
     }
 
     @Override
+    public CommandSourceKind sourceKind() {
+        return CommandSourceKind.PLAYER_ONLY;
+    }
+
+    @Override
     public String usage() {
-        return "/createkit <name> <item> [count]";
+        return "/createkit <name> <cooldownSeconds|once>";
     }
 
     @Override
@@ -39,8 +41,11 @@ public final class CreateKitCommand extends AbstractKitCommand {
 
     @Override
     public int execute(CommandInvocation invocation) {
+        var self = player(invocation);
+        if (self.isEmpty()) return 0;
+
         var args = invocation.args();
-        if (args.length < 2 || args.length > 3) {
+        if (args.length != 2) {
             invocation.errorKey(
                     "commands.kit.create-kit-command.error.1",
                     Map.of("value0", usage())
@@ -48,21 +53,51 @@ public final class CreateKitCommand extends AbstractKitCommand {
             return 0;
         }
 
-        var descriptor = items.parse(args[1] + (args.length == 3 ? " " + args[2] : ""));
-        if (descriptor.isEmpty()) {
-            invocation.errorKey("commands.kit.create-kit-command.error.2");
+        long cooldown;
+        if (args[1].equalsIgnoreCase("once")
+                || args[1].equalsIgnoreCase("one-time")
+        ) {
+            cooldown = -1L;
+        } else {
+            try {
+                cooldown = Long.parseLong(args[1]);
+            } catch (NumberFormatException _) {
+                invocation.errorKey("commands.kit.create-kit-command.error.cooldown");
+                return 0;
+            }
+            if (cooldown < 0L) {
+                invocation.errorKey("commands.kit.create-kit-command.error.cooldown");
+                return 0;
+            }
+        }
+
+        var inventory = platform.inventoryItems(self.get());
+        if (inventory.isEmpty()) {
+            invocation.errorKey("commands.kit.create-kit-command.error.empty");
             return 0;
         }
 
         var kit = new KitDefinition();
-        kit.id = args[0];
+        kit.id = args[0].trim().toLowerCase(Locale.ROOT);
         kit.displayName = args[0];
-        kit.permission = "cellulosesz.kit." + args[0].toLowerCase();
-        kit.items.add(new KitItem(descriptor.get().normalizedItem(), descriptor.get().count));
-        kits.save(kit).thenRun(() -> invocation.replyKey(
+        kit.permission = "cellulosesz.kit." + kit.id;
+        kit.cooldownSeconds = cooldown;
+        inventory.forEach(item -> {
+            var kitItem = new KitItem(item.normalizedItem(), item.count);
+            kitItem.components.putAll(item.normalizedComponents());
+            kit.items.add(kitItem);
+        });
+        try {
+            kits.save(kit).join();
+        } catch (RuntimeException _) {
+            invocation.errorKey("service.kit.persistence-failed");
+            return 0;
+        }
+
+        invocation.replyKey(
                 "commands.kit.create-kit-command.reply.1",
                 Map.of("value0", kit.id)
-        ));
+        );
         return 1;
     }
 

@@ -6,7 +6,6 @@ import java.util.UUID;
 
 public final class BanRecord {
 
-    public int schema = 1;
     public @Nullable UUID uuid;
     public String name = "";
     public String reason = "";

@@ -80,6 +80,18 @@ public final class MuteCommand extends AbstractAdminCommand {
             }
         }
 
+        if (duration != null
+                && config.maximumMuteSeconds >= 0
+                && duration > config.maximumMuteSeconds * 1000L
+                && !invocation.hasPermission("cellulosesz.admin.mute.unlimited")
+        ) {
+            invocation.errorKey(
+                    "commands.admin.mute-command.error.maximum",
+                    Map.of("seconds", config.maximumMuteSeconds)
+            );
+            return 0;
+        }
+
         var result = mutes.mute(
                 uuid.get(),
                 args[0],

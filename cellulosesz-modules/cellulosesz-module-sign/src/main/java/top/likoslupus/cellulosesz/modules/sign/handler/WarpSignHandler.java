@@ -41,9 +41,9 @@ public final class WarpSignHandler implements CellSignHandler {
             return SignUseResult.failure("service.sign.warp-not-found", Map.of("warp", name));
         }
 
-        var permission = warp.get().permission;
-        if (permission != null && !permission.isBlank()
-                && !permissions.has(context.player().nativeHandle(), permission)
+        var requiredPermission = warps.requiredPermission(warp.get());
+        if (requiredPermission.isPresent()
+                && !permissions.has(context.player().nativeHandle(), requiredPermission.orElseThrow())
         ) {
             return SignUseResult.failure("service.sign.warp-no-permission");
         }

@@ -8,7 +8,6 @@ import java.util.Map;
 
 public final class CoreConfig {
 
-    public int schema = 1;
     public LocaleConfig locale = new LocaleConfig();
     public DebugConfig debug = new DebugConfig();
     public StorageConfig storage = new StorageConfig();

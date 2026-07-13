@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.home;
 
 public final class HomeConfig {
 
-    public int schema = 1;
     public Limits limits = new Limits();
     public Teleport teleport = new Teleport();
     public Naming naming = new Naming();
