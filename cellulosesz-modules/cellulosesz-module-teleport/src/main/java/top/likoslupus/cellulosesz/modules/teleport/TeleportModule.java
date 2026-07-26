@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
@@ -178,17 +179,33 @@ public final class TeleportModule implements CellulosesZModule {
         context.commands().register(new TpCommand(platform, teleports, users));
         context.commands().register(new TpHereCommand(platform, teleports, users));
         context.commands().register(new TpPosCommand(platform, teleports));
-        context.commands()
-                .register(new TpaCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, false));
-        context.commands()
-                .register(new TpaCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, true));
+        context.commands().register(new TpaCommand(
+                platform,
+                requestExecutor,
+                users,
+                config.requests.timeoutSeconds,
+                false
+        ));
+        context.commands().register(new TpaCommand(
+                platform,
+                requestExecutor,
+                users,
+                config.requests.timeoutSeconds,
+                true
+        ));
         context.commands().register(new TpAcceptCommand(platform, requestExecutor));
         context.commands().register(new TpDenyCommand(platform, requests, renderer, locales));
         context.commands().register(new TpCancelCommand(platform, requests));
         context.commands().register(new TpToggleCommand(platform, users));
         context.commands().register(new TpAutoCommand(platform, users));
-        context.commands()
-                .register(new TpaAllCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, config.requests.maximumBulkTargets));
+        context.commands().register(new TpaAllCommand(
+                platform,
+                requestExecutor,
+                users,
+                context.services().optional(VanishService.class),
+                config.requests.timeoutSeconds,
+                config.requests.maximumBulkTargets
+        ));
         context.commands().register(new TpAllCommand(platform, teleports, users));
         context.commands().register(new TpoCommand(platform, teleports));
         context.commands().register(new TpoHereCommand(platform, teleports));

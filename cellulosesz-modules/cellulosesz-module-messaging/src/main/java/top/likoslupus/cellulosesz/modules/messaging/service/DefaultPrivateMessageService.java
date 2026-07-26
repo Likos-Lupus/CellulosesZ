@@ -75,7 +75,9 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                         if (update.failure() != null) {
                             return CompletableFuture.completedFuture(MessageResult.failure("service.messaging.persistence-failed"));
                         }
-                        return platform.runOnServerThreadAsync(() -> {
+                        return platform.callOnServerThread(() -> {
+                            var senderName = displayNames.plainDisplayName(sender);
+                            var targetName = displayNames.plainDisplayName(target);
                             platform.sendMessage(target, renderer.render(
                                     platform.locale(target),
                                     "messaging.private-incoming",
@@ -86,9 +88,10 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                     "messaging.private-outgoing",
                                     Map.of("target", displayNames.displayName(target), "message", message)
                             ));
-                        }).thenCompose(_ -> broadcastSpy(
-                                displayNames.plainDisplayName(sender),
-                                displayNames.plainDisplayName(target),
+                            return new DeliveredNames(senderName, targetName);
+                        }).thenCompose(names -> broadcastSpy(
+                                names.sender(),
+                                names.target(),
                                 message,
                                 Set.of(sender.uuid(), target.uuid())
                         )).thenApply(_ -> MessageResult.success("service.messaging.sent"));
@@ -144,26 +147,52 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
             String message,
             Collection<UUID> excluded
     ) {
-        var candidates = platform.onlinePlayers().stream()
-                .filter(player -> !excluded.contains(player.uuid()))
-                .filter(player -> permissions.has(player.nativeHandle(), "cellulosesz.messaging.socialspy"))
-                .toList();
-        var checks = candidates.stream().map(player -> socialSpy(player.uuid())
-                        .exceptionally(_ -> false)
-                        .thenApply(enabled -> new SpyCandidate(player, enabled)))
-                .toList();
-        return CompletableFuture.allOf(checks.toArray(CompletableFuture[]::new))
-                .thenCompose(_ -> platform.runOnServerThreadAsync(() -> {
-                    for (var check : checks) {
-                        var candidate = check.getNow(new SpyCandidate(null, false));
-                        if (!candidate.enabled() || candidate.player() == null) continue;
-                        platform.sendMessage(candidate.player(), renderer.render(
-                                platform.locale(candidate.player()),
-                                "messaging.social-spy",
-                                Map.of("sender", sender, "target", target, "message", message)
-                        ));
-                    }
-                }));
+        var excludedSnapshot = Set.copyOf(excluded);
+        return platform.callOnServerThread(() ->
+                        platform.onlinePlayers().stream()
+                                .filter(player -> !excludedSnapshot.contains(player.uuid()))
+                                .filter(player -> permissions.has(
+                                        player.nativeHandle(),
+                                        "cellulosesz.messaging.socialspy"
+                                ))
+                                .toList()
+                )
+                .thenCompose(candidates -> {
+                    var checks = candidates.stream()
+                            .map(player ->
+                                    socialSpy(player.uuid())
+                                            .exceptionally(_ -> false)
+                                            .thenApply(enabled -> new SpyCandidate(player, enabled))
+                            )
+                            .toList();
+                    return CompletableFuture.allOf(checks.toArray(CompletableFuture[]::new))
+                            .thenCompose(_ -> platform.runOnServerThreadAsync(() ->
+                                    checks.stream()
+                                            .map(check ->
+                                                    check.getNow(new SpyCandidate(null, false))
+                                            )
+                                            .filter(candidate -> candidate.enabled() && candidate.player() != null)
+                                            .forEach(candidate -> platform.sendMessage(
+                                                    candidate.player(),
+                                                    renderer.render(
+                                                            platform.locale(candidate.player()),
+                                                            "messaging.social-spy",
+                                                            Map.of(
+                                                                    "sender", sender,
+                                                                    "target", target,
+                                                                    "message", message
+                                                            )
+                                                    )
+                                            ))
+                            ));
+                });
+    }
+
+    private record DeliveredNames(
+            String sender,
+            String target
+    ) {
+
     }
 
     private record TargetUpdate(

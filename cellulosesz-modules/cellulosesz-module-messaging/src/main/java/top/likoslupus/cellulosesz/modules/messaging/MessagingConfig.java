@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.messaging;
 
 import java.time.ZoneId;
-import java.util.List;
 
 import static java.util.Objects.requireNonNull;
 
@@ -15,7 +14,6 @@ public final class MessagingConfig {
     public int maxSendAllRecipients = 100_000;
     public String mailTimeZone = "UTC";
     public boolean allowConsolePrivateMessage = true;
-    public List<String> socialSpyCommands = List.of("msg", "tell", "w", "reply", "r", "mail", "me", "helpop");
 
     public void copyFrom(MessagingConfig source) {
         var validated = source.validatedCopy();
@@ -27,7 +25,6 @@ public final class MessagingConfig {
         maxSendAllRecipients = validated.maxSendAllRecipients;
         mailTimeZone = validated.mailTimeZone;
         allowConsolePrivateMessage = validated.allowConsolePrivateMessage;
-        socialSpyCommands = validated.socialSpyCommands;
     }
 
     public MessagingConfig validatedCopy() {
@@ -40,7 +37,6 @@ public final class MessagingConfig {
             throw new IllegalArgumentException("expiredMailSweepSeconds must be positive");
         if (maxSendAllRecipients < 1) throw new IllegalArgumentException("maxSendAllRecipients must be positive");
         ZoneId.of(requireNonNull(mailTimeZone, "mailTimeZone"));
-        requireNonNull(socialSpyCommands, "socialSpyCommands");
 
         var copy = new MessagingConfig();
         copy.maxMailPerPlayer = maxMailPerPlayer;
@@ -51,7 +47,6 @@ public final class MessagingConfig {
         copy.maxSendAllRecipients = maxSendAllRecipients;
         copy.mailTimeZone = mailTimeZone;
         copy.allowConsolePrivateMessage = allowConsolePrivateMessage;
-        copy.socialSpyCommands = List.copyOf(socialSpyCommands);
         return copy;
     }
 

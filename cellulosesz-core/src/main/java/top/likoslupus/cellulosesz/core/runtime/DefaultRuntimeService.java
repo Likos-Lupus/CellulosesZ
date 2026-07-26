@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 public final class DefaultRuntimeService implements RuntimeService {
 
@@ -20,8 +21,8 @@ public final class DefaultRuntimeService implements RuntimeService {
     }
 
     @Override
-    public void reload() {
-        bootstrap.reload();
+    public CompletableFuture<Void> reload() {
+        return bootstrap.reload();
     }
 
     @Override

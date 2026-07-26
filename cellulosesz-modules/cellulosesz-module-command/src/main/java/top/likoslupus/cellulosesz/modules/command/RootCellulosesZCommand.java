@@ -3,11 +3,14 @@ package top.likoslupus.cellulosesz.modules.command;
 import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
+import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
 public final class RootCellulosesZCommand implements CellCommand {
 
@@ -92,21 +95,23 @@ public final class RootCellulosesZCommand implements CellCommand {
             return 0;
         }
 
-        try {
-            runtime.reload();
-            invocation.replyKey("cellulosesz.reloaded");
-            return 1;
-        } catch (RuntimeException exception) {
-            var reason = exception.getMessage() == null
-                    ? exception.getClass().getSimpleName()
-                    : exception.getMessage();
+        var platform = context.services().require(PlatformService.class);
+        invocation.replyKey("cellulosesz.reload-started");
+        runtime.reload().whenComplete((ignored, failure) -> platform.runOnServerThread(() -> {
+            if (failure == null) {
+                invocation.replyKey("cellulosesz.reloaded");
+                return;
+            }
+            var cause = unwrap(failure);
+            var reason = cause.getMessage() == null
+                    ? cause.getClass().getSimpleName()
+                    : cause.getMessage();
             invocation.errorKey(
                     "cellulosesz.reload-failed",
                     Map.of("reason", reason)
             );
-            return 0;
-        }
-
+        }));
+        return 1;
     }
 
     private int modules(
@@ -147,6 +152,16 @@ public final class RootCellulosesZCommand implements CellCommand {
                 )
         );
         return 1;
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        var cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+                && cause.getCause() != null
+        ) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
 
 }

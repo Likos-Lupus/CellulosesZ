@@ -20,7 +20,11 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     private final DisplayNameService displayNames;
     private final ConcurrentHashMap<UUID, Long> lastActivityNanos = new ConcurrentHashMap<>();
 
-    public DefaultPlayerStateService(PlatformService platform, UserService users, DisplayNameService displayNames) {
+    public DefaultPlayerStateService(
+            PlatformService platform,
+            UserService users,
+            DisplayNameService displayNames
+    ) {
         this.platform = platform;
         this.users = users;
         this.displayNames = displayNames;
@@ -140,7 +144,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         return users.updateVoid(uuid, user -> user.state.nickname = stored.orElse(null))
                 .thenCompose(_ -> platform.callOnServerThread(() -> {
                     online.ifPresent(displayNames::refresh);
-                    return stored.<AdminResult>map(value -> AdminResult.success("player.nick-set", Map.of("nickname", value)))
+                    return stored.map(value -> AdminResult.success(
+                                    "player.nick-set",
+                                    Map.of("nickname", value)
+                            ))
                             .orElseGet(() -> AdminResult.success("player.nick-cleared"));
                 }))
                 .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
@@ -149,6 +156,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     @Override
     public Optional<String> nick(UUID uuid) {
         return users.cached(uuid).flatMap(user -> Optional.ofNullable(user.state.nickname));
+    }
+
+    public void forgetActivity(UUID uuid) {
+        lastActivityNanos.remove(uuid);
     }
 
 }

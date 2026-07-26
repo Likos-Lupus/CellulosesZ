@@ -10,6 +10,23 @@ final class SignMessages {
 
     static Map<String, String> english() {
         var messages = new LinkedHashMap<String, String>();
+        messages.put("service.sign.no-permission", "<red>You do not have permission to use the [<secondary>{sign}<red>] sign.");
+        messages.put("service.sign.cooldown", "<red>Please wait before using another sign.");
+        messages.put("service.sign.execution-failed", "<red>Sign execution failed: <secondary>{reason}<red>");
+        messages.put("service.sign.buy-format", "<red>[Buy] format: amount on line 2, item on line 3, price on line 4.");
+        messages.put("service.sign.buy-inventory-full", "<red>Your inventory cannot receive the item; the transaction was refunded.");
+        messages.put("service.sign.buy-success", "<primary>Bought <secondary>{count}<primary> × <secondary>{item}<primary> for <secondary>{price}<primary>.");
+        messages.put("service.sign.sell-format", "<red>[Sell] format: amount on line 2, item on line 3, price on line 4.");
+        messages.put("service.sign.sell-not-enough", "<red>You do not have enough items.");
+        messages.put("service.sign.sell-take-failed", "<red>Unable to remove the items from your inventory.");
+        messages.put("service.sign.sell-success", "<primary>Sold <secondary>{count}<primary> × <secondary>{item}<primary> for <secondary>{price}<primary>.");
+        messages.put("service.sign.kit-name-required", "<red>[Kit] requires a kit name on line 2.");
+        messages.put("service.sign.kit-not-found", "<red>Kit not found: <secondary>{kit}<red>");
+        messages.put("service.sign.kit-no-permission", "<red>You do not have permission to claim this kit.");
+        messages.put("service.sign.warp-name-required", "<red>[Warp] requires a warp name on line 2.");
+        messages.put("service.sign.warp-not-found", "<red>Warp not found: <secondary>{warp}<red>");
+        messages.put("service.sign.warp-no-permission", "<red>You do not have permission to use this warp.");
+        messages.put("service.sign.warp-success", "<primary>Teleported to warp <secondary>{warp}<primary>.");
         messages.put("service.sign.balance", "<primary>Balance: <secondary>{balance}<primary>.");
         messages.put("service.sign.break-no-permission", "<primary>Break no permission.");
         messages.put("service.sign.break-success", "<primary>Break success.");
@@ -70,6 +87,23 @@ final class SignMessages {
 
     static Map<String, String> chinese() {
         var messages = new LinkedHashMap<String, String>();
+        messages.put("service.sign.no-permission", "<red>你没有权限使用 [<secondary>{sign}<red>] 告示牌。");
+        messages.put("service.sign.cooldown", "<red>告示牌使用过快，请稍后再试。");
+        messages.put("service.sign.execution-failed", "<red>告示牌执行失败：<secondary>{reason}<red>");
+        messages.put("service.sign.buy-format", "<red>[Buy] 格式：第二行数量，第三行物品，第四行价格。");
+        messages.put("service.sign.buy-inventory-full", "<red>背包无法接收物品，交易已退款。");
+        messages.put("service.sign.buy-success", "<primary>购买成功：<secondary>{count}<primary> × <secondary>{item}<primary>，花费 <secondary>{price}<primary>。");
+        messages.put("service.sign.sell-format", "<red>[Sell] 格式：第二行数量，第三行物品，第四行价格。");
+        messages.put("service.sign.sell-not-enough", "<red>物品数量不足。");
+        messages.put("service.sign.sell-take-failed", "<red>无法从背包扣除物品。");
+        messages.put("service.sign.sell-success", "<primary>出售成功：<secondary>{count}<primary> × <secondary>{item}<primary>，获得 <secondary>{price}<primary>。");
+        messages.put("service.sign.kit-name-required", "<red>[Kit] 第二行必须填写 Kit 名称。");
+        messages.put("service.sign.kit-not-found", "<red>Kit 不存在：<secondary>{kit}<red>");
+        messages.put("service.sign.kit-no-permission", "<red>你没有权限领取此 Kit。");
+        messages.put("service.sign.warp-name-required", "<red>[Warp] 第二行必须填写 Warp 名称。");
+        messages.put("service.sign.warp-not-found", "<red>Warp 不存在：<secondary>{warp}<red>");
+        messages.put("service.sign.warp-no-permission", "<red>你没有权限使用此 Warp。");
+        messages.put("service.sign.warp-success", "<primary>已传送到 Warp：<secondary>{warp}<primary>");
         messages.put("service.sign.balance", "<primary>余额：<secondary>{balance}<primary>。");
         messages.put("service.sign.break-no-permission", "<primary>Break no permission。");
         messages.put("service.sign.break-success", "<primary>操作成功：Break success。");

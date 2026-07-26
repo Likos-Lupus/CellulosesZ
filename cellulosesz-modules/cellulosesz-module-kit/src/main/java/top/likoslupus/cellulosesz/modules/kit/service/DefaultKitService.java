@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
@@ -33,6 +34,7 @@ public final class DefaultKitService implements KitService {
     private final Path kitsDirectory;
     private final LinkedHashMap<String, KitDefinition> kits = new LinkedHashMap<>();
     private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> claimTails = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.concurrent.ConcurrentHashMap<String, CompletableFuture<Void>> definitionTails = new java.util.concurrent.ConcurrentHashMap<>();
 
     public DefaultKitService(
             StorageService storage,
@@ -57,7 +59,7 @@ public final class DefaultKitService implements KitService {
                 .thenCompose(loaded -> {
                     var next = new LinkedHashMap<String, KitDefinition>();
                     loaded.stream()
-                            .peek(this::validate)
+                            .map(this::validatedCopy)
                             .sorted(Comparator.comparing(kit -> kit.id))
                             .forEach(kit -> {
                                 var previous = next.put(key(kit.id), kit);
@@ -80,32 +82,25 @@ public final class DefaultKitService implements KitService {
 
     @Override
     public synchronized List<KitDefinition> kits() {
-        return List.copyOf(kits.values());
+        return kits.values().stream().map(this::copyDefinition).toList();
     }
 
     @Override
     public synchronized Optional<KitDefinition> kit(String id) {
-        return Optional.ofNullable(kits.get(key(id)));
+        return Optional.ofNullable(kits.get(key(id)))
+                .map(this::copyDefinition);
     }
 
     @Override
     public CompletableFuture<Void> save(KitDefinition kit) {
-        validate(kit);
-        var id = key(kit.id);
-        KitDefinition previous;
-        synchronized (this) {
-            previous = kits.put(id, kit);
-        }
-
-        return storage.save(path(kit.id), kit)
-                .whenComplete((_, exception) -> {
-                    if (exception == null) return;
+        var candidate = validatedCopy(kit);
+        var id = key(candidate.id);
+        return enqueueDefinitionMutation(id, () -> storage.save(path(candidate.id), candidate)
+                .thenRun(() -> {
                     synchronized (this) {
-                        if (kits.get(id) != kit) return;
-                        if (previous == null) kits.remove(id);
-                        else kits.put(id, previous);
+                        kits.put(id, candidate);
                     }
-                });
+                }));
     }
 
     @Override
@@ -115,40 +110,41 @@ public final class DefaultKitService implements KitService {
             return CompletableFuture.completedFuture(false);
         }
 
-        KitDefinition previous;
-        synchronized (this) {
-            previous = kits.remove(normalizedId);
-        }
-        if (previous == null) return CompletableFuture.completedFuture(false);
+        return enqueueDefinitionMutation(normalizedId, () -> {
+            synchronized (this) {
+                if (!kits.containsKey(normalizedId)) {
+                    return CompletableFuture.completedFuture(false);
+                }
+            }
 
-        return storage.delete(path(normalizedId))
-                .thenApply(ignored -> true)
-                .whenComplete((ignored, failure) -> {
-                    if (failure != null) {
-                        synchronized (this) {
-                            kits.putIfAbsent(normalizedId, previous);
-                        }
-                    }
-                });
+            return storage.delete(path(normalizedId)).thenApply(deleted -> {
+                if (!deleted) return false;
+
+                synchronized (this) {
+                    kits.remove(normalizedId);
+                }
+                return true;
+            });
+        });
     }
 
     @Override
     public CompletableFuture<KitClaimResult> claim(CellPlayer player, KitDefinition kit) {
         requireNonNull(player, "player");
-        requireNonNull(kit, "kit");
-        validate(kit);
+        var candidate = validatedCopy(kit);
 
         var result = new CompletableFuture<KitClaimResult>();
         claimTails.compute(player.uuid(), (uuid, previous) -> {
             var tail = previous == null ? CompletableFuture.<Void>completedFuture(null) : previous;
             var next = tail.handle((ignored, failure) -> null)
-                    .thenCompose(ignored -> claimSerialized(player, kit))
+                    .thenCompose(ignored -> claimSerialized(player, candidate))
                     .handle((claimResult, failure) -> {
                         if (failure == null) result.complete(claimResult);
                         else result.completeExceptionally(failure);
                         return (Void) null;
                     });
-            next.whenComplete((ignored, failure) -> claimTails.remove(uuid, next));
+
+            next.whenComplete((ignored, _) -> claimTails.remove(uuid, next));
             return next;
         });
         return result;
@@ -285,6 +281,46 @@ public final class DefaultKitService implements KitService {
         }).thenApply(ignored -> null);
     }
 
+    private KitDefinition validatedCopy(KitDefinition source) {
+        var copy = copyDefinition(source);
+        validate(copy);
+        return copy;
+    }
+
+    private <T> CompletableFuture<T> enqueueDefinitionMutation(
+            String id,
+            Supplier<CompletableFuture<T>> operation
+    ) {
+        var result = new CompletableFuture<T>();
+        definitionTails.compute(id, (key, previous) -> {
+            var tail = previous == null ? CompletableFuture.<Void>completedFuture(null) : previous;
+            var next = tail.handle((ignored, _) -> null)
+                    .thenCompose(ignored -> {
+                        try {
+                            return operation.get();
+                        } catch (Throwable failure) {
+                            return CompletableFuture.failedFuture(failure);
+                        }
+                    })
+                    .handle((value, failure) -> {
+                        if (failure == null) result.complete(value);
+                        else result.completeExceptionally(unwrapCompletionFailure(failure));
+                        return (Void) null;
+                    });
+            next.whenComplete((ignored, _) -> definitionTails.remove(key, next));
+            return next;
+        });
+        return result;
+    }
+
+    private Path path(String id) {
+        var normalizedId = key(id);
+        if (!KIT_ID.matcher(normalizedId).matches()) {
+            throw new IllegalArgumentException("Invalid kit id: " + id);
+        }
+        return kitsDirectory.resolve(normalizedId + ".yml");
+    }
+
     private void validate(KitDefinition kit) {
         requireNonNull(kit, "kit");
 
@@ -327,8 +363,37 @@ public final class DefaultKitService implements KitService {
         });
     }
 
+    private Throwable unwrapCompletionFailure(Throwable failure) {
+        if (failure instanceof java.util.concurrent.CompletionException completion
+                && completion.getCause() != null) {
+            return completion.getCause();
+        }
+        return failure;
+    }
+
+    private BigDecimal parseMoney(String value) {
+        return new BigDecimal(value);
+    }
+
     private String key(String id) {
         return requireNonNull(id, "id").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private KitDefinition copyDefinition(KitDefinition source) {
+        requireNonNull(source, "kit");
+        var copy = new KitDefinition();
+        copy.id = requireNonNull(source.id, "kit.id");
+        copy.displayName = requireNonNull(source.displayName, "kit.displayName");
+        copy.permission = requireNonNull(source.permission, "kit.permission");
+        copy.cooldownSeconds = source.cooldownSeconds;
+        copy.cost = requireNonNull(source.cost, "kit.cost");
+        copy.items = requireNonNull(source.items, "kit.items").stream()
+                .map(item -> new KitItem(
+                        requireNonNull(item, "kit item").slot,
+                        item.validatedStack()
+                ))
+                .toList();
+        return copy;
     }
 
     private KitDefinition starterKit() {
@@ -343,21 +408,9 @@ public final class DefaultKitService implements KitService {
         return kit;
     }
 
-    private Path path(String id) {
-        var normalizedId = key(id);
-        if (!KIT_ID.matcher(normalizedId).matches()) {
-            throw new IllegalArgumentException("Invalid kit id: " + id);
-        }
-        return kitsDirectory.resolve(normalizedId + ".yml");
-    }
-
     private synchronized void replaceKits(Map<String, KitDefinition> next) {
         kits.clear();
-        kits.putAll(next);
-    }
-
-    private BigDecimal parseMoney(String value) {
-        return new BigDecimal(value);
+        next.forEach((id, definition) -> kits.put(key(id), validatedCopy(definition)));
     }
 
     private record CooldownReservation(

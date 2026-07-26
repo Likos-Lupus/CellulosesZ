@@ -38,6 +38,8 @@ import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class CellulosesZBootstrap {
 
@@ -58,6 +60,7 @@ public final class CellulosesZBootstrap {
     private final DefaultCooldownService cooldowns = new DefaultCooldownService(services);
     private final DefaultConfirmationService confirmations = new DefaultConfirmationService();
     private final DefaultCommandCostService commandCosts = new DefaultCommandCostService(services);
+    private final AtomicBoolean reloadRunning = new AtomicBoolean();
     private @Nullable DefaultLocaleResolver localeResolver;
     private @Nullable DefaultModuleManager modules;
     private @Nullable CoreConfig coreConfig;
@@ -177,18 +180,67 @@ public final class CellulosesZBootstrap {
         scheduler.tick();
     }
 
-    public synchronized void reload() {
-        configs.reload();
-        coreConfig = configs.require("core", CoreConfig.class);
-        messages.locales(coreConfig.locale.defaultLocale, coreConfig.locale.fallback);
-        messages.theme(coreConfig.locale.primaryColor, coreConfig.locale.secondaryColor, coreConfig.locale.legacyColors);
-        messages.reload();
-        requireLocaleResolver().configure(coreConfig.locale.defaultLocale, coreConfig.locale.useClientLocale);
-        commandCosts.configure(coreConfig.commands.costs);
-        aliasRegistry.configure(coreConfig.commands.aliases);
-        requireModules().onReload();
-        services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
-        logger.info("CellulosesZ reloaded.");
+    public CompletableFuture<Void> reload() {
+        if (!reloadRunning.compareAndSet(false, true)) {
+            return CompletableFuture.failedFuture(new IllegalStateException("A reload is already in progress"));
+        }
+
+        var platform = services.require(PlatformService.class);
+        return scheduler.async(() -> {
+                    var preparedConfigs = configs.prepareReload();
+                    var candidateCore = preparedConfigs.require("core", CoreConfig.class);
+                    var preparedMessages = messages.prepareReload(
+                            candidateCore.locale.defaultLocale,
+                            candidateCore.locale.fallback
+                    );
+                    return new ReloadPlan(preparedConfigs, preparedMessages, candidateCore);
+                }).thenCompose(plan -> platform.runOnServerThreadAsync(() -> applyReload(plan)))
+                .whenComplete((ignored, _) -> reloadRunning.set(false));
+    }
+
+    private synchronized void applyReload(ReloadPlan plan) {
+        var previousConfigs = configs.snapshot();
+        var previousMessages = messages.snapshot();
+        var previousCore = coreConfig();
+
+        try {
+            configs.commit(plan.configs());
+            coreConfig = plan.core();
+            messages.commit(
+                    plan.messages(),
+                    coreConfig.locale.defaultLocale,
+                    coreConfig.locale.fallback,
+                    coreConfig.locale.primaryColor,
+                    coreConfig.locale.secondaryColor,
+                    coreConfig.locale.legacyColors
+            );
+            applyCoreRuntimeConfiguration(coreConfig);
+            requireModules().onReload();
+            services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
+            logger.info("CellulosesZ reloaded.");
+        } catch (RuntimeException failure) {
+            configs.restore(previousConfigs);
+            messages.restore(previousMessages);
+            coreConfig = previousCore;
+            try {
+                applyCoreRuntimeConfiguration(previousCore);
+                requireModules().onReload();
+                services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
+            } catch (RuntimeException rollbackFailure) {
+                failure.addSuppressed(rollbackFailure);
+            }
+            throw failure;
+        }
+    }
+
+    public CoreConfig coreConfig() {
+        return Objects.requireNonNull(coreConfig, "CellulosesZ is not initialized");
+    }
+
+    private void applyCoreRuntimeConfiguration(CoreConfig config) {
+        requireLocaleResolver().configure(config.locale.defaultLocale, config.locale.useClientLocale);
+        commandCosts.configure(config.commands.costs);
+        aliasRegistry.configure(config.commands.aliases);
     }
 
     private DefaultLocaleResolver requireLocaleResolver() {
@@ -231,8 +283,12 @@ public final class CellulosesZBootstrap {
         return logger;
     }
 
-    public CoreConfig coreConfig() {
-        return Objects.requireNonNull(coreConfig, "CellulosesZ is not initialized");
+    private record ReloadPlan(
+            JacksonConfigRegistry.ReloadSnapshot configs,
+            DefaultMessageService.PreparedMessages messages,
+            CoreConfig core
+    ) {
+
     }
 
 }

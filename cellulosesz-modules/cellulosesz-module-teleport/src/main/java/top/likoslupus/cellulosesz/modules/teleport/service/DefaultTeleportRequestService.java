@@ -2,9 +2,7 @@ package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequest;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
+import top.likoslupus.cellulosesz.api.teleport.*;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,7 +18,7 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
     private final Object mutationLock = new Object();
 
     @Override
-    public TeleportRequest create(
+    public TeleportRequestCreateResult create(
             CellPlayer requester,
             CellPlayer target,
             TeleportRequestType type,
@@ -36,20 +34,26 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
                 target.uuid(),
                 type,
                 now,
-                Math.addExact(now, Math.multiplyExact((long) timeoutSeconds, 1000L))
+                Math.addExact(now, Math.multiplyExact(timeoutSeconds, 1000L))
         );
         synchronized (mutationLock) {
             removeExpiredLocked(now);
-            requestsById.entrySet().removeIf(entry -> {
-                var existing = entry.getValue();
-                return existing.state == RequestState.PENDING
-                        && existing.request.requester().equals(requester.uuid())
-                        && existing.request.target().equals(target.uuid())
-                        && existing.request.type() == type;
-            });
+            var existing = requestsById.values().stream()
+                    .filter(entry -> entry.state == RequestState.PENDING)
+                    .map(entry -> entry.request)
+                    .filter(candidate -> candidate.requester().equals(requester.uuid()))
+                    .filter(candidate -> candidate.target().equals(target.uuid()))
+                    .filter(candidate -> candidate.type() == type)
+                    .findFirst();
+            if (existing.isPresent()) {
+                return new TeleportRequestCreateResult(
+                        TeleportRequestCreateStatus.ALREADY_PENDING,
+                        existing.orElseThrow()
+                );
+            }
             requestsById.put(request.id(), new RequestEntry(request));
+            return new TeleportRequestCreateResult(TeleportRequestCreateStatus.CREATED, request);
         }
-        return request;
     }
 
     @Override

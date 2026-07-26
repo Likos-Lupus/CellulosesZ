@@ -127,21 +127,91 @@ public final class DefaultMessageService implements MessageService, MessageRende
     }
 
     @Override
-    public synchronized void reload() {
+    public void reload() {
+        var prepared = prepareReload(locale, fallback);
+        synchronized (this) {
+            locales.clear();
+            locales.putAll(prepared.locales());
+        }
+    }
+
+    private synchronized Map<String, String> messages(String requestedLocale) {
+        return locales.getOrDefault(normalizeLocale(requestedLocale), Map.of());
+    }
+
+    /**
+     * Reads all locale files without publishing them. Runtime rendering never performs file I/O.
+     */
+    public PreparedMessages prepareReload(String configuredLocale, String configuredFallback) {
+        var requestedLocale = normalizeLocaleValue(configuredLocale, "zh_cn");
+        var fallbackLocale = normalizeLocaleValue(configuredFallback, "en_us");
         try {
             Files.createDirectories(directory);
             writeDefaultIfMissing("en_us", defaultEnglish());
             writeDefaultIfMissing("zh_cn", defaultChinese());
 
+            var names = new LinkedHashSet<String>();
+            names.add(fallbackLocale);
+            names.add(requestedLocale);
+            try (var paths = Files.list(directory)) {
+                paths.filter(Files::isRegularFile)
+                        .map(path -> path.getFileName().toString())
+                        .filter(name -> name.endsWith(".yml") && name.length() > 4)
+                        .map(name -> normalizeLocaleValue(name.substring(0, name.length() - 4), ""))
+                        .filter(name -> !name.isBlank())
+                        .forEach(names::add);
+            }
+
             var loaded = new LinkedHashMap<String, Map<String, String>>();
-            loadLocale(fallback, loaded);
-            loadLocale(locale, loaded);
-            locales.clear();
-            locales.putAll(loaded);
+            for (var name : names) loadLocale(name, loaded);
+            return new PreparedMessages(loaded);
         } catch (IOException exception) {
             logger.error("Failed to load messages; the previous messages remain active", exception);
             throw new IllegalStateException("Failed to reload messages: " + exception.getMessage(), exception);
         }
+    }
+
+    public synchronized MessageState snapshot() {
+        return new MessageState(
+                locales,
+                locale,
+                fallback,
+                primaryColor,
+                secondaryColor,
+                legacyColors
+        );
+    }
+
+    public synchronized void commit(
+            PreparedMessages prepared,
+            String configuredLocale,
+            String configuredFallback,
+            String configuredPrimaryColor,
+            String configuredSecondaryColor,
+            boolean configuredLegacyColors
+    ) {
+        locale = normalizeLocaleValue(configuredLocale, "zh_cn");
+        fallback = normalizeLocaleValue(configuredFallback, "en_us");
+        primaryColor = normalizeColor(configuredPrimaryColor, "#55FF55");
+        secondaryColor = normalizeColor(configuredSecondaryColor, "#FFFF55");
+        legacyColors = configuredLegacyColors;
+        locales.clear();
+        locales.putAll(prepared.locales());
+    }
+
+    private static String normalizeLocaleValue(String value, String fallbackValue) {
+        if (value.isBlank()) return fallbackValue;
+        return value.toLowerCase(Locale.ROOT).replace('-', '_');
+    }
+
+    public synchronized void restore(MessageState state) {
+        locale = state.locale();
+        fallback = state.fallback();
+        primaryColor = state.primaryColor();
+        secondaryColor = state.secondaryColor();
+        legacyColors = state.legacyColors();
+        locales.clear();
+        locales.putAll(state.locales());
     }
 
     @Override
@@ -172,20 +242,6 @@ public final class DefaultMessageService implements MessageService, MessageRende
         if (configured != null) return Optional.of(configured);
 
         return Optional.ofNullable(messages(fallback).get(key));
-    }
-
-    private synchronized Map<String, String> messages(String requestedLocale) {
-        var normalized = normalizeLocale(requestedLocale);
-        var current = locales.get(normalized);
-        if (current != null) return current;
-
-        try {
-            return loadLocale(normalized, locales);
-        } catch (IOException exception) {
-            logger.warn("Failed to load locale " + normalized + ": " + exception.getMessage());
-            locales.put(normalized, Map.of());
-            return Map.of();
-        }
     }
 
     private Map<String, String> loadLocale(
@@ -371,79 +427,66 @@ public final class DefaultMessageService implements MessageService, MessageRende
     }
 
     private Map<String, Object> defaultEnglish() {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("common", Map.ofEntries(
-                Map.entry("no-permission", "<red>You do not have permission to use this command."),
-                Map.entry("player-only", "<red>This command can only be used by a player."),
-                Map.entry("console-only", "<red>This command can only be used from the console."),
-                Map.entry("usage", "<red>Usage: <secondary>{usage}"),
-                Map.entry("player-not-found", "<red>Player not found: <secondary>{player}"),
-                Map.entry("module-disabled", "<red>Module is disabled: <secondary>{module}"),
-                Map.entry("command-cost-failed", "<red>You need <secondary>{cost}<red> to use this command.")
-        ));
-        root.put("cellulosesz", Map.of(
-                "version", "<primary>CellulosesZ <secondary>{version}",
-                "reloaded", "<primary>CellulosesZ has been reloaded.",
-                "modules-header", "<primary>Loaded CellulosesZ modules:",
-                "unknown-subcommand", "<red>Unknown CellulosesZ subcommand."
-        ));
-        root.put("player", Map.of(
-                "list", "<primary>Online players (<secondary>{count}<primary>): {players}",
-                "nick-set", "<primary>Nickname set to <secondary>{nickname}<primary>.",
-                "nick-cleared", "<primary>Nickname cleared.",
-                "nick-invalid", "<red>The nickname does not match the configured rules."
-        ));
-        root.put("messaging", Map.ofEntries(
-                Map.entry("private-incoming", "<dark_gray>[Message] <secondary>{sender} <dark_gray>→ <primary>you<dark_gray>: <white>{message}"),
-                Map.entry("private-outgoing", "<dark_gray>[Message] <primary>you <dark_gray>→ <secondary>{target}<dark_gray>: <white>{message}"),
-                Map.entry("social-spy", "<dark_gray>[SocialSpy] <secondary>{sender} <dark_gray>→ <secondary>{target}<dark_gray>: <white>{message}"),
-                Map.entry("broadcast", "<gold>[Broadcast] <white>{message}"),
-                Map.entry("broadcast-sent", "<primary>Broadcast sent."),
-                Map.entry("me", "<secondary>* {player} <white>{action}"),
-                Map.entry("helpop", "<dark_aqua>[HelpOp] <secondary>{sender}<dark_gray>: <white>{message}"),
-                Map.entry("helpop-sent", "<primary>HelpOp message sent."),
-                Map.entry("mail-received", "<primary>You received new mail. Use <secondary>/mail read<primary> to view it.")
-        ));
-        root.putAll(BuiltInCommandMessages.english());
-        return root;
+        return unflatten(BuiltInCommandMessages.english());
     }
 
     private Map<String, Object> defaultChinese() {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("common", Map.ofEntries(
-                Map.entry("no-permission", "<red>你没有权限执行此命令。"),
-                Map.entry("player-only", "<red>此命令只能由玩家执行。"),
-                Map.entry("console-only", "<red>此命令只能由控制台执行。"),
-                Map.entry("usage", "<red>用法：<secondary>{usage}"),
-                Map.entry("player-not-found", "<red>找不到玩家：<secondary>{player}"),
-                Map.entry("module-disabled", "<red>模块已禁用：<secondary>{module}"),
-                Map.entry("command-cost-failed", "<red>执行此命令需要 <secondary>{cost}<red>。")
-        ));
-        root.put("cellulosesz", Map.of(
-                "version", "<primary>CellulosesZ <secondary>{version}",
-                "reloaded", "<primary>CellulosesZ 已重载。",
-                "modules-header", "<primary>已加载的 CellulosesZ 模块：",
-                "unknown-subcommand", "<red>未知的 CellulosesZ 子命令。"
-        ));
-        root.put("player", Map.of(
-                "list", "<primary>在线玩家（<secondary>{count}<primary>）：{players}",
-                "nick-set", "<primary>昵称已设置为 <secondary>{nickname}<primary>。",
-                "nick-cleared", "<primary>昵称已清除。",
-                "nick-invalid", "<red>昵称不符合当前配置规则。"
-        ));
-        root.put("messaging", Map.ofEntries(
-                Map.entry("private-incoming", "<dark_gray>[私聊] <secondary>{sender} <dark_gray>→ <primary>你<dark_gray>: <white>{message}"),
-                Map.entry("private-outgoing", "<dark_gray>[私聊] <primary>你 <dark_gray>→ <secondary>{target}<dark_gray>: <white>{message}"),
-                Map.entry("social-spy", "<dark_gray>[SocialSpy] <secondary>{sender} <dark_gray>→ <secondary>{target}<dark_gray>: <white>{message}"),
-                Map.entry("broadcast", "<gold>[公告] <white>{message}"),
-                Map.entry("broadcast-sent", "<primary>公告已发送。"),
-                Map.entry("me", "<secondary>* {player} <white>{action}"),
-                Map.entry("helpop", "<dark_aqua>[HelpOp] <secondary>{sender}<dark_gray>: <white>{message}"),
-                Map.entry("helpop-sent", "<primary>HelpOp 消息已发送。"),
-                Map.entry("mail-received", "<primary>你收到了一封新邮件，使用 <secondary>/mail read<primary> 查看。")
-        ));
-        root.putAll(BuiltInCommandMessages.chinese());
+        return unflatten(BuiltInCommandMessages.chinese());
+    }
+
+    private Map<String, Object> unflatten(Map<String, String> flattened) {
+        var root = new LinkedHashMap<String, Object>();
+        flattened.forEach((key, value) -> {
+            var segments = key.split("\\.");
+            Map<String, Object> current = root;
+            for (int index = 0; index < segments.length - 1; index++) {
+                var segment = segments[index];
+                var existing = current.get(segment);
+                if (existing == null) {
+                    var created = new LinkedHashMap<String, Object>();
+                    current.put(segment, created);
+                    current = created;
+                } else if (existing instanceof Map<?, ?> nested) {
+                    @SuppressWarnings("unchecked")
+                    var typed = (Map<String, Object>) nested;
+                    current = typed;
+                } else {
+                    throw new IllegalStateException("Message key prefix collides with a value: " + key);
+                }
+            }
+            var leaf = segments[segments.length - 1];
+            if (current.putIfAbsent(leaf, value) != null) {
+                throw new IllegalStateException("Duplicate message key: " + key);
+            }
+        });
         return root;
+    }
+
+    public record PreparedMessages(Map<String, Map<String, String>> locales) {
+
+        public PreparedMessages {
+            var copied = new LinkedHashMap<String, Map<String, String>>();
+            locales.forEach((name, messages) -> copied.put(name, Map.copyOf(messages)));
+            locales = Map.copyOf(copied);
+        }
+
+    }
+
+    public record MessageState(
+            Map<String, Map<String, String>> locales,
+            String locale,
+            String fallback,
+            String primaryColor,
+            String secondaryColor,
+            boolean legacyColors
+    ) {
+
+        public MessageState {
+            var copied = new LinkedHashMap<String, Map<String, String>>();
+            locales.forEach((name, messages) -> copied.put(name, Map.copyOf(messages)));
+            locales = Map.copyOf(copied);
+        }
+
     }
 
 }

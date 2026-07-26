@@ -5,9 +5,11 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -105,10 +107,10 @@ public final class FireworkCommand implements CellCommand {
                             ? parseColor(args[3])
                             : color;
                     var flags = args.length == 5
-                            ? args[4].toLowerCase(Locale.ROOT)
-                            : "";
-                    var trail = flags.contains("trail");
-                    var twinkle = flags.contains("twinkle");
+                            ? parseFlags(args[4])
+                            : FireworkFlags.NONE;
+                    var trail = flags.trail();
+                    var twinkle = flags.twinkle();
                     var raw = "{flight_duration:1,explosions:[{shape:\"%s\",colors:[%d],fade_colors:[%d],has_trail:%s,has_twinkle:%s}]}"
                             .formatted(shape, color, fade, trail, twinkle);
 
@@ -149,6 +151,29 @@ public final class FireworkCommand implements CellCommand {
                 : value;
         if (normalized.length() != 6) throw new IllegalArgumentException("Invalid RGB color");
         return Integer.parseInt(normalized, 16);
+    }
+
+    static FireworkFlags parseFlags(String value) {
+        var tokens = Arrays.stream(value.toLowerCase(Locale.ROOT).split("[,+]", -1))
+                .map(String::trim)
+                .collect(Collectors.toUnmodifiableSet());
+        if (tokens.isEmpty()
+                || tokens.contains("")
+                || tokens.stream().anyMatch(token ->
+                !token.equals("trail") && !token.equals("twinkle")
+        )) {
+            throw new IllegalArgumentException("Invalid firework flags");
+        }
+        return new FireworkFlags(tokens.contains("trail"), tokens.contains("twinkle"));
+    }
+
+    record FireworkFlags(
+            boolean trail,
+            boolean twinkle
+    ) {
+
+        private static final FireworkFlags NONE = new FireworkFlags(false, false);
+
     }
 
 }

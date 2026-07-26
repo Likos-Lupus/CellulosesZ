@@ -18,6 +18,8 @@ import top.likoslupus.cellulosesz.modules.world.service.DefaultBackupService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultEntityRemoveService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultWorldService;
 
+import static java.util.Objects.requireNonNull;
+
 @CellulosesModule(
         id = "world",
         name = "World",
@@ -47,7 +49,11 @@ public final class WorldModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         worlds = new DefaultWorldService(platform);
         remover = new DefaultEntityRemoveService(platform);
-        backups = new DefaultBackupService(platform, context.dataDirectory().getParent(), config);
+        backups = new DefaultBackupService(
+                platform,
+                context.dataDirectory().getParent(),
+                requireNonNull(config, "WorldConfig has not been initialized")
+        );
         context.services().register(WorldService.class, worlds);
         context.services().register(EntityRemoveService.class, remover);
         context.services().register(BackupService.class, backups);
@@ -66,8 +72,8 @@ public final class WorldModule implements CellulosesZModule {
     @Override
     public void onReload(ModuleContext context) {
         config = context.configs().require("module.world", WorldConfig.class);
-        java.util.Objects.requireNonNull(backups, "BackupService has not been initialized").configure(
-                java.util.Objects.requireNonNull(config, "WorldConfig has not been initialized")
+        requireNonNull(backups, "BackupService has not been initialized").configure(
+                requireNonNull(config, "WorldConfig has not been initialized")
         );
     }
 

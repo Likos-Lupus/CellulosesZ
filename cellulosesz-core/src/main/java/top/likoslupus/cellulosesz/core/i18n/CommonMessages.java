@@ -10,7 +10,8 @@ final class CommonMessages {
 
     static Map<String, String> english() {
         var messages = new LinkedHashMap<String, String>();
-        messages.put("cellulosesz.reload-failed", "<red>Reload failed; the previous configuration remains active: <secondary>{reason}");
+        messages.put("common.console", "Console");
+        messages.put("service.user.persistence-failed", "<red>The user setting could not be persisted; the change was rolled back.");
         messages.put("commands.common.invalid-boolean", "<red>Invalid boolean.");
         messages.put("commands.common.invalid-page", "<red>Invalid page.");
         messages.put("commands.common.page-out-of-range", "<red>Page out of range; last page: <secondary>{pages}<red>.");
@@ -26,12 +27,14 @@ final class CommonMessages {
         messages.put("common.usage", "<red>Usage: <secondary>{usage}<red>");
         messages.put("service.user.load-failed", "<red>Player data could not be loaded.");
         messages.put("service.user.rollback-failed", "<red>The operation failed and player data could not be fully rolled back. Contact an administrator.");
+        messages.put("common.player-not-found", "<red>Player not found: <secondary>{player}");
         return Map.copyOf(messages);
     }
 
     static Map<String, String> chinese() {
         var messages = new LinkedHashMap<String, String>();
-        messages.put("cellulosesz.reload-failed", "<red>重载失败，旧配置仍然有效：<secondary>{reason}");
+        messages.put("common.console", "控制台");
+        messages.put("service.user.persistence-failed", "<red>用户设置无法持久化，本次变更已回滚。");
         messages.put("commands.common.invalid-boolean", "<red>操作失败：Invalid boolean。");
         messages.put("commands.common.invalid-page", "<red>操作失败：Invalid page。");
         messages.put("commands.common.page-out-of-range", "<red>页码超出范围，最后一页为 <secondary>{pages}<red>。");
@@ -47,6 +50,7 @@ final class CommonMessages {
         messages.put("common.usage", "<red>用法：<secondary>{usage}<red>");
         messages.put("service.user.load-failed", "<red>无法加载玩家数据。");
         messages.put("service.user.rollback-failed", "<red>操作失败且玩家数据未能完整回滚，请联系管理员。");
+        messages.put("common.player-not-found", "<red>找不到玩家：<secondary>{player}");
         return Map.copyOf(messages);
     }
 

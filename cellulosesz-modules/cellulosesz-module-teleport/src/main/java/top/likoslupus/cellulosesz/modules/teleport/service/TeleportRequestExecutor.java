@@ -42,14 +42,16 @@ public final class TeleportRequestExecutor {
         this.warmupSeconds = Math.max(0, warmupSeconds);
     }
 
-    public TeleportRequest create(
+    public TeleportRequestCreateResult create(
             CommandInvocation invocation,
             CellPlayer requester,
             CellPlayer target,
             TeleportRequestType type,
             int timeoutSeconds
     ) {
-        var request = requests.create(requester, target, type, timeoutSeconds);
+        var creation = requests.create(requester, target, type, timeoutSeconds);
+        if (!creation.created()) return creation;
+        var request = creation.request();
         platform.runOnServerThread(() -> platform.sendMessage(
                 target,
                 renderer.render(
@@ -68,9 +70,10 @@ public final class TeleportRequestExecutor {
         users.load(target.uuid()).whenComplete((targetUser, failure) -> {
             if (failure != null || !targetUser.preferences.teleportAutoAccept) return;
             platform.runOnServerThread(() -> online(target.uuid()).ifPresent(onlineTarget ->
-                    acceptRequest(invocation, onlineTarget, request.id(), true)));
+                    acceptRequest(invocation, onlineTarget, request.id(), true)
+            ));
         });
-        return request;
+        return creation;
     }
 
     public Optional<CellPlayer> online(UUID uuid) {
@@ -117,7 +120,7 @@ public final class TeleportRequestExecutor {
                         options
                 ))
                 .thenCompose(value -> value)
-                .whenComplete((result, throwable) -> {
+                .whenComplete((result, throwable) -> platform.runOnServerThread(() -> {
                     if (throwable != null) {
                         requests.release(pending.id());
                         invocation.errorKey(
@@ -144,7 +147,7 @@ public final class TeleportRequestExecutor {
                                     "request", pending.id()
                             )
                     );
-                    platform.runOnServerThread(() -> platform.sendMessage(
+                    platform.sendMessage(
                             requester.orElseThrow(),
                             renderer.render(
                                     locales.locale(requester.orElseThrow()),
@@ -154,8 +157,8 @@ public final class TeleportRequestExecutor {
                                             "request", pending.id()
                                     )
                             )
-                    ));
-                });
+                    );
+                }));
         return true;
     }
 

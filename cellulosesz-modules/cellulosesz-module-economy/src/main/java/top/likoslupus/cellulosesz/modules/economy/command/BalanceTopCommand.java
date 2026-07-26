@@ -3,26 +3,29 @@ package top.likoslupus.cellulosesz.modules.economy.command;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.CellUser;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
+import java.util.stream.IntStream;
 
 public final class BalanceTopCommand extends AbstractEconomyCommand {
+
+    private final NameCacheService names;
 
     public BalanceTopCommand(
             PlatformService platform,
             UserService users,
+            NameCacheService names,
             EconomyService economy,
             EconomyConfig config
     ) {
         super(platform, users, economy, config);
+        this.names = names;
     }
 
     @Override
@@ -93,33 +96,25 @@ public final class BalanceTopCommand extends AbstractEconomyCommand {
         }
 
         var pageEntries = entries.subList(from, Math.min(entries.size(), from + pageSize));
-        var loads = new ArrayList<CompletableFuture<Optional<CellUser>>>(pageEntries.size());
-        for (var entry : pageEntries) {
-            loads.add(users.load(entry.uuid())
-                    .thenApply(Optional::of)
-                    .exceptionally(_ -> Optional.empty()));
-        }
-
-        CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new)).whenComplete((_, failure) -> {
-            var rows = new StringBuilder();
-            for (int offset = 0; offset < pageEntries.size(); offset++) {
-                var entry = pageEntries.get(offset);
-                var loaded = loads.get(offset).getNow(Optional.empty());
-                var name = loaded.map(user -> user.lastKnownName)
-                        .filter(value -> !value.isBlank())
-                        .orElse(entry.uuid().toString());
-                rows.append("\n")
-                        .append(from + offset + 1)
-                        .append(". ")
-                        .append(name)
-                        .append(" - ")
-                        .append(format(entry.balance()));
-            }
-            invocation.replyKey(
-                    "commands.economy.balance-top",
-                    Map.of("page", page, "rows", rows.toString())
-            );
-        });
+        var nameSnapshot = names.entries();
+        var rows = new StringBuilder();
+        IntStream.range(0, pageEntries.size())
+                .forEach(offset -> {
+                    var entry = pageEntries.get(offset);
+                    var name = Optional.ofNullable(nameSnapshot.get(entry.uuid()))
+                            .filter(value -> !value.isBlank())
+                            .orElse(entry.uuid().toString());
+                    rows.append("\n")
+                            .append(from + offset + 1)
+                            .append(". ")
+                            .append(name)
+                            .append(" - ")
+                            .append(format(entry.balance()));
+                });
+        invocation.replyKey(
+                "commands.economy.balance-top",
+                Map.of("page", page, "rows", rows.toString())
+        );
         return 1;
     }
 

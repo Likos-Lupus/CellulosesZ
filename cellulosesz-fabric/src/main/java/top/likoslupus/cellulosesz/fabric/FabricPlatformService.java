@@ -82,6 +82,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
     private @Nullable MinecraftServer server;
     private @Nullable MessageRenderer renderer;
     private @Nullable LocaleResolver locales;
+
     public FabricPlatformService(FabricVanillaCommandBridge vanillaCommands) {
         this.vanillaCommands = vanillaCommands;
     }
@@ -1454,7 +1455,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
     }
 
     private String normalizeItemId(String value) {
-        var normalized = value.trim().toLowerCase();
+        var normalized = value.trim().toLowerCase(Locale.ROOT);
         return normalized.indexOf(':') < 0
                 ? "minecraft:%s".formatted(normalized)
                 : normalized;

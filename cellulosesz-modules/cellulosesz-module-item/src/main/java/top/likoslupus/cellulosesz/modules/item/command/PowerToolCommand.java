@@ -103,6 +103,11 @@ public final class PowerToolCommand extends AbstractItemCommand {
         }
 
         var input = join(args, 0).trim();
+        if (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0) {
+            invocation.errorKey("commands.item.power-tool-command.error.line-break");
+            return 0;
+        }
+
         if (input.isEmpty()
                 || input.equalsIgnoreCase("clear")
                 || input.equalsIgnoreCase("d:")

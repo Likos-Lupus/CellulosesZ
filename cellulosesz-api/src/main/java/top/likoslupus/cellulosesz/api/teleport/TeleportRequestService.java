@@ -9,7 +9,7 @@ import java.util.UUID;
 
 public interface TeleportRequestService {
 
-    TeleportRequest create(
+    TeleportRequestCreateResult create(
             CellPlayer requester,
             CellPlayer target,
             TeleportRequestType type,

@@ -6,6 +6,7 @@ plugins {
 val cellulosesJavaVersion = libs.versions.java.get().toInt()
 val jspecifyDependency = libs.jspecify
 val lombokDependency = libs.lombok
+val junitDependency = libs.junit.jupiter
 
 allprojects {
     group = "top.likoslupus"
@@ -61,7 +62,7 @@ subprojects {
         "annotationProcessor"(lombokDependency)
         "testCompileOnly"(lombokDependency)
         "testAnnotationProcessor"(lombokDependency)
-        "testImplementation"(libs.junit.jupiter)
+        "testImplementation"(junitDependency)
     }
 
     tasks.withType<Test>().configureEach {

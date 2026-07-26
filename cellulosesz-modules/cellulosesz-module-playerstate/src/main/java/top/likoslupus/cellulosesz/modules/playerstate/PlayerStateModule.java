@@ -70,9 +70,12 @@ public final class PlayerStateModule implements CellulosesZModule {
         );
         context.events().listen(
                 PlayerDisconnectEvent.class,
-                event -> context.services()
-                        .require(PlatformService.class)
-                        .setVanishedState(event.player(), false)
+                event -> {
+                    context.services().require(PlatformService.class)
+                            .setVanishedState(event.player(), false);
+                    context.services().require(DefaultPlayerStateService.class)
+                            .forgetActivity(event.player().uuid());
+                }
         );
         context.events().listen(
                 PlayerMoveEvent.class,
@@ -100,6 +103,13 @@ public final class PlayerStateModule implements CellulosesZModule {
         context.events().listen(
                 PlayerWorldChangeEvent.class,
                 event -> restorePersonalWorldState(context, event.player())
+        );
+        context.events().listen(
+                PlayerRespawnEvent.class,
+                event -> context.scheduler().syncLater(
+                        () -> restorePersonalWorldState(context, event.player()),
+                        1L
+                )
         );
     }
 
@@ -141,6 +151,8 @@ public final class PlayerStateModule implements CellulosesZModule {
     public void onServerStarted(ModuleContext context) {
         context.scheduler()
                 .syncRepeating(() -> checkAutomaticAfk(context), 20L, 20L);
+        context.scheduler()
+                .syncRepeating(() -> maintainPersonalWorldState(context), 20L, 20L);
     }
 
     @Override
@@ -199,6 +211,24 @@ public final class PlayerStateModule implements CellulosesZModule {
                         .plainText());
             }
         });
+    }
+
+    private void maintainPersonalWorldState(ModuleContext context) {
+        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
+        if (!currentConfig.persistPersonalTimeWeather) return;
+
+        var platform = context.services().require(PlatformService.class);
+        var users = context.services().require(UserService.class);
+        platform.onlinePlayers().forEach(player ->
+                users.cached(player.uuid()).ifPresent(user -> {
+                    if (user.state.personalTime != null) {
+                        platform.setPersonalTime(player, user.state.personalTime);
+                    }
+                    if (user.state.personalWeather != null) {
+                        platform.setPersonalWeather(player, user.state.personalWeather);
+                    }
+                })
+        );
     }
 
     private void activity(ModuleContext context, CellPlayer player) {

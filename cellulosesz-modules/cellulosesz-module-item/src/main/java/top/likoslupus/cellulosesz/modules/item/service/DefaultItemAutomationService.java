@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -16,6 +17,7 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     private final PlatformService platform;
     private final UserService users;
     private final ItemService items;
+    private final Set<UUID> executingPowerTools = ConcurrentHashMap.newKeySet();
     private volatile ItemConfig config;
 
     public DefaultItemAutomationService(
@@ -125,34 +127,39 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     @Override
     public boolean executePowerTool(CellPlayer player, String clickedPlayerName) {
         if (!config.powerToolsEnabled || !powerToolsEnabled(player.uuid())) return false;
+        if (!executingPowerTools.add(player.uuid())) return false;
 
-        var held = items.heldItemId(player);
-        if (held.isEmpty()) return false;
+        try {
+            var held = items.heldItemId(player);
+            if (held.isEmpty()) return false;
 
-        var commands = powerTool(player.uuid(), held.get());
-        if (commands.isEmpty()) return false;
+            var commands = powerTool(player.uuid(), held.get());
+            if (commands.isEmpty()) return false;
 
-        var targetedClick = !clickedPlayerName.isBlank();
-        var used = false;
-        for (var configured : commands) {
-            var targetsPlayer = configured.contains("{player}");
-            if (targetsPlayer != targetedClick) continue;
+            var targetedClick = !clickedPlayerName.isBlank();
+            var used = false;
+            for (var configured : commands) {
+                var targetsPlayer = configured.contains("{player}");
+                if (targetsPlayer != targetedClick) continue;
 
-            var value = configured.replace("{player}", clickedPlayerName).trim();
-            if (value.startsWith("c:")) {
-                var message = value.substring(2).trim();
-                if (message.isBlank()) continue;
+                var value = configured.replace("{player}", clickedPlayerName).trim();
+                if (containsLineBreak(value)) continue;
 
-                platform.sendChatMessage(player, message);
-            } else {
-                if (value.isBlank()) continue;
-
-                platform.dispatchPlayerCommand(player, value);
+                if (value.startsWith("c:")) {
+                    var message = value.substring(2).trim();
+                    if (message.isBlank()) continue;
+                    platform.sendChatMessage(player, message);
+                } else {
+                    if (value.isBlank()) continue;
+                    platform.dispatchPlayerCommand(player, value);
+                }
+                used = true;
             }
-            used = true;
-        }
 
-        return used;
+            return used;
+        } finally {
+            executingPowerTools.remove(player.uuid());
+        }
     }
 
     @Override
@@ -225,6 +232,10 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     private String normalizeCommand(String command) {
         var normalized = command.trim();
+        if (containsLineBreak(normalized)) {
+            throw new IllegalArgumentException("PowerTool commands must not contain line breaks");
+        }
+
         if (normalized.startsWith("c:")) {
             return "c:" + normalized.substring(2).trim();
         }
@@ -233,6 +244,10 @@ public final class DefaultItemAutomationService implements ItemAutomationService
             normalized = normalized.substring(1);
         }
         return normalized;
+    }
+
+    private boolean containsLineBreak(String value) {
+        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
     }
 
 }

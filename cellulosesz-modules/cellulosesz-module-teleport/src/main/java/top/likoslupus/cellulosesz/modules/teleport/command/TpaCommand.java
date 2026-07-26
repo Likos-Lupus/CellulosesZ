@@ -19,7 +19,10 @@ public final class TpaCommand implements CellCommand {
     private final boolean here;
 
     public TpaCommand(
-            PlatformService platform, TeleportRequestExecutor executor, UserService users, int timeoutSeconds,
+            PlatformService platform,
+            TeleportRequestExecutor executor,
+            UserService users,
+            int timeoutSeconds,
             boolean here
     ) {
         this.platform = platform;
@@ -53,7 +56,10 @@ public final class TpaCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey("commands.teleport.tpa-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey(
+                    "commands.teleport.tpa-command.error.1",
+                    Map.of("value0", usage())
+            );
             return 0;
         }
         var requester = platform.player(invocation);
@@ -63,7 +69,10 @@ public final class TpaCommand implements CellCommand {
             return 0;
         }
         if (target.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpa-command.error.3", Map.of("value0", args[0]));
+            invocation.errorKey(
+                    "commands.teleport.tpa-command.error.3",
+                    Map.of("value0", args[0])
+            );
             return 0;
         }
         if (target.orElseThrow().uuid().equals(requester.orElseThrow().uuid())) {
@@ -76,17 +85,41 @@ public final class TpaCommand implements CellCommand {
                 return;
             }
             if (!targetUser.preferences.teleportRequests
-                    && !invocation.hasPermission("cellulosesz.teleport.tptoggle.bypass")) {
-                invocation.errorKey("commands.teleport.tpa-command.requests-disabled", Map.of("player", target.orElseThrow()
-                        .name()));
+                    && !invocation.hasPermission("cellulosesz.teleport.tptoggle.bypass")
+            ) {
+                invocation.errorKey(
+                        "commands.teleport.tpa-command.requests-disabled",
+                        Map.of("player", target.orElseThrow().name())
+                );
                 return;
             }
             platform.runOnServerThread(() -> {
-                executor.create(invocation, requester.orElseThrow(), target.orElseThrow(),
-                        here ? TeleportRequestType.TARGET_TO_REQUESTER : TeleportRequestType.REQUESTER_TO_TARGET,
-                        timeoutSeconds);
-                invocation.replyKey("commands.teleport.tpa-command.reply.1", Map.of("value0", target.orElseThrow()
-                        .name(), "value1", timeoutSeconds));
+                var creation = executor.create(
+                        invocation,
+                        requester.orElseThrow(),
+                        target.orElseThrow(),
+                        here
+                                ? TeleportRequestType.TARGET_TO_REQUESTER
+                                : TeleportRequestType.REQUESTER_TO_TARGET,
+                        timeoutSeconds
+                );
+                if (!creation.created()) {
+                    invocation.errorKey(
+                            "commands.teleport.request.already-pending",
+                            Map.of(
+                                    "request", creation.request().id(),
+                                    "player", target.orElseThrow().name()
+                            )
+                    );
+                    return;
+                }
+                invocation.replyKey(
+                        "commands.teleport.tpa-command.reply.1",
+                        Map.of(
+                                "value0", target.orElseThrow().name(),
+                                "value1", timeoutSeconds
+                        )
+                );
             });
         });
         return 1;

@@ -14,6 +14,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.command.*;
 import top.likoslupus.cellulosesz.modules.economy.service.JsonEconomyService;
@@ -64,6 +65,7 @@ public final class EconomyModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
+        var names = context.services().require(NameCacheService.class);
         var players = context.services().require(PlayerResolver.class);
         var confirmations = context.services().require(ConfirmationService.class);
         var messages = context.services().require(MessageRenderer.class);
@@ -75,9 +77,9 @@ public final class EconomyModule implements CellulosesZModule {
         requireNonNull(worths, "WorthService has not been initialized");
 
         context.commands().register(new BalanceCommand(platform, users, economy, config));
-        context.commands().register(new BalanceTopCommand(platform, users, economy, config));
-        context.commands().register(new PayCommand(platform, users, economy, config, players,
-                confirmations, messages, locales));
+        context.commands().register(new BalanceTopCommand(platform, users, names, economy, config));
+        context.commands().register(new PayCommand(platform, users, economy, config,
+                players, confirmations, messages, locales));
         context.commands().register(new PayToggleCommand(platform, users, economy, config));
         context.commands().register(new PayConfirmToggleCommand(platform, users, economy, config));
         context.commands().register(new EcoCommand(platform, users, economy, config));
