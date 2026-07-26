@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -31,6 +32,7 @@ public final class MessagingModule implements CellulosesZModule {
     private @Nullable MessagingConfig config;
     private @Nullable PrivateMessageService privateMessages;
     private @Nullable MailService mail;
+    private @Nullable TaskHandle mailSweep;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -46,15 +48,16 @@ public final class MessagingModule implements CellulosesZModule {
     public void registerServices(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
+        var permissions = context.services().require(PermissionService.class);
         var storage = context.services().require(StorageService.class);
-        var root = context.dataDirectory().getParent().resolve("mails");
+        var path = context.dataDirectory().resolve("mail.json");
         var displayNames = context.services().require(DisplayNameService.class);
         var renderer = context.services().require(MessageRenderer.class);
 
         requireNonNull(config, "MessagingConfig has not been initialized");
 
-        privateMessages = new DefaultPrivateMessageService(platform, users, displayNames, renderer);
-        mail = new JsonMailService(storage, config, root);
+        privateMessages = new DefaultPrivateMessageService(platform, users, permissions, displayNames, renderer);
+        mail = new JsonMailService(storage, config, path);
 
         context.services().register(PrivateMessageService.class, privateMessages);
         context.services().register(DefaultPrivateMessageService.class, (DefaultPrivateMessageService) privateMessages);
@@ -79,13 +82,55 @@ public final class MessagingModule implements CellulosesZModule {
         context.commands().register(new MsgToggleCommand(platform, users, config));
         context.commands().register(new ReplyToggleCommand(platform, users, config));
         context.commands().register(new IgnoreCommand(platform, users, config, privateMessages));
-        context.commands().register(new MailCommand(platform, users, config, mail, displayNames, renderer));
+        context.commands().register(new MailCommand(platform, users, config, mail, displayNames, renderer,
+                privateMessages));
         context.commands().register(new SocialSpyCommand(platform, users, config, privateMessages));
         context.commands().register(new HelpOpCommand(platform, users, config, permissions, displayNames, renderer));
         context.commands().register(new BroadcastCommand(platform, users, config, renderer));
         context.commands().register(new BroadcastWorldCommand(platform, users, config, renderer));
         context.commands().register(new MeCommand(platform, users, config, displayNames, renderer));
         context.commands().register(new ListCommand(platform, users, config, displayNames, renderer));
+    }
+
+    @Override
+    public void onServerStarted(ModuleContext context) {
+        scheduleMailSweep(context);
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        var current = requireNonNull(config, "MessagingConfig has not been initialized");
+        current.copyFrom(context.configs().require("module.messaging", MessagingConfig.class));
+        requireNonNull(mail, "MailService has not been initialized");
+        ((JsonMailService) mail).configure(current);
+        scheduleMailSweep(context);
+    }
+
+    @Override
+    public void onServerStopping(ModuleContext context) {
+        if (mailSweep != null) {
+            mailSweep.cancel();
+            mailSweep = null;
+        }
+    }
+
+    private void scheduleMailSweep(ModuleContext context) {
+        var service = requireNonNull(mail, "MailService has not been initialized");
+        var current = requireNonNull(config, "MessagingConfig has not been initialized");
+        if (mailSweep != null) mailSweep.cancel();
+        final long period;
+        try {
+            period = Math.max(20L, Math.multiplyExact(current.expiredMailSweepSeconds, 20L));
+        } catch (ArithmeticException exception) {
+            throw new IllegalArgumentException("expiredMailSweepSeconds is too large", exception);
+        }
+        mailSweep = context.scheduler().syncRepeating(
+                () -> service.purgeExpired(System.currentTimeMillis()).whenComplete((_, failure) -> {
+                    if (failure != null) context.logger().error("Failed to persist expired mail cleanup", failure);
+                }),
+                20L,
+                period
+        );
     }
 
 }

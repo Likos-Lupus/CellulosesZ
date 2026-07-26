@@ -1,11 +1,7 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import org.jspecify.annotations.Nullable;
-
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.admin.Jail;
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.admin.JailedPlayer;
+import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -15,6 +11,8 @@ import top.likoslupus.cellulosesz.modules.admin.data.JailDocument;
 
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public final class JsonJailService implements JailService {
 
@@ -22,7 +20,8 @@ public final class JsonJailService implements JailService {
     private final Path path;
     private final PlatformService platform;
     private final AdminConfig config;
-    private final JailDocument document;
+    private JailDocument document;
+    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonJailService(
             StorageService storage,
@@ -35,103 +34,101 @@ public final class JsonJailService implements JailService {
         this.platform = platform;
         this.config = config;
         this.document = storage.load(path, JailDocument.class, JailDocument::new).join();
+        validate(document);
+    }
+
+    private void validate(JailDocument candidate) {
+        candidate.jails.forEach(jail -> {
+            if (normalize(jail.name).isEmpty()) throw new IllegalStateException("Jail name must not be blank");
+            if (jail.location == null) throw new IllegalStateException("Jail location is required");
+        });
+        candidate.jailed.forEach(record -> {
+            if (record.uuid == null) throw new IllegalStateException("Jailed player UUID is required");
+            if (record.jail.isBlank()) throw new IllegalStateException("Jailed player jail is required");
+            if (record.expiresAt != null && record.expiresAt > 0L && record.expiresAt <= record.createdAt) {
+                throw new IllegalStateException("Jail expiry must be after creation");
+            }
+        });
+    }
+
+    private String normalize(String name) {
+        return name.trim().toLowerCase(Locale.ROOT);
     }
 
     @Override
-    public synchronized AdminResult setJail(
+    public CompletableFuture<AdminResult> setJail(
             String name,
             CellLocation location,
             String actor
     ) {
+        var normalized = normalize(name);
+        if (normalized.isEmpty()) {
+            return CompletableFuture.completedFuture(AdminResult.failure(
+                    AdminStatus.INVALID_INPUT, "service.admin.jail-invalid-name"));
+        }
         var jail = new Jail();
-        jail.name = normalize(name);
-        jail.location = location;
+        jail.name = normalized;
+        jail.location = copy(location);
         jail.createdBy = actor;
         jail.createdAt = System.currentTimeMillis();
-
-        var previous = List.copyOf(document.jails);
-        document.jails.removeIf(existing -> existing.name.equalsIgnoreCase(jail.name));
-        document.jails.add(jail);
-        if (!save()) {
-            restore(document.jails, previous);
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        return AdminResult.success(
-                "service.admin.jail-set",
-                Map.of("jail", jail.name)
-        );
+        return mutate(current -> {
+            current.jails.removeIf(existing -> existing.name.equalsIgnoreCase(normalized));
+            current.jails.add(copy(jail));
+            return AdminResult.success("service.admin.jail-set", Map.of("jail", normalized));
+        });
     }
 
     @Override
-    public synchronized AdminResult deleteJail(String name) {
+    public CompletableFuture<AdminResult> deleteJail(String name) {
         var normalized = normalize(name);
-        if (document.jails.stream()
-                .noneMatch(jail -> jail.name.equalsIgnoreCase(normalized))
-        ) {
-            return AdminResult.failure(
-                    "service.admin.jail-not-found",
-                    Map.of("jail", normalized)
-            );
+        final List<JailedPlayer> affected;
+        synchronized (this) {
+            if (document.jails.stream().noneMatch(jail -> jail.name.equalsIgnoreCase(normalized))) {
+                return CompletableFuture.completedFuture(AdminResult.failure(
+                        AdminStatus.NOT_FOUND,
+                        "service.admin.jail-not-found",
+                        Map.of("jail", normalized)
+                ));
+            }
+            affected = document.jailed.stream()
+                    .filter(record -> record.jail.equalsIgnoreCase(normalized))
+                    .map(this::copy)
+                    .toList();
         }
-
-        var previousJails = List.copyOf(document.jails);
-        var previousJailed = List.copyOf(document.jailed);
-        var previousExpiry = new IdentityHashMap<JailedPlayer, OptionalLong>();
-        document.jailed.forEach(record -> previousExpiry.put(
-                record,
-                record.expiresAt == null
-                        ? OptionalLong.empty()
-                        : OptionalLong.of(record.expiresAt)
-        ));
-
-        document.jails.removeIf(jail -> jail.name.equalsIgnoreCase(normalized));
-        var affected = document.jailed.stream()
-                .filter(jailed -> jailed.jail.equalsIgnoreCase(normalized))
-                .toList();
-        affected.forEach(record -> record.expiresAt = 0L);
-
-        // Persist the non-jailed/pending-release state before moving any player. A failed cleanup save may leave
-        // an already released player with an expired record, but it can no longer be confined and purgeExpired
-        // can safely retry the idempotent release later.
-        if (!save()) {
-            previousExpiry.forEach((record, expiresAt) ->
-                    record.expiresAt = expiresAt.isPresent()
-                            ? expiresAt.getAsLong()
-                            : null
-            );
-            restore(document.jails, previousJails);
-            restore(document.jailed, previousJailed);
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        var pendingSnapshot = List.copyOf(document.jailed);
-        var outcomes = affected.stream()
-                .map(record -> new ReleaseAttempt(record, releasePlayer(record)))
-                .toList();
-        var released = outcomes.stream()
-                .filter(attempt -> attempt.outcome() == ReleaseOutcome.RELEASED)
-                .map(ReleaseAttempt::record)
-                .toList();
-        document.jailed.removeAll(released);
-        if (!released.isEmpty() && !save()) {
-            restore(document.jailed, pendingSnapshot);
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        var pending = outcomes.stream()
-                .filter(attempt -> attempt.outcome() != ReleaseOutcome.RELEASED)
-                .count();
-        if (pending > 0L) {
-            return AdminResult.failure(
-                    "service.admin.jail-delete-release-pending",
-                    Map.of("jail", normalized, "count", pending)
-            );
-        }
-        return AdminResult.success(
-                "service.admin.jail-deleted",
-                Map.of("jail", normalized)
-        );
+        return mutate(current -> {
+            current.jails.removeIf(jail -> jail.name.equalsIgnoreCase(normalized));
+            current.jailed.stream()
+                    .filter(record -> record.jail.equalsIgnoreCase(normalized))
+                    .forEach(record -> record.expiresAt = 0L);
+            return AdminResult.success("service.admin.jail-deleted", Map.of("jail", normalized));
+        }).thenCompose(saved -> {
+            if (!saved.success() || affected.isEmpty()) return CompletableFuture.completedFuture(saved);
+            return releaseAll(affected).thenCompose(outcomes -> {
+                var released = outcomes.stream()
+                        .filter(outcome -> outcome.result() == ReleaseResult.RELEASED)
+                        .map(ReleaseAttempt::record)
+                        .map(record -> record.uuid)
+                        .toList();
+                var pending = outcomes.size() - released.size();
+                if (released.isEmpty()) {
+                    return CompletableFuture.completedFuture(pending == 0
+                            ? saved
+                            : AdminResult.partial(
+                                    "service.admin.jail-delete-release-pending",
+                                    Map.of("jail", normalized, "count", pending)
+                            ));
+                }
+                return mutate(current -> {
+                    current.jailed.removeIf(record -> released.contains(record.uuid));
+                    return pending == 0
+                            ? saved
+                            : AdminResult.partial(
+                                    "service.admin.jail-delete-release-pending",
+                                    Map.of("jail", normalized, "count", pending)
+                            );
+                });
+            });
+        });
     }
 
     @Override
@@ -139,213 +136,318 @@ public final class JsonJailService implements JailService {
         var normalized = normalize(name);
         return document.jails.stream()
                 .filter(jail -> jail.name.equalsIgnoreCase(normalized))
-                .findFirst();
+                .findFirst()
+                .map(this::copy);
     }
 
     @Override
     public synchronized Collection<Jail> jails() {
-        return List.copyOf(document.jails);
+        return document.jails.stream().map(this::copy).toList();
     }
 
     @Override
-    public synchronized AdminResult jailPlayer(
+    public CompletableFuture<AdminResult> jailPlayer(
             CellPlayer player,
             String jailName,
             String actor,
             @Nullable Long durationMillis,
             String reason
     ) {
-        purgeExpired();
-        var jail = jail(jailName);
-        if (jail.isEmpty()) {
-            return AdminResult.failure(
-                    "service.admin.jail-not-found",
-                    Map.of("jail", jailName)
-            );
+        final Jail jail;
+        final @Nullable JailedPlayer previous;
+        synchronized (this) {
+            var found = document.jails.stream()
+                    .filter(value -> value.name.equalsIgnoreCase(normalize(jailName)))
+                    .findFirst();
+            if (found.isEmpty()) {
+                return CompletableFuture.completedFuture(AdminResult.failure(
+                        AdminStatus.NOT_FOUND,
+                        "service.admin.jail-not-found",
+                        Map.of("jail", jailName)
+                ));
+            }
+            jail = copy(found.orElseThrow());
+            previous = document.jailed.stream()
+                    .filter(existing -> player.uuid().equals(existing.uuid))
+                    .findFirst()
+                    .map(this::copy)
+                    .orElse(null);
         }
 
-        var beforeTeleport = platform.location(player);
-        if (!teleport(player, jail.orElseThrow().location)) {
-            return AdminResult.failure(
-                    "service.admin.jail-teleport-failed",
-                    Map.of("player", player.name())
-            );
+        var beforeTeleport = copy(platform.location(player));
+        var createdAt = System.currentTimeMillis();
+        final @Nullable Long expiresAt;
+        try {
+            expiresAt = durationMillis == null || durationMillis <= 0L
+                    ? null
+                    : Math.addExact(createdAt, durationMillis);
+        } catch (ArithmeticException exception) {
+            return CompletableFuture.completedFuture(AdminResult.failure(
+                    AdminStatus.INVALID_INPUT, "service.admin.invalid-duration"));
         }
-
-        var previousRecords = List.copyOf(document.jailed);
-        var previous = document.jailed.stream()
-                .filter(existing -> player.uuid().equals(existing.uuid))
-                .findFirst();
 
         var record = new JailedPlayer();
         record.uuid = player.uuid();
         record.name = player.name();
-        record.jail = jail.orElseThrow().name;
+        record.jail = jail.name;
         record.actor = actor;
         record.reason = reason;
-        record.createdAt = System.currentTimeMillis();
-        record.expiresAt = durationMillis == null || durationMillis <= 0L
-                ? null
-                : record.createdAt + durationMillis;
-        record.returnLocation = previous
-                .flatMap(existing -> Optional.ofNullable(existing.returnLocation))
-                .orElse(beforeTeleport);
+        record.createdAt = createdAt;
+        record.expiresAt = expiresAt;
+        record.returnLocation = previous != null && previous.returnLocation != null
+                ? copy(previous.returnLocation)
+                : beforeTeleport;
 
-        document.jailed.removeIf(existing -> player.uuid().equals(existing.uuid));
-        document.jailed.add(record);
-        if (!save()) {
-            restore(document.jailed, previousRecords);
-            if (!teleport(player, beforeTeleport)) {
-                return AdminResult.failure(
+        return mutate(current -> {
+            current.jailed.removeIf(existing -> player.uuid().equals(existing.uuid));
+            current.jailed.add(copy(record));
+            return AdminResult.success(
+                    "service.admin.player-jailed",
+                    Map.of("player", player.name(), "jail", jail.name)
+            );
+        }).thenCompose(saved -> {
+            if (!saved.success()) return CompletableFuture.completedFuture(saved);
+            return teleport(player, jail.location).thenCompose(moved -> {
+                if (moved) return CompletableFuture.completedFuture(saved);
+                return mutate(current -> {
+                    current.jailed.removeIf(existing -> player.uuid().equals(existing.uuid));
+                    if (previous != null) current.jailed.add(copy(previous));
+                    return AdminResult.failure(
+                            AdminStatus.PLATFORM_FAILURE,
+                            "service.admin.jail-teleport-failed",
+                            Map.of("player", player.name())
+                    );
+                }).thenApply(rollback -> rollback.status() == AdminStatus.PERSISTENCE_FAILURE
+                        ? AdminResult.failure(
+                        AdminStatus.ROLLBACK_FAILURE,
                         "service.admin.jail-rollback-failed",
                         Map.of("player", player.name())
-                );
-            }
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        return AdminResult.success(
-                "service.admin.player-jailed",
-                Map.of(
-                        "player", player.name(),
-                        "jail", jail.orElseThrow().name
                 )
-        );
+                        : rollback);
+            });
+        });
     }
 
     @Override
-    public synchronized AdminResult unjail(
-            UUID uuid,
-            String name,
-            String actor
-    ) {
-        var record = document.jailed.stream()
-                .filter(jailed -> uuid.equals(jailed.uuid))
-                .findFirst();
-        if (record.isEmpty()) {
-            return AdminResult.failure(
-                    "service.admin.player-not-jailed",
-                    Map.of("player", name)
-            );
+    public CompletableFuture<AdminResult> unjail(UUID uuid, String name, String actor) {
+        final JailedPlayer record;
+        synchronized (this) {
+            var found = document.jailed.stream()
+                    .filter(jailed -> uuid.equals(jailed.uuid))
+                    .findFirst();
+            if (found.isEmpty()) {
+                return CompletableFuture.completedFuture(AdminResult.failure(
+                        AdminStatus.NOT_FOUND,
+                        "service.admin.player-not-jailed",
+                        Map.of("player", name)
+                ));
+            }
+            record = copy(found.orElseThrow());
         }
-
-        var jailed = record.orElseThrow();
-        var previousExpiry = jailed.expiresAt;
-        jailed.expiresAt = 0L;
-        if (!save()) {
-            jailed.expiresAt = previousExpiry;
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        var outcome = releasePlayer(jailed);
-        if (outcome == ReleaseOutcome.FAILED) {
-            return AdminResult.failure(
-                    "service.admin.jail-release-failed",
-                    Map.of("player", name)
-            );
-        }
-        if (outcome == ReleaseOutcome.PENDING) {
-            return AdminResult.success(
-                    "service.admin.player-unjailed",
-                    Map.of("player", name)
-            );
-        }
-
-        document.jailed.remove(jailed);
-        if (!save()) {
-            document.jailed.add(jailed);
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-        return AdminResult.success(
-                "service.admin.player-unjailed",
-                Map.of("player", name)
-        );
+        return mutate(current -> {
+            current.jailed.stream()
+                    .filter(jailed -> uuid.equals(jailed.uuid))
+                    .forEach(jailed -> jailed.expiresAt = 0L);
+            return AdminResult.success("service.admin.player-unjailed", Map.of("player", name));
+        }).thenCompose(saved -> {
+            if (!saved.success()) return CompletableFuture.completedFuture(saved);
+            return releasePlayer(record).thenCompose(result -> {
+                if (result == ReleaseResult.FAILED) {
+                    return CompletableFuture.completedFuture(AdminResult.failure(
+                            AdminStatus.PLATFORM_FAILURE,
+                            "service.admin.jail-release-failed",
+                            Map.of("player", name)
+                    ));
+                }
+                if (result == ReleaseResult.PENDING) return CompletableFuture.completedFuture(saved);
+                return mutate(current -> {
+                    current.jailed.removeIf(jailed -> uuid.equals(jailed.uuid));
+                    return saved;
+                });
+            });
+        });
     }
 
     @Override
     public synchronized Optional<JailedPlayer> jailed(UUID uuid) {
-        purgeExpired();
         var now = System.currentTimeMillis();
         return document.jailed.stream()
                 .filter(record -> uuid.equals(record.uuid))
                 .filter(record -> !record.expired(now))
-                .findFirst();
+                .findFirst()
+                .map(this::copy);
     }
 
     @Override
     public synchronized Collection<JailedPlayer> jailedPlayers() {
-        purgeExpired();
         var now = System.currentTimeMillis();
         return document.jailed.stream()
                 .filter(record -> !record.expired(now))
+                .map(this::copy)
                 .toList();
     }
 
     @Override
-    public synchronized void purgeExpired() {
-        var now = System.currentTimeMillis();
-        var previous = List.copyOf(document.jailed);
-        var released = document.jailed.stream()
-                .filter(record -> record.expired(now))
-                .filter(record -> releasePlayer(record) == ReleaseOutcome.RELEASED)
-                .toList();
-        if (released.isEmpty()) return;
-
-        document.jailed.removeAll(released);
-        if (!save()) restore(document.jailed, previous);
+    public CompletableFuture<Integer> purgeExpired() {
+        final List<JailedPlayer> expired;
+        synchronized (this) {
+            var now = System.currentTimeMillis();
+            expired = document.jailed.stream()
+                    .filter(record -> record.expired(now))
+                    .map(this::copy)
+                    .toList();
+        }
+        if (expired.isEmpty()) return CompletableFuture.completedFuture(0);
+        return releaseAll(expired).thenCompose(outcomes -> {
+            var released = outcomes.stream()
+                    .filter(outcome -> outcome.result() == ReleaseResult.RELEASED)
+                    .map(outcome -> outcome.record().uuid)
+                    .toList();
+            if (released.isEmpty()) return CompletableFuture.completedFuture(0);
+            var result = new CompletableFuture<Integer>();
+            enqueue(current -> {
+                current.jailed.removeIf(record -> released.contains(record.uuid));
+                return new Mutation<>(current, released.size());
+            }, result);
+            return result;
+        });
     }
 
-    private ReleaseOutcome releasePlayer(JailedPlayer record) {
-        if (!config.teleportOnJailRelease || record.returnLocation == null) {
-            return ReleaseOutcome.RELEASED;
-        }
+    private JailedPlayer copy(JailedPlayer source) {
+        var target = new JailedPlayer();
+        target.uuid = source.uuid;
+        target.name = source.name;
+        target.jail = source.jail;
+        target.reason = source.reason;
+        target.actor = source.actor;
+        target.createdAt = source.createdAt;
+        target.expiresAt = source.expiresAt;
+        target.returnLocation = source.returnLocation == null ? null : copy(source.returnLocation);
+        return target;
+    }
 
+    private CompletableFuture<AdminResult> mutate(Function<JailDocument, AdminResult> operation) {
+        var result = new CompletableFuture<AdminResult>();
+        enqueue(current -> new Mutation<>(current, operation.apply(current)), result);
+        return result;
+    }
+
+    private CompletableFuture<List<ReleaseAttempt>> releaseAll(List<JailedPlayer> records) {
+        var futures = records.stream()
+                .map(record -> releasePlayer(record)
+                        .thenApply(result -> new ReleaseAttempt(record, result)))
+                .toList();
+        CompletableFuture<List<ReleaseAttempt>> combined =
+                CompletableFuture.completedFuture(List.of());
+        for (var future : futures) {
+            combined = combined.thenCombine(future, (results, attempt) -> {
+                var next = new ArrayList<ReleaseAttempt>(results.size() + 1);
+                next.addAll(results);
+                next.add(attempt);
+                return List.copyOf(next);
+            });
+        }
+        return combined;
+    }
+
+    private CellLocation copy(CellLocation source) {
+        return new CellLocation(source.world, source.x, source.y, source.z, source.yaw, source.pitch);
+    }
+
+    private synchronized <T> void enqueue(
+            Function<JailDocument, Mutation<T>> operation,
+            CompletableFuture<T> result
+    ) {
+        mutationTail = mutationTail.handle((ignored, failure) -> null)
+                .thenCompose(ignored -> {
+                    JailDocument current;
+                    synchronized (this) {
+                        current = copy(document);
+                    }
+                    final Mutation<T> mutation;
+                    try {
+                        mutation = operation.apply(current);
+                    } catch (RuntimeException exception) {
+                        result.completeExceptionally(exception);
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    return storage.save(path, mutation.document()).handle((saved, failure) -> {
+                        if (failure == null) {
+                            synchronized (this) {
+                                document = mutation.document();
+                            }
+                            result.complete(mutation.result());
+                        } else if (mutation.result() instanceof AdminResult) {
+                            @SuppressWarnings("unchecked")
+                            var failureResult = (T) AdminResult.failure(
+                                    AdminStatus.PERSISTENCE_FAILURE, "service.admin.persistence-failed");
+                            result.complete(failureResult);
+                        } else {
+                            result.completeExceptionally(failure);
+                        }
+                        return (Void) null;
+                    });
+                });
+        mutationTail.whenComplete((ignored, failure) -> {
+            if (failure != null) result.completeExceptionally(failure);
+        });
+    }
+
+    private CompletableFuture<ReleaseResult> releasePlayer(JailedPlayer record) {
+        if (!config.teleportOnJailRelease || record.returnLocation == null) {
+            return CompletableFuture.completedFuture(ReleaseResult.RELEASED);
+        }
         var player = platform.onlinePlayers().stream()
                 .filter(online -> online.uuid().equals(record.uuid))
                 .findFirst();
-        if (player.isEmpty()) return ReleaseOutcome.PENDING;
+        if (player.isEmpty()) return CompletableFuture.completedFuture(ReleaseResult.PENDING);
         return teleport(player.orElseThrow(), record.returnLocation)
-                ? ReleaseOutcome.RELEASED
-                : ReleaseOutcome.FAILED;
+                .handle((success, failure) -> failure == null && success
+                        ? ReleaseResult.RELEASED
+                        : ReleaseResult.FAILED);
     }
 
-    private boolean teleport(CellPlayer player, CellLocation location) {
-        try {
-            return platform.teleport(player, location).join();
-        } catch (RuntimeException _) {
-            return false;
-        }
+    private JailDocument copy(JailDocument source) {
+        var target = new JailDocument();
+        target.jails = source.jails.stream()
+                .map(this::copy)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        target.jailed = source.jailed.stream()
+                .map(this::copy)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        return target;
     }
 
-    private String normalize(String name) {
-        return name.trim().toLowerCase(Locale.ROOT);
+    private CompletableFuture<Boolean> teleport(CellPlayer player, CellLocation location) {
+        return platform.callOnServerThread(() -> platform.teleport(player, copy(location)))
+                .thenCompose(Function.identity());
     }
 
-    private boolean save() {
-        try {
-            storage.save(path, document).join();
-            return true;
-        } catch (RuntimeException _) {
-            return false;
-        }
+    private Jail copy(Jail source) {
+        var target = new Jail();
+        target.name = source.name;
+        target.location = copy(source.location);
+        target.createdBy = source.createdBy;
+        target.createdAt = source.createdAt;
+        return target;
     }
 
-    private <T> void restore(List<T> target, List<T> snapshot) {
-        target.clear();
-        target.addAll(snapshot);
-    }
-
-    private enum ReleaseOutcome {
-
+    private enum ReleaseResult {
         RELEASED,
         PENDING,
         FAILED
-
     }
 
     private record ReleaseAttempt(
             JailedPlayer record,
-            ReleaseOutcome outcome
+            ReleaseResult result
+    ) {
+
+    }
+
+    private record Mutation<T>(
+            JailDocument document,
+            T result
     ) {
 
     }

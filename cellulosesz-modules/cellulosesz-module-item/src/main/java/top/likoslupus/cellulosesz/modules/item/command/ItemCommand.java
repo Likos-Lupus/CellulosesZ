@@ -54,6 +54,10 @@ public final class ItemCommand extends AbstractItemCommand {
             return 0;
         }
 
+        if (!allowSpawn(invocation, descriptor.get(), "cellulosesz.item.spawn")) {
+            return 0;
+        }
+
         if (!items.give(self.get(), descriptor.get())) {
             invocation.errorKey("commands.item.item-command.error.2");
             return 0;

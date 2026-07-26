@@ -58,20 +58,24 @@ public final class IgnoreCommand extends AbstractMessagingCommand {
         var target = uuid(invocation, args[0]);
         if (self.isEmpty() || target.isEmpty()) return 0;
 
-        var nowIgnored = !privateMessages.ignored(self.get().uuid(), target.get());
-        try {
-            privateMessages.setIgnored(self.get().uuid(), target.get(), nowIgnored);
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.user.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                nowIgnored
-                        ? "commands.messaging.ignore-enabled"
-                        : "commands.messaging.ignore-disabled",
-                Map.of("player", args[0])
-        );
+        privateMessages.ignored(self.orElseThrow().uuid(), target.orElseThrow())
+                .whenComplete((currentlyIgnored, loadFailure) -> {
+                    if (loadFailure != null) {
+                        invocation.errorKey("service.user.persistence-failed");
+                        return;
+                    }
+                    var nowIgnored = !currentlyIgnored;
+                    privateMessages.setIgnored(self.orElseThrow().uuid(), target.orElseThrow(), nowIgnored)
+                            .whenComplete((_, saveFailure) -> {
+                                if (saveFailure != null) invocation.errorKey("service.user.persistence-failed");
+                                else invocation.replyKey(
+                                        nowIgnored
+                                                ? "commands.messaging.ignore-enabled"
+                                                : "commands.messaging.ignore-disabled",
+                                        Map.of("player", args[0])
+                                );
+                            });
+                });
         return 1;
     }
 

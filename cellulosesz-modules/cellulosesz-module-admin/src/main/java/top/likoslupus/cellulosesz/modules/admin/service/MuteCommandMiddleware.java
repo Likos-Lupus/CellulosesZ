@@ -14,7 +14,7 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
 
     private final PlatformService platform;
     private final MuteService mutes;
-    private final AdminConfig config;
+    private volatile AdminConfig config;
 
     public MuteCommandMiddleware(
             PlatformService platform,
@@ -23,6 +23,10 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
     ) {
         this.platform = platform;
         this.mutes = mutes;
+        this.config = config;
+    }
+
+    public void configure(AdminConfig config) {
         this.config = config;
     }
 

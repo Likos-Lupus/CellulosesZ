@@ -9,6 +9,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
+import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
@@ -24,6 +25,7 @@ import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.Objects;
 
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
@@ -55,6 +57,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         vanillaCommands = new FabricVanillaCommandBridge();
         platform = new FabricPlatformService(vanillaCommands);
+        validatePlatformCapabilities(platform);
 
         bootstrap.registerService(PlatformService.class, platform);
         bootstrap.registerService(FabricPlatformService.class, platform);
@@ -95,9 +98,13 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 bootstrap.onServerStarted(server)
         );
-        ServerLifecycleEvents.SERVER_STOPPING.register(server ->
-                bootstrap.onServerStopping(server)
-        );
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            try {
+                bootstrap.onServerStopping(server);
+            } finally {
+                platform.close();
+            }
+        });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             bootstrap.tick();
             gameplayHooks.tick(server);
@@ -113,6 +120,15 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
             FabricDisplayNameBridge.clear(handler.getPlayer().getUUID());
             bootstrap.onPlayerDisconnect(handler.getPlayer());
         });
+    }
+
+
+    private static void validatePlatformCapabilities(PlatformService platform) {
+        var required = EnumSet.allOf(PlatformCapability.class);
+        required.removeAll(platform.capabilities());
+        if (!required.isEmpty()) {
+            throw new IllegalStateException("Fabric platform is missing required capabilities: " + required);
+        }
     }
 
     private PermissionBackend permissionBackend() {

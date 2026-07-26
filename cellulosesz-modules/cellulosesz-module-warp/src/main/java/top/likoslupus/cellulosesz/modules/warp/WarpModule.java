@@ -75,7 +75,7 @@ public final class WarpModule implements CellulosesZModule {
 
         var suggestions = context.services().require(CommandSuggestionRegistry.class);
         var warpNames = (Function<CommandSuggestionContext, Collection<String>>) _ ->
-                warps.warps().join().stream()
+                warps.cachedWarps().stream()
                         .map(warp -> warp.name)
                         .toList();
         suggestions.register("warp", "name", warpNames);
@@ -86,7 +86,10 @@ public final class WarpModule implements CellulosesZModule {
     @Override
     public void onReload(ModuleContext context) {
         requireNonNull(warps, "WarpService has not been initialized");
-        warps.reload().join();
+        warps.reload().whenComplete((_, failure) -> {
+            if (failure != null)
+                context.logger().error("Failed to reload warp data; retaining the previous snapshot", failure);
+        });
     }
 
 }

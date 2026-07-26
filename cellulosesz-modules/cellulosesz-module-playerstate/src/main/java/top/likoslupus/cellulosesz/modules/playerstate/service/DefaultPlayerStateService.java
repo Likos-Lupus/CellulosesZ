@@ -10,142 +10,145 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class DefaultPlayerStateService implements PlayerStateService {
 
     private final PlatformService platform;
     private final UserService users;
     private final DisplayNameService displayNames;
+    private final ConcurrentHashMap<UUID, Long> lastActivityNanos = new ConcurrentHashMap<>();
 
-    public DefaultPlayerStateService(
-            PlatformService platform,
-            UserService users,
-            DisplayNameService displayNames
-    ) {
+    public DefaultPlayerStateService(PlatformService platform, UserService users, DisplayNameService displayNames) {
         this.platform = platform;
         this.users = users;
         this.displayNames = displayNames;
     }
 
     @Override
-    public AdminResult setFlying(CellPlayer player, boolean enabled) {
-        if (!platform.setFlying(player, enabled)) {
-            return AdminResult.failure("service.playerstate.fly-failed");
-        }
-        users.cached(player.uuid()).ifPresent(user -> {
+    public CompletableFuture<AdminResult> setFlying(CellPlayer player, boolean enabled) {
+        return users.update(player.uuid(), user -> {
+            var previous = user.state.flying;
             user.state.flying = enabled;
-            users.markDirty(player.uuid());
-        });
-        return AdminResult.success(
-                enabled ? "service.playerstate.fly-enabled" : "service.playerstate.fly-disabled",
-                Map.of("player", displayNames.plainDisplayName(player))
-        );
+            return previous;
+        }).thenCompose(previous -> platform.callOnServerThread(() -> platform.setFlying(player, enabled))
+                .thenCompose(applied -> {
+                    if (applied) return CompletableFuture.completedFuture(AdminResult.success(
+                            enabled ? "service.playerstate.fly-enabled" : "service.playerstate.fly-disabled",
+                            Map.of("player", displayNames.plainDisplayName(player))
+                    ));
+                    return users.updateVoid(player.uuid(), user -> {
+                        if (user.state.flying == enabled) user.state.flying = previous;
+                    }).handle((_, rollbackFailure) -> rollbackFailure == null
+                            ? AdminResult.failure("service.playerstate.fly-failed")
+                            : AdminResult.failure("service.user.rollback-failed"));
+                })).exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
     }
 
     @Override
-    public AdminResult setGod(CellPlayer player, boolean enabled) {
-        if (!platform.setInvulnerable(player, enabled)) {
-            return AdminResult.failure("service.playerstate.god-failed");
-        }
-        users.cached(player.uuid()).ifPresent(user -> {
+    public CompletableFuture<AdminResult> setGod(CellPlayer player, boolean enabled) {
+        return users.update(player.uuid(), user -> {
+            var previous = user.state.god;
             user.state.god = enabled;
-            users.markDirty(player.uuid());
-        });
-        return AdminResult.success(
-                enabled ? "service.playerstate.god-enabled" : "service.playerstate.god-disabled",
-                Map.of("player", displayNames.plainDisplayName(player))
-        );
+            return previous;
+        }).thenCompose(previous -> platform.callOnServerThread(() -> platform.setInvulnerable(player, enabled))
+                .thenCompose(applied -> {
+                    if (applied) return CompletableFuture.completedFuture(AdminResult.success(
+                            enabled ? "service.playerstate.god-enabled" : "service.playerstate.god-disabled",
+                            Map.of("player", displayNames.plainDisplayName(player))
+                    ));
+                    return users.updateVoid(player.uuid(), user -> {
+                        if (user.state.god == enabled) user.state.god = previous;
+                    }).handle((_, rollbackFailure) -> rollbackFailure == null
+                            ? AdminResult.failure("service.playerstate.god-failed")
+                            : AdminResult.failure("service.user.rollback-failed"));
+                })).exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
     }
 
     @Override
     public AdminResult heal(CellPlayer player) {
         return platform.heal(player) ? AdminResult.success(
-                "service.playerstate.heal-success",
-                Map.of("player", displayNames.plainDisplayName(player))
+                "service.playerstate.heal-success", Map.of("player", displayNames.plainDisplayName(player))
         ) : AdminResult.failure(
-                "service.playerstate.heal-failed",
-                Map.of("player", displayNames.plainDisplayName(player))
+                "service.playerstate.heal-failed", Map.of("player", displayNames.plainDisplayName(player))
         );
     }
 
     @Override
     public AdminResult feed(CellPlayer player) {
         return platform.feed(player) ? AdminResult.success(
-                "service.playerstate.feed-success",
-                Map.of("player", displayNames.plainDisplayName(player))
+                "service.playerstate.feed-success", Map.of("player", displayNames.plainDisplayName(player))
         ) : AdminResult.failure(
-                "service.playerstate.feed-failed",
-                Map.of("player", displayNames.plainDisplayName(player))
+                "service.playerstate.feed-failed", Map.of("player", displayNames.plainDisplayName(player))
         );
     }
 
     @Override
-    public AdminResult setAfk(
-            UUID uuid,
-            String name,
-            boolean afk
-    ) {
-        users.cached(uuid).ifPresent(user -> {
+    public CompletableFuture<AdminResult> setAfk(UUID uuid, String name, boolean afk) {
+        var now = System.currentTimeMillis();
+        return users.updateVoid(uuid, user -> {
             user.state.afk = afk;
-            users.markDirty(uuid);
-        });
-        return AdminResult.success(
-                afk ? "service.playerstate.afk-enabled" : "service.playerstate.afk-disabled",
-                Map.of("player", name)
-        );
+            user.timestamps.lastActivityAt = now;
+        }).thenApply(_ -> {
+            lastActivityNanos.put(uuid, System.nanoTime());
+            return AdminResult.success(
+                    afk ? "service.playerstate.afk-enabled" : "service.playerstate.afk-disabled",
+                    Map.of("player", name)
+            );
+        }).exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
     }
 
     @Override
     public boolean afk(UUID uuid) {
-        return users.cached(uuid)
-                .map(user -> user.state.afk)
-                .orElse(false);
+        return users.cached(uuid).map(user -> user.state.afk).orElse(false);
     }
 
     @Override
-    public AdminResult setNick(
-            UUID uuid,
-            String name,
-            Optional<String> nickname
-    ) {
-        var online = platform.onlinePlayers().stream()
-                .filter(player -> player.uuid().equals(uuid))
-                .findFirst();
+    public void activity(UUID uuid, long timestamp) {
+        lastActivityNanos.put(uuid, System.nanoTime());
+        var user = users.cached(uuid).orElse(null);
+        if (user == null) return;
+        user.timestamps.lastActivityAt = Math.max(user.timestamps.lastActivityAt, timestamp);
+        users.markDirty(uuid);
+    }
+
+    @Override
+    public long lastActivity(UUID uuid) {
+        return users.cached(uuid).map(user -> user.timestamps.lastActivityAt).orElse(0L);
+    }
+
+    @Override
+    public long idleMillis(UUID uuid) {
+        var started = lastActivityNanos.get(uuid);
+        if (started == null) return -1L;
+        return Math.max(0L, (System.nanoTime() - started) / 1_000_000L);
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> setNick(UUID uuid, String name, Optional<String> nickname) {
+        var online = platform.onlinePlayers().stream().filter(player -> player.uuid().equals(uuid)).findFirst();
         var normalized = nickname.filter(value -> !value.isBlank());
         if (online.isPresent() && normalized.isPresent()) {
-            var sanitized = displayNames.sanitizeNickname(online.get(), normalized.get());
-            if (!displayNames.validNickname(online.get(), sanitized)) {
-                return AdminResult.failure("player.nick-invalid");
+            var sanitized = displayNames.sanitizeNickname(online.orElseThrow(), normalized.orElseThrow());
+            if (!displayNames.validNickname(online.orElseThrow(), sanitized)) {
+                return CompletableFuture.completedFuture(AdminResult.failure("player.nick-invalid"));
             }
             normalized = Optional.of(sanitized);
         }
-
         var stored = normalized;
-        var user = users.load(uuid).join();
-        var previous = user.state.nickname;
-        user.state.nickname = stored.orElse(null);
-        users.markDirty(uuid);
-        try {
-            users.save(uuid).join();
-        } catch (RuntimeException _) {
-            user.state.nickname = previous;
-            users.markDirty(uuid);
-            return AdminResult.failure("service.user.persistence-failed");
-        }
-        online.ifPresent(displayNames::refresh);
-
-        return stored
-                .map(value -> AdminResult.success(
-                        "player.nick-set",
-                        Map.of("nickname", value)
-                ))
-                .orElseGet(() -> AdminResult.success("player.nick-cleared"));
+        return users.updateVoid(uuid, user -> user.state.nickname = stored.orElse(null))
+                .thenCompose(_ -> platform.callOnServerThread(() -> {
+                    online.ifPresent(displayNames::refresh);
+                    return stored.<AdminResult>map(value -> AdminResult.success("player.nick-set", Map.of("nickname", value)))
+                            .orElseGet(() -> AdminResult.success("player.nick-cleared"));
+                }))
+                .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
     }
 
     @Override
     public Optional<String> nick(UUID uuid) {
-        return users.cached(uuid)
-                .flatMap(user -> Optional.ofNullable(user.state.nickname));
+        return users.cached(uuid).flatMap(user -> Optional.ofNullable(user.state.nickname));
     }
 
 }

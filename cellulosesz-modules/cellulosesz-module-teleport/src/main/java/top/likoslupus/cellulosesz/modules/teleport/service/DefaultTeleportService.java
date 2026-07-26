@@ -103,65 +103,45 @@ public final class DefaultTeleportService implements TeleportService {
         }
 
         var previousBack = backLocations.location(player.uuid());
-        if (options.rememberBack) {
-            try {
-                // Pre-commit the return location. A storage failure aborts before the platform can move the player,
-                // while a failed platform teleport restores the previous value below.
-                backLocations.remember(player.uuid(), origin);
-            } catch (RuntimeException _) {
+        var precommit = options.rememberBack
+                ? backLocations.remember(player.uuid(), origin)
+                : CompletableFuture.completedFuture(null);
+
+        precommit.whenComplete((unused, persistenceFailure) -> {
+            if (persistenceFailure != null) {
                 future.complete(TeleportResult.failed(
                         "service.teleport.back-persistence-failed",
                         target
                 ));
                 return;
             }
-        }
-
-        CompletableFuture<Boolean> platformTeleport;
-        try {
-            platformTeleport = platform.teleport(player, target);
-        } catch (RuntimeException exception) {
-            if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
-                future.complete(TeleportResult.failed(
-                        "service.teleport.back-rollback-failed",
-                        target
-                ));
-                return;
-            }
-            future.complete(TeleportResult.failed(
-                    "service.teleport.exception",
-                    Map.of("reason", String.valueOf(exception.getMessage())),
-                    target
-            ));
-            return;
-        }
-
-        platformTeleport.whenComplete((success, throwable) -> {
-            if (throwable != null) {
-                if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
-                    future.complete(TeleportResult.failed(
-                            "service.teleport.back-rollback-failed",
-                            target
-                    ));
-                    return;
-                }
-                future.complete(TeleportResult.failed(
-                        "service.teleport.exception",
-                        Map.of("reason", String.valueOf(throwable.getMessage())),
-                        target
-                ));
-            } else if (Boolean.TRUE.equals(success)) {
-                future.complete(TeleportResult.success(target));
-            } else {
-                if (!restoreBack(player.uuid(), previousBack, options.rememberBack)) {
-                    future.complete(TeleportResult.failed(
-                            "service.teleport.back-rollback-failed",
-                            target
-                    ));
-                    return;
-                }
-                future.complete(TeleportResult.failed("service.teleport.failed", target));
-            }
+            platform.callOnServerThread(() -> platform.teleport(player, target))
+                    .thenCompose(value -> value)
+                    .handle((success, failure) -> new PlatformOutcome(Boolean.TRUE.equals(success), failure))
+                    .thenCompose(outcome -> {
+                        if (outcome.success()) return CompletableFuture.completedFuture(outcome);
+                        return restoreBack(player.uuid(), previousBack, options.rememberBack)
+                                .handle((rollbackUnused, rollbackFailure) -> outcome.withRollbackFailure(rollbackFailure));
+                    })
+                    .whenComplete((outcome, chainFailure) -> {
+                        if (future.isDone()) return;
+                        if (chainFailure != null || outcome.rollbackFailure() != null) {
+                            future.complete(TeleportResult.failed(
+                                    "service.teleport.back-rollback-failed",
+                                    target
+                            ));
+                        } else if (outcome.success()) {
+                            future.complete(TeleportResult.success(target));
+                        } else if (outcome.failure() != null) {
+                            future.complete(TeleportResult.failed(
+                                    "service.teleport.exception",
+                                    Map.of("reason", failureMessage(outcome.failure())),
+                                    target
+                            ));
+                        } else {
+                            future.complete(TeleportResult.failed("service.teleport.failed", target));
+                        }
+                    });
         });
     }
 
@@ -170,22 +150,24 @@ public final class DefaultTeleportService implements TeleportService {
         pending.future.complete(TeleportResult.failed(messageKey, pending.destination));
     }
 
-    private boolean restoreBack(
+    private CompletableFuture<Void> restoreBack(
             UUID uuid,
             Optional<CellLocation> previous,
             boolean changed
     ) {
-        if (!changed) return true;
-        try {
-            if (previous.isPresent()) {
-                backLocations.remember(uuid, previous.orElseThrow());
-            } else {
-                backLocations.forget(uuid);
-            }
-            return true;
-        } catch (RuntimeException _) {
-            return false;
+        if (!changed) return CompletableFuture.completedFuture(null);
+        return previous.isPresent()
+                ? backLocations.remember(uuid, previous.orElseThrow())
+                : backLocations.forget(uuid);
+    }
+
+    private String failureMessage(Throwable failure) {
+        var cause = failure;
+        while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
         }
+        var message = cause.getMessage();
+        return message == null || message.isBlank() ? cause.getClass().getSimpleName() : message;
     }
 
     @Override
@@ -203,18 +185,34 @@ public final class DefaultTeleportService implements TeleportService {
     }
 
     @Override
-    public void rememberBackLocation(CellPlayer player) {
-        backLocations.remember(player);
+    public CompletableFuture<Void> rememberBackLocation(CellPlayer player) {
+        return backLocations.remember(player);
     }
 
     @Override
-    public void rememberBackLocation(UUID uuid, CellLocation location) {
-        backLocations.remember(uuid, location);
+    public CompletableFuture<Void> rememberBackLocation(UUID uuid, CellLocation location) {
+        return backLocations.remember(uuid, location);
     }
 
     @Override
     public Optional<CellLocation> backLocation(UUID uuid) {
         return backLocations.location(uuid);
+    }
+
+    private record PlatformOutcome(
+            boolean success,
+            @Nullable Throwable failure,
+            @Nullable Throwable rollbackFailure
+    ) {
+
+        private PlatformOutcome(boolean success, @Nullable Throwable failure) {
+            this(success, failure, null);
+        }
+
+        private PlatformOutcome withRollbackFailure(@Nullable Throwable rollbackFailure) {
+            return new PlatformOutcome(success, failure, rollbackFailure);
+        }
+
     }
 
     private record PendingWarmup(

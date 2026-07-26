@@ -7,5 +7,6 @@ public final class CommandConfig {
 
     public Set<String> disabledCommands = new LinkedHashSet<>();
     public boolean auditCommands = true;
+    public int helpPageSize = 10;
 
 }

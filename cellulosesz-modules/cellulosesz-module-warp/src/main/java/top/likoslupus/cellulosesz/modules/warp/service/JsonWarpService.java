@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -18,12 +17,9 @@ public final class JsonWarpService implements WarpService {
     private final Path warpsDirectory;
     private final WarpConfig config;
     private final ConcurrentHashMap<String, Warp> warps = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<Void>> writeTails = new ConcurrentHashMap<>();
 
-    public JsonWarpService(
-            StorageService storage,
-            Path warpsDirectory,
-            WarpConfig config
-    ) {
+    public JsonWarpService(StorageService storage, Path warpsDirectory, WarpConfig config) {
         this.storage = storage;
         this.warpsDirectory = warpsDirectory;
         this.config = config;
@@ -31,71 +27,42 @@ public final class JsonWarpService implements WarpService {
 
     @Override
     public CompletableFuture<List<Warp>> warps() {
-        if (warps.isEmpty()) {
-            return reload().thenApply(_ -> sorted());
-        }
         return CompletableFuture.completedFuture(sorted());
     }
 
     @Override
-    public CompletableFuture<Optional<Warp>> warp(String name) {
-        var key = normalize(name);
-        var cached = warps.get(key);
-
-        if (cached != null) {
-            return CompletableFuture.completedFuture(Optional.of(cached));
-        }
-        if (Files.notExists(path(key))) {
-            return CompletableFuture.completedFuture(Optional.empty());
-        }
-
-        return storage.load(path(key), Warp.class, Warp::new)
-                .thenApply(warp -> {
-                    if (warp.name.isBlank()) return Optional.empty();
-
-                    warps.put(normalize(warp.name), warp);
-                    return Optional.of(warp);
-                });
+    public List<Warp> cachedWarps() {
+        return sorted();
     }
 
     @Override
-    public CompletableFuture<Warp> setWarp(
-            String name,
-            CellLocation location,
-            UUID creator
-    ) {
+    public CompletableFuture<Optional<Warp>> warp(String name) {
+        return CompletableFuture.completedFuture(cachedWarp(name));
+    }
+
+    @Override
+    public Optional<Warp> cachedWarp(String name) {
+        return Optional.ofNullable(warps.get(normalize(name)));
+    }
+
+    @Override
+    public CompletableFuture<Warp> setWarp(String name, CellLocation location, UUID creator) {
         var key = normalize(name);
-        var warp = new Warp(key, location);
-
-        warp.createdBy = creator;
-        var previous = warps.put(key, warp);
-
-        return storage.save(path(key), warp)
-                .thenApply(_ -> warp)
-                .whenComplete((_, exception) -> {
-                    if (exception == null) return;
-                    if (previous == null) {
-                        warps.remove(key, warp);
-                    } else {
-                        warps.replace(key, warp, previous);
-                    }
-                });
+        var replacement = new Warp(key, location);
+        replacement.createdBy = creator;
+        return enqueue(key, () -> storage.save(path(key), replacement).thenApply(_ -> {
+            warps.put(key, replacement);
+            return replacement;
+        }));
     }
 
     @Override
     public CompletableFuture<Boolean> deleteWarp(String name) {
         var key = normalize(name);
-        var previous = warps.remove(key);
-
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                var deleted = Files.deleteIfExists(path(key));
-                return deleted || previous != null;
-            } catch (Exception exception) {
-                if (previous != null) warps.putIfAbsent(key, previous);
-                throw new java.util.concurrent.CompletionException(exception);
-            }
-        });
+        return enqueue(key, () -> storage.delete(path(key)).thenApply(deleted -> {
+            var removed = warps.remove(key);
+            return deleted || removed != null;
+        }));
     }
 
     @Override
@@ -106,29 +73,53 @@ public final class JsonWarpService implements WarpService {
 
     @Override
     public CompletableFuture<Void> reload() {
-        return storage.loadDirectory(warpsDirectory, Warp.class)
-                .thenAccept(loaded -> {
-                    var replacement = new LinkedHashMap<String, Warp>();
-                    loaded.stream()
-                            .filter(warp -> !warp.name.isBlank())
-                            .forEach(warp -> replacement.put(normalize(warp.name), warp));
-                    warps.clear();
-                    warps.putAll(replacement);
-                });
+        return storage.loadDirectory(warpsDirectory, Warp.class).thenAccept(loaded -> {
+            var replacement = new LinkedHashMap<String, Warp>();
+            for (var warp : loaded) {
+                validate(warp);
+                replacement.put(normalize(warp.name), warp);
+            }
+            warps.clear();
+            warps.putAll(replacement);
+        });
+    }
+
+    private void validate(Warp warp) {
+        if (warp.name.isBlank()) throw new IllegalArgumentException("Warp name must not be blank");
+        if (warp.location == null) throw new IllegalArgumentException("Warp location must not be null");
+    }
+
+    private <T> CompletableFuture<T> enqueue(String key, java.util.function.Supplier<CompletableFuture<T>> operation) {
+        var result = new CompletableFuture<T>();
+        writeTails.compute(key, (_, previous) -> {
+            var tail = previous == null ? CompletableFuture.completedFuture(null) : previous;
+            var next = tail.handle((_, _) -> null).thenCompose(_ -> operation.get().thenAccept(result::complete));
+            next.whenComplete((_, failure) -> {
+                writeTails.remove(key, next);
+                if (failure != null) result.completeExceptionally(unwrap(failure));
+            });
+            return next;
+        });
+        return result;
     }
 
     private Path path(String name) {
         return warpsDirectory.resolve(normalize(name) + ".json");
     }
 
-    private List<Warp> sorted() {
-        return warps.values().stream()
-                .sorted(Comparator.comparing(warp -> warp.name))
-                .toList();
+    private Throwable unwrap(Throwable failure) {
+        return failure instanceof java.util.concurrent.CompletionException completion
+                && completion.getCause() != null ? completion.getCause() : failure;
     }
 
     private String normalize(String name) {
-        return name.trim().toLowerCase(Locale.ROOT);
+        var normalized = name.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) throw new IllegalArgumentException("Warp name must not be blank");
+        return normalized;
+    }
+
+    private List<Warp> sorted() {
+        return warps.values().stream().sorted(Comparator.comparing(warp -> warp.name)).toList();
     }
 
 }

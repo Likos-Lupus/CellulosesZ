@@ -12,7 +12,6 @@ import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public final class WarpCommand extends AbstractWarpCommand {
 
@@ -58,94 +57,63 @@ public final class WarpCommand extends AbstractWarpCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
-        if (self.isEmpty()) {
-            return 0;
-        }
-
+        if (self.isEmpty()) return 0;
+        var player = self.orElseThrow();
         var args = invocation.args();
 
-        if (invocation.label().equalsIgnoreCase("warps")
-                || args.length == 0
-                || (args.length == 1 && numeric(args[0]))
-        ) {
-            return list(
-                    invocation,
-                    args.length == 1 && numeric(args[0])
-                            ? Integer.parseInt(args[0])
-                            : 1
-            );
+        if (invocation.label().equalsIgnoreCase("warps") || args.length == 0
+                || (args.length == 1 && numeric(args[0]))) {
+            var page = args.length == 1 && numeric(args[0]) ? Integer.parseInt(args[0]) : 1;
+            list(invocation, page);
+            return 1;
         }
-
         if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.warp.warp-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
-        Optional<Warp> warp;
-        try {
-            warp = warps.warp(args[0]).join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.warp.persistence-failed");
-            return 0;
-        }
-
-        if (warp.isEmpty()) {
-            invocation.errorKey(
-                    "commands.warp.warp-command.error.2",
-                    Map.of("value0", args[0])
-            );
-            return 0;
-        }
-
-        if (!allowed(invocation, warp.get())) {
-            invocation.errorKey("commands.warp.warp-command.error.3");
-            return 0;
-        }
-
         if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown")) {
-            var remaining = cooldowns.remaining(
-                    self.get().uuid(),
-                    COOLDOWN_KEY
-            );
+            var remaining = cooldowns.remaining(player.uuid(), COOLDOWN_KEY);
             if (!remaining.isZero()) {
-                invocation.errorKey(
-                        "commands.warp.cooldown",
-                        Map.of(
-                                "seconds",
-                                Math.max(1L, remaining.toSeconds() + (remaining.toMillisPart() > 0 ? 1 : 0))
-                        )
-                );
+                invocation.errorKey("commands.warp.cooldown", Map.of("seconds", Math.max(1L, remaining.toSeconds() + (
+                        remaining.toMillisPart() > 0
+                                ? 1
+                                : 0))));
                 return 0;
             }
         }
-
-        teleports.teleport(
-                self.get(),
-                warp.get().location,
-                options(invocation)
-        ).thenAccept(result -> {
-            if (result.success()) {
-                if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown")
-                        && config.teleport.cooldownSeconds > 0
-                ) {
-                    cooldowns.start(
-                            self.get().uuid(),
-                            COOLDOWN_KEY,
-                            Duration.ofSeconds(config.teleport.cooldownSeconds)
-                    );
+        try {
+            warps.warp(args[0]).whenComplete((warp, failure) -> {
+                if (failure != null) {
+                    invocation.errorKey("service.warp.persistence-failed");
+                    return;
                 }
-                invocation.replyKey(
-                        "commands.warp.warp-command.reply.1",
-                        Map.of("value0", warp.get().displayName)
-                );
-            } else {
-                invocation.error(result.message());
-            }
-        });
-        return 1;
+                if (warp.isEmpty()) {
+                    invocation.errorKey("commands.warp.warp-command.error.2", Map.of("value0", args[0]));
+                    return;
+                }
+                if (!allowed(invocation, warp.orElseThrow())) {
+                    invocation.errorKey("commands.warp.warp-command.error.3");
+                    return;
+                }
+                platform.callOnServerThread(() -> teleports.teleport(player, warp.orElseThrow().location, options(invocation)))
+                        .thenCompose(value -> value)
+                        .whenComplete((result, teleportFailure) -> {
+                            if (teleportFailure != null) {
+                                invocation.errorKey("commands.teleport.request.failed", Map.of("reason", teleportFailure.getClass()
+                                        .getSimpleName()));
+                            } else if (result.success()) {
+                                if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
+                                    cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
+                                }
+                                invocation.replyKey("commands.warp.warp-command.reply.1", Map.of("value0", warp.orElseThrow().displayName));
+                            } else invocation.error(result.message());
+                        });
+            });
+            return 1;
+        } catch (IllegalArgumentException _) {
+            invocation.errorKey("commands.warp.warp-command.error.2", Map.of("value0", args[0]));
+            return 0;
+        }
     }
 
     private boolean numeric(String value) {
@@ -156,39 +124,37 @@ public final class WarpCommand extends AbstractWarpCommand {
         }
     }
 
-    private int list(CommandInvocation invocation, int requestedPage) {
-        List<Warp> available;
-        try {
-            available = warps.warps().join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.warp.persistence-failed");
-            return 0;
-        }
-
-        var visible = available.stream()
-                .filter(warp -> !config.list.hideNoPermission || allowed(invocation, warp))
-                .toList();
-        if (visible.isEmpty()) {
-            invocation.replyKey("commands.warp.list-empty");
-            return 1;
-        }
-
-        var pageSize = Math.max(1, config.list.pageSize);
-        var pages = Math.max(1, (visible.size() + pageSize - 1) / pageSize);
-        var page = Math.clamp(requestedPage, 1, pages);
-        var from = (page - 1) * pageSize;
-        var names = visible.subList(from, Math.min(visible.size(), from + pageSize)).stream()
-                .map(warp -> warp.displayName)
-                .toList();
-        invocation.replyKey(
-                "commands.warp.list-page",
-                Map.of(
-                        "warps", String.join(", ", names),
-                        "page", page,
-                        "pages", pages
-                )
-        );
-        return 1;
+    private void list(CommandInvocation invocation, int requestedPage) {
+        warps.warps().whenComplete((available, failure) -> {
+            if (failure != null) {
+                invocation.errorKey("service.warp.persistence-failed");
+                return;
+            }
+            var visible = available.stream()
+                    .filter(warp -> !config.list.hideNoPermission || allowed(invocation, warp))
+                    .toList();
+            if (visible.isEmpty()) {
+                invocation.replyKey("commands.warp.list-empty");
+                return;
+            }
+            var pageSize = Math.max(1, config.list.pageSize);
+            var pages = Math.max(1, (visible.size() + pageSize - 1) / pageSize);
+            if (requestedPage < 1 || requestedPage > pages) {
+                invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
+                return;
+            }
+            final int from;
+            try {
+                from = Math.multiplyExact(requestedPage - 1, pageSize);
+            } catch (ArithmeticException _) {
+                invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
+                return;
+            }
+            var names = visible.subList(from, Math.min(visible.size(), from + pageSize)).stream()
+                    .map(warp -> warp.displayName).toList();
+            invocation.replyKey("commands.warp.list-page", Map.of(
+                    "warps", String.join(", ", names), "page", requestedPage, "pages", pages));
+        });
     }
 
     private boolean allowed(CommandInvocation invocation, Warp warp) {

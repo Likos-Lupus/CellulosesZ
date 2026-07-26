@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * Platform-neutral description of an item stack.
  *
@@ -25,7 +27,8 @@ public class ItemDescriptor {
             String item,
             int count
     ) {
-        this.item = item;
+        this.item = requireNonNull(item, "item");
+        if (count <= 0) throw new IllegalArgumentException("count must be positive");
         this.count = count;
     }
 
@@ -34,9 +37,10 @@ public class ItemDescriptor {
             int count,
             Map<String, Object> components
     ) {
-        this.item = item;
+        this.item = requireNonNull(item, "item");
+        if (count <= 0) throw new IllegalArgumentException("count must be positive");
         this.count = count;
-        this.components = copyMap(components);
+        this.components = copyMap(requireNonNull(components, "components"));
     }
 
     private static Map<String, Object> copyMap(Map<String, Object> source) {
@@ -63,27 +67,36 @@ public class ItemDescriptor {
     }
 
     public String normalizedItem() {
-        var value = item.trim().toLowerCase();
-        if (value.isBlank()) return "minecraft:air";
-        return value.indexOf(':') < 0 ? "minecraft:" + value : value;
+        var value = requireNonNull(item, "item").trim().toLowerCase();
+        if (value.isBlank()) throw new IllegalStateException("item must not be blank");
+        return value.indexOf(':') < 0
+                ? "minecraft:" + value
+                : value;
     }
 
     public Map<String, Object> normalizedComponents() {
+        requireNonNull(components, "components");
         if (components.isEmpty()) return Map.of();
 
         var normalized = new LinkedHashMap<String, Object>();
         components.forEach((key, value) -> {
-            if (key.isBlank()) return;
+            requireNonNull(key, "component key");
+            requireNonNull(value, "component value");
+            if (key.isBlank()) throw new IllegalStateException("component key must not be blank");
             var id = key.trim().toLowerCase();
-            normalized.put(id.indexOf(':') < 0 ? "minecraft:" + id : id, deepCopy(value));
+            normalized.put(
+                    id.indexOf(':') < 0
+                            ? "minecraft:" + id
+                            : id,
+                    deepCopy(value)
+            );
         });
 
         return normalized;
     }
 
     public ItemDescriptor copy() {
-        var copy = new ItemDescriptor(normalizedItem(), count, normalizedComponents());
-        return copy;
+        return new ItemDescriptor(normalizedItem(), count, normalizedComponents());
     }
 
 }

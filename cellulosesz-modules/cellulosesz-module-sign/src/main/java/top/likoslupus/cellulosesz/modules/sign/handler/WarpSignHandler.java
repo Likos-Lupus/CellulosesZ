@@ -9,6 +9,8 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 public final class WarpSignHandler implements CellSignHandler {
 
@@ -16,14 +18,10 @@ public final class WarpSignHandler implements CellSignHandler {
     private final TeleportService teleports;
     private final PermissionService permissions;
 
-    public WarpSignHandler(
-            WarpService warps,
-            TeleportService teleports,
-            PermissionService permissions
-    ) {
-        this.warps = warps;
-        this.teleports = teleports;
-        this.permissions = permissions;
+    public WarpSignHandler(WarpService warps, TeleportService teleports, PermissionService permissions) {
+        this.warps = Objects.requireNonNull(warps, "warps");
+        this.teleports = Objects.requireNonNull(teleports, "teleports");
+        this.permissions = Objects.requireNonNull(permissions, "permissions");
     }
 
     @Override
@@ -32,31 +30,40 @@ public final class WarpSignHandler implements CellSignHandler {
     }
 
     @Override
-    public SignUseResult use(SignUseContext context) {
+    public SignUseResult validate(SignUseContext context) {
         var name = context.line(1);
         if (name.isBlank()) return SignUseResult.failure("service.sign.warp-name-required");
+        return warps.cachedWarp(name).isPresent()
+                ? SignUseResult.success("service.sign.valid")
+                : SignUseResult.failure("service.sign.warp-not-found", Map.of("warp", name));
+    }
 
-        var warp = warps.warp(name).join();
-        if (warp.isEmpty()) {
-            return SignUseResult.failure("service.sign.warp-not-found", Map.of("warp", name));
+    @Override
+    public CompletableFuture<SignUseResult> use(SignUseContext context) {
+        var name = context.line(1);
+        if (name.isBlank()) {
+            return CompletableFuture.completedFuture(SignUseResult.failure("service.sign.warp-name-required"));
         }
-
-        var requiredPermission = warps.requiredPermission(warp.get());
-        if (requiredPermission.isPresent()
-                && !permissions.has(context.player().nativeHandle(), requiredPermission.orElseThrow())
-        ) {
-            return SignUseResult.failure("service.sign.warp-no-permission");
-        }
-
-        var result = teleports.teleport(
-                context.player(),
-                warp.get().location,
-                new TeleportOptions().safe(true).warmupSeconds(0)
-        ).join();
-        return result.success() ? SignUseResult.success(
-                "service.sign.warp-success",
-                Map.of("warp", warp.get().displayName)
-        ) : SignUseResult.failure(result.message());
+        return warps.warp(name).thenCompose(warp -> {
+            if (warp.isEmpty()) {
+                return CompletableFuture.completedFuture(SignUseResult.failure(
+                        "service.sign.warp-not-found", Map.of("warp", name)));
+            }
+            var value = warp.orElseThrow();
+            var requiredPermission = warps.requiredPermission(value);
+            if (requiredPermission.isPresent()
+                    && !permissions.has(context.player().nativeHandle(), requiredPermission.orElseThrow())) {
+                return CompletableFuture.completedFuture(SignUseResult.failure("service.sign.warp-no-permission"));
+            }
+            return teleports.teleport(
+                            context.player(),
+                            value.location,
+                            new TeleportOptions().safe(true).warmupSeconds(0)
+                    )
+                    .thenApply(result -> result.success()
+                            ? SignUseResult.success("service.sign.warp-success", Map.of("warp", value.displayName))
+                            : SignUseResult.failure(result.message()));
+        });
     }
 
 }

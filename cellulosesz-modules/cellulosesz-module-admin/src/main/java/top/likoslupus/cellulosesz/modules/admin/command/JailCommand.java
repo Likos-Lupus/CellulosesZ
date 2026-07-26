@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
+import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.admin.JailService;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
@@ -60,23 +62,18 @@ public final class JailCommand extends AbstractAdminCommand {
         var target = online(invocation, args[0]);
         if (target.isEmpty()) return 0;
 
-        if (args[1].equalsIgnoreCase("off") || args[1].equalsIgnoreCase("release")) {
-            var result = jails.unjail(
+        if (args[1].equalsIgnoreCase("off")
+                || args[1].equalsIgnoreCase("release")
+        ) {
+            jails.unjail(
                     target.get().uuid(),
                     target.get().name(),
                     actor(invocation)
-            );
-            if (result.success()) {
-                invocation.reply(result.message());
-            } else {
-                invocation.error(result.message());
-            }
-            return result.success() ? 1 : 0;
+            ).whenComplete((result, failure) -> complete(invocation, result, failure));
+            return 1;
         }
 
-        var duration = config.defaultJailSeconds <= 0
-                ? null
-                : config.defaultJailSeconds * 1000L;
+        @Nullable Long duration = defaultDuration();
         var reasonStart = 2;
         if (args.length >= 3) {
             var parsed = DurationParser.parseMillis(args[2]);
@@ -86,19 +83,53 @@ public final class JailCommand extends AbstractAdminCommand {
             }
         }
 
-        var result = jails.jailPlayer(
+        if (duration != null
+                && exceedsMaximum(duration)
+                && !invocation.hasPermission("cellulosesz.admin.punishment.unlimited")
+        ) {
+            invocation.errorKey(
+                    "commands.admin.maximum-punishment",
+                    Map.of("seconds", config.maximumPunishmentSeconds)
+            );
+            return 0;
+        }
+
+        jails.jailPlayer(
                 target.get(),
                 args[1],
                 actor(invocation),
                 duration,
                 join(args, reasonStart)
-        );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
+        ).whenComplete((result, failure) -> complete(invocation, result, failure));
+        return 1;
+    }
+
+    private void complete(
+            CommandInvocation invocation,
+            AdminResult result,
+            Throwable failure
+    ) {
+        if (failure != null) invocation.errorKey("service.admin.persistence-failed");
+        else if (result.success()) invocation.reply(result.message());
+        else invocation.error(result.message());
+    }
+
+    private @Nullable Long defaultDuration() {
+        if (config.defaultJailSeconds <= 0) return null;
+        try {
+            return Math.multiplyExact(config.defaultJailSeconds, 1000L);
+        } catch (ArithmeticException _) {
+            return Long.MAX_VALUE;
         }
-        return result.success() ? 1 : 0;
+    }
+
+    private boolean exceedsMaximum(long durationMillis) {
+        if (config.maximumPunishmentSeconds < 0) return false;
+        try {
+            return durationMillis > Math.multiplyExact(config.maximumPunishmentSeconds, 1000L);
+        } catch (ArithmeticException _) {
+            return false;
+        }
     }
 
 }

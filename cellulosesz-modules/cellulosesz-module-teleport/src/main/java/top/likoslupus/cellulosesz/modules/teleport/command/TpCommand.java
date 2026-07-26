@@ -3,16 +3,21 @@ package top.likoslupus.cellulosesz.modules.teleport.command;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.util.Map;
 
 public final class TpCommand extends AbstractTeleportCommand {
 
+    private final TeleportTargetPolicy policy;
+
     public TpCommand(
             PlatformService platform,
-            TeleportService teleports
+            TeleportService teleports,
+            UserService users
     ) {
         super(platform, teleports);
+        this.policy = new TeleportTargetPolicy(platform, users);
     }
 
     @Override
@@ -37,14 +42,24 @@ public final class TpCommand extends AbstractTeleportCommand {
             var self = player(invocation);
             var target = online(invocation, args[0]);
             if (self.isEmpty() || target.isEmpty()) return 0;
-            return teleport(invocation, self.get(), platform.location(target.get()));
+            var subject = self.orElseThrow();
+            var location = platform.location(target.orElseThrow());
+            policy.mayMove(invocation, subject).thenAccept(allowed -> {
+                if (allowed) teleport(invocation, subject, location);
+            });
+            return 1;
         }
 
         if (args.length == 2) {
             var subject = online(invocation, args[0]);
             var target = online(invocation, args[1]);
             if (subject.isEmpty() || target.isEmpty()) return 0;
-            return teleport(invocation, subject.get(), platform.location(target.get()));
+            var moving = subject.orElseThrow();
+            var location = platform.location(target.orElseThrow());
+            policy.mayMove(invocation, moving).thenAccept(allowed -> {
+                if (allowed) teleport(invocation, moving, location);
+            });
+            return 1;
         }
 
         invocation.errorKey(

@@ -4,12 +4,13 @@ import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public interface VanishService {
 
     boolean vanished(UUID uuid);
 
-    AdminResult setVanished(CellPlayer player, boolean vanished);
+    CompletableFuture<AdminResult> setVanished(CellPlayer player, boolean vanished);
 
     boolean canSee(CellPlayer viewer, UUID target);
 

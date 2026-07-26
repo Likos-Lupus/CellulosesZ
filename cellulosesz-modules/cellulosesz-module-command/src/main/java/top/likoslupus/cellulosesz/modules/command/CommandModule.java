@@ -56,7 +56,7 @@ public final class CommandModule implements CellulosesZModule {
     @Override
     public void registerCommands(ModuleContext context) {
         context.commands().register(new RootCellulosesZCommand(context));
-        context.commands().register(new HelpCommand(context));
+        context.commands().register(new HelpCommand(context, config));
     }
 
 }

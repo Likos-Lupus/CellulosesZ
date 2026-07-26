@@ -4,14 +4,15 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public interface BackLocationService {
 
-    void remember(CellPlayer player);
+    CompletableFuture<Void> remember(CellPlayer player);
 
-    void remember(UUID uuid, CellLocation location);
+    CompletableFuture<Void> remember(UUID uuid, CellLocation location);
 
-    void forget(UUID uuid);
+    CompletableFuture<Void> forget(UUID uuid);
 
     Optional<CellLocation> location(UUID uuid);
 

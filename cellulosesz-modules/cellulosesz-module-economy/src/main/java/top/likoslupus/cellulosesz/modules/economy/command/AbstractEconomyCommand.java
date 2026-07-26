@@ -8,10 +8,8 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
-import top.likoslupus.cellulosesz.modules.economy.service.JsonEconomyService;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -85,10 +83,7 @@ abstract class AbstractEconomyCommand implements CellCommand {
     }
 
     protected String format(BigDecimal amount) {
-        if (economy instanceof JsonEconomyService service) {
-            return service.format(amount);
-        }
-        return config.currency.symbol + amount.setScale(config.currency.scale, RoundingMode.HALF_UP).toPlainString();
+        return economy.format(amount);
     }
 
 }

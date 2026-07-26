@@ -1,84 +1,71 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import org.jspecify.annotations.Nullable;
-
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.admin.BanRecord;
 import top.likoslupus.cellulosesz.api.admin.MuteService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.data.MuteDocument;
 
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public final class JsonMuteService implements MuteService {
 
     private final StorageService storage;
     private final Path path;
-    private final MuteDocument document;
+    private MuteDocument document;
+    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
-    public JsonMuteService(
-            StorageService storage,
-            Path path
-    ) {
+    public JsonMuteService(StorageService storage, Path path) {
         this.storage = storage;
         this.path = path;
         this.document = storage.load(path, MuteDocument.class, MuteDocument::new).join();
+        validate(document);
+    }
+
+    private void validate(MuteDocument candidate) {
+        if (candidate.records.stream().anyMatch(BanRecord::ip)) {
+            throw new IllegalStateException("Mute storage contains an IP punishment record");
+        }
     }
 
     @Override
-    public synchronized AdminResult mute(
+    public CompletableFuture<AdminResult> mute(
             UUID uuid,
             String name,
             String actor,
             @Nullable Long durationMillis,
             String reason
     ) {
-        purgeExpired();
-        var record = new BanRecord();
-        record.uuid = uuid;
-        record.name = name;
-        record.actor = actor;
-        record.reason = reason;
-        record.createdAt = System.currentTimeMillis();
-        record.expiresAt = durationMillis == null || durationMillis <= 0L
-                ? null
-                : record.createdAt + durationMillis;
-
-        var previous = List.copyOf(document.records);
-        document.records.removeIf(existing -> uuid.equals(existing.uuid));
-        document.records.add(record);
-        if (!save()) {
-            restore(previous);
-            return AdminResult.failure("service.admin.persistence-failed");
+        final long createdAt = System.currentTimeMillis();
+        final @Nullable Long expiresAt;
+        try {
+            expiresAt = durationMillis == null || durationMillis <= 0L
+                    ? null
+                    : Math.addExact(createdAt, durationMillis);
+        } catch (ArithmeticException exception) {
+            return CompletableFuture.completedFuture(AdminResult.failure(
+                    AdminStatus.INVALID_INPUT, "service.admin.invalid-duration"));
         }
-
-        return AdminResult.success(
-                "service.admin.mute-success",
-                Map.of("player", name)
-        );
+        var record = new BanRecord(uuid, name, reason, actor, createdAt, expiresAt, false, null);
+        return mutate(current -> {
+            current.records.removeIf(existing -> uuid.equals(existing.uuid()));
+            current.records.add(record);
+            return AdminResult.success("service.admin.mute-success", Map.of("player", name));
+        });
     }
 
     @Override
-    public synchronized AdminResult unmute(
-            UUID uuid,
-            String name,
-            String actor
-    ) {
-        var previous = List.copyOf(document.records);
-        document.records.removeIf(record -> uuid.equals(record.uuid));
-        if (!save()) {
-            restore(previous);
-            return AdminResult.failure("service.admin.persistence-failed");
-        }
-
-        return AdminResult.success(
-                "service.admin.unmute-success",
-                Map.of("player", name)
-        );
+    public CompletableFuture<AdminResult> unmute(UUID uuid, String name, String actor) {
+        return mutate(current -> current.records.removeIf(record -> uuid.equals(record.uuid()))
+                ? AdminResult.success("service.admin.unmute-success", Map.of("player", name))
+                : AdminResult.failure(AdminStatus.NOT_FOUND, "service.admin.not-muted", Map.of("player", name)));
     }
 
     @Override
@@ -88,34 +75,80 @@ public final class JsonMuteService implements MuteService {
 
     @Override
     public synchronized Optional<BanRecord> record(UUID uuid) {
-        purgeExpired();
+        var now = System.currentTimeMillis();
         return document.records.stream()
-                .filter(record -> uuid.equals(record.uuid))
+                .filter(record -> uuid.equals(record.uuid()))
+                .filter(record -> !record.expired(now))
                 .findFirst();
     }
 
     @Override
-    public synchronized void purgeExpired() {
-        var now = System.currentTimeMillis();
-        if (document.records.stream().noneMatch(record -> record.expired(now))) return;
-
-        var previous = List.copyOf(document.records);
-        document.records.removeIf(record -> record.expired(now));
-        if (!save()) restore(previous);
+    public CompletableFuture<Integer> purgeExpired() {
+        var result = new CompletableFuture<Integer>();
+        enqueue(current -> {
+            var before = current.records.size();
+            current.records.removeIf(record -> record.expired(System.currentTimeMillis()));
+            return new Mutation<>(current, before - current.records.size());
+        }, result);
+        return result;
     }
 
-    private boolean save() {
-        try {
-            storage.save(path, document).join();
-            return true;
-        } catch (RuntimeException _) {
-            return false;
-        }
+    private CompletableFuture<AdminResult> mutate(Function<MuteDocument, AdminResult> operation) {
+        var result = new CompletableFuture<AdminResult>();
+        enqueue(current -> new Mutation<>(current, operation.apply(current)), result);
+        return result;
     }
 
-    private void restore(List<BanRecord> records) {
-        document.records.clear();
-        document.records.addAll(records);
+    private synchronized <T> void enqueue(
+            Function<MuteDocument, Mutation<T>> operation,
+            CompletableFuture<T> result
+    ) {
+        mutationTail = mutationTail.handle((ignored, failure) -> null)
+                .thenCompose(ignored -> {
+                    MuteDocument current;
+                    synchronized (this) {
+                        current = copy(document);
+                    }
+                    final Mutation<T> mutation;
+                    try {
+                        mutation = operation.apply(current);
+                    } catch (RuntimeException exception) {
+                        result.completeExceptionally(exception);
+                        return CompletableFuture.completedFuture(null);
+                    }
+                    return storage.save(path, mutation.document()).handle((saved, failure) -> {
+                        if (failure == null) {
+                            synchronized (this) {
+                                document = mutation.document();
+                            }
+                            result.complete(mutation.result());
+                        } else if (mutation.result() instanceof AdminResult) {
+                            @SuppressWarnings("unchecked")
+                            var failureResult = (T) AdminResult.failure(
+                                    AdminStatus.PERSISTENCE_FAILURE, "service.admin.persistence-failed");
+                            result.complete(failureResult);
+                        } else {
+                            result.completeExceptionally(failure);
+                        }
+                        return (Void) null;
+                    });
+                });
+        mutationTail.whenComplete((ignored, failure) -> {
+            if (failure != null) result.completeExceptionally(failure);
+        });
+    }
+
+    private MuteDocument copy(MuteDocument source) {
+        var target = new MuteDocument();
+        target.records = new java.util.ArrayList<>(source.records);
+        return target;
+    }
+
+    private record Mutation<T>(
+            MuteDocument document,
+            T result
+    ) {
+
     }
 
 }

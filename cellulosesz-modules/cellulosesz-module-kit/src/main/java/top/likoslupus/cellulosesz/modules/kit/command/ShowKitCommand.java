@@ -51,10 +51,21 @@ public final class ShowKitCommand extends AbstractKitCommand {
         }
 
         var entries = new StringBuilder();
-        kit.get().items.forEach(item -> entries.append("\n- ")
-                .append(item.normalizedItem())
-                .append(" x")
-                .append(item.count));
+        for (var item : kit.get().items) {
+            var descriptor = platform.describeInventoryItem(item);
+            if (descriptor.isEmpty()) {
+                invocation.errorKey("commands.kit.show-kit-command.error.invalid-item");
+                return 0;
+            }
+
+            entries.append("\n- [")
+                    .append(item.slot)
+                    .append("] ")
+                    .append(descriptor.orElseThrow().normalizedItem())
+                    .append(" x")
+                    .append(descriptor.orElseThrow().count);
+        }
+
         invocation.replyKey(
                 "commands.kit.details",
                 Map.of(

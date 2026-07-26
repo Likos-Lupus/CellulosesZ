@@ -91,9 +91,22 @@ public final class RootCellulosesZCommand implements CellCommand {
             invocation.errorKey("common.no-permission");
             return 0;
         }
-        runtime.reload();
-        invocation.replyKey("cellulosesz.reloaded");
-        return 1;
+
+        try {
+            runtime.reload();
+            invocation.replyKey("cellulosesz.reloaded");
+            return 1;
+        } catch (RuntimeException exception) {
+            var reason = exception.getMessage() == null
+                    ? exception.getClass().getSimpleName()
+                    : exception.getMessage();
+            invocation.errorKey(
+                    "cellulosesz.reload-failed",
+                    Map.of("reason", reason)
+            );
+            return 0;
+        }
+
     }
 
     private int modules(

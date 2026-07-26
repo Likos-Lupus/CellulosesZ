@@ -10,12 +10,7 @@ import java.util.Map;
 
 public final class DelHomeCommand extends AbstractHomeCommand {
 
-    public DelHomeCommand(
-            PlatformService platform,
-            HomeService homes,
-            TeleportService teleports,
-            HomeConfig config
-    ) {
+    public DelHomeCommand(PlatformService platform, HomeService homes, TeleportService teleports, HomeConfig config) {
         super(platform, homes, teleports, config);
     }
 
@@ -38,29 +33,17 @@ public final class DelHomeCommand extends AbstractHomeCommand {
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
-
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.home.del-home-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.home.del-home-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
-        if (homes.deleteHome(self.get().uuid(), args[0]).join()) {
-            invocation.replyKey(
-                    "commands.home.del-home-command.reply.1",
-                    Map.of("value0", args[0])
-            );
-            return 1;
-        }
-
-        invocation.errorKey(
-                "commands.home.del-home-command.error.2",
-                Map.of("value0", args[0])
-        );
-        return 0;
+        homes.deleteHome(self.orElseThrow().uuid(), args[0]).whenComplete((deleted, failure) -> {
+            if (failure != null) invocation.errorKey("common.persistence-failed");
+            else if (deleted) invocation.replyKey("commands.home.del-home-command.reply.1", Map.of("value0", args[0]));
+            else invocation.errorKey("commands.home.del-home-command.error.2", Map.of("value0", args[0]));
+        });
+        return 1;
     }
 
 }

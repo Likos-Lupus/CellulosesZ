@@ -18,6 +18,10 @@ public interface StorageService {
             T value
     );
 
+    CompletableFuture<Boolean> exists(Path path);
+
+    CompletableFuture<Boolean> delete(Path path);
+
     <T> CompletableFuture<List<T>> loadDirectory(
             Path directory,
             Class<T> type

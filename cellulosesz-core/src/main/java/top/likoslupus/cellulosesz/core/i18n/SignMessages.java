@@ -1,0 +1,131 @@
+package top.likoslupus.cellulosesz.core.i18n;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+final class SignMessages {
+
+    private SignMessages() {
+    }
+
+    static Map<String, String> english() {
+        var messages = new LinkedHashMap<String, String>();
+        messages.put("service.sign.balance", "<primary>Balance: <secondary>{balance}<primary>.");
+        messages.put("service.sign.break-no-permission", "<primary>Break no permission.");
+        messages.put("service.sign.break-success", "<primary>Break success.");
+        messages.put("service.sign.buy-rollback-failed", "<red>Buy rollback failed.");
+        messages.put("service.sign.changed", "<primary>Changed.");
+        messages.put("service.sign.create-no-permission", "<primary>Create no permission.");
+        messages.put("service.sign.create-success", "<primary>Create success.");
+        messages.put("service.sign.edit-no-permission", "<primary>Edit no permission.");
+        messages.put("service.sign.edit-success", "<primary>Edit success.");
+        messages.put("service.sign.enchant-failed", "<red>Enchant failed.");
+        messages.put("service.sign.enchant-format", "<primary>Enchant format.");
+        messages.put("service.sign.enchant-success", "<primary>Applied <secondary>{enchantment}<primary> level <secondary>{level}<primary>.");
+        messages.put("service.sign.free-format", "<primary>Free format.");
+        messages.put("service.sign.free-inventory-full", "<primary>Free inventory full.");
+        messages.put("service.sign.free-success", "<primary>Received <secondary>{count}<primary> × <secondary>{item}<primary>.");
+        messages.put("service.sign.gamemode-failed", "<red>Gamemode failed.");
+        messages.put("service.sign.gamemode-format", "<primary>Gamemode format.");
+        messages.put("service.sign.gamemode-success", "<primary>Game mode changed to <secondary>{mode}<primary>.");
+        messages.put("service.sign.info", "{text}");
+        messages.put("service.sign.info-format", "<primary>Info format.");
+        messages.put("service.sign.item-blacklisted", "<primary>Item blacklisted.");
+        messages.put("service.sign.mail", "<primary>Unread mail: <secondary>{unread}<primary>.");
+        messages.put("service.sign.random-teleport-failed", "<red>Random teleport failed.");
+        messages.put("service.sign.random-teleport-world", "<primary>Random teleport world.");
+        messages.put("service.sign.removed", "<primary>Removed.");
+        messages.put("service.sign.repair-format", "<primary>Repair format.");
+        messages.put("service.sign.repair-nothing", "<primary>Repair nothing.");
+        messages.put("service.sign.repair-success", "<primary>Repaired <secondary>{count}<primary> item(s).");
+        messages.put("service.sign.save-failed", "<red>Save failed.");
+        messages.put("service.sign.sell-rollback-failed", "<red>Sell rollback failed.");
+        messages.put("service.sign.spawnmob-failed", "<red>Spawned <secondary>{spawned}<red> of <secondary>{count}<red> requested entities.");
+        messages.put("service.sign.spawnmob-format", "<primary>Spawnmob format.");
+        messages.put("service.sign.spawnmob-success", "<primary>Spawned <secondary>{count}<primary> × <secondary>{entity}<primary>.");
+        messages.put("service.sign.time-format", "<primary>Time format.");
+        messages.put("service.sign.time-world", "<primary>Time world.");
+        messages.put("service.sign.trade-format", "<primary>Trade format.");
+        messages.put("service.sign.trade-inventory-full", "<primary>Trade inventory full.");
+        messages.put("service.sign.trade-not-enough", "<red>Trade not enough.");
+        messages.put("service.sign.trade-rollback-failed", "<red>Trade rollback failed.");
+        messages.put("service.sign.trade-success", "<primary>Traded <secondary>{cost}<primary> for <secondary>{reward}<primary>.");
+        messages.put("service.sign.trade-take-failed", "<red>Trade take failed.");
+        messages.put("service.sign.valid", "<primary>Valid.");
+        messages.put("service.sign.balance-format", "<primary>Balance signs do not accept extra lines.");
+        messages.put("service.sign.heal-format", "<primary>Heal signs do not accept extra lines.");
+        messages.put("service.sign.mail-format", "<primary>Mail signs do not accept extra lines.");
+        messages.put("service.sign.weather-format", "<primary>Weather format.");
+        messages.put("service.sign.weather-world", "<primary>Weather world.");
+        messages.put("service.sign.workstation-failed", "<red>Workstation failed.");
+        messages.put("service.sign.workstation-opened", "<primary>Opened <secondary>{workstation}<primary>.");
+        messages.put("service.sign.concurrent-change", "<red>The sign changed while the operation was being saved. Try again.");
+        messages.put("service.sign.free-stack-limit", "<red>The requested free-item amount exceeds the item stack limit.");
+        messages.put("service.sign.platform-apply-failed", "<red>The sign record was saved, but the world change could not be applied; the record was rolled back.");
+        messages.put("service.sign.platform-rollback-failed", "<red>The sign world change failed and the saved record could not be rolled back. Contact an administrator.");
+        messages.put("service.sign.trade-inventory-changed", "<red>The inventory changed before the trade could commit.");
+        messages.put("service.sign.workstation-format", "<red>The workstation sign type is invalid or unavailable.");
+        return Map.copyOf(messages);
+    }
+
+    static Map<String, String> chinese() {
+        var messages = new LinkedHashMap<String, String>();
+        messages.put("service.sign.balance", "<primary>余额：<secondary>{balance}<primary>。");
+        messages.put("service.sign.break-no-permission", "<primary>Break no permission。");
+        messages.put("service.sign.break-success", "<primary>操作成功：Break success。");
+        messages.put("service.sign.buy-rollback-failed", "<red>操作失败：Buy rollback failed。");
+        messages.put("service.sign.changed", "<primary>Changed。");
+        messages.put("service.sign.create-no-permission", "<primary>Create no permission。");
+        messages.put("service.sign.create-success", "<primary>操作成功：Create success。");
+        messages.put("service.sign.edit-no-permission", "<primary>Edit no permission。");
+        messages.put("service.sign.edit-success", "<primary>操作成功：Edit success。");
+        messages.put("service.sign.enchant-failed", "<red>操作失败：Enchant failed。");
+        messages.put("service.sign.enchant-format", "<primary>Enchant format。");
+        messages.put("service.sign.enchant-success", "<primary>已应用 <secondary>{enchantment}<primary> 等级 <secondary>{level}<primary>。");
+        messages.put("service.sign.free-format", "<primary>Free format。");
+        messages.put("service.sign.free-inventory-full", "<primary>Free inventory full。");
+        messages.put("service.sign.free-success", "<primary>获得 <secondary>{count}<primary> × <secondary>{item}<primary>。");
+        messages.put("service.sign.gamemode-failed", "<red>操作失败：Gamemode failed。");
+        messages.put("service.sign.gamemode-format", "<primary>Gamemode format。");
+        messages.put("service.sign.gamemode-success", "<primary>游戏模式已切换为 <secondary>{mode}<primary>。");
+        messages.put("service.sign.info", "{text}");
+        messages.put("service.sign.info-format", "<primary>Info format。");
+        messages.put("service.sign.item-blacklisted", "<primary>Item blacklisted。");
+        messages.put("service.sign.mail", "<primary>未读邮件：<secondary>{unread}<primary>。");
+        messages.put("service.sign.random-teleport-failed", "<red>操作失败：Random teleport failed。");
+        messages.put("service.sign.random-teleport-world", "<primary>Random teleport world。");
+        messages.put("service.sign.removed", "<primary>Removed。");
+        messages.put("service.sign.repair-format", "<primary>Repair format。");
+        messages.put("service.sign.repair-nothing", "<primary>Repair nothing。");
+        messages.put("service.sign.repair-success", "<primary>已修理 <secondary>{count}<primary> 个物品。");
+        messages.put("service.sign.save-failed", "<red>操作失败：Save failed。");
+        messages.put("service.sign.sell-rollback-failed", "<red>操作失败：Sell rollback failed。");
+        messages.put("service.sign.spawnmob-failed", "<red>只生成 <secondary>{spawned}<red> 个实体，请求数量为 <secondary>{count}<red>。");
+        messages.put("service.sign.spawnmob-format", "<primary>Spawnmob format。");
+        messages.put("service.sign.spawnmob-success", "<primary>已生成 <secondary>{count}<primary> × <secondary>{entity}<primary>。");
+        messages.put("service.sign.time-format", "<primary>Time format。");
+        messages.put("service.sign.time-world", "<primary>Time world。");
+        messages.put("service.sign.trade-format", "<primary>Trade format。");
+        messages.put("service.sign.trade-inventory-full", "<primary>Trade inventory full。");
+        messages.put("service.sign.trade-not-enough", "<red>操作失败：Trade not enough。");
+        messages.put("service.sign.trade-rollback-failed", "<red>操作失败：Trade rollback failed。");
+        messages.put("service.sign.trade-success", "<primary>已用 <secondary>{cost}<primary> 换取 <secondary>{reward}<primary>。");
+        messages.put("service.sign.trade-take-failed", "<red>操作失败：Trade take failed。");
+        messages.put("service.sign.valid", "<primary>Valid。");
+        messages.put("service.sign.balance-format", "<primary>余额标牌不接受额外行。");
+        messages.put("service.sign.heal-format", "<primary>治疗标牌不接受额外行。");
+        messages.put("service.sign.mail-format", "<primary>邮件标牌不接受额外行。");
+        messages.put("service.sign.weather-format", "<primary>Weather format。");
+        messages.put("service.sign.weather-world", "<primary>Weather world。");
+        messages.put("service.sign.workstation-failed", "<red>操作失败：Workstation failed。");
+        messages.put("service.sign.workstation-opened", "<primary>已打开 <secondary>{workstation}<primary>。");
+        messages.put("service.sign.concurrent-change", "<red>保存期间告示牌已发生变化，请重试。");
+        messages.put("service.sign.free-stack-limit", "<red>免费物品数量超过该物品的堆叠上限。");
+        messages.put("service.sign.platform-apply-failed", "<red>告示牌记录已保存，但世界修改失败；记录已回滚。");
+        messages.put("service.sign.platform-rollback-failed", "<red>告示牌世界修改失败，且保存记录未能回滚，请联系管理员。");
+        messages.put("service.sign.trade-inventory-changed", "<red>交易提交前背包已发生变化。");
+        messages.put("service.sign.workstation-format", "<red>工作站告示牌类型无效或平台不支持。");
+        return Map.copyOf(messages);
+    }
+
+}

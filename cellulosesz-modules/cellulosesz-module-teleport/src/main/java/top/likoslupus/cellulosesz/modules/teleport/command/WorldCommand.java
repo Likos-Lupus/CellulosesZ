@@ -47,6 +47,17 @@ public final class WorldCommand extends AbstractTeleportCommand {
             return 1;
         }
 
+        if (args.length != 1 || !platform.worlds().contains(args[0])) {
+            invocation.errorKey("commands.teleport.world-command.invalid-world", Map.of("world", args.length == 0
+                    ? ""
+                    : args[0]));
+            return 0;
+        }
+        var permission = "cellulosesz.teleport.world." + args[0].toLowerCase().replace(':', '.');
+        if (!invocation.hasPermission(permission)) {
+            invocation.errorKey("commands.teleport.world-no-permission", Map.of("world", args[0]));
+            return 0;
+        }
         var self = player(invocation);
         if (self.isEmpty()) return 0;
 

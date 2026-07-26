@@ -6,12 +6,15 @@ import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.world.BackupService;
 import top.likoslupus.cellulosesz.api.world.EntityRemoveService;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.modules.world.command.BackupCommand;
 import top.likoslupus.cellulosesz.modules.world.command.RemoveCommand;
 import top.likoslupus.cellulosesz.modules.world.command.TimeCommand;
 import top.likoslupus.cellulosesz.modules.world.command.WeatherCommand;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.service.DefaultBackupService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultEntityRemoveService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultWorldService;
 
@@ -27,6 +30,7 @@ public final class WorldModule implements CellulosesZModule {
     private @Nullable WorldConfig config;
     private @Nullable WorldService worlds;
     private @Nullable EntityRemoveService remover;
+    private @Nullable DefaultBackupService backups;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -43,8 +47,11 @@ public final class WorldModule implements CellulosesZModule {
         var platform = context.services().require(PlatformService.class);
         worlds = new DefaultWorldService(platform);
         remover = new DefaultEntityRemoveService(platform);
+        backups = new DefaultBackupService(platform, context.dataDirectory().getParent(), config);
         context.services().register(WorldService.class, worlds);
         context.services().register(EntityRemoveService.class, remover);
+        context.services().register(BackupService.class, backups);
+        context.services().register(DefaultBackupService.class, backups);
     }
 
     @Override
@@ -53,6 +60,15 @@ public final class WorldModule implements CellulosesZModule {
         context.commands().register(new TimeCommand(platform, config, worlds));
         context.commands().register(new WeatherCommand(platform, config, worlds));
         context.commands().register(new RemoveCommand(platform, config, remover));
+        context.commands().register(new BackupCommand(backups));
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        config = context.configs().require("module.world", WorldConfig.class);
+        java.util.Objects.requireNonNull(backups, "BackupService has not been initialized").configure(
+                java.util.Objects.requireNonNull(config, "WorldConfig has not been initialized")
+        );
     }
 
 }

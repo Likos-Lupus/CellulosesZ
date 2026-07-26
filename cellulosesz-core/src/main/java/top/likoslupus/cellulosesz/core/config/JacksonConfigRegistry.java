@@ -27,17 +27,27 @@ public final class JacksonConfigRegistry implements ConfigRegistry {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public synchronized <T> T register(
             String key,
             Class<T> type,
             String relativePath,
             Supplier<T> defaultSupplier
     ) {
-        definitions.put(key, new ConfigDefinition<>(key, type, root.resolve(relativePath), defaultSupplier));
-        T value = (T) load(definitions.get(key));
-        values.put(key, value);
-        return value;
+        var definition = new ConfigDefinition<>(
+                key,
+                type,
+                root.resolve(relativePath),
+                defaultSupplier
+        );
+        definitions.put(key, definition);
+        try {
+            T value = load(definition);
+            values.put(key, value);
+            return value;
+        } catch (IOException exception) {
+            definitions.remove(key);
+            throw configurationFailure(definition, exception);
+        }
     }
 
     @Override
@@ -60,26 +70,39 @@ public final class JacksonConfigRegistry implements ConfigRegistry {
 
     @Override
     public synchronized void reload() {
+        var reloaded = new LinkedHashMap<String, Object>();
+        try {
+            for (var definition : definitions.values()) {
+                reloaded.put(definition.key(), loadUnknown(definition));
+            }
+        } catch (IOException exception) {
+            logger.error("Configuration reload failed; the previous complete configuration remains active.", exception);
+            throw new IllegalStateException("Configuration reload failed", exception);
+        }
         values.clear();
-        definitions.values().forEach(definition -> {
-            var value = load(definition);
-            values.put(definition.key(), value);
-        });
+        values.putAll(reloaded);
     }
 
-    private <T> T load(ConfigDefinition<T> definition) {
-        try {
-            Files.createDirectories(definition.path().getParent());
-            if (Files.notExists(definition.path())) {
-                T defaultValue = definition.defaultSupplier().get();
-                JacksonCodecs.writeYaml(definition.path(), defaultValue);
-                return defaultValue;
-            }
-            return JacksonCodecs.readYaml(definition.path(), definition.type());
-        } catch (IOException exception) {
-            logger.error("Failed to load configuration %s at %s".formatted(definition.key(), definition.path()), exception);
-            return definition.defaultSupplier().get();
+    private Object loadUnknown(ConfigDefinition<?> definition) throws IOException {
+        return load(definition);
+    }
+
+    private <T> T load(ConfigDefinition<T> definition) throws IOException {
+        Files.createDirectories(definition.path().getParent());
+        if (Files.notExists(definition.path())) {
+            T defaultValue = definition.defaultSupplier().get();
+            JacksonCodecs.writeYaml(definition.path(), defaultValue);
+            return defaultValue;
         }
+        return JacksonCodecs.readYaml(definition.path(), definition.type());
+    }
+
+    private IllegalStateException configurationFailure(
+            ConfigDefinition<?> definition,
+            IOException exception
+    ) {
+        logger.error("Failed to load configuration %s at %s".formatted(definition.key(), definition.path()), exception);
+        return new IllegalStateException("Failed to load configuration " + definition.key(), exception);
     }
 
     private record ConfigDefinition<T>(

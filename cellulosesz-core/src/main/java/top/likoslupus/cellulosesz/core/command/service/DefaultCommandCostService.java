@@ -3,12 +3,14 @@ package top.likoslupus.cellulosesz.core.command.service;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 
 import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DefaultCommandCostService implements CommandCostService {
@@ -37,18 +39,16 @@ public final class DefaultCommandCostService implements CommandCostService {
     }
 
     @Override
-    public boolean charge(UUID uuid, String command) {
+    public CompletableFuture<Boolean> charge(UUID uuid, String command) {
         var amount = cost(command);
-        if (amount.signum() <= 0) return true;
+        if (amount.signum() <= 0) return CompletableFuture.completedFuture(true);
         return services.optional(EconomyService.class)
-                .map(economy ->
-                        economy.withdraw(
-                                uuid,
-                                amount,
-                                TransactionCause.command("cellulosesz", command)
-                        ).success()
-                )
-                .orElse(false);
+                .map(economy -> economy.withdraw(
+                        uuid,
+                        amount,
+                        TransactionCause.command("cellulosesz", command)
+                ).thenApply(TransactionResult::success))
+                .orElseGet(() -> CompletableFuture.completedFuture(false));
     }
 
 }

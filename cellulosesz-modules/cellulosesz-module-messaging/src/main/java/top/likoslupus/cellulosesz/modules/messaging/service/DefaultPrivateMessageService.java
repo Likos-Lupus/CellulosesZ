@@ -1,154 +1,184 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
+import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultPrivateMessageService implements PrivateMessageService {
 
     private final PlatformService platform;
     private final UserService users;
+    private final PermissionService permissions;
     private final DisplayNameService displayNames;
     private final MessageRenderer renderer;
-    private final ConcurrentHashMap<UUID, UUID> incomingReplyTargets = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, UUID> outgoingReplyTargets = new ConcurrentHashMap<>();
-    private final Set<UUID> socialSpy = ConcurrentHashMap.newKeySet();
 
     public DefaultPrivateMessageService(
             PlatformService platform,
             UserService users,
+            PermissionService permissions,
             DisplayNameService displayNames,
             MessageRenderer renderer
     ) {
         this.platform = platform;
         this.users = users;
+        this.permissions = permissions;
         this.displayNames = displayNames;
         this.renderer = renderer;
     }
 
     @Override
-    public MessageResult send(
-            CellPlayer sender,
-            CellPlayer target,
-            String message
-    ) {
-        if (ignored(target.uuid(), sender.uuid())) {
-            return MessageResult.failure("service.messaging.ignored");
-        }
+    public CompletableFuture<MessageResult> send(CellPlayer sender, CellPlayer target, String message) {
+        requireNonNull(sender, "sender");
+        requireNonNull(target, "target");
+        if (message.isBlank())
+            return CompletableFuture.completedFuture(MessageResult.failure("service.messaging.empty-message"));
 
-        var targetUser = users.load(target.uuid()).join();
-        if (!targetUser.preferences.privateMessages) {
-            return MessageResult.failure("service.messaging.private-messages-disabled");
-        }
-
-        platform.sendMessage(target, renderer.render(
-                platform.locale(target),
-                "messaging.private-incoming",
-                Map.of(
-                        "sender", displayNames.displayName(sender),
-                        "message", message
-                )
-        ));
-        platform.sendMessage(sender, renderer.render(
-                platform.locale(sender),
-                "messaging.private-outgoing",
-                Map.of(
-                        "target", displayNames.displayName(target),
-                        "message", message
-                )
-        ));
-
-        outgoingReplyTargets.put(sender.uuid(), target.uuid());
-        incomingReplyTargets.put(target.uuid(), sender.uuid());
-
-        platform.onlinePlayers().stream()
-                .filter(player -> !player.uuid().equals(sender.uuid())
-                        && !player.uuid().equals(target.uuid())
-                )
-                .filter(player -> socialSpy(player.uuid()))
-                .forEach(player -> platform.sendMessage(player, renderer.render(
-                        platform.locale(player),
-                        "messaging.social-spy",
-                        Map.of(
-                                "sender", displayNames.displayName(sender),
-                                "target", displayNames.displayName(target),
-                                "message", message
-                        )
-                )));
-        return MessageResult.success("service.messaging.sent");
-    }
-
-    @Override
-    public Optional<UUID> lastReplyTarget(UUID uuid) {
-        var replyToRecipient = users.load(uuid).join().preferences.replyToLastRecipient;
-        var preferred = replyToRecipient
-                ? outgoingReplyTargets.get(uuid)
-                : incomingReplyTargets.get(uuid);
-        var fallback = replyToRecipient
-                ? incomingReplyTargets.get(uuid)
-                : outgoingReplyTargets.get(uuid);
-        return Optional.ofNullable(preferred != null ? preferred : fallback);
-    }
-
-    @Override
-    public void setLastReplyTarget(UUID uuid, UUID target) {
-        incomingReplyTargets.put(uuid, target);
-    }
-
-    @Override
-    public boolean ignored(UUID viewer, UUID target) {
-        return users.load(viewer).join().relations.ignored.contains(target);
-    }
-
-    @Override
-    public void setIgnored(
-            UUID viewer,
-            UUID target,
-            boolean ignored
-    ) {
-        var user = users.load(viewer).join();
-        var previouslyIgnored = user.relations.ignored.contains(target);
-        if (ignored) {
-            user.relations.ignored.add(target);
-        } else {
-            user.relations.ignored.remove(target);
-        }
-        users.markDirty(viewer);
-        try {
-            users.save(viewer).join();
-        } catch (RuntimeException exception) {
-            if (previouslyIgnored) {
-                user.relations.ignored.add(target);
-            } else {
-                user.relations.ignored.remove(target);
+        return users.load(target.uuid()).thenCompose(targetUser -> {
+            if (targetUser.relations.ignored.contains(sender.uuid())) {
+                return CompletableFuture.completedFuture(MessageResult.failure("service.messaging.ignored"));
             }
-            users.markDirty(viewer);
-            throw exception;
-        }
+            if (!targetUser.preferences.privateMessages) {
+                return CompletableFuture.completedFuture(MessageResult.failure("service.messaging.private-messages-disabled"));
+            }
+            return users.update(sender.uuid(), user -> {
+                        var previous = user.preferences.outgoingReplyTarget;
+                        user.preferences.outgoingReplyTarget = target.uuid();
+                        return previous;
+                    }).thenCompose(previousOutgoing -> users.update(target.uuid(), user -> {
+                                var previous = user.preferences.incomingReplyTarget;
+                                user.preferences.incomingReplyTarget = sender.uuid();
+                                return previous;
+                            })
+                            .handle((previousIncoming, targetFailure) -> new TargetUpdate(previousOutgoing, previousIncoming, targetFailure)))
+                    .thenCompose(update -> {
+                        if (update.failure() == null) return CompletableFuture.completedFuture(update);
+                        return users.updateVoid(sender.uuid(), user -> {
+                            if (target.uuid().equals(user.preferences.outgoingReplyTarget)) {
+                                user.preferences.outgoingReplyTarget = update.previousOutgoing();
+                            }
+                        }).handle((_, rollbackFailure) -> {
+                            if (rollbackFailure != null) update.failure().addSuppressed(rollbackFailure);
+                            return update;
+                        });
+                    }).thenCompose(update -> {
+                        if (update.failure() != null) {
+                            return CompletableFuture.completedFuture(MessageResult.failure("service.messaging.persistence-failed"));
+                        }
+                        return platform.runOnServerThreadAsync(() -> {
+                            platform.sendMessage(target, renderer.render(
+                                    platform.locale(target),
+                                    "messaging.private-incoming",
+                                    Map.of("sender", displayNames.displayName(sender), "message", message)
+                            ));
+                            platform.sendMessage(sender, renderer.render(
+                                    platform.locale(sender),
+                                    "messaging.private-outgoing",
+                                    Map.of("target", displayNames.displayName(target), "message", message)
+                            ));
+                        }).thenCompose(_ -> broadcastSpy(
+                                displayNames.plainDisplayName(sender),
+                                displayNames.plainDisplayName(target),
+                                message,
+                                Set.of(sender.uuid(), target.uuid())
+                        )).thenApply(_ -> MessageResult.success("service.messaging.sent"));
+                    });
+        }).exceptionally(_ -> MessageResult.failure("service.messaging.persistence-failed"));
     }
 
     @Override
-    public boolean socialSpy(UUID uuid) {
-        return socialSpy.contains(uuid);
+    public CompletableFuture<Optional<UUID>> lastReplyTarget(UUID uuid) {
+        return users.load(uuid).thenApply(user -> {
+            var preferred = user.preferences.replyToLastRecipient
+                    ? user.preferences.outgoingReplyTarget
+                    : user.preferences.incomingReplyTarget;
+            var fallback = user.preferences.replyToLastRecipient
+                    ? user.preferences.incomingReplyTarget
+                    : user.preferences.outgoingReplyTarget;
+            return Optional.ofNullable(preferred != null ? preferred : fallback);
+        });
     }
 
     @Override
-    public void setSocialSpy(UUID uuid, boolean enabled) {
-        if (enabled) {
-            socialSpy.add(uuid);
-        } else {
-            socialSpy.remove(uuid);
-        }
+    public CompletableFuture<Void> setLastReplyTarget(UUID uuid, UUID target) {
+        return users.updateVoid(uuid, user -> user.preferences.incomingReplyTarget = target);
+    }
+
+    @Override
+    public CompletableFuture<Boolean> ignored(UUID viewer, UUID target) {
+        return users.load(viewer).thenApply(user -> user.relations.ignored.contains(target));
+    }
+
+    @Override
+    public CompletableFuture<Void> setIgnored(UUID viewer, UUID target, boolean ignored) {
+        return users.updateVoid(viewer, user -> {
+            if (ignored) user.relations.ignored.add(target);
+            else user.relations.ignored.remove(target);
+        });
+    }
+
+    @Override
+    public CompletableFuture<Boolean> socialSpy(UUID uuid) {
+        return users.load(uuid).thenApply(user -> user.preferences.socialSpy);
+    }
+
+    @Override
+    public CompletableFuture<Void> setSocialSpy(UUID uuid, boolean enabled) {
+        return users.updateVoid(uuid, user -> user.preferences.socialSpy = enabled);
+    }
+
+    @Override
+    public CompletableFuture<Void> broadcastSpy(
+            String sender,
+            String target,
+            String message,
+            Collection<UUID> excluded
+    ) {
+        var candidates = platform.onlinePlayers().stream()
+                .filter(player -> !excluded.contains(player.uuid()))
+                .filter(player -> permissions.has(player.nativeHandle(), "cellulosesz.messaging.socialspy"))
+                .toList();
+        var checks = candidates.stream().map(player -> socialSpy(player.uuid())
+                        .exceptionally(_ -> false)
+                        .thenApply(enabled -> new SpyCandidate(player, enabled)))
+                .toList();
+        return CompletableFuture.allOf(checks.toArray(CompletableFuture[]::new))
+                .thenCompose(_ -> platform.runOnServerThreadAsync(() -> {
+                    for (var check : checks) {
+                        var candidate = check.getNow(new SpyCandidate(null, false));
+                        if (!candidate.enabled() || candidate.player() == null) continue;
+                        platform.sendMessage(candidate.player(), renderer.render(
+                                platform.locale(candidate.player()),
+                                "messaging.social-spy",
+                                Map.of("sender", sender, "target", target, "message", message)
+                        ));
+                    }
+                }));
+    }
+
+    private record TargetUpdate(
+            @Nullable UUID previousOutgoing,
+            @Nullable UUID previousIncoming,
+            @Nullable Throwable failure
+    ) {
+
+    }
+
+    private record SpyCandidate(
+            @Nullable CellPlayer player,
+            boolean enabled
+    ) {
+
     }
 
 }

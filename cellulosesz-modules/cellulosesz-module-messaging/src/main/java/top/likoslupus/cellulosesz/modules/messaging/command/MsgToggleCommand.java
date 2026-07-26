@@ -37,15 +37,15 @@ public final class MsgToggleCommand extends AbstractMessagingCommand {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
 
-        var user = users.load(self.get().uuid()).join();
-        user.preferences.privateMessages = !user.preferences.privateMessages;
-        users.markDirty(self.get().uuid());
-        users.save(self.get().uuid());
-        invocation.replyKey(
-                user.preferences.privateMessages
-                        ? "commands.messaging.private-messages-enabled"
-                        : "commands.messaging.private-messages-disabled"
-        );
+        users.update(self.orElseThrow().uuid(), user -> {
+            user.preferences.privateMessages = !user.preferences.privateMessages;
+            return user.preferences.privateMessages;
+        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
+            if (failure != null) invocation.errorKey("service.user.persistence-failed");
+            else invocation.replyKey(enabled
+                    ? "commands.messaging.private-messages-enabled"
+                    : "commands.messaging.private-messages-disabled");
+        }));
         return 1;
     }
 

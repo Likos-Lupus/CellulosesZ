@@ -2,13 +2,12 @@ package top.likoslupus.cellulosesz.modules.sign.handler;
 
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 
 import java.math.BigDecimal;
 import java.util.Optional;
 
-abstract class AbstractTradeSignHandler implements CellSignHandler {
+abstract class AbstractTradeSignHandler {
 
     protected final ItemService items;
 

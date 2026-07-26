@@ -84,28 +84,22 @@ public final class TpToggleCommand implements CellCommand {
 
         if (!mode.isBlank() && !isMode(mode)) return usage(invocation);
 
-        var user = users.load(uuid).join();
-        var enabled = mode.isBlank()
-                ? !user.preferences.teleportRequests
-                : enabled(mode);
-        var previous = user.preferences.teleportRequests;
-        user.preferences.teleportRequests = enabled;
-        users.markDirty(uuid);
-        try {
-            users.save(uuid).join();
-        } catch (RuntimeException _) {
-            user.preferences.teleportRequests = previous;
-            users.markDirty(uuid);
-            invocation.errorKey("service.user.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                enabled
-                        ? "commands.teleport.tp-toggle-command.enabled"
-                        : "commands.teleport.tp-toggle-command.disabled",
-                Map.of("player", name)
-        );
+        var requestedMode = mode;
+        users.update(uuid, user -> {
+            var enabled = requestedMode.isBlank()
+                    ? !user.preferences.teleportRequests
+                    : enabled(requestedMode);
+            user.preferences.teleportRequests = enabled;
+            return enabled;
+        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
+            if (failure != null) invocation.errorKey("service.user.persistence-failed");
+            else invocation.replyKey(
+                    enabled
+                            ? "commands.teleport.tp-toggle-command.enabled"
+                            : "commands.teleport.tp-toggle-command.disabled",
+                    Map.of("player", name)
+            );
+        }));
         return 1;
     }
 

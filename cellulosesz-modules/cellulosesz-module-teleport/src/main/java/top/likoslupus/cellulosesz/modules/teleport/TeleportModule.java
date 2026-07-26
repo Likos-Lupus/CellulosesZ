@@ -33,6 +33,8 @@ public final class TeleportModule implements CellulosesZModule {
 
     private @Nullable TeleportConfig config;
     private @Nullable TeleportRequestService requests;
+    private @Nullable OfflineLocationService offlineLocations;
+    private @Nullable RandomTeleportSettingsService randomSettings;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -64,12 +66,28 @@ public final class TeleportModule implements CellulosesZModule {
                 safeLocations
         );
         requests = new DefaultTeleportRequestService();
+        offlineLocations = new JsonOfflineLocationService(
+                storage,
+                context.dataDirectory().getParent().resolve("teleport/offline-locations.json")
+        );
+        randomSettings = new JsonRandomTeleportSettingsService(
+                storage,
+                context.dataDirectory().getParent().resolve("teleport/random-settings.json"),
+                new RandomTeleportSettings(
+                        0.0D,
+                        0.0D,
+                        config.randomTeleport.minRadius,
+                        config.randomTeleport.maxRadius
+                )
+        );
         var randomTeleports = new DefaultRandomTeleportService(platform, config.randomTeleport.attempts);
 
         context.services().register(BackLocationService.class, backLocations);
         context.services().register(SafeLocationFinder.class, safeLocations);
         context.services().register(TeleportService.class, teleports);
         context.services().register(TeleportRequestService.class, requests);
+        context.services().register(OfflineLocationService.class, offlineLocations);
+        context.services().register(RandomTeleportSettingsService.class, randomSettings);
         context.services().register(RandomTeleportService.class, randomTeleports);
     }
 
@@ -99,28 +117,40 @@ public final class TeleportModule implements CellulosesZModule {
                     event.player().uuid(),
                     "service.teleport.cancelled-death"
             );
-            try {
-                teleports.rememberBackLocation(
-                        event.player().uuid(),
-                        event.location()
-                );
-            } catch (RuntimeException _) {
-                platform.sendMessage(
+            teleports.rememberBackLocation(
+                    event.player().uuid(),
+                    event.location()
+            ).whenComplete((unused, failure) -> {
+                if (failure == null) return;
+                platform.runOnServerThread(() -> platform.sendMessage(
                         event.player(),
                         renderer.render(
                                 locales.locale(event.player()),
                                 "service.teleport.back-persistence-failed",
                                 Map.of()
                         )
-                );
-            }
+                ));
+            });
         });
-        context.events().listen(PlayerDisconnectEvent.class, event ->
-                teleports.cancelWarmup(
-                        event.player().uuid(),
-                        "service.teleport.cancelled-disconnect"
-                )
-        );
+        context.events().listen(PlayerDisconnectEvent.class, event -> {
+            teleports.cancelWarmup(
+                    event.player().uuid(),
+                    "service.teleport.cancelled-disconnect"
+            );
+            requireNonNull(requests, "TeleportRequestService has not been initialized")
+                    .clearFor(event.player().uuid());
+            var logoutLocation = platform.location(event.player());
+            requireNonNull(offlineLocations, "OfflineLocationService has not been initialized")
+                    .remember(event.player().uuid(), logoutLocation)
+                    .whenComplete((unused, failure) -> {
+                        if (failure != null) {
+                            context.logger().error(
+                                    "Failed to persist the logout location for " + event.player().uuid(),
+                                    failure
+                            );
+                        }
+                    });
+        });
     }
 
     @Override
@@ -133,15 +163,44 @@ public final class TeleportModule implements CellulosesZModule {
         requireNonNull(requests, "TeleportRequestService has not been initialized");
         requireNonNull(config, "TeleportConfig has not been initialized");
 
-        context.commands().register(new TpCommand(platform, teleports));
-        context.commands().register(new TpHereCommand(platform, teleports));
+        var renderer = context.services().require(MessageRenderer.class);
+        var locales = context.services().require(LocaleResolver.class);
+        var requestExecutor = new TeleportRequestExecutor(
+                platform,
+                teleports,
+                requests,
+                users,
+                renderer,
+                locales,
+                config.warmup.defaultSeconds
+        );
+
+        context.commands().register(new TpCommand(platform, teleports, users));
+        context.commands().register(new TpHereCommand(platform, teleports, users));
         context.commands().register(new TpPosCommand(platform, teleports));
-        context.commands().register(new TpaCommand(platform, requests, users, config.requests.timeoutSeconds, false));
-        context.commands().register(new TpaCommand(platform, requests, users, config.requests.timeoutSeconds, true));
-        context.commands().register(new TpAcceptCommand(platform, teleports, requests));
-        context.commands().register(new TpDenyCommand(platform, requests));
+        context.commands()
+                .register(new TpaCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, false));
+        context.commands()
+                .register(new TpaCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, true));
+        context.commands().register(new TpAcceptCommand(platform, requestExecutor));
+        context.commands().register(new TpDenyCommand(platform, requests, renderer, locales));
         context.commands().register(new TpCancelCommand(platform, requests));
         context.commands().register(new TpToggleCommand(platform, users));
+        context.commands().register(new TpAutoCommand(platform, users));
+        context.commands()
+                .register(new TpaAllCommand(platform, requestExecutor, users, config.requests.timeoutSeconds, config.requests.maximumBulkTargets));
+        context.commands().register(new TpAllCommand(platform, teleports, users));
+        context.commands().register(new TpoCommand(platform, teleports));
+        context.commands().register(new TpoHereCommand(platform, teleports));
+        context.commands().register(new TpOfflineCommand(
+                platform,
+                teleports,
+                requireNonNull(offlineLocations, "OfflineLocationService has not been initialized")
+        ));
+        context.commands().register(new SetTprCommand(
+                platform,
+                requireNonNull(randomSettings, "RandomTeleportSettingsService has not been initialized")
+        ));
         context.commands().register(new BackCommand(platform, teleports));
         context.commands().register(new JumpCommand(platform, teleports));
         context.commands().register(new TopCommand(platform, teleports));
@@ -151,8 +210,8 @@ public final class TeleportModule implements CellulosesZModule {
                 platform,
                 teleports,
                 randomTeleports,
-                config.randomTeleport.minRadius,
-                config.randomTeleport.maxRadius
+                requireNonNull(randomSettings, "RandomTeleportSettingsService has not been initialized"),
+                config.warmup.defaultSeconds
         ));
     }
 
@@ -164,6 +223,12 @@ public final class TeleportModule implements CellulosesZModule {
                 20L,
                 20L
         );
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        var current = requireNonNull(config, "TeleportConfig has not been initialized");
+        current.copyFrom(context.configs().require("module.teleport", TeleportConfig.class));
     }
 
 }

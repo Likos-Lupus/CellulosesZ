@@ -63,24 +63,33 @@ public final class ReplyCommand extends AbstractMessagingCommand {
             return 0;
         }
 
-        var targetUuid = privateMessages.lastReplyTarget(self.get().uuid());
-        if (targetUuid.isEmpty()) {
-            invocation.errorKey("commands.messaging.reply-command.error.2");
-            return 0;
-        }
-
-        var target = invocation.resolvePlayer(targetUuid.get().toString()).online();
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.messaging.reply-command.error.3");
-            return 0;
-        }
-
         var message = join(args, 0);
         if (!validLength(invocation, message)) return 0;
 
-        var result = privateMessages.send(self.get(), target.get(), message);
-        if (!result.success()) invocation.error(result.message());
-        return result.success() ? 1 : 0;
+        privateMessages.lastReplyTarget(self.orElseThrow().uuid()).whenComplete((targetUuid, failure) -> {
+            if (failure != null) {
+                invocation.errorKey("service.messaging.persistence-failed");
+                return;
+            }
+            if (targetUuid.isEmpty()) {
+                invocation.errorKey("commands.messaging.reply-command.error.2");
+                return;
+            }
+            platform.callOnServerThread(() -> invocation.resolvePlayer(targetUuid.orElseThrow().toString()).online())
+                    .whenComplete((target, resolveFailure) -> {
+                        if (resolveFailure != null || target.isEmpty()) {
+                            invocation.errorKey("commands.messaging.reply-command.error.3");
+                            return;
+                        }
+                        privateMessages.send(self.orElseThrow(), target.orElseThrow(), message)
+                                .whenComplete((result, sendFailure) -> {
+                                    if (sendFailure != null)
+                                        invocation.errorKey("service.messaging.persistence-failed");
+                                    else if (!result.success()) invocation.error(result.message());
+                                });
+                    });
+        });
+        return 1;
     }
 
 }

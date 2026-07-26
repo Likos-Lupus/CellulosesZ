@@ -24,6 +24,8 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
 import java.util.*;
+import java.util.function.BooleanSupplier;
+import java.util.stream.IntStream;
 
 /**
  * Fabric-to-core event adapter. Minecraft/Fabric objects are converted at this boundary so feature modules only depend
@@ -31,6 +33,7 @@ import java.util.*;
  */
 public final class FabricPlatformEventBridge {
 
+    private static final ThreadLocal<Integer> SIGN_BREAK_BYPASS_DEPTH = ThreadLocal.withInitial(() -> 0);
     private static @Nullable FabricPlatformEventBridge active;
 
     private final EventRegistry events;
@@ -117,6 +120,20 @@ public final class FabricPlatformEventBridge {
                 .orElse(true);
     }
 
+    public static boolean withoutSignBreakCheck(BooleanSupplier operation) {
+        var depth = SIGN_BREAK_BYPASS_DEPTH.get();
+        SIGN_BREAK_BYPASS_DEPTH.set(depth + 1);
+        try {
+            return operation.getAsBoolean();
+        } finally {
+            if (depth == 0) {
+                SIGN_BREAK_BYPASS_DEPTH.remove();
+            } else {
+                SIGN_BREAK_BYPASS_DEPTH.set(depth);
+            }
+        }
+    }
+
     public static boolean allowSignUpdate(
             ServerPlayer nativePlayer,
             BlockPos position,
@@ -145,24 +162,24 @@ public final class FabricPlatformEventBridge {
         var next = List.copyOf(Arrays.asList(lines));
         var location = location(nativePlayer, position);
         if (previous.stream().allMatch(String::isBlank)) {
-            return events.fireCancellable(new SignCreateEvent(
-                    wrapped.get(),
-                    location,
-                    front,
-                    next
-            ));
+            var event = new SignCreateEvent(wrapped.get(), location, front, next);
+            var allowed = events.fireCancellable(event);
+            if (allowed) copySignLines(event.lines(), lines);
+            return allowed;
         }
-        return events.fireCancellable(new SignEditEvent(
-                wrapped.get(),
-                location,
-                front,
-                previous,
-                next
-        ));
+
+        var event = new SignEditEvent(wrapped.get(), location, front, previous, next);
+        var allowed = events.fireCancellable(event);
+        if (allowed) copySignLines(event.lines(), lines);
+        return allowed;
     }
 
     private List<String> signLines(SignBlockEntity sign, boolean front) {
-        return Arrays.stream((front ? sign.getFrontText() : sign.getBackText()).getMessages(false))
+        return Arrays.stream((
+                        front
+                                ? sign.getFrontText()
+                                : sign.getBackText()
+                ).getMessages(false))
                 .map(Component::getString)
                 .toList();
     }
@@ -176,6 +193,11 @@ public final class FabricPlatformEventBridge {
                 player.getYRot(),
                 player.getXRot()
         );
+    }
+
+    private void copySignLines(List<String> source, String[] destination) {
+        IntStream.range(0, Math.min(source.size(), destination.length))
+                .forEach(index -> destination[index] = source.get(index));
     }
 
     public void register() {
@@ -298,6 +320,7 @@ public final class FabricPlatformEventBridge {
         });
 
         PlayerBlockBreakEvents.BEFORE.register((_, nativePlayer, position, _, blockEntity) -> {
+            if (SIGN_BREAK_BYPASS_DEPTH.get() > 0) return true;
             if (!(nativePlayer instanceof ServerPlayer serverPlayer)
                     || !(blockEntity instanceof SignBlockEntity sign)) {
                 return true;
@@ -414,7 +437,7 @@ public final class FabricPlatformEventBridge {
         var event = new PlayerGameModeChangeEvent(player, previous.gameMode, current.gameMode);
         events.fire(event);
         if (event.cancelled()) {
-            platform.dispatchPlayerCommand(player, "minecraft:gamemode " + previous.gameMode + " @s");
+            platform.setGameMode(player, previous.gameMode);
             snapshots.put(player.uuid(), current.withGameMode(previous.gameMode));
         }
     }

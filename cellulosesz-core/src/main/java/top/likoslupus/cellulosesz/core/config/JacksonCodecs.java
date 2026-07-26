@@ -5,7 +5,9 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
 import java.io.IOException;
-import java.nio.file.Path;
+import java.io.OutputStream;
+import java.nio.channels.FileChannel;
+import java.nio.file.*;
 
 public final class JacksonCodecs {
 
@@ -28,10 +30,63 @@ public final class JacksonCodecs {
     }
 
     public static void writeYaml(Path path, Object value) throws IOException {
+        writeAtomically(path, output ->
+                YAML.writerWithDefaultPrettyPrinter().writeValue(output, value)
+        );
+    }
+
+    private static void writeAtomically(Path path, StreamWriter writer) throws IOException {
+        var target = path.toAbsolutePath().normalize();
+        var parent = target.getParent();
+        if (parent == null) {
+            throw new IOException("Document path has no parent: " + target);
+        }
+
+        Files.createDirectories(parent);
+        var temporary = Files.createTempFile(parent, "." + target.getFileName() + ".", ".tmp");
+        var moved = false;
         try {
-            YAML.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
-        } catch (RuntimeException exception) {
-            throw new IOException("Failed to write YAML: " + path, exception);
+            try (
+                    var output = Files.newOutputStream(
+                            temporary,
+                            StandardOpenOption.WRITE,
+                            StandardOpenOption.TRUNCATE_EXISTING
+                    )
+            ) {
+                writer.write(output);
+                output.flush();
+            } catch (RuntimeException exception) {
+                throw new IOException("Failed to encode document: " + target, exception);
+            }
+
+            try (var channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+
+            try {
+                Files.move(
+                        temporary,
+                        target,
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING
+                );
+            } catch (AtomicMoveNotSupportedException ignored) {
+                Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+            moved = true;
+            forceDirectory(parent);
+        } finally {
+            if (!moved) {
+                Files.deleteIfExists(temporary);
+            }
+        }
+    }
+
+    private static void forceDirectory(Path directory) {
+        try (var channel = FileChannel.open(directory, StandardOpenOption.READ)) {
+            channel.force(true);
+        } catch (IOException | UnsupportedOperationException _) {
+            // The data file itself has already been forced. Some filesystems do not allow opening directories.
         }
     }
 
@@ -56,19 +111,24 @@ public final class JacksonCodecs {
     }
 
     public static void writeJson(Path path, Object value) throws IOException {
-        try {
-            JSON.writerWithDefaultPrettyPrinter().writeValue(path.toFile(), value);
-        } catch (RuntimeException exception) {
-            throw new IOException("Failed to write JSON: " + path, exception);
-        }
+        writeAtomically(path, output ->
+                JSON.writerWithDefaultPrettyPrinter().writeValue(output, value)
+        );
     }
 
     public static String toDebugString(Object value) {
         try {
             return YAML.writeValueAsString(value);
-        } catch (RuntimeException exception) {
+        } catch (RuntimeException _) {
             return String.valueOf(value);
         }
+    }
+
+    @FunctionalInterface
+    private interface StreamWriter {
+
+        void write(OutputStream output) throws IOException;
+
     }
 
 }

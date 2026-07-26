@@ -34,15 +34,19 @@ public final class CommandCostMiddleware implements CommandMiddleware {
         var player = platform.player(invocation);
         if (player.isEmpty()) return continuation.proceed();
 
-        if (!costs.charge(player.get().uuid(), command.name())) {
-            invocation.errorKey(
-                    "common.command-cost-failed",
-                    Map.of("cost", cost.toPlainString())
-            );
-            return 0;
-        }
-
-        return continuation.proceed();
+        costs.charge(player.orElseThrow().uuid(), command.name())
+                .whenComplete((charged, failure) -> platform.runOnServerThread(() -> {
+                    if (failure != null || !Boolean.TRUE.equals(charged)) {
+                        invocation.errorKey(
+                                "common.command-cost-failed",
+                                Map.of("cost", cost.toPlainString())
+                        );
+                        return;
+                    }
+                    continuation.proceed();
+                }));
+        // Brigadier cannot await storage; the final command result is delivered after the charge commits.
+        return 1;
     }
 
 }

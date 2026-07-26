@@ -10,12 +10,7 @@ import java.util.Map;
 
 public final class WarpInfoCommand extends AbstractWarpCommand {
 
-    public WarpInfoCommand(
-            PlatformService platform,
-            WarpService warps,
-            TeleportService teleports,
-            WarpConfig config
-    ) {
+    public WarpInfoCommand(PlatformService platform, WarpService warps, TeleportService teleports, WarpConfig config) {
         super(platform, warps, teleports, config);
     }
 
@@ -38,30 +33,22 @@ public final class WarpInfoCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.warp.warp-info-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.warp.warp-info-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
-        var warp = warps.warp(args[0]).join();
-        if (warp.isEmpty()) {
-            invocation.errorKey(
-                    "commands.warp.warp-info-command.error.2",
-                    Map.of("value0", args[0])
-            );
+        try {
+            warps.warp(args[0]).whenComplete((warp, failure) -> {
+                if (failure != null) invocation.errorKey("service.warp.persistence-failed");
+                else if (warp.isEmpty())
+                    invocation.errorKey("commands.warp.warp-info-command.error.2", Map.of("value0", args[0]));
+                else
+                    invocation.replyKey("commands.warp.warp-info-command.reply.1", Map.of("value0", warp.orElseThrow().name, "value1", warp.orElseThrow().location.compact()));
+            });
+            return 1;
+        } catch (IllegalArgumentException _) {
+            invocation.errorKey("commands.warp.warp-info-command.error.2", Map.of("value0", args[0]));
             return 0;
         }
-
-        invocation.replyKey(
-                "commands.warp.warp-info-command.reply.1",
-                Map.of(
-                        "value0", warp.get().name,
-                        "value1", warp.get().location.compact()
-                )
-        );
-        return 1;
     }
 
 }

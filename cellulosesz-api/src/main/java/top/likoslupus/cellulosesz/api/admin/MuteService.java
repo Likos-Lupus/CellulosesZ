@@ -4,10 +4,11 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public interface MuteService {
 
-    AdminResult mute(
+    CompletableFuture<AdminResult> mute(
             UUID uuid,
             String name,
             String actor,
@@ -15,7 +16,7 @@ public interface MuteService {
             String reason
     );
 
-    AdminResult unmute(
+    CompletableFuture<AdminResult> unmute(
             UUID uuid,
             String name,
             String actor
@@ -25,6 +26,6 @@ public interface MuteService {
 
     Optional<BanRecord> record(UUID uuid);
 
-    void purgeExpired();
+    CompletableFuture<Integer> purgeExpired();
 
 }

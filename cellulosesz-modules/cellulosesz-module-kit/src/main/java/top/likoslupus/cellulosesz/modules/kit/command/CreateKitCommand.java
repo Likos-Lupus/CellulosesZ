@@ -71,7 +71,13 @@ public final class CreateKitCommand extends AbstractKitCommand {
             }
         }
 
-        var inventory = platform.inventoryItems(self.get());
+        var snapshot = platform.inventorySnapshot(self.get());
+        if (snapshot.isEmpty()) {
+            invocation.errorKey("commands.kit.create-kit-command.error.snapshot");
+            return 0;
+        }
+
+        var inventory = snapshot.orElseThrow();
         if (inventory.isEmpty()) {
             invocation.errorKey("commands.kit.create-kit-command.error.empty");
             return 0;
@@ -82,22 +88,14 @@ public final class CreateKitCommand extends AbstractKitCommand {
         kit.displayName = args[0];
         kit.permission = "cellulosesz.kit." + kit.id;
         kit.cooldownSeconds = cooldown;
-        inventory.forEach(item -> {
-            var kitItem = new KitItem(item.normalizedItem(), item.count);
-            kitItem.components.putAll(item.normalizedComponents());
-            kit.items.add(kitItem);
-        });
-        try {
-            kits.save(kit).join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.kit.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.kit.create-kit-command.reply.1",
-                Map.of("value0", kit.id)
+        inventory.forEach(item ->
+                kit.items.add(new KitItem(item.slot, item.validatedStack()))
         );
+
+        kits.save(kit).whenComplete((_, failure) -> {
+            if (failure != null) invocation.errorKey("service.kit.persistence-failed");
+            else invocation.replyKey("commands.kit.create-kit-command.reply.1", Map.of("value0", kit.id));
+        });
         return 1;
     }
 

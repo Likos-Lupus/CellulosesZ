@@ -4,6 +4,7 @@ import top.likoslupus.cellulosesz.api.admin.TempBanService;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
 
 import java.util.Map;
@@ -11,14 +12,17 @@ import java.util.Map;
 public final class TempBanCommand extends AbstractAdminCommand {
 
     private final TempBanService bans;
+    private final AdminConfig config;
 
     public TempBanCommand(
             PlatformService platform,
             UserService users,
-            TempBanService bans
+            TempBanService bans,
+            AdminConfig config
     ) {
         super(platform, users);
         this.bans = bans;
+        this.config = config;
     }
 
     @Override
@@ -53,6 +57,16 @@ public final class TempBanCommand extends AbstractAdminCommand {
             return 0;
         }
 
+        if (exceedsMaximum(duration.getAsLong())
+                && !invocation.hasPermission("cellulosesz.admin.punishment.unlimited")
+        ) {
+            invocation.errorKey(
+                    "commands.admin.maximum-punishment",
+                    Map.of("seconds", config.maximumPunishmentSeconds)
+            );
+            return 0;
+        }
+
         var target = invocation.resolvePlayer(args[0]);
         if (target.optionalUuid().isEmpty()) {
             invocation.errorKey(
@@ -62,18 +76,30 @@ public final class TempBanCommand extends AbstractAdminCommand {
             return 0;
         }
 
-        var result = bans.tempBan(
+        bans.tempBan(
                 target.name(),
                 actor(invocation),
                 duration.getAsLong(),
                 join(args, 2)
-        );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
+        ).whenComplete((result, failure) -> {
+            if (failure != null) {
+                invocation.errorKey("service.admin.persistence-failed");
+            } else if (result.success()) {
+                invocation.reply(result.message());
+            } else {
+                invocation.error(result.message());
+            }
+        });
+        return 1;
+    }
+
+    private boolean exceedsMaximum(long durationMillis) {
+        if (config.maximumPunishmentSeconds < 0) return false;
+        try {
+            return durationMillis > Math.multiplyExact(config.maximumPunishmentSeconds, 1000L);
+        } catch (ArithmeticException exception) {
+            return false;
         }
-        return result.success() ? 1 : 0;
     }
 
 }

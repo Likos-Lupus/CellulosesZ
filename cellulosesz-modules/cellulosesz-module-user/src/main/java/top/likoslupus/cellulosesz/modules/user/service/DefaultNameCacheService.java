@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.modules.user.data.NameCacheDocument;
 
 import java.nio.file.Path;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -29,15 +30,9 @@ public final class DefaultNameCacheService implements NameCacheService {
 
     private CompletableFuture<Void> load() {
         return storage.load(path, NameCacheDocument.class, NameCacheDocument::new)
-                .thenAccept(document ->
-                        document.names.forEach((uuid, name) -> {
-                            try {
-                                remember(UUID.fromString(uuid), name);
-                            } catch (IllegalArgumentException _) {
-                                // Ignore corrupted cache entries.
-                            }
-                        })
-                );
+                .thenAccept(document -> document.names.forEach((uuid, name) ->
+                        remember(UUID.fromString(uuid), name)
+                ));
     }
 
     @Override
@@ -55,6 +50,11 @@ public final class DefaultNameCacheService implements NameCacheService {
     @Override
     public Optional<String> findName(UUID uuid) {
         return Optional.ofNullable(uuidToName.get(uuid));
+    }
+
+    @Override
+    public Map<UUID, String> entries() {
+        return Map.copyOf(uuidToName);
     }
 
     @Override

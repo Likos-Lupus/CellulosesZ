@@ -43,6 +43,7 @@ public final class AdminModule implements CellulosesZModule {
     private @Nullable TempBanService tempBans;
     private @Nullable MuteService mutes;
     private @Nullable JailService jails;
+    private @Nullable AddressBookService addresses;
     private @Nullable MuteCommandMiddleware muteCommandPolicy;
 
     @Override
@@ -63,23 +64,27 @@ public final class AdminModule implements CellulosesZModule {
         var root = context.dataDirectory().getParent().resolve("admin");
         var renderer = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
+        var permissions = context.services().require(PermissionService.class);
 
         requireNonNull(config, "AdminConfig has not been initialized");
 
-        bans = new DefaultBanService(platform, renderer, locales);
+        bans = new DefaultBanService(platform, renderer, locales, permissions);
         tempBans = new JsonTempBanService(
                 storage,
                 root.resolve("temp-bans.json"),
                 platform,
                 users,
                 renderer,
-                locales
+                locales,
+                config.tempBanKickOnlinePlayers
         );
+        addresses = new JsonAddressBookService(storage, root.resolve("addresses.json"));
         mutes = new JsonMuteService(storage, root.resolve("mutes.json"));
         jails = new JsonJailService(storage, root.resolve("jails.json"), platform, config);
 
         context.services().register(BanService.class, bans);
         context.services().register(TempBanService.class, tempBans);
+        context.services().register(AddressBookService.class, addresses);
         context.services().register(MuteService.class, mutes);
         context.services().register(JailService.class, jails);
 
@@ -100,15 +105,30 @@ public final class AdminModule implements CellulosesZModule {
 
         context.events().listen(PlayerJoinEvent.class, event -> {
             var player = event.player();
-            tempBans.active(player.uuid(), player.name())
-                    .ifPresent(record -> platform.kick(
-                            player,
-                            renderer.render(
-                                    locales.locale(player),
-                                    "service.admin.temp-ban-kick",
-                                    Map.of("reason", record.reason)
-                            ).plainText()
-                    ));
+            var address = platform.address(player);
+            address.ifPresent(value -> requireNonNull(
+                    addresses, "AddressBookService has not been initialized")
+                    .remember(player.uuid(), player.name(), value)
+                    .whenComplete((ignored, failure) -> {
+                        if (failure != null) {
+                            context.logger().error(
+                                    "Failed to persist a player login address", failure);
+                        }
+                    }));
+
+            var active = tempBans.active(player.uuid(), player.name())
+                    .or(() -> address.flatMap(tempBans::activeIp));
+            if (active.isPresent()) {
+                platform.kick(
+                        player,
+                        renderer.render(
+                                locales.locale(player),
+                                "service.admin.temp-ban-kick",
+                                Map.of("reason", active.orElseThrow().reason())
+                        ).plainText()
+                );
+                return;
+            }
             enforceJail(platform, jails, player);
         });
 
@@ -190,9 +210,15 @@ public final class AdminModule implements CellulosesZModule {
         requireNonNull(mutes, "MuteService has not been initialized");
         requireNonNull(config, "Config has not been initialized");
         requireNonNull(jails, "JailService has not been initialized");
+        requireNonNull(addresses, "AddressBookService has not been initialized");
 
         context.commands().register(new BanCommand(platform, users, bans));
-        context.commands().register(new TempBanCommand(platform, users, tempBans));
+        context.commands().register(new BanIpCommand(platform, users, bans, addresses));
+        context.commands().register(new TempBanCommand(platform, users, tempBans, config));
+        context.commands().register(new TempBanIpCommand(platform, users, tempBans, addresses, config));
+        context.commands().register(new UnbanCommand(platform, users, bans, tempBans));
+        context.commands().register(new UnbanIpCommand(bans, tempBans));
+        context.commands().register(new KickAllCommand(bans));
         context.commands().register(new MuteCommand(platform, users, mutes, config));
         context.commands().register(new KickCommand(platform, users, bans));
         context.commands().register(new JailCommand(platform, users, jails, config));
@@ -221,9 +247,15 @@ public final class AdminModule implements CellulosesZModule {
 
         context.scheduler().syncRepeating(
                 () -> {
-                    tempBans.purgeExpired();
-                    mutes.purgeExpired();
-                    jails.purgeExpired();
+                    tempBans.purgeExpired().whenComplete((ignored, failure) -> {
+                        if (failure != null) context.logger().error("Failed to purge expired temporary bans", failure);
+                    });
+                    mutes.purgeExpired().whenComplete((ignored, failure) -> {
+                        if (failure != null) context.logger().error("Failed to purge expired mutes", failure);
+                    });
+                    jails.purgeExpired().whenComplete((ignored, failure) -> {
+                        if (failure != null) context.logger().error("Failed to purge expired jail records", failure);
+                    });
                     platform.onlinePlayers()
                             .forEach(player ->
                                     enforceJail(platform, jails, player)
@@ -232,6 +264,14 @@ public final class AdminModule implements CellulosesZModule {
                 20L,
                 Math.max(20L, config.jailedPlayerCheckSeconds * 20L)
         );
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        var current = requireNonNull(config, "AdminConfig has not been initialized");
+        current.copyFrom(context.configs().require("module.admin", AdminConfig.class));
+        requireNonNull(muteCommandPolicy, "MuteCommandMiddleware has not been initialized")
+                .configure(current);
     }
 
     private void enforceJail(

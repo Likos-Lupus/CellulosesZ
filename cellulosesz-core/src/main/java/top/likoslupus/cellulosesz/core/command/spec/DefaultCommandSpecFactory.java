@@ -6,8 +6,12 @@ import top.likoslupus.cellulosesz.api.command.spec.CommandParameterType;
 import top.likoslupus.cellulosesz.api.command.spec.CommandRoute;
 import top.likoslupus.cellulosesz.api.command.spec.CommandSpec;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
 
+import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.command.spec.CommandParameter.*;
 import static top.likoslupus.cellulosesz.api.command.spec.CommandParameterType.*;
 
@@ -19,7 +23,7 @@ import static top.likoslupus.cellulosesz.api.command.spec.CommandParameterType.*
 public final class DefaultCommandSpecFactory {
 
     public CommandSpec spec(CellCommand command) {
-        var declared = Objects.requireNonNull(
+        var declared = requireNonNull(
                 command.commandSpec(),
                 "Command spec must not be null: " + command.name()
         );
@@ -59,6 +63,27 @@ public final class DefaultCommandSpecFactory {
             case "setjail", "deljail" -> routes(route(
                     required("name", STRING)
             ));
+            case "banip" -> routes(route(
+                    required("address", WORD),
+                    optional("reason", GREEDY_STRING)
+            ));
+            case "tempbanip" -> routes(route(
+                    required("address", WORD),
+                    required("duration", WORD),
+                    optional("reason", GREEDY_STRING)
+            ));
+            case "unban" -> routes(route(
+                    required("player", KNOWN_PLAYER)
+            ));
+            case "unbanip" -> routes(route(
+                    required("address", WORD)
+            ));
+            case "kickall" -> routes(
+                    route(),
+                    route(
+                            required("reason", GREEDY_STRING)
+                    )
+            );
 
             // Core and economy
             case "cellulosesz" -> routes(
@@ -72,13 +97,39 @@ public final class DefaultCommandSpecFactory {
                             "debug"
                     ))
             );
+            case "help" -> routes(
+                    route(),
+                    route(
+                            required("page", INTEGER)
+                    ),
+                    route(
+                            required("query", STRING)
+                    ),
+                    route(
+                            required("query", STRING),
+                            required("page", INTEGER)
+                    )
+            );
             case "balance" -> routes(
                     route(),
-                    route(required("player", KNOWN_PLAYER))
+                    route(
+                            required("player", KNOWN_PLAYER)
+                    )
             );
             case "balancetop" -> routes(
                     route(),
-                    route(required("page", INTEGER))
+                    route(
+                            required("page", INTEGER)
+                    ),
+                    route(
+                            required("page", INTEGER),
+                            required("minimum", DOUBLE)
+                    ),
+                    route(
+                            required("page", INTEGER),
+                            required("minimum", DOUBLE),
+                            required("maximum", DOUBLE)
+                    )
             );
             case "eco" -> routes(route(
                     choice(
@@ -90,26 +141,69 @@ public final class DefaultCommandSpecFactory {
                     required("amount", DOUBLE)
             ));
             case "pay" -> routes(route(
-                    required("player", KNOWN_PLAYER),
+                    required("player", WORD),
                     required("amount", DOUBLE),
                     optional("confirmation", WORD)
             ));
+            case "sell" -> routes(
+                    route(
+                            choice(
+                                    "scope",
+                                    false,
+                                    "hand", "all"
+                            )
+                    ),
+                    route(
+                            choice(
+                                    "scope",
+                                    false,
+                                    "hand"
+                            ),
+                            required("amount", INTEGER)
+                    ),
+                    route(
+                            required("item", WORD)
+                    ),
+                    route(
+                            required("item", WORD),
+                            required("amount", INTEGER)
+                    )
+            );
             case "setworth" -> routes(route(
                     required("item", WORD),
                     required("value", WORD)
             ));
-            case "worth" -> routes(route(
-                    required("item", WORD)
-            ));
+            case "worth" -> routes(
+                    route(),
+                    route(
+                            choice(
+                                    "scope",
+                                    false,
+                                    "hand",
+                                    "inventory"
+                            )
+                    ),
+                    route(
+                            required("item", WORD)
+                    ),
+                    route(
+                            required("item", WORD),
+                            required("amount", INTEGER)
+                    )
+            );
 
             // Homes and warps
             case "home" -> routes(
                     route(),
-                    route(required("name", STRING))
+                    route(
+                            required("name", STRING)
+                    )
             );
             case "sethome" -> routes(
                     route(),
-                    route(required("name", STRING))
+                    route(
+                            required("name", STRING)
+                    )
             );
             case "delhome" -> routes(route(
                     required("name", STRING)
@@ -120,7 +214,9 @@ public final class DefaultCommandSpecFactory {
             ));
             case "warp" -> routes(
                     route(),
-                    route(required("name", STRING))
+                    route(
+                            required("name", STRING)
+                    )
             );
             case "setwarp", "delwarp", "warpinfo" -> routes(route(
                     required("name", STRING)
@@ -140,31 +236,108 @@ public final class DefaultCommandSpecFactory {
             ));
             case "repair" -> routes(
                     route(),
-                    route(choice(
-                            "scope",
-                            false,
-                            "hand", "all"
-                    ))
+                    route(
+                            choice(
+                                    "scope",
+                                    false,
+                                    "hand", "all"
+                            )
+                    )
             );
             case "invsee" -> routes(route(
                     required("player", PLAYER)
             ));
             case "enderchest" -> routes(
                     route(),
-                    route(required("player", PLAYER))
+                    route(
+                            required("player", PLAYER)
+                    )
             );
             case "powertool" -> routes(
                     route(),
-                    route(required("command", GREEDY_STRING))
+                    route(
+                            required("command", GREEDY_STRING)
+                    )
             );
             case "unlimited" -> routes(
                     route(),
-                    route(choice(
-                            "state",
-                            false,
-                            "on", "off", "enable", "disable", "true", "false", "list", "clear"
-                    ))
+                    route(
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "enable", "disable", "true", "false", "list", "clear"
+                            )
+                    )
             );
+            case "itemname", "itemlore" -> routes(
+                    route(),
+                    route(
+                            required("value", GREEDY_STRING)
+                    )
+            );
+            case "potion" -> routes(
+                    route(
+                            required("effect", WORD)
+                    ),
+                    route(
+                            required("effect", WORD),
+                            required("duration", INTEGER)
+                    ),
+                    route(
+                            required("effect", WORD),
+                            required("duration", INTEGER),
+                            required("amplifier", INTEGER)
+                    )
+            );
+            case "firework" -> routes(
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "clear"
+                            )
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "power"
+                            ),
+                            required("power", INTEGER)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "effect"
+                            ),
+                            required("shape", WORD),
+                            required("color", WORD)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "effect"
+                            ),
+                            required("shape", WORD),
+                            required("color", WORD),
+                            required("fade", WORD)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "effect"
+                            ),
+                            required("shape", WORD),
+                            required("color", WORD),
+                            required("fade", WORD),
+                            required("flags", WORD)
+                    )
+            );
+            case "anvil", "cartographytable", "grindstone", "loom", "smithingtable", "workbench", "disposal" ->
+                    routes(route());
             case "createkit" -> routes(route(
                     required("name", STRING),
                     required("cooldown", WORD)
@@ -174,10 +347,14 @@ public final class DefaultCommandSpecFactory {
             ));
             case "kit" -> routes(
                     route(),
-                    route(required("name", STRING))
+                    route(
+                            required("name", STRING)
+                    )
             );
             case "kitreset" -> routes(
-                    route(required("kit", STRING)),
+                    route(
+                            required("kit", STRING)
+                    ),
                     route(
                             required("kit", STRING),
                             required("player", KNOWN_PLAYER)
@@ -197,16 +374,29 @@ public final class DefaultCommandSpecFactory {
             ));
             case "mail" -> routes(
                     route(),
-                    route(choice(
-                            "action",
-                            false,
-                            "read"
-                    )),
-                    route(choice(
-                            "action",
-                            false,
-                            "clear"
-                    )),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "read", "unread", "clear"
+                            )
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "read"
+                            ),
+                            required("page", INTEGER)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "delete"
+                            ),
+                            required("id", WORD)
+                    ),
                     route(
                             choice(
                                     "action",
@@ -215,13 +405,55 @@ public final class DefaultCommandSpecFactory {
                             ),
                             required("player", KNOWN_PLAYER),
                             required("message", GREEDY_STRING)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "sendtemp"
+                            ),
+                            required("player", KNOWN_PLAYER),
+                            required("duration", WORD),
+                            required("message", GREEDY_STRING)
+                    ),
+                    route(
+                            choice(
+                                    "action",
+                                    false,
+                                    "sendall"
+                            ),
+                            required("message", GREEDY_STRING)
+                    )
+            );
+            case "socialspy" -> routes(
+                    route(),
+                    route(
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
+                    ),
+                    route(
+                            required("player", KNOWN_PLAYER)
+                    ),
+                    route(
+                            required("player", KNOWN_PLAYER),
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
                     )
             );
 
             // Player state
+            case "afk" -> routes(route());
             case "feed", "heal" -> routes(
                     route(),
-                    route(required("player", PLAYER))
+                    route(
+                            required("player", PLAYER)
+                    )
             );
             case "fly", "god" -> routes(
                     route(),
@@ -239,11 +471,13 @@ public final class DefaultCommandSpecFactory {
             );
             case "vanish" -> routes(
                     route(),
-                    route(choice(
-                            "state",
-                            false,
-                            "on", "off", "true", "false", "enable", "disable"
-                    )),
+                    route(
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
+                    ),
                     route(
                             required("player", PLAYER)
                     ),
@@ -259,6 +493,81 @@ public final class DefaultCommandSpecFactory {
             case "nick" -> routes(route(
                     required("nickname", STRING)
             ));
+            case "seen", "whois" -> routes(route(
+                    required("player", KNOWN_PLAYER)
+            ));
+            case "playtime" -> routes(
+                    route(),
+                    route(
+                            required("player", KNOWN_PLAYER)
+                    )
+            );
+            case "near" -> routes(
+                    route(),
+                    route(
+                            required("radius", INTEGER)
+                    )
+            );
+            case "gamemode" -> routes(
+                    route(
+                            choice(
+                                    "mode",
+                                    false,
+                                    "survival", "creative", "adventure", "spectator"
+                            )
+                    ),
+                    route(
+                            choice(
+                                    "mode",
+                                    false,
+                                    "survival", "creative", "adventure", "spectator"
+                            ),
+                            required("player", PLAYER)
+                    )
+            );
+            case "speed" -> routes(
+                    route(
+                            required("speed", DOUBLE)
+                    ),
+                    route(
+                            choice("type", false, "walk", "fly"),
+                            required("speed", DOUBLE)
+                    ),
+                    route(
+                            choice("type", false, "walk", "fly"),
+                            required("speed", DOUBLE),
+                            required("player", PLAYER)
+                    )
+            );
+            case "ptime" -> routes(
+                    route(
+                            required("time", WORD)
+                    ),
+                    route(
+                            required("time", WORD),
+                            required("player", PLAYER)
+                    )
+            );
+            case "pweather" -> routes(
+                    route(
+                            choice(
+                                    "weather",
+                                    false,
+                                    "clear", "rain", "thunder", "reset"
+                            )
+                    ),
+                    route(
+                            choice(
+                                    "weather",
+                                    false,
+                                    "clear",
+                                    "rain",
+                                    "thunder",
+                                    "reset"
+                            ),
+                            required("player", PLAYER)
+                    )
+            );
 
             // Teleport and world
             case "tp" -> routes(
@@ -273,9 +582,93 @@ public final class DefaultCommandSpecFactory {
             case "tpa", "tpahere" -> routes(route(
                     required("player", PLAYER)
             ));
-            case "tphere" -> routes(route(
+            case "tpaccept", "tpdeny", "tpacancel" -> routes(
+                    route(),
+                    route(
+                            required("request-or-player", STRING)
+                    )
+            );
+            case "tpaall" -> routes(route());
+            case "tpauto" -> routes(
+                    route(),
+                    route(
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
+                    )
+            );
+            case "tpall" -> routes(
+                    route(),
+                    route(
+                            required("player", PLAYER)
+                    )
+            );
+            case "tphere", "tpohere" -> routes(route(
                     required("player", PLAYER)
             ));
+            case "tpo" -> routes(
+                    route(
+                            required("target", PLAYER)
+                    ),
+                    route(
+                            required("player", PLAYER),
+                            required("target", PLAYER)
+                    )
+            );
+            case "tpoffline" -> routes(route(
+                    required("player", KNOWN_PLAYER)
+            ));
+            case "tptoggle" -> routes(
+                    route(),
+                    route(
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
+                    ),
+                    route(
+                            required("player", KNOWN_PLAYER)
+                    ),
+                    route(
+                            required("player", KNOWN_PLAYER),
+                            choice(
+                                    "state",
+                                    false,
+                                    "on", "off", "true", "false", "enable", "disable"
+                            )
+                    )
+            );
+            case "settpr" -> routes(
+                    route(
+                            required("world", WORLD),
+                            choice(
+                                    "action",
+                                    false,
+                                    "center"
+                            )
+                    ),
+                    route(
+                            required("world", WORLD),
+                            choice(
+                                    "action",
+                                    false,
+                                    "minrange", "maxrange"
+                            )
+                    ),
+                    route(
+                            required("world", WORLD),
+                            choice(
+                                    "action",
+                                    false,
+                                    "minrange",
+                                    "maxrange"
+                            ),
+                            required("value", INTEGER)
+                    )
+            );
             case "tppos" -> routes(
                     route(
                             required("position", POSITION)
@@ -287,7 +680,9 @@ public final class DefaultCommandSpecFactory {
             );
             case "world" -> routes(
                     route(),
-                    route(required("world", WORLD))
+                    route(
+                            required("world", WORLD)
+                    )
             );
             case "remove" -> routes(
                     route(
@@ -307,6 +702,22 @@ public final class DefaultCommandSpecFactory {
                             required("world", WORLD)
                     )
             );
+            case "info", "motd", "rules" -> routes(
+                    route(),
+                    route(
+                            required("page", INTEGER)
+                    )
+            );
+            case "customtext" -> routes(
+                    route(
+                            required("name", STRING)
+                    ),
+                    route(
+                            required("name", STRING),
+                            required("page", INTEGER)
+                    )
+            );
+            case "backup" -> routes(route());
             case "weather" -> routes(
                     route(
                             choice(

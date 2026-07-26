@@ -6,8 +6,7 @@ public interface RandomTeleportService {
 
     Optional<CellLocation> randomLocation(
             String world,
-            int minRadius,
-            int maxRadius
+            RandomTeleportSettings settings
     );
 
 }

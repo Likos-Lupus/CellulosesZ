@@ -11,11 +11,7 @@ import java.util.Map;
 public final class RenameHomeCommand extends AbstractHomeCommand {
 
     public RenameHomeCommand(
-            PlatformService platform,
-            HomeService homes,
-            TeleportService teleports,
-            HomeConfig config
-    ) {
+            PlatformService platform, HomeService homes, TeleportService teleports, HomeConfig config) {
         super(platform, homes, teleports, config);
     }
 
@@ -38,31 +34,19 @@ public final class RenameHomeCommand extends AbstractHomeCommand {
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
-
         var args = invocation.args();
         if (args.length != 2) {
-            invocation.errorKey(
-                    "commands.home.rename-home-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.home.rename-home-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
         if (!validName(invocation, args[1])) return 0;
-
-        if (homes.renameHome(self.get().uuid(), args[0], args[1]).join()) {
-            invocation.replyKey(
-                    "commands.home.rename-home-command.reply.1",
-                    Map.of(
-                            "value0", args[0],
-                            "value1", args[1]
-                    )
-            );
-            return 1;
-        }
-
-        invocation.errorKey("commands.home.rename-home-command.error.2");
-        return 0;
+        homes.renameHome(self.orElseThrow().uuid(), args[0], args[1]).whenComplete((renamed, failure) -> {
+            if (failure != null) invocation.errorKey("common.persistence-failed");
+            else if (renamed)
+                invocation.replyKey("commands.home.rename-home-command.reply.1", Map.of("value0", args[0], "value1", args[1]));
+            else invocation.errorKey("commands.home.rename-home-command.error.2");
+        });
+        return 1;
     }
 
 }

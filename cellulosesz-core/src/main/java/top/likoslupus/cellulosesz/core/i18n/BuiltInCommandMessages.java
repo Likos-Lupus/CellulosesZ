@@ -348,6 +348,8 @@ final class BuiltInCommandMessages {
         messages.put("commands.item.power-tool-command.removed", "<primary>Removed PowerTool command: <secondary>{command}<primary>");
         messages.put("commands.kit.create-kit-command.error.cooldown", "<red>The cooldown must be zero or a positive number of seconds, or <secondary>once<red>.");
         messages.put("commands.kit.create-kit-command.error.empty", "<red>Your inventory is empty; no kit was created.");
+        messages.put("commands.kit.create-kit-command.error.snapshot", "<red>Your inventory could not be serialized; no kit was created.");
+        messages.put("commands.kit.show-kit-command.error.invalid-item", "<red>The kit contains an invalid serialized item stack.");
         messages.put("commands.kit.kit-reset-command.error.kit", "<red>Kit not found: <secondary>{kit}<red>");
         messages.put("commands.kit.kit-reset-command.error.player-required", "<red>Console must specify a player.");
         messages.put("commands.kit.kit-reset-command.error.others", "<red>You do not have permission to reset another player’s kit cooldown.");
@@ -370,10 +372,24 @@ final class BuiltInCommandMessages {
         messages.put("service.economy.persistence-failed", "<red>The balance change could not be persisted; no balances were changed.");
         messages.put("service.user.persistence-failed", "<red>The user setting could not be persisted; the change was rolled back.");
         messages.put("service.kit.persistence-failed", "<red>The kit data could not be persisted; the change was rolled back.");
+        messages.put("service.kit.inventory-unavailable", "<red>The kit requires inventory slots that are not currently empty.");
+        messages.put("service.kit.inventory-changed", "<red>Your inventory changed before the kit could be granted.");
+        messages.put("service.kit.rollback-failed", "<red>The kit claim failed and could not be fully rolled back; contact an administrator.");
         messages.put("service.warp.persistence-failed", "<red>The warp data could not be persisted; the change was rolled back.");
         messages.put("service.kit.once", "<red>This one-time kit has already been claimed.");
         messages.put("service.teleport.cross-world-disabled", "<red>This teleport does not allow changing worlds.");
         messages.put("service.teleport.unsafe", "<red>No safe destination could be found.");
+        messages.putAll(CommonMessages.english());
+        messages.putAll(CommandMessages.english());
+        messages.putAll(AdminMessages.english());
+        messages.putAll(EconomyMessages.english());
+        messages.putAll(ItemMessages.english());
+        messages.putAll(MessagingMessages.english());
+        messages.putAll(PlayerStateMessages.english());
+        messages.putAll(TeleportMessages.english());
+        messages.putAll(TextMessages.english());
+        messages.putAll(WorldMessages.english());
+        messages.putAll(SignMessages.english());
         return Map.copyOf(messages);
     }
 
@@ -407,10 +423,10 @@ final class BuiltInCommandMessages {
         messages.put("commands.economy.balance-top-command.error.2", "<red>此页没有余额排行记录。");
         messages.put("commands.economy.eco-command.error.1", "<red>用法: <secondary>{value0}<red>");
         messages.put("commands.economy.eco-command.error.2", "<red>用法: <secondary>{value0}<red>");
-        messages.put("commands.economy.pay-command.reply.1", "<primary>已向 <secondary>{value0}<primary> 支付 <secondary>{value1}<primary>。当前余额: <secondary>{value2}<primary>");
+        messages.put("commands.economy.pay-command.reply.1", "<primary>已支付 <secondary>{value1}<primary> 给 <secondary>{value0}<primary>。当前余额：<secondary>{value2}<primary>");
         messages.put("commands.economy.pay-received", "<secondary>{player}<primary> 向你支付了 <secondary>{amount}<primary>。");
         messages.put("commands.economy.pay-self", "<red>不能向自己付款。");
-        messages.put("commands.economy.pay-confirm-required", "<primary>向 <secondary>{player}<primary> 支付 <secondary>{amount}<primary> 需要确认。请在 <secondary>{seconds}<primary> 秒内执行 <secondary>/pay {player} {amount} {token}<primary>。");
+        messages.put("commands.economy.pay-confirm-required", "<primary>支付 <secondary>{amount}<primary> 给 <secondary>{player}<primary> 需要确认。请执行 <secondary>/pay {player} {amount} {token}<primary>，并在 <secondary>{seconds}<primary> 秒内完成。");
         messages.put("commands.economy.pay-confirm-invalid", "<red>付款确认无效、已过期或与当前付款不匹配。");
         messages.put("commands.economy.pay-confirm-unexpected", "<red>这笔付款不需要确认令牌。");
         messages.put("commands.economy.pay-command.error.1", "<red>用法: <secondary>{value0}<red>");
@@ -466,7 +482,7 @@ final class BuiltInCommandMessages {
         messages.put("commands.item.repair-command.error.2", "<red>你没有权限修复全部物品。");
         messages.put("commands.item.repair-command.error.3", "<red>没有可修复的物品。");
         messages.put("commands.item.unlimited-command.reply.1", "<primary>已清除全部无限物品。");
-        messages.put("commands.item.unlimited-command.reply.2", "<primary><secondary>{value0}<primary><secondary>{value1}<primary> 的无限补充。");
+        messages.put("commands.item.unlimited-command.reply.2", "<primary><secondary>{value1}<primary> 的无限补充状态：<secondary>{value0}<primary>。");
         messages.put("commands.item.unlimited-command.enabled", "<primary>已启用 <secondary>{item}<primary> 的无限补充。");
         messages.put("commands.item.unlimited-command.disabled", "<primary>已禁用 <secondary>{item}<primary> 的无限补充。");
         messages.put("commands.item.unlimited-command.error.1", "<red>用法: <secondary>{value0}<red>");
@@ -714,12 +730,14 @@ final class BuiltInCommandMessages {
         messages.put("commands.item.power-tool-command.removed", "<primary>已移除 PowerTool 命令：<secondary>{command}<primary>");
         messages.put("commands.kit.create-kit-command.error.cooldown", "<red>冷却必须为 0 或正整数秒，也可填写 <secondary>once<red>。");
         messages.put("commands.kit.create-kit-command.error.empty", "<red>背包为空，未创建 Kit。");
+        messages.put("commands.kit.create-kit-command.error.snapshot", "<red>无法完整序列化你的背包，未创建 Kit。");
+        messages.put("commands.kit.show-kit-command.error.invalid-item", "<red>该 Kit 包含无法解析的物品栈数据。");
         messages.put("commands.kit.kit-reset-command.error.kit", "<red>Kit 不存在：<secondary>{kit}<red>");
         messages.put("commands.kit.kit-reset-command.error.player-required", "<red>控制台必须指定玩家。");
         messages.put("commands.kit.kit-reset-command.error.others", "<red>你没有权限重置其他玩家的 Kit 冷却。");
         messages.put("commands.messaging.broadcast-world-command.usage", "<red>用法：<secondary>{usage}<red>");
         messages.put("commands.messaging.broadcast-world-command.world", "<red>世界不存在：<secondary>{world}<red>");
-        messages.put("commands.messaging.broadcast-world-command.sent", "<primary>已向世界 <secondary>{world}<primary> 中的 <secondary>{count}<primary> 名玩家广播。");
+        messages.put("commands.messaging.broadcast-world-command.sent", "<primary>已向 <secondary>{count}<primary> 名玩家广播，世界：<secondary>{world}<primary>。");
         messages.put("commands.messaging.reply-toggle.usage", "<red>用法：<secondary>{usage}<red>");
         messages.put("commands.messaging.reply-toggle.recipient", "<primary>/reply 将优先回复你最后主动私聊的玩家。");
         messages.put("commands.messaging.reply-toggle.sender", "<primary>/reply 将优先回复最后私聊你的玩家。");
@@ -736,10 +754,24 @@ final class BuiltInCommandMessages {
         messages.put("service.economy.persistence-failed", "<red>余额变更无法持久化，所有余额均保持不变。");
         messages.put("service.user.persistence-failed", "<red>用户设置无法持久化，本次变更已回滚。");
         messages.put("service.kit.persistence-failed", "<red>Kit 数据无法持久化，本次变更已回滚。");
+        messages.put("service.kit.inventory-unavailable", "<red>该 Kit 所需的原始背包槽位当前并非全部为空。");
+        messages.put("service.kit.inventory-changed", "<red>发放 Kit 前背包状态发生变化。");
+        messages.put("service.kit.rollback-failed", "<red>Kit 领取失败且未能完整回滚，请联系管理员。");
         messages.put("service.warp.persistence-failed", "<red>Warp 数据无法持久化，本次变更已回滚。");
         messages.put("service.kit.once", "<red>该一次性 Kit 已经领取过。");
         messages.put("service.teleport.cross-world-disabled", "<red>此次传送不允许跨世界。");
         messages.put("service.teleport.unsafe", "<red>未找到安全的传送落点。");
+        messages.putAll(CommonMessages.chinese());
+        messages.putAll(CommandMessages.chinese());
+        messages.putAll(AdminMessages.chinese());
+        messages.putAll(EconomyMessages.chinese());
+        messages.putAll(ItemMessages.chinese());
+        messages.putAll(MessagingMessages.chinese());
+        messages.putAll(PlayerStateMessages.chinese());
+        messages.putAll(TeleportMessages.chinese());
+        messages.putAll(TextMessages.chinese());
+        messages.putAll(WorldMessages.chinese());
+        messages.putAll(SignMessages.chinese());
         return Map.copyOf(messages);
     }
 

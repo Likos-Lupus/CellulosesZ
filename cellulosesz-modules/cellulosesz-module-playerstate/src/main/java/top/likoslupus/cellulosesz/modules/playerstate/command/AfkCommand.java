@@ -37,12 +37,12 @@ public final class AfkCommand extends AbstractPlayerStateCommand {
         if (self.isEmpty()) return 0;
 
         var enabled = !states.afk(self.get().uuid());
-        var result = states.setAfk(
-                self.get().uuid(),
-                self.get().name(),
-                enabled
-        );
-        invocation.reply(result.message());
+        states.setAfk(self.orElseThrow().uuid(), self.orElseThrow().name(), enabled)
+                .whenComplete((result, failure) -> {
+                    if (failure != null) invocation.errorKey("service.user.persistence-failed");
+                    else if (result.success()) invocation.reply(result.message());
+                    else invocation.error(result.message());
+                });
         return 1;
     }
 

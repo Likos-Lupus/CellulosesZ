@@ -87,8 +87,8 @@ public final class UnlimitedCommand extends AbstractItemCommand {
         var enabled = args.length == 0
                 ? !automation.unlimited(self.get().uuid(), held.get())
                 : args[0].equalsIgnoreCase("on")
-                  || args[0].equalsIgnoreCase("enable")
-                  || args[0].equalsIgnoreCase("true");
+                        || args[0].equalsIgnoreCase("enable")
+                        || args[0].equalsIgnoreCase("true");
         if (args.length == 1 && !(
                 enabled || args[0].equalsIgnoreCase("off")
                         || args[0].equalsIgnoreCase("disable")

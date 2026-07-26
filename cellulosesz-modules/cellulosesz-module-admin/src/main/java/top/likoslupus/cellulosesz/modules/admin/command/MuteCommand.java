@@ -59,18 +59,12 @@ public final class MuteCommand extends AbstractAdminCommand {
                 || args[1].equalsIgnoreCase("remove")
                 || args[1].equalsIgnoreCase("clear"))
         ) {
-            var result = mutes.unmute(uuid.get(), args[0], actor(invocation));
-            if (result.success()) {
-                invocation.reply(result.message());
-            } else {
-                invocation.error(result.message());
-            }
-            return result.success() ? 1 : 0;
+            mutes.unmute(uuid.get(), args[0], actor(invocation))
+                    .whenComplete((result, failure) -> complete(invocation, result, failure));
+            return 1;
         }
 
-        var duration = config.defaultMuteSeconds <= 0
-                ? null
-                : config.defaultMuteSeconds * 1000L;
+        @org.jspecify.annotations.Nullable Long duration = defaultDuration();
         var reasonStart = 1;
         if (args.length >= 2) {
             var parsed = DurationParser.parseMillis(args[1]);
@@ -81,8 +75,7 @@ public final class MuteCommand extends AbstractAdminCommand {
         }
 
         if (duration != null
-                && config.maximumMuteSeconds >= 0
-                && duration > config.maximumMuteSeconds * 1000L
+                && exceedsMaximum(duration)
                 && !invocation.hasPermission("cellulosesz.admin.mute.unlimited")
         ) {
             invocation.errorKey(
@@ -92,19 +85,42 @@ public final class MuteCommand extends AbstractAdminCommand {
             return 0;
         }
 
-        var result = mutes.mute(
+        mutes.mute(
                 uuid.get(),
                 args[0],
                 actor(invocation),
                 duration,
                 join(args, reasonStart)
-        );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
+        ).whenComplete((result, failure) -> complete(invocation, result, failure));
+        return 1;
+    }
+
+    private void complete(
+            CommandInvocation invocation,
+            top.likoslupus.cellulosesz.api.admin.AdminResult result,
+            Throwable failure
+    ) {
+        if (failure != null) invocation.errorKey("service.admin.persistence-failed");
+        else if (result.success()) invocation.reply(result.message());
+        else invocation.error(result.message());
+    }
+
+    private @org.jspecify.annotations.Nullable Long defaultDuration() {
+        if (config.defaultMuteSeconds <= 0) return null;
+        try {
+            return Math.multiplyExact(config.defaultMuteSeconds, 1000L);
+        } catch (ArithmeticException exception) {
+            return Long.MAX_VALUE;
         }
-        return result.success() ? 1 : 0;
+    }
+
+    private boolean exceedsMaximum(long durationMillis) {
+        if (config.maximumMuteSeconds < 0) return false;
+        try {
+            return durationMillis > Math.multiplyExact(config.maximumMuteSeconds, 1000L);
+        } catch (ArithmeticException exception) {
+            return false;
+        }
     }
 
 }

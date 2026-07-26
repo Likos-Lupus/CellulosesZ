@@ -57,17 +57,16 @@ public final class SetJailCommand extends AbstractAdminCommand {
             return 0;
         }
 
-        var result = jails.setJail(
+        jails.setJail(
                 invocation.args()[0],
                 platform.location(self.get()),
                 actor(invocation)
-        );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        ).whenComplete((result, failure) -> {
+            if (failure != null) invocation.errorKey("service.admin.persistence-failed");
+            else if (result.success()) invocation.reply(result.message());
+            else invocation.error(result.message());
+        });
+        return 1;
     }
 
 }

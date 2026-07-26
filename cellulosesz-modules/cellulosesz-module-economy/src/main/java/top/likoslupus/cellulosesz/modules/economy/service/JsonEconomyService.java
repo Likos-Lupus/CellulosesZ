@@ -9,25 +9,29 @@ import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 import top.likoslupus.cellulosesz.modules.economy.data.EconomyDocument;
-import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogDocument;
 import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogEntry;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.file.Path;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
 public final class JsonEconomyService implements EconomyService {
 
     private static final int MAX_LOG_ENTRIES = 500;
 
     private final StorageService storage;
-    private final EconomyConfig config;
-    private final Path accountsPath;
-    private final Path logPath;
+    private final Path path;
     private final CellulosesZLogger logger;
-    private final EconomyDocument document;
-    private final TransactionLogDocument log;
+    private EconomyDocument document;
+    private volatile ConfigSnapshot config;
+    private volatile List<BalanceEntry> cachedTop = List.of();
+    private volatile long cachedTopAt;
+    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonEconomyService(
             StorageService storage,
@@ -36,183 +40,156 @@ public final class JsonEconomyService implements EconomyService {
             CellulosesZLogger logger
     ) {
         this.storage = storage;
-        this.config = config;
-        this.accountsPath = directory.resolve("accounts.json");
-        this.logPath = directory.resolve("transactions.json");
+        this.config = ConfigSnapshot.from(config);
+        this.path = directory.resolve("economy.json");
         this.logger = logger;
-        this.document = storage.load(accountsPath, EconomyDocument.class, EconomyDocument::new).join();
-        this.log = storage.load(logPath, TransactionLogDocument.class, TransactionLogDocument::new).join();
+        this.document = storage.load(path, EconomyDocument.class, EconomyDocument::new).join();
+        validateDocument(document, this.config);
+    }
+
+    private void validateDocument(EconomyDocument candidate, ConfigSnapshot snapshot) {
+        if (candidate.balances == null || candidate.transactions == null) {
+            throw new IllegalArgumentException("Economy document is incomplete");
+        }
+        candidate.balances.forEach((uuid, amount) -> {
+            UUID.fromString(uuid);
+            if (!withinBounds(money(amount, snapshot), snapshot)) {
+                throw new IllegalStateException("Stored balance is outside configured bounds");
+            }
+        });
+    }
+
+    private boolean withinBounds(BigDecimal amount, ConfigSnapshot snapshot) {
+        return amount.compareTo(snapshot.minimum()) >= 0 && amount.compareTo(snapshot.maximum()) <= 0;
+    }
+
+    private BigDecimal money(String value, ConfigSnapshot snapshot) {
+        return normalizeAmount(new BigDecimal(value), snapshot);
+    }
+
+    private BigDecimal normalizeAmount(BigDecimal amount, ConfigSnapshot snapshot) {
+        return amount.setScale(snapshot.scale(), RoundingMode.HALF_UP);
+    }
+
+    public synchronized void configure(EconomyConfig candidate) {
+        var replacement = ConfigSnapshot.from(candidate);
+        validateDocument(document, replacement);
+        config = replacement;
+        invalidateTop();
+    }
+
+    private void invalidateTop() {
+        cachedTop = List.of();
+        cachedTopAt = 0L;
     }
 
     @Override
     public synchronized BigDecimal balance(UUID uuid) {
-        return read(uuid);
+        return read(document, uuid, config);
     }
 
     @Override
-    public synchronized TransactionResult deposit(
+    public String format(BigDecimal amount) {
+        var snapshot = config;
+        var symbols = DecimalFormatSymbols.getInstance(Locale.ROOT);
+        symbols.setGroupingSeparator(',');
+        symbols.setDecimalSeparator('.');
+
+        var pattern = snapshot.grouping() ? "#,##0" : "0";
+        if (snapshot.scale() > 0) pattern += "." + "0".repeat(snapshot.scale());
+        var normalized = normalizeAmount(amount, snapshot);
+        var number = new DecimalFormat(pattern, symbols).format(normalized);
+        var spacing = snapshot.spaceBetweenSymbolAndAmount() ? " " : "";
+        var money = snapshot.symbolBefore()
+                ? snapshot.symbol() + spacing + number
+                : number + spacing + snapshot.symbol();
+        var unit = normalized.abs().compareTo(BigDecimal.ONE.setScale(snapshot.scale())) == 0
+                ? snapshot.singular()
+                : snapshot.plural();
+        return snapshot.showName() ? money + " " + unit : money;
+    }
+
+    @Override
+    public CompletableFuture<TransactionResult> deposit(
             UUID uuid,
             BigDecimal amount,
             TransactionCause cause
     ) {
-        var normalized = normalizeAmount(amount);
-        if (normalized.signum() < 0) {
-            return record(
-                    null,
-                    uuid,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.negative-amount",
-                    read(uuid)
-            );
-        }
-
-        var snapshot = snapshotBalances();
-        var current = read(uuid);
-        var next = current.add(normalized);
-        var maximum = money(config.maximumBalance);
-        if (next.compareTo(maximum) > 0) {
-            return record(
-                    null,
-                    uuid,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.balance-maximum",
-                    current
-            );
-        }
-
-        write(uuid, next);
-        if (!persistAccounts(snapshot)) {
-            return record(
-                    null,
-                    uuid,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.persistence-failed",
-                    current
-            );
-        }
-        return record(
-                null,
-                uuid,
-                normalized,
-                cause,
-                true,
-                "service.economy.deposit-success",
-                next
-        );
+        return enqueue(current -> {
+            var snapshot = config;
+            var normalized = normalizeAmount(amount, snapshot);
+            var balance = read(current, uuid, snapshot);
+            if (normalized.signum() <= 0) {
+                return failureOutcome(current, null, uuid, normalized, cause,
+                        "service.economy.amount-positive", balance, snapshot);
+            }
+            var nextBalance = balance.add(normalized);
+            if (nextBalance.compareTo(snapshot.maximum()) > 0) {
+                return failureOutcome(current, null, uuid, normalized, cause,
+                        "service.economy.balance-maximum", balance, snapshot);
+            }
+            var next = copy(current);
+            write(next, uuid, nextBalance, snapshot);
+            append(next, logEntry(null, uuid, normalized, cause, true,
+                    "service.economy.deposit-success", snapshot));
+            return MutationOutcome.balanceChange(next, TransactionResult.success(
+                    "service.economy.deposit-success", normalized, nextBalance));
+        });
     }
 
     @Override
-    public synchronized TransactionResult withdraw(
+    public CompletableFuture<TransactionResult> withdraw(
             UUID uuid,
             BigDecimal amount,
             TransactionCause cause
     ) {
-        var normalized = normalizeAmount(amount);
-        if (normalized.signum() < 0) {
-            return record(
-                    uuid,
-                    null,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.negative-amount",
-                    read(uuid)
-            );
-        }
-
-        var snapshot = snapshotBalances();
-        var current = read(uuid);
-        var next = current.subtract(normalized);
-        var minimum = money(config.minimumBalance);
-        if (next.compareTo(minimum) < 0) {
-            return record(
-                    uuid,
-                    null,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.insufficient-funds",
-                    current
-            );
-        }
-
-        write(uuid, next);
-        if (!persistAccounts(snapshot)) {
-            return record(
-                    uuid,
-                    null,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.persistence-failed",
-                    current
-            );
-        }
-        return record(
-                uuid,
-                null,
-                normalized,
-                cause,
-                true,
-                "service.economy.withdraw-success",
-                next
-        );
+        return enqueue(current -> {
+            var snapshot = config;
+            var normalized = normalizeAmount(amount, snapshot);
+            var balance = read(current, uuid, snapshot);
+            if (normalized.signum() <= 0) {
+                return failureOutcome(current, uuid, null, normalized, cause,
+                        "service.economy.amount-positive", balance, snapshot);
+            }
+            var nextBalance = balance.subtract(normalized);
+            if (nextBalance.compareTo(snapshot.minimum()) < 0) {
+                return failureOutcome(current, uuid, null, normalized, cause,
+                        "service.economy.insufficient-funds", balance, snapshot);
+            }
+            var next = copy(current);
+            write(next, uuid, nextBalance, snapshot);
+            append(next, logEntry(uuid, null, normalized, cause, true,
+                    "service.economy.withdraw-success", snapshot));
+            return MutationOutcome.balanceChange(next, TransactionResult.success(
+                    "service.economy.withdraw-success", normalized, nextBalance));
+        });
     }
 
     @Override
-    public synchronized TransactionResult setBalance(
+    public CompletableFuture<TransactionResult> setBalance(
             UUID uuid,
             BigDecimal amount,
             TransactionCause cause
     ) {
-        var normalized = normalizeAmount(amount);
-        var minimum = money(config.minimumBalance);
-        var maximum = money(config.maximumBalance);
-        if (normalized.compareTo(minimum) < 0 || normalized.compareTo(maximum) > 0) {
-            return record(
-                    null,
-                    uuid,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.balance-out-of-range",
-                    read(uuid)
-            );
-        }
-
-        var snapshot = snapshotBalances();
-        var current = read(uuid);
-        write(uuid, normalized);
-        if (!persistAccounts(snapshot)) {
-            return record(
-                    null,
-                    uuid,
-                    normalized,
-                    cause,
-                    false,
-                    "service.economy.persistence-failed",
-                    current
-            );
-        }
-        return record(
-                null,
-                uuid,
-                normalized,
-                cause,
-                true,
-                "service.economy.balance-set",
-                normalized
-        );
+        return enqueue(current -> {
+            var snapshot = config;
+            var normalized = normalizeAmount(amount, snapshot);
+            var balance = read(current, uuid, snapshot);
+            if (!withinBounds(normalized, snapshot)) {
+                return failureOutcome(current, null, uuid, normalized, cause,
+                        "service.economy.balance-out-of-range", balance, snapshot);
+            }
+            var next = copy(current);
+            write(next, uuid, normalized, snapshot);
+            append(next, logEntry(null, uuid, normalized, cause, true,
+                    "service.economy.balance-set", snapshot));
+            return MutationOutcome.balanceChange(next, TransactionResult.success(
+                    "service.economy.balance-set", normalized, normalized));
+        });
     }
 
     @Override
-    public synchronized TransactionResult transfer(
+    public CompletableFuture<TransactionResult> transfer(
             UUID from,
             UUID to,
             BigDecimal amount,
@@ -222,182 +199,283 @@ public final class JsonEconomyService implements EconomyService {
     }
 
     @Override
-    public synchronized TransactionResult transferMany(
+    public CompletableFuture<TransactionResult> transferMany(
             UUID from,
             Collection<UUID> recipients,
             BigDecimal amountEach,
             TransactionCause cause
     ) {
-        var snapshot = snapshotBalances();
-        var uniqueRecipients = new LinkedHashSet<>(recipients);
-        uniqueRecipients.remove(from);
-        var normalized = normalizeAmount(amountEach);
-
-        if (uniqueRecipients.isEmpty()) {
-            return TransactionResult.failure(
-                    "service.economy.self-payment",
-                    normalized,
-                    read(from)
-            );
-        }
-        if (normalized.signum() <= 0) {
-            return TransactionResult.failure(
-                    "service.economy.amount-positive",
-                    normalized,
-                    read(from)
-            );
-        }
-
-        var total = normalized.multiply(BigDecimal.valueOf(uniqueRecipients.size()));
-        var fromBalance = read(from);
-        var nextFrom = fromBalance.subtract(total);
-        if (nextFrom.compareTo(money(config.minimumBalance)) < 0) {
-            return record(
-                    from,
-                    null,
-                    total,
-                    cause,
-                    false,
-                    "service.economy.insufficient-funds",
-                    fromBalance
-            );
-        }
-
-        var nextRecipients = new LinkedHashMap<UUID, BigDecimal>();
-        var maximum = money(config.maximumBalance);
-        for (var recipient : uniqueRecipients) {
-            var next = read(recipient).add(normalized);
-            if (next.compareTo(maximum) > 0) {
-                return record(
-                        from,
-                        recipient,
-                        normalized,
-                        cause,
-                        false,
-                        "service.economy.recipient-maximum",
-                        fromBalance
-                );
-            }
-            nextRecipients.put(recipient, next);
-        }
-
-        write(from, nextFrom);
-        nextRecipients.forEach(this::write);
-
-        if (!persistAccounts(snapshot)) {
-            return record(
-                    from,
-                    null,
-                    total,
-                    cause,
-                    false,
-                    "service.economy.persistence-failed",
-                    fromBalance
-            );
-        }
-
-        uniqueRecipients.forEach(recipient ->
-                record(
-                        from,
-                        recipient,
-                        normalized,
-                        cause,
-                        true,
-                        "service.economy.transfer-success",
-                        nextFrom
-                )
-        );
-        return TransactionResult.success("service.economy.transfer-success", total, nextFrom);
+        var immutableRecipients = List.copyOf(recipients);
+        return enqueue(current -> transferOutcome(current, from, immutableRecipients, amountEach, cause));
     }
 
     @Override
-    public synchronized List<BalanceEntry> topBalances(int limit) {
-        return document.balances.entrySet().stream()
-                .map(entry -> new BalanceEntry(
-                        UUID.fromString(entry.getKey()),
-                        money(entry.getValue())
-                ))
-                .sorted(Comparator.comparing(BalanceEntry::balance).reversed())
-                .limit(Math.max(1, limit))
+    public synchronized List<BalanceEntry> topBalances(
+            int limit,
+            @Nullable BigDecimal minimum,
+            @Nullable BigDecimal maximum
+    ) {
+        if (limit <= 0) return List.of();
+        var snapshot = config;
+        var now = System.currentTimeMillis();
+        long ttl;
+        try {
+            ttl = Math.multiplyExact(snapshot.balanceTopCacheSeconds(), 1000L);
+        } catch (ArithmeticException exception) {
+            ttl = Long.MAX_VALUE;
+        }
+        if (cachedTop.isEmpty() || now - cachedTopAt > ttl) {
+            cachedTop = document.balances.entrySet().stream()
+                    .map(entry -> new BalanceEntry(
+                            UUID.fromString(entry.getKey()),
+                            money(entry.getValue(), snapshot)
+                    ))
+                    .sorted(Comparator.comparing(BalanceEntry::balance)
+                            .reversed()
+                            .thenComparing(entry -> entry.uuid().toString()))
+                    .toList();
+            cachedTopAt = now;
+        }
+        return cachedTop.stream()
+                .filter(entry -> minimum == null || entry.balance().compareTo(minimum) >= 0)
+                .filter(entry -> maximum == null || entry.balance().compareTo(maximum) <= 0)
+                .limit(limit)
                 .toList();
     }
 
-    private TransactionResult record(
+    private BigDecimal read(EconomyDocument source, UUID uuid, ConfigSnapshot snapshot) {
+        var value = source.balances.get(uuid.toString());
+        return value == null ? snapshot.starting() : money(value, snapshot);
+    }
+
+    private MutationOutcome transferOutcome(
+            EconomyDocument current,
+            UUID from,
+            Collection<UUID> recipients,
+            BigDecimal amountEach,
+            TransactionCause cause
+    ) {
+        var snapshot = config;
+        var uniqueRecipients = new LinkedHashSet<>(recipients);
+        uniqueRecipients.remove(from);
+        var normalized = normalizeAmount(amountEach, snapshot);
+        var fromBalance = read(current, from, snapshot);
+        if (uniqueRecipients.isEmpty()) {
+            return failureOutcome(current, from, null, normalized, cause,
+                    "service.economy.self-payment", fromBalance, snapshot);
+        }
+        if (normalized.signum() <= 0) {
+            return failureOutcome(current, from, null, normalized, cause,
+                    "service.economy.amount-positive", fromBalance, snapshot);
+        }
+        var total = normalized.multiply(BigDecimal.valueOf(uniqueRecipients.size()));
+        var nextFrom = fromBalance.subtract(total);
+        if (nextFrom.compareTo(snapshot.minimum()) < 0) {
+            return failureOutcome(current, from, null, total, cause,
+                    "service.economy.insufficient-funds", fromBalance, snapshot);
+        }
+
+        var changes = new LinkedHashMap<UUID, BigDecimal>();
+        changes.put(from, nextFrom);
+        for (var recipient : uniqueRecipients) {
+            var recipientBalance = read(current, recipient, snapshot);
+            var nextRecipient = recipientBalance.add(normalized);
+            if (nextRecipient.compareTo(snapshot.maximum()) > 0) {
+                return failureOutcome(current, from, recipient, normalized, cause,
+                        "service.economy.recipient-maximum", fromBalance, snapshot);
+            }
+            changes.put(recipient, nextRecipient);
+        }
+
+        var next = copy(current);
+        changes.forEach((uuid, value) -> write(next, uuid, value, snapshot));
+        uniqueRecipients.forEach(recipient -> append(next, logEntry(
+                from, recipient, normalized, cause, true,
+                "service.economy.transfer-success", snapshot
+        )));
+        return MutationOutcome.balanceChange(next, TransactionResult.success(
+                "service.economy.transfer-success", total, nextFrom));
+    }
+
+    private synchronized CompletableFuture<TransactionResult> enqueue(
+            Function<EconomyDocument, MutationOutcome> operation
+    ) {
+        var result = new CompletableFuture<TransactionResult>();
+        mutationTail = mutationTail.handle((unused, failure) -> null)
+                .thenCompose(unused -> {
+                    EconomyDocument current;
+                    synchronized (this) {
+                        current = copy(document);
+                    }
+                    final MutationOutcome outcome;
+                    try {
+                        outcome = operation.apply(current);
+                    } catch (RuntimeException exception) {
+                        return CompletableFuture.failedFuture(exception);
+                    }
+                    return storage.save(path, outcome.document())
+                            .handle((saved, saveFailure) -> {
+                                if (saveFailure == null) {
+                                    synchronized (this) {
+                                        document = outcome.document();
+                                        if (outcome.balanceChanged()) invalidateTop();
+                                    }
+                                    result.complete(outcome.result());
+                                } else if (outcome.balanceChanged()) {
+                                    logger.error("Failed to persist the atomic economy document", saveFailure);
+                                    result.complete(TransactionResult.failure(
+                                            "service.economy.persistence-failed",
+                                            outcome.result().amount(),
+                                            outcome.result().balance()
+                                    ));
+                                } else {
+                                    // Audit persistence is secondary: preserve the original business failure.
+                                    logger.error("Failed to persist an economy failure audit entry", saveFailure);
+                                    result.complete(outcome.result());
+                                }
+                                return (Void) null;
+                            });
+                });
+        mutationTail.whenComplete((unused, failure) -> {
+            if (failure != null) result.completeExceptionally(failure);
+        });
+        return result;
+    }
+
+    private MutationOutcome failureOutcome(
+            EconomyDocument current,
+            @Nullable UUID from,
+            @Nullable UUID to,
+            BigDecimal amount,
+            TransactionCause cause,
+            String message,
+            BigDecimal balance,
+            ConfigSnapshot snapshot
+    ) {
+        var next = copy(current);
+        append(next, logEntry(from, to, amount, cause, false, message, snapshot));
+        return MutationOutcome.auditOnly(next, TransactionResult.failure(message, amount, balance));
+    }
+
+    private EconomyDocument copy(EconomyDocument source) {
+        var copy = new EconomyDocument();
+        copy.balances = new LinkedHashMap<>(source.balances);
+        copy.transactions = source.transactions.stream()
+                .map(this::copy)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        return copy;
+    }
+
+    private TransactionLogEntry copy(TransactionLogEntry source) {
+        var copy = new TransactionLogEntry();
+        copy.at = source.at;
+        copy.causeType = source.causeType;
+        copy.actor = source.actor;
+        copy.note = source.note;
+        copy.amount = source.amount;
+        copy.from = source.from;
+        copy.to = source.to;
+        copy.success = source.success;
+        copy.message = source.message;
+        return copy;
+    }
+
+    private void append(EconomyDocument target, TransactionLogEntry entry) {
+        target.transactions.add(entry);
+        while (target.transactions.size() > MAX_LOG_ENTRIES) target.transactions.removeFirst();
+    }
+
+    private TransactionLogEntry logEntry(
             @Nullable UUID from,
             @Nullable UUID to,
             BigDecimal amount,
             TransactionCause cause,
             boolean success,
             String message,
-            BigDecimal resultingBalance
+            ConfigSnapshot snapshot
     ) {
         var entry = new TransactionLogEntry();
         entry.from = from == null ? null : from.toString();
         entry.to = to == null ? null : to.toString();
-        entry.amount = normalizeAmount(amount).toPlainString();
+        entry.amount = normalizeAmount(amount, snapshot).toPlainString();
         entry.causeType = cause.type();
         entry.actor = cause.actor();
         entry.note = cause.note();
         entry.success = success;
         entry.message = message;
-        log.entries.add(entry);
-
-        while (log.entries.size() > MAX_LOG_ENTRIES) log.entries.removeFirst();
-        var snapshot = new TransactionLogDocument();
-        snapshot.entries.addAll(log.entries);
-        storage.save(logPath, snapshot)
-                .whenComplete((_, exception) -> {
-                    if (exception != null) {
-                        logger.error("Failed to save economy transaction log", exception);
-                    }
-                });
-        return success
-                ? TransactionResult.success(message, normalizeAmount(amount), resultingBalance)
-                : TransactionResult.failure(message, normalizeAmount(amount), resultingBalance);
+        return entry;
     }
 
-    private Map<String, String> snapshotBalances() {
-        return new LinkedHashMap<>(document.balances);
+    private void write(EconomyDocument target, UUID uuid, BigDecimal amount, ConfigSnapshot snapshot) {
+        target.balances.put(uuid.toString(), normalizeAmount(amount, snapshot).toPlainString());
     }
 
-    private void write(UUID uuid, BigDecimal amount) {
-        document.balances.put(uuid.toString(), normalizeAmount(amount).toPlainString());
-    }
+    private record MutationOutcome(
+            EconomyDocument document,
+            TransactionResult result,
+            boolean balanceChanged
+    ) {
 
-    private boolean persistAccounts(Map<String, String> snapshot) {
-        try {
-            storage.save(accountsPath, document).join();
-            return true;
-        } catch (RuntimeException exception) {
-            document.balances.clear();
-            document.balances.putAll(snapshot);
-            logger.error("Failed to persist economy accounts; in-memory balances were rolled back", exception);
-            return false;
+        private static MutationOutcome balanceChange(EconomyDocument document, TransactionResult result) {
+            return new MutationOutcome(document, result, true);
         }
-    }
 
-    private BigDecimal read(UUID uuid) {
-        var value = document.balances.computeIfAbsent(
-                uuid.toString(),
-                _ -> money(config.startingBalance).toPlainString()
-        );
-        return money(value);
-    }
-
-    private BigDecimal money(String value) {
-        try {
-            return normalizeAmount(new BigDecimal(value));
-        } catch (RuntimeException _) {
-            return BigDecimal.ZERO.setScale(config.currency.scale, RoundingMode.HALF_UP);
+        private static MutationOutcome auditOnly(EconomyDocument document, TransactionResult result) {
+            return new MutationOutcome(document, result, false);
         }
+
     }
 
-    private BigDecimal normalizeAmount(BigDecimal amount) {
-        return amount.setScale(config.currency.scale, RoundingMode.HALF_UP);
-    }
+    private record ConfigSnapshot(
+            String singular,
+            String plural,
+            String symbol,
+            boolean symbolBefore,
+            boolean spaceBetweenSymbolAndAmount,
+            boolean grouping,
+            boolean showName,
+            int scale,
+            BigDecimal starting,
+            BigDecimal minimum,
+            BigDecimal maximum,
+            long balanceTopCacheSeconds
+    ) {
 
-    public String format(BigDecimal amount) {
-        return config.currency.symbol + normalizeAmount(amount).toPlainString();
+        private static ConfigSnapshot from(EconomyConfig source) {
+            if (source == null || source.currency == null || source.balanceTop == null || source.pay == null) {
+                throw new IllegalArgumentException("Economy config is incomplete");
+            }
+            if (source.currency.scale < 0 || source.currency.scale > 8) {
+                throw new IllegalArgumentException("currency.scale must be between 0 and 8");
+            }
+            var scale = source.currency.scale;
+            var starting = new BigDecimal(source.startingBalance).setScale(scale, RoundingMode.HALF_UP);
+            var minimum = new BigDecimal(source.minimumBalance).setScale(scale, RoundingMode.HALF_UP);
+            var maximum = new BigDecimal(source.maximumBalance).setScale(scale, RoundingMode.HALF_UP);
+            if (minimum.compareTo(maximum) > 0
+                    || starting.compareTo(minimum) < 0
+                    || starting.compareTo(maximum) > 0) {
+                throw new IllegalArgumentException("Economy balance bounds are inconsistent");
+            }
+            if (source.balanceTop.cacheSeconds < 0) {
+                throw new IllegalArgumentException("balanceTop.cacheSeconds must not be negative");
+            }
+            return new ConfigSnapshot(
+                    source.currency.singular,
+                    source.currency.plural,
+                    source.currency.symbol,
+                    source.currency.symbolBefore,
+                    source.currency.spaceBetweenSymbolAndAmount,
+                    source.currency.grouping,
+                    source.currency.showName,
+                    scale,
+                    starting,
+                    minimum,
+                    maximum,
+                    source.balanceTop.cacheSeconds
+            );
+        }
+
     }
 
 }

@@ -4,8 +4,12 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
+import top.likoslupus.cellulosesz.api.platform.NativeCommandResult;
 
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * Keeps untouched vanilla command roots before CellulosesZ replaces commands with the same labels.
@@ -33,9 +37,7 @@ public final class FabricVanillaCommandBridge {
 
     public void capture(CommandDispatcher<CommandSourceStack> source) {
         var capturedRoots = new LinkedHashMap<String, CommandNode<CommandSourceStack>>();
-        source.getRoot().getChildren().forEach(command ->
-                capturedRoots.put(command.getName(), command)
-        );
+        source.getRoot().getChildren().forEach(command -> capturedRoots.put(command.getName(), command));
         roots = Map.copyOf(capturedRoots);
 
         var snapshot = new CommandDispatcher<CommandSourceStack>();
@@ -46,10 +48,7 @@ public final class FabricVanillaCommandBridge {
         dispatcher = snapshot;
     }
 
-    public void restore(
-            CommandDispatcher<CommandSourceStack> target,
-            String label
-    ) {
+    public void restore(CommandDispatcher<CommandSourceStack> target, String label) {
         root(label).ifPresent(target.getRoot()::addChild);
     }
 
@@ -57,17 +56,32 @@ public final class FabricVanillaCommandBridge {
         return Optional.ofNullable(roots.get(label));
     }
 
-    public OptionalInt execute(String command, CommandSourceStack source) {
-        if (command.isBlank()) return OptionalInt.empty();
+    public NativeCommandResult execute(String command, CommandSourceStack source) {
+        if (command.isBlank()) return NativeCommandResult.parseFailure("Command is blank");
 
         var normalized = command.trim();
         while (normalized.startsWith("/")) normalized = normalized.substring(1);
-        if (normalized.isBlank()) return OptionalInt.empty();
+        if (normalized.isBlank()) return NativeCommandResult.parseFailure("Command is blank");
+
+        var labelEnd = normalized.indexOf(' ');
+        var label = labelEnd < 0 ? normalized : normalized.substring(0, labelEnd);
+        if (!roots.containsKey(label)) {
+            return NativeCommandResult.notAvailable("Native command root is unavailable: " + label);
+        }
 
         try {
-            return OptionalInt.of(dispatcher.execute(normalized, source));
-        } catch (CommandSyntaxException _) {
-            return OptionalInt.empty();
+            var code = dispatcher.execute(normalized, source);
+            return code > 0
+                    ? NativeCommandResult.success(code)
+                    : NativeCommandResult.executionFailure(code, "Native command returned a non-success result code");
+        } catch (CommandSyntaxException exception) {
+            return NativeCommandResult.parseFailure(exception.getRawMessage().getString());
+        } catch (RuntimeException exception) {
+            var message = exception.getMessage();
+            return NativeCommandResult.executionFailure(
+                    0,
+                    message == null || message.isBlank() ? exception.getClass().getSimpleName() : message
+            );
         }
     }
 

@@ -8,9 +8,9 @@ public final class WorldConfig {
 
     public static final class Backup {
 
-        public boolean enabled = false;
-        public String command = "";
-        public boolean requireConsole = true;
+        public boolean enabled = true;
+        public String directory = "backups";
+        public int retain = 10;
 
     }
 

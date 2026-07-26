@@ -11,6 +11,8 @@ public final class UserState {
     public boolean flying;
     public boolean vanished;
     public @Nullable String nickname;
+    public @Nullable Long personalTime;
+    public @Nullable String personalWeather;
     public Map<String, List<String>> powerToolCommands = new LinkedHashMap<>();
     public Set<String> unlimitedItems = new LinkedHashSet<>();
 

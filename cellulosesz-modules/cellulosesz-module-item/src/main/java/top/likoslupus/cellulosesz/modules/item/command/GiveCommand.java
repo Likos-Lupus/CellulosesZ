@@ -54,6 +54,10 @@ public final class GiveCommand extends AbstractItemCommand {
             return 0;
         }
 
+        if (!allowSpawn(invocation, descriptor.get(), "cellulosesz.item.give")) {
+            return 0;
+        }
+
         if (!items.give(target.get(), descriptor.get())) {
             invocation.errorKey("commands.item.give-command.error.3");
             return 0;

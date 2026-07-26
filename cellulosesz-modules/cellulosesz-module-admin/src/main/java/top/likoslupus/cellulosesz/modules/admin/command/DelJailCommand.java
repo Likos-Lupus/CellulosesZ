@@ -45,13 +45,12 @@ public final class DelJailCommand extends AbstractAdminCommand {
             return 0;
         }
 
-        var result = jails.deleteJail(invocation.args()[0]);
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        jails.deleteJail(invocation.args()[0]).whenComplete((result, failure) -> {
+            if (failure != null) invocation.errorKey("service.admin.persistence-failed");
+            else if (result.success()) invocation.reply(result.message());
+            else invocation.error(result.message());
+        });
+        return 1;
     }
 
 }

@@ -26,9 +26,9 @@ public interface TeleportService {
 
     boolean warmingUp(UUID uuid);
 
-    void rememberBackLocation(CellPlayer player);
+    CompletableFuture<Void> rememberBackLocation(CellPlayer player);
 
-    void rememberBackLocation(UUID uuid, CellLocation location);
+    CompletableFuture<Void> rememberBackLocation(UUID uuid, CellLocation location);
 
     Optional<CellLocation> backLocation(UUID uuid);
 

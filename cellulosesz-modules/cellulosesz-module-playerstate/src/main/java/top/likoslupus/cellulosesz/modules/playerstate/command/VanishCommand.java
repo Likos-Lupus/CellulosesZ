@@ -93,20 +93,23 @@ public final class VanishCommand extends AbstractPlayerStateCommand {
             return 0;
         }
 
+        var selectedTarget = target;
         var enabled = args.length == stateIndex
-                ? !vanish.vanished(target.uuid())
+                ? !vanish.vanished(selectedTarget.uuid())
                 : enabled(args[stateIndex]);
-        var result = vanish.setVanished(target, enabled);
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-
-        if (!target.uuid().equals(self.get().uuid())) {
-            platform.sendMessage(target, messages.render(locales.locale(target), result.message()));
-        }
-        return result.success() ? 1 : 0;
+        vanish.setVanished(selectedTarget, enabled).whenComplete((result, failure) -> {
+            if (failure != null) {
+                invocation.errorKey("service.user.persistence-failed");
+                return;
+            }
+            if (result.success()) invocation.reply(result.message());
+            else invocation.error(result.message());
+            if (!selectedTarget.uuid().equals(self.orElseThrow().uuid())) {
+                platform.runOnServerThread(() -> platform.sendMessage(
+                        selectedTarget, messages.render(locales.locale(selectedTarget), result.message())));
+            }
+        });
+        return 1;
     }
 
     private boolean toggleWord(String value) {

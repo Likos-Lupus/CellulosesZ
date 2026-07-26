@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.core.permission;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.CompletionStage;
 import java.util.stream.Stream;
 
 public final class ReflectionLuckPermsPermissionBackend implements PermissionBackend {
@@ -76,16 +75,7 @@ public final class ReflectionLuckPermsPermissionBackend implements PermissionBac
                     .getMethod("getUser", UUID.class)
                     .invoke(userManager, uuid.get());
 
-            if (loaded != null) return Optional.of(loaded);
-
-            var future = userManager.getClass()
-                    .getMethod("loadUser", UUID.class)
-                    .invoke(userManager, uuid.get());
-            if (future instanceof CompletionStage<?> stage) {
-                return Optional.ofNullable(stage.toCompletableFuture().join());
-            }
-
-            return Optional.empty();
+            return Optional.ofNullable(loaded);
         } catch (ClassNotFoundException |
                  IllegalAccessException |
                  InvocationTargetException |
@@ -144,7 +134,7 @@ public final class ReflectionLuckPermsPermissionBackend implements PermissionBac
     private Optional<Object> invoke(Object value, String method) {
         try {
             return Optional.ofNullable(value.getClass().getMethod(method).invoke(value));
-        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException exception) {
+        } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException _) {
             return Optional.empty();
         }
     }

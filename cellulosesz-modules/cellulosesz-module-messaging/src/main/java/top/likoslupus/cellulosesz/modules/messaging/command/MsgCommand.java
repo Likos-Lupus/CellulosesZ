@@ -59,9 +59,12 @@ public final class MsgCommand extends AbstractMessagingCommand {
         var message = join(args, 1);
         if (sender.isEmpty() || target.isEmpty() || !validLength(invocation, message)) return 0;
 
-        var result = privateMessages.send(sender.get(), target.get(), message);
-        if (!result.success()) invocation.error(result.message());
-        return result.success() ? 1 : 0;
+        privateMessages.send(sender.orElseThrow(), target.orElseThrow(), message)
+                .whenComplete((result, failure) -> {
+                    if (failure != null) invocation.errorKey("service.messaging.persistence-failed");
+                    else if (!result.success()) invocation.error(result.message());
+                });
+        return 1;
     }
 
 }

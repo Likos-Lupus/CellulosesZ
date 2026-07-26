@@ -8,45 +8,298 @@ import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.core.config.JacksonCodecs;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultItemService implements ItemService {
 
     private static final Pattern ID_PATTERN = Pattern.compile("^[a-z0-9_.-]+:[a-z0-9_./-]+$");
     private static final Pattern INTEGER_PATTERN = Pattern.compile("^[0-9]+$");
-
     private final PlatformService platform;
-    private final ItemConfig config;
+    private volatile ItemConfig config;
+    private volatile Map<String, String> aliases = Map.of();
+    private volatile Map<String, ItemDescriptor> customItems = Map.of();
+    private volatile Set<String> blacklist = Set.of();
 
     public DefaultItemService(
             PlatformService platform,
             ItemConfig config
     ) {
-        this.platform = platform;
+        this.platform = requireNonNull(platform, "platform");
+        configure(config);
+    }
+
+    public void configure(ItemConfig config) {
+        requireNonNull(config, "config");
+        if (config.maxCommandCount < 1) {
+            throw new IllegalArgumentException("maxCommandCount must be positive");
+        }
+        if (config.maxLoreLines < 1) {
+            throw new IllegalArgumentException("maxLoreLines must be positive");
+        }
+
+        var aliasCopy = new LinkedHashMap<String, String>();
+        requireNonNull(config.aliases, "aliases").forEach((alias, item) -> {
+            var key = key(alias);
+            var normalized = normalizeId(item);
+
+            if (key.isBlank() || !ID_PATTERN.matcher(normalized).matches()) {
+                throw new IllegalArgumentException("Invalid item alias: " + alias);
+            }
+            if (aliasCopy.put(key, normalized) != null)
+                throw new IllegalArgumentException("Duplicate item alias: " + alias);
+        });
+
+        var customCopy = new LinkedHashMap<String, ItemDescriptor>();
+        requireNonNull(config.customItems, "customItems").forEach((name, item) -> {
+            var key = key(name);
+            requireNonNull(item, "custom item");
+            var copy = item.copy();
+            if (key.isBlank() || !validDescriptorShape(copy)) {
+                throw new IllegalArgumentException("Invalid custom item: " + name);
+            }
+            if (customCopy.put(key, copy) != null) {
+                throw new IllegalArgumentException("Duplicate custom item: " + name);
+            }
+        });
+
+        var blacklistCopy = new LinkedHashSet<String>();
+        requireNonNull(config.blacklist, "blacklist").forEach(item -> {
+            var normalized = normalizeId(item);
+            if (!ID_PATTERN.matcher(normalized).matches()) {
+                throw new IllegalArgumentException("Invalid blacklisted item: " + item);
+            }
+            blacklistCopy.add(normalized);
+        });
+
         this.config = config;
+        this.aliases = Map.copyOf(aliasCopy);
+        this.customItems = Map.copyOf(customCopy);
+        this.blacklist = Set.copyOf(blacklistCopy);
+    }
+
+    private static String key(String value) {
+        return requireNonNull(value, "value").trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static String normalizeId(String value) {
+        var normalized = key(value);
+        return normalized.indexOf(':') < 0 ? "minecraft:" + normalized : normalized;
+    }
+
+    private boolean validDescriptorShape(ItemDescriptor item) {
+        if (item.count <= 0 || item.count > Math.max(1, config.maxCommandCount)) {
+            return false;
+        }
+
+        var id = item.normalizedItem();
+        if (!ID_PATTERN.matcher(id).matches()) return false;
+
+        return item.normalizedComponents().keySet().stream()
+                .allMatch(key -> ID_PATTERN.matcher(key).matches());
+    }
+
+    private static int firstTokenEnd(String value) {
+        for (var i = 0; i < value.length(); i++) {
+            var c = value.charAt(i);
+            if (Character.isWhitespace(c) || c == '[') return i;
+        }
+        return value.length();
+    }
+
+    private static int firstWhitespace(String value) {
+        return IntStream.range(0, value.length())
+                .filter(i -> Character.isWhitespace(value.charAt(i)))
+                .findFirst()
+                .orElse(-1);
+    }
+
+    private static int matchingBracket(String input, int start) {
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+        for (var index = start; index < input.length(); index++) {
+            var current = input.charAt(index);
+            if (quote != '\0') {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == quote) quote = '\0';
+                continue;
+            }
+
+            if (current == '\'' || current == '"') {
+                quote = current;
+                continue;
+            }
+
+            if (current == '[') depth++;
+            else if (current == ']' && --depth == 0) return index;
+        }
+
+        return -1;
+    }
+
+    private static boolean parseComponentList(String input, Map<String, Object> output) {
+        if (input.isBlank()) return true;
+
+        for (var entry : splitTopLevel(input, ',')) {
+            var equals = topLevelIndex(entry, '=');
+            if (equals <= 0 || equals == entry.length() - 1) return false;
+
+            var component = normalizeId(entry.substring(0, equals));
+            if (!ID_PATTERN.matcher(component).matches()) return false;
+
+            var raw = entry.substring(equals + 1).trim();
+            if (raw.isEmpty() || output.put(component, new RawItemComponent(raw)) != null) return false;
+        }
+
+        return true;
+    }
+
+    private static boolean parseTrailingComponents(String input, Map<String, Object> output) {
+        var value = input.trim();
+
+        if (value.startsWith("{") && value.endsWith("}")) {
+            try {
+                Map<?, ?> parsed = JacksonCodecs.readJson(value, LinkedHashMap.class);
+                for (var entry : parsed.entrySet()) {
+                    var key = normalizeId(String.valueOf(entry.getKey()));
+                    if (!ID_PATTERN.matcher(key).matches()
+                            || output.put(key, entry.getValue()) != null
+                    ) return false;
+                }
+                return true;
+            } catch (IOException | RuntimeException _) {
+                return false;
+            }
+        }
+
+        return value.startsWith("[")
+                && value.endsWith("]")
+                && matchingBracket(value, 0) == value.length() - 1
+                && parseComponentList(value.substring(1, value.length() - 1), output);
+    }
+
+    private static List<String> splitTopLevel(String input, char delimiter) {
+        var result = new ArrayList<String>();
+
+        var start = 0;
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+        for (var index = 0; index < input.length(); index++) {
+            var current = input.charAt(index);
+            if (quote != '\0') {
+                if (escaped) escaped = false;
+                else if (current == '\\') escaped = true;
+                else if (current == quote) quote = '\0';
+                continue;
+            }
+
+            if (current == '\'' || current == '"') {
+                quote = current;
+            } else if (current == '{' || current == '[' || current == '(') {
+                depth++;
+            } else if (current == '}' || current == ']' || current == ')') {
+                if (--depth < 0) return List.of("");
+            } else if (current == delimiter && depth == 0) {
+                result.add(input.substring(start, index).trim());
+                start = index + 1;
+            }
+        }
+
+        if (quote != '\0' || depth != 0) {
+            return List.of("");
+        }
+
+        result.add(input.substring(start).trim());
+        return result;
+    }
+
+    private static int topLevelIndex(String input, char target) {
+        var depth = 0;
+        var quote = '\0';
+        var escaped = false;
+        for (var index = 0; index < input.length(); index++) {
+            var current = input.charAt(index);
+            if (quote != '\0') {
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else {
+                    if (current == quote) quote = '\0';
+                }
+                continue;
+            }
+
+            if (current == '\'' || current == '"') {
+                quote = current;
+            } else if (current == '{' || current == '[' || current == '(') {
+                depth++;
+            } else if (current == '}' || current == ']' || current == ')') {
+                depth--;
+            } else {
+                if (current == target && depth == 0) return index;
+            }
+        }
+
+        return -1;
     }
 
     @Override
     public Optional<ItemDescriptor> parse(String input) {
         if (input.isBlank()) return Optional.empty();
 
-        var cursor = 0;
         var value = input.trim();
+        var firstEnd = firstTokenEnd(value);
+        var first = value.substring(0, firstEnd);
+        var custom = customItems.get(key(first));
+
+        if (custom != null) {
+            var result = custom.copy();
+            var tail = value.substring(firstEnd).trim();
+            if (!tail.isEmpty()) {
+                if (!INTEGER_PATTERN.matcher(tail).matches()) return Optional.empty();
+
+                try {
+                    result.count = Integer.parseInt(tail);
+                } catch (NumberFormatException _) {
+                    return Optional.empty();
+                }
+            }
+
+            return validDescriptorShape(result)
+                    ? Optional.of(result)
+                    : Optional.empty();
+        }
+
+        var alias = aliases.get(key(first));
+        if (alias != null) value = alias + value.substring(firstEnd);
+
+        var cursor = 0;
         while (cursor < value.length()
                 && !Character.isWhitespace(value.charAt(cursor))
                 && value.charAt(cursor) != '['
         ) {
             cursor++;
         }
+
+        if (cursor == 0) return Optional.empty();
+
         var itemId = normalizeId(value.substring(0, cursor));
         if (!ID_PATTERN.matcher(itemId).matches()) return Optional.empty();
 
         var descriptor = new ItemDescriptor(itemId, 1);
         if (cursor < value.length() && value.charAt(cursor) == '[') {
             var end = matchingBracket(value, cursor);
-            if (end < 0 || !parseComponentList(value.substring(cursor + 1, end), descriptor.components)) {
+            if (end < 0
+                    || !parseComponentList(value.substring(cursor + 1, end), descriptor.components)
+            ) {
                 return Optional.empty();
             }
             cursor = end + 1;
@@ -54,63 +307,94 @@ public final class DefaultItemService implements ItemService {
 
         var tail = value.substring(cursor).trim();
         if (!tail.isBlank()) {
-            var firstWhitespace = firstWhitespace(tail);
-            var first = firstWhitespace < 0
+            var whitespace = firstWhitespace(tail);
+            var firstTail = whitespace < 0
                     ? tail
-                    : tail.substring(0, firstWhitespace);
-            if (INTEGER_PATTERN.matcher(first).matches()) {
+                    : tail.substring(0, whitespace);
+            if (INTEGER_PATTERN.matcher(firstTail).matches()) {
                 try {
-                    descriptor.count = Integer.parseInt(first);
+                    descriptor.count = Integer.parseInt(firstTail);
                 } catch (NumberFormatException _) {
                     return Optional.empty();
                 }
-                tail = firstWhitespace < 0
-                        ? ""
-                        : tail.substring(firstWhitespace).trim();
+                tail = whitespace < 0 ? "" : tail.substring(whitespace).trim();
             }
         }
 
-        if (descriptor.count <= 0
-                || descriptor.count > Math.max(1, config.maxCommandCount)
-                || !tail.isBlank()
+        if (!tail.isBlank()
                 && !parseTrailingComponents(tail, descriptor.components)
-        ) return Optional.empty();
+        ) {
+            return Optional.empty();
+        }
 
-        return Optional.of(descriptor);
+        return validDescriptorShape(descriptor)
+                ? Optional.of(descriptor)
+                : Optional.empty();
     }
 
     @Override
     public String commandArgument(ItemDescriptor item) {
+        requireNonNull(item, "item");
         var id = item.normalizedItem();
-        if (!ID_PATTERN.matcher(id).matches()) return "minecraft:air";
+        if (!ID_PATTERN.matcher(id).matches()) {
+            throw new IllegalArgumentException("Invalid item id: " + id);
+        }
 
         var components = item.normalizedComponents();
         if (components.isEmpty()) return id;
 
         var parts = new ArrayList<String>();
         components.forEach((key, value) -> {
-            if (ID_PATTERN.matcher(key).matches()) parts.add(key + "=" + serialize(value));
+            if (!ID_PATTERN.matcher(key).matches()) {
+                throw new IllegalArgumentException("Invalid component id: " + key);
+            }
+            parts.add(key + "=" + serialize(value));
         });
-        return parts.isEmpty()
-                ? id
-                : "%s[%s]".formatted(id, String.join(",", parts));
+
+        return "%s[%s]".formatted(id, String.join(",", parts));
+    }
+
+    @Override
+    public boolean valid(ItemDescriptor item) {
+        return validDescriptorShape(item) && platform.validItem(item.normalizedItem());
+    }
+
+    @Override
+    public boolean blacklisted(ItemDescriptor item) {
+        return blacklist.contains(item.normalizedItem());
+    }
+
+    @Override
+    public int maxStackSize(ItemDescriptor item) {
+        return Math.max(1, platform.maxStackSize(item.normalizedItem()));
+    }
+
+    @Override
+    public Set<String> names() {
+        var names = new LinkedHashSet<String>();
+        names.addAll(aliases.keySet());
+        names.addAll(customItems.keySet());
+        return Set.copyOf(names);
     }
 
     @Override
     public boolean give(CellPlayer player, ItemDescriptor item) {
-        if (item.count <= 0 || item.count > Math.max(1, config.maxCommandCount)) return false;
-        return platform.giveItem(player, commandArgument(item), item.count);
+        return valid(item)
+                && item.count <= config.maxCommandCount
+                && platform.giveItem(player, commandArgument(item), item.count);
     }
 
     @Override
     public int count(CellPlayer player, ItemDescriptor item) {
-        return platform.countItem(player, commandArgument(item));
+        return valid(item)
+                ? platform.countItem(player, commandArgument(item))
+                : 0;
     }
 
     @Override
     public boolean take(CellPlayer player, ItemDescriptor item) {
-        if (item.count <= 0) return false;
-        return platform.takeItem(player, commandArgument(item), item.count);
+        return valid(item)
+                && platform.takeItem(player, commandArgument(item), item.count);
     }
 
     @Override
@@ -119,174 +403,13 @@ public final class DefaultItemService implements ItemService {
     }
 
     private String serialize(Object value) {
-        if (value instanceof RawItemComponent(String value1)) return value1;
-        try {
-            return JacksonCodecs.writeJsonString(value);
-        } catch (RuntimeException exception) {
-            return String.valueOf(value);
+        if (value instanceof RawItemComponent(String value1)) {
+            if (value1.isBlank()) {
+                throw new IllegalArgumentException("Raw component must not be blank");
+            }
+            return value1;
         }
-    }
-
-    private String normalizeId(String value) {
-        var normalized = value.trim().toLowerCase();
-        return normalized.indexOf(':') < 0 ? "minecraft:" + normalized : normalized;
-    }
-
-    private int matchingBracket(String input, int start) {
-        var depth = 0;
-        var quote = '\0';
-        var escaped = false;
-
-        for (var index = start; index < input.length(); index++) {
-            var current = input.charAt(index);
-            if (quote != '\0') {
-                if (escaped) {
-                    escaped = false;
-                } else if (current == '\\') {
-                    escaped = true;
-                } else if (current == quote) {
-                    quote = '\0';
-                }
-                continue;
-            }
-
-            if (current == '\'' || current == '"') {
-                quote = current;
-                continue;
-            }
-
-            if (current == '[') {
-                depth++;
-            } else if (current == ']' && --depth == 0) {
-                return index;
-            }
-        }
-        return -1;
-    }
-
-    private boolean parseComponentList(String input, Map<String, Object> output) {
-        if (input.isBlank()) return true;
-
-        for (var entry : splitTopLevel(input, ',')) {
-            if (entry.isBlank()) return false;
-
-            var equals = topLevelIndex(entry, '=');
-            if (equals <= 0 || equals == entry.length() - 1) return false;
-
-            var key = normalizeId(entry.substring(0, equals));
-            if (!ID_PATTERN.matcher(key).matches()) return false;
-
-            var raw = entry.substring(equals + 1).trim();
-            if (raw.isEmpty()) return false;
-
-            output.put(key, new RawItemComponent(raw));
-        }
-
-        return true;
-    }
-
-    private int firstWhitespace(String value) {
-        return IntStream.range(0, value.length())
-                .filter(index -> Character.isWhitespace(value.charAt(index)))
-                .findFirst()
-                .orElse(-1);
-    }
-
-    private boolean parseTrailingComponents(String input, Map<String, Object> output) {
-        var value = input.trim();
-        if (value.startsWith("{") && value.endsWith("}")) {
-            try {
-                Map<?, ?> parsed = JacksonCodecs.readJson(value, LinkedHashMap.class);
-                parsed.forEach((key, component) ->
-                        output.put(String.valueOf(key), component)
-                );
-                return true;
-            } catch (Exception _) {
-                return false;
-            }
-        }
-
-        if (value.startsWith("[") && value.endsWith("]")
-                && matchingBracket(value, 0) == value.length() - 1
-        ) {
-            return parseComponentList(value.substring(1, value.length() - 1), output);
-        }
-
-        return false;
-    }
-
-    private List<String> splitTopLevel(String input, char delimiter) {
-        var result = new ArrayList<String>();
-        var start = 0;
-        var depth = 0;
-        var quote = '\0';
-        var escaped = false;
-
-        for (var index = 0; index < input.length(); index++) {
-            var current = input.charAt(index);
-
-            if (quote != '\0') {
-                if (escaped) {
-                    escaped = false;
-                } else if (current == '\\') {
-                    escaped = true;
-                } else if (current == quote) {
-                    quote = '\0';
-                }
-                continue;
-            }
-
-            if (current == '\'' || current == '"') {
-                quote = current;
-                continue;
-            }
-
-            if (current == '{' || current == '[' || current == '(') {
-                depth++;
-            } else if (current == '}' || current == ']' || current == ')') {
-                depth--;
-                if (depth < 0) return List.of("");
-            } else if (current == delimiter && depth == 0) {
-                result.add(input.substring(start, index).trim());
-                start = index + 1;
-            }
-        }
-
-        if (quote != '\0' || depth != 0) return List.of("");
-
-        result.add(input.substring(start).trim());
-        return result;
-    }
-
-    private int topLevelIndex(String input, char target) {
-        var depth = 0;
-        var quote = '\0';
-        var escaped = false;
-
-        for (var index = 0; index < input.length(); index++) {
-            var current = input.charAt(index);
-            if (quote != '\0') {
-                if (escaped) {
-                    escaped = false;
-                } else if (current == '\\') {
-                    escaped = true;
-                } else if (current == quote) {
-                    quote = '\0';
-                }
-                continue;
-            }
-            if (current == '\'' || current == '"') {
-                quote = current;
-            } else if (current == '{' || current == '[' || current == '(') {
-                depth++;
-            } else if (current == '}' || current == ']' || current == ')') {
-                depth--;
-            } else if (current == target && depth == 0) {
-                return index;
-            }
-        }
-
-        return -1;
+        return JacksonCodecs.writeJsonString(value);
     }
 
 }

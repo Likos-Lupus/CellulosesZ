@@ -11,7 +11,13 @@ public interface WarpService {
 
     CompletableFuture<List<Warp>> warps();
 
+    default List<Warp> cachedWarps() {
+        return List.of();
+    }
+
     CompletableFuture<Optional<Warp>> warp(String name);
+
+    Optional<Warp> cachedWarp(String name);
 
     CompletableFuture<Warp> setWarp(
             String name,

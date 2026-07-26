@@ -79,20 +79,11 @@ public final class KitResetCommand extends AbstractKitCommand {
             return 0;
         }
 
-        try {
-            kits.resetCooldown(uuid.get(), args[0]).join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.kit.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.kit.kit-reset-command.reply.1",
-                Map.of(
-                        "kit", args[0],
-                        "player", resolved.name()
-                )
-        );
+        kits.resetCooldown(uuid.orElseThrow(), args[0]).whenComplete((_, failure) -> {
+            if (failure != null) invocation.errorKey("service.kit.persistence-failed");
+            else invocation.replyKey("commands.kit.kit-reset-command.reply.1", Map.of(
+                    "kit", args[0], "player", resolved.name()));
+        });
         return 1;
     }
 

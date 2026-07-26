@@ -45,13 +45,12 @@ public final class FlyCommand extends AbstractPlayerStateCommand {
         var enabled = invocation.args().length > 1
                 ? state(invocation.args()[1]).orElse(!current)
                 : !current;
-        var result = states.setFlying(target.get(), enabled);
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        states.setFlying(target.get(), enabled).whenComplete((result, failure) -> {
+            if (failure != null) invocation.errorKey("service.user.persistence-failed");
+            else if (result.success()) invocation.reply(result.message());
+            else invocation.error(result.message());
+        });
+        return 1;
     }
 
 }

@@ -5,7 +5,6 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
@@ -26,7 +25,7 @@ import static java.util.Objects.requireNonNull;
         name = "Kit",
         description = "Kit storage, preview, claim, cooldown, and cost services.",
         phase = ModulePhase.FEATURE,
-        requires = {"user", "command", "item"},
+        requires = {"user", "command"},
         optional = {"economy"}
 )
 public final class KitModule implements CellulosesZModule {
@@ -48,13 +47,13 @@ public final class KitModule implements CellulosesZModule {
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
-        var items = context.services().require(ItemService.class);
+        var platform = context.services().require(PlatformService.class);
         var economy = context.services().optional(EconomyService.class);
         var root = context.dataDirectory().getParent().resolve("kits");
 
         requireNonNull(config, "KitConfig has not been initialized");
 
-        kits = new DefaultKitService(storage, users, items, economy, config, root);
+        kits = new DefaultKitService(storage, users, platform, economy, config, root);
         context.services().register(KitService.class, kits);
         context.services().register(DefaultKitService.class, (DefaultKitService) kits);
     }

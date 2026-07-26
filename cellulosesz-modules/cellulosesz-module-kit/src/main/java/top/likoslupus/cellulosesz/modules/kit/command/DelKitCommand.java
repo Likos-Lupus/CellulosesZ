@@ -41,8 +41,10 @@ public final class DelKitCommand extends AbstractKitCommand {
             return 0;
         }
 
-        kits.delete(args[0]).thenAccept(deleted -> {
-            if (deleted) {
+        kits.delete(args[0]).whenComplete((deleted, exception) -> {
+            if (exception != null) {
+                invocation.errorKey("service.kit.persistence-failed");
+            } else if (Boolean.TRUE.equals(deleted)) {
                 invocation.replyKey(
                         "commands.kit.del-kit-command.reply.1",
                         Map.of("value0", args[0])

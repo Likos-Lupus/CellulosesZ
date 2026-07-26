@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public final class DefaultVanishService implements VanishService {
 
@@ -30,41 +31,56 @@ public final class DefaultVanishService implements VanishService {
         this.displayNames = displayNames;
     }
 
-    @Override
+    private static final class PlatformVanishException extends RuntimeException {
+
+        private final boolean previous;
+
+        private PlatformVanishException(boolean previous, Throwable cause) {
+            super(cause);
+            this.previous = previous;
+        }
+
+    }    @Override
     public boolean vanished(UUID uuid) {
-        return users.cached(uuid)
-                .map(user -> user.state.vanished)
-                .orElse(false);
+        return users.cached(uuid).map(user -> user.state.vanished).orElse(false);
     }
 
     @Override
-    public AdminResult setVanished(CellPlayer player, boolean vanished) {
-        var user = users.cached(player.uuid());
-        if (user.isEmpty()) {
-            return AdminResult.failure(
-                    "service.playerstate.user-not-loaded",
-                    Map.of("player", displayNames.plainDisplayName(player))
-            );
-        }
-
-        user.get().state.vanished = vanished;
-        users.markDirty(player.uuid());
-        platform.setVanishedState(player, vanished);
-        platform.onlinePlayers().stream()
-                .filter(viewer -> !viewer.uuid().equals(player.uuid()))
-                .forEach(viewer -> {
-                    if (vanished) {
-                        if (!canSee(viewer, player.uuid())) {
-                            platform.setPlayerVisible(viewer, player, false);
-                        }
-                    } else {
-                        platform.setPlayerVisible(viewer, player, true);
-                    }
-                });
-        return AdminResult.success(
-                vanished ? "service.playerstate.vanish-enabled" : "service.playerstate.vanish-disabled",
-                Map.of("player", displayNames.plainDisplayName(player))
-        );
+    public CompletableFuture<AdminResult> setVanished(CellPlayer player, boolean vanished) {
+        return users.update(player.uuid(), user -> {
+            var previous = user.state.vanished;
+            user.state.vanished = vanished;
+            return previous;
+        }).thenCompose(previous -> platform.callOnServerThread(() -> {
+            try {
+                platform.setVanishedState(player, vanished);
+                platform.onlinePlayers().stream()
+                        .filter(viewer -> !viewer.uuid().equals(player.uuid()))
+                        .forEach(viewer -> {
+                            if (vanished && !canSee(viewer, player.uuid())) {
+                                platform.setPlayerVisible(viewer, player, false);
+                            } else if (!vanished) {
+                                platform.setPlayerVisible(viewer, player, true);
+                            }
+                        });
+                return AdminResult.success(
+                        vanished ? "service.playerstate.vanish-enabled" : "service.playerstate.vanish-disabled",
+                        Map.of("player", displayNames.plainDisplayName(player))
+                );
+            } catch (RuntimeException failure) {
+                throw new PlatformVanishException(previous, failure);
+            }
+        }).exceptionallyCompose(failure -> {
+            var cause = unwrap(failure);
+            if (!(cause instanceof PlatformVanishException platformFailure)) {
+                return CompletableFuture.completedFuture(AdminResult.failure("service.user.persistence-failed"));
+            }
+            return users.updateVoid(player.uuid(), user -> {
+                if (user.state.vanished == vanished) user.state.vanished = platformFailure.previous;
+            }).handle((_, rollbackFailure) -> rollbackFailure == null
+                    ? AdminResult.failure("service.playerstate.vanish-failed")
+                    : AdminResult.failure("service.user.rollback-failed"));
+        }));
     }
 
     @Override
@@ -77,14 +93,15 @@ public final class DefaultVanishService implements VanishService {
     @Override
     public void synchronizeViewer(CellPlayer viewer) {
         platform.onlinePlayers().stream()
-                .filter(target -> !viewer.uuid().equals(target.uuid())
-                        && !canSee(viewer, target.uuid())
-                )
-                .forEach(target -> platform.setPlayerVisible(
-                        viewer,
-                        target,
-                        false
-                ));
+                .filter(target -> !viewer.uuid().equals(target.uuid()) && !canSee(viewer, target.uuid()))
+                .forEach(target -> platform.setPlayerVisible(viewer, target, false));
     }
+
+    private Throwable unwrap(Throwable failure) {
+        return failure instanceof java.util.concurrent.CompletionException completion
+                && completion.getCause() != null ? completion.getCause() : failure;
+    }
+
+
 
 }

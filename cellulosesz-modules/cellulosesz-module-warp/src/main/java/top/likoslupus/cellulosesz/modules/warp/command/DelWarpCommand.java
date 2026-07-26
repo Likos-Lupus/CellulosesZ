@@ -10,12 +10,7 @@ import java.util.Map;
 
 public final class DelWarpCommand extends AbstractWarpCommand {
 
-    public DelWarpCommand(
-            PlatformService platform,
-            WarpService warps,
-            TeleportService teleports,
-            WarpConfig config
-    ) {
+    public DelWarpCommand(PlatformService platform, WarpService warps, TeleportService teleports, WarpConfig config) {
         super(platform, warps, teleports, config);
     }
 
@@ -38,34 +33,21 @@ public final class DelWarpCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.warp.del-warp-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.warp.del-warp-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
-        boolean deleted;
         try {
-            deleted = warps.deleteWarp(args[0]).join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.warp.persistence-failed");
+            warps.deleteWarp(args[0]).whenComplete((deleted, failure) -> {
+                if (failure != null) invocation.errorKey("service.warp.persistence-failed");
+                else if (deleted)
+                    invocation.replyKey("commands.warp.del-warp-command.reply.1", Map.of("value0", args[0]));
+                else invocation.errorKey("commands.warp.del-warp-command.error.2", Map.of("value0", args[0]));
+            });
+            return 1;
+        } catch (IllegalArgumentException _) {
+            invocation.errorKey("commands.warp.del-warp-command.error.2", Map.of("value0", args[0]));
             return 0;
         }
-
-        if (deleted) {
-            invocation.replyKey(
-                    "commands.warp.del-warp-command.reply.1",
-                    Map.of("value0", args[0])
-            );
-            return 1;
-        }
-
-        invocation.errorKey(
-                "commands.warp.del-warp-command.error.2",
-                Map.of("value0", args[0])
-        );
-        return 0;
     }
 
 }

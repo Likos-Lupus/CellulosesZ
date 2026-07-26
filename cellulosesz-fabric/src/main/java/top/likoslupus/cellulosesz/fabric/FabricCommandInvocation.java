@@ -96,7 +96,7 @@ public final class FabricCommandInvocation implements CommandInvocation {
 
     @Override
     public void reply(RichText message) {
-        source.sendSuccess(() -> FabricTextAdapter.toComponent(message), false);
+        onServerThread(() -> source.sendSuccess(() -> FabricTextAdapter.toComponent(message), false));
     }
 
     @Override
@@ -111,12 +111,21 @@ public final class FabricCommandInvocation implements CommandInvocation {
 
     @Override
     public void error(RichText message) {
-        source.sendFailure(FabricTextAdapter.toComponent(message));
+        onServerThread(() -> source.sendFailure(FabricTextAdapter.toComponent(message)));
     }
 
     @Override
     public void errorKey(String key, Map<String, ?> placeholders) {
         error(renderer.render(locale(), key, placeholders));
+    }
+
+    private void onServerThread(Runnable task) {
+        var server = source.getServer();
+        if (server.isSameThread()) {
+            task.run();
+        } else {
+            server.execute(task);
+        }
     }
 
 }

@@ -80,37 +80,32 @@ public final class ReplyToggleCommand extends AbstractMessagingCommand {
             return usageError(invocation);
         }
 
-        var user = users.load(uuid).join();
-        var enabled = mode.isBlank()
-                ? !user.preferences.replyToLastRecipient
-                : enabled(mode);
-        var previous = user.preferences.replyToLastRecipient;
-        user.preferences.replyToLastRecipient = enabled;
-        users.markDirty(uuid);
-        try {
-            users.save(uuid).join();
-        } catch (RuntimeException _) {
-            user.preferences.replyToLastRecipient = previous;
-            users.markDirty(uuid);
-            invocation.errorKey("service.user.persistence-failed");
-            return 0;
-        }
-
+        var requestedMode = mode;
         var changedOther = platform.player(invocation)
                 .map(actor -> !actor.uuid().equals(uuid))
                 .orElse(true);
-
-        String key = enabled ? (
-                changedOther
-                ? "commands.messaging.reply-toggle.recipient-other"
-                        : "commands.messaging.reply-toggle.recipient"
-        ) : (
-                changedOther
-                ? "commands.messaging.reply-toggle.sender-other"
-                        : "commands.messaging.reply-toggle.sender"
-        );
-
-        invocation.replyKey(key, Map.of("player", playerName));
+        users.update(uuid, user -> {
+            var enabled = requestedMode.isBlank()
+                    ? !user.preferences.replyToLastRecipient
+                    : enabled(requestedMode);
+            user.preferences.replyToLastRecipient = enabled;
+            return enabled;
+        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
+            if (failure != null) {
+                invocation.errorKey("service.user.persistence-failed");
+                return;
+            }
+            String key = enabled ? (
+                    changedOther
+                            ? "commands.messaging.reply-toggle.recipient-other"
+                            : "commands.messaging.reply-toggle.recipient"
+            ) : (
+                    changedOther
+                            ? "commands.messaging.reply-toggle.sender-other"
+                            : "commands.messaging.reply-toggle.sender"
+            );
+            invocation.replyKey(key, Map.of("player", playerName));
+        }));
         return 1;
     }
 

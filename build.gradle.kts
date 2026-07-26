@@ -61,5 +61,10 @@ subprojects {
         "annotationProcessor"(lombokDependency)
         "testCompileOnly"(lombokDependency)
         "testAnnotationProcessor"(lombokDependency)
+        "testImplementation"(libs.junit.jupiter)
+    }
+
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
     }
 }

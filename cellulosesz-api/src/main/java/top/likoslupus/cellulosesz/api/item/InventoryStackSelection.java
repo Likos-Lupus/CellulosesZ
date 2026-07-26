@@ -1,0 +1,16 @@
+package top.likoslupus.cellulosesz.api.item;
+
+import static java.util.Objects.requireNonNull;
+
+public record InventoryStackSelection(
+        InventoryItemSnapshot snapshot,
+        int count
+) {
+
+    public InventoryStackSelection {
+        requireNonNull(snapshot, "snapshot");
+        if (count <= 0) throw new IllegalArgumentException("count must be positive");
+        snapshot = snapshot.copy();
+    }
+
+}

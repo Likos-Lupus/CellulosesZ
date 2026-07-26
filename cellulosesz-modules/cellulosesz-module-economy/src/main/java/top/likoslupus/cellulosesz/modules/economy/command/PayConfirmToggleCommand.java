@@ -38,24 +38,15 @@ public final class PayConfirmToggleCommand extends AbstractEconomyCommand {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
 
-        var user = users.load(self.get().uuid()).join();
-        var previous = user.preferences.confirmLargePayments;
-        user.preferences.confirmLargePayments = !previous;
-        users.markDirty(self.get().uuid());
-        try {
-            users.save(self.get().uuid()).join();
-        } catch (RuntimeException _) {
-            user.preferences.confirmLargePayments = previous;
-            users.markDirty(self.get().uuid());
-            invocation.errorKey("service.user.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                user.preferences.confirmLargePayments
-                        ? "commands.economy.pay-confirm-enabled"
-                        : "commands.economy.pay-confirm-disabled"
-        );
+        users.update(self.orElseThrow().uuid(), user -> {
+            user.preferences.confirmLargePayments = !user.preferences.confirmLargePayments;
+            return user.preferences.confirmLargePayments;
+        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
+            if (failure != null) invocation.errorKey("service.user.persistence-failed");
+            else invocation.replyKey(enabled
+                    ? "commands.economy.pay-confirm-enabled"
+                    : "commands.economy.pay-confirm-disabled");
+        }));
         return 1;
     }
 

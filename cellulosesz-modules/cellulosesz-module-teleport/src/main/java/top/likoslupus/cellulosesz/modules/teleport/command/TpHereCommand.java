@@ -4,16 +4,21 @@ import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.util.Map;
 
 public final class TpHereCommand extends AbstractTeleportCommand {
 
+    private final TeleportTargetPolicy policy;
+
     public TpHereCommand(
             PlatformService platform,
-            TeleportService teleports
+            TeleportService teleports,
+            UserService users
     ) {
         super(platform, teleports);
+        this.policy = new TeleportTargetPolicy(platform, users);
     }
 
     @Override
@@ -50,8 +55,12 @@ public final class TpHereCommand extends AbstractTeleportCommand {
         var self = player(invocation);
         var target = online(invocation, args[0]);
         if (self.isEmpty() || target.isEmpty()) return 0;
-
-        return teleport(invocation, target.get(), platform.location(self.get()));
+        var moving = target.orElseThrow();
+        var location = platform.location(self.orElseThrow());
+        policy.mayMove(invocation, moving).thenAccept(allowed -> {
+            if (allowed) teleport(invocation, moving, location);
+        });
+        return 1;
     }
 
 }

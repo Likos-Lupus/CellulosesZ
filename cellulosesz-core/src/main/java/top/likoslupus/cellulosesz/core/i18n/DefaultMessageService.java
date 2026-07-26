@@ -133,11 +133,14 @@ public final class DefaultMessageService implements MessageService, MessageRende
             writeDefaultIfMissing("en_us", defaultEnglish());
             writeDefaultIfMissing("zh_cn", defaultChinese());
 
+            var loaded = new LinkedHashMap<String, Map<String, String>>();
+            loadLocale(fallback, loaded);
+            loadLocale(locale, loaded);
             locales.clear();
-            loadLocale(fallback);
-            loadLocale(locale);
+            locales.putAll(loaded);
         } catch (IOException exception) {
-            logger.error("Failed to load messages", exception);
+            logger.error("Failed to load messages; the previous messages remain active", exception);
+            throw new IllegalStateException("Failed to reload messages: " + exception.getMessage(), exception);
         }
     }
 
@@ -177,7 +180,7 @@ public final class DefaultMessageService implements MessageService, MessageRende
         if (current != null) return current;
 
         try {
-            return loadLocale(normalized);
+            return loadLocale(normalized, locales);
         } catch (IOException exception) {
             logger.warn("Failed to load locale " + normalized + ": " + exception.getMessage());
             locales.put(normalized, Map.of());
@@ -185,18 +188,25 @@ public final class DefaultMessageService implements MessageService, MessageRende
         }
     }
 
-    private Map<String, String> loadLocale(String name) throws IOException {
+    private Map<String, String> loadLocale(
+            String name,
+            Map<String, Map<String, String>> destination
+    ) throws IOException {
         var loaded = new LinkedHashMap<String, String>();
         if (name.equals("en_us")) flatten("", defaultEnglish(), loaded);
         if (name.equals("zh_cn")) flatten("", defaultChinese(), loaded);
 
         loaded.putAll(readFlattened(directory.resolve(name + ".yml")));
         var immutable = Map.copyOf(loaded);
-        locales.put(name, immutable);
+        destination.put(name, immutable);
         return immutable;
     }
 
-    private RichText parse(String requestedLocale, String input, Map<String, ?> placeholders) {
+    private RichText parse(
+            String requestedLocale,
+            String input,
+            Map<String, ?> placeholders
+    ) {
         var segments = new ArrayList<RichText.Segment>();
         var buffer = new StringBuilder();
         var style = TextStyle.EMPTY;

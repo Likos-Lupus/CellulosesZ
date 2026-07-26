@@ -73,7 +73,7 @@ public final class HomeModule implements CellulosesZModule {
         var homeNames = (Function<CommandSuggestionContext, Collection<String>>) suggestion ->
                 suggestion.playerName()
                         .flatMap(platform::onlinePlayer)
-                        .map(player -> homes.homes(player.uuid()).join().keySet())
+                        .map(player -> homes.cachedHomes(player.uuid()).keySet())
                         .orElseGet(Set::of);
         suggestions.register("home", "name", homeNames);
         suggestions.register("delhome", "name", homeNames);

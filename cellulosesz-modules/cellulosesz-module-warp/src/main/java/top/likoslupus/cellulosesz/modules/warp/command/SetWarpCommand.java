@@ -12,12 +12,7 @@ import java.util.Map;
 
 public final class SetWarpCommand extends AbstractWarpCommand {
 
-    public SetWarpCommand(
-            PlatformService platform,
-            WarpService warps,
-            TeleportService teleports,
-            WarpConfig config
-    ) {
+    public SetWarpCommand(PlatformService platform, WarpService warps, TeleportService teleports, WarpConfig config) {
         super(platform, warps, teleports, config);
     }
 
@@ -45,41 +40,31 @@ public final class SetWarpCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
-
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.warp.set-warp-command.error.1",
-                    Map.of("value0", usage())
-            );
+            invocation.errorKey("commands.warp.set-warp-command.error.1", Map.of("value0", usage()));
             return 0;
         }
-
         if (!validName(invocation, args[0])) return 0;
-
-        var existing = warps.warp(args[0]).join();
-        if (existing.isPresent()
-                && !invocation.hasPermission("cellulosesz.warp.overwrite")
-                && !invocation.hasPermission("cellulosesz.warp.overwrite." + args[0].toLowerCase(Locale.ROOT))
-        ) {
-            invocation.errorKey(
-                    "commands.warp.set-warp-command.error.exists",
-                    Map.of("warp", args[0])
-            );
-            return 0;
-        }
-
-        try {
-            warps.setWarp(args[0], platform.location(self.get()), self.get().uuid()).join();
-        } catch (RuntimeException _) {
-            invocation.errorKey("service.warp.persistence-failed");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.warp.set-warp-command.reply.1",
-                Map.of("value0", args[0])
-        );
+        var key = args[0].toLowerCase(Locale.ROOT);
+        warps.warp(key).whenComplete((existing, loadFailure) -> {
+            if (loadFailure != null) {
+                invocation.errorKey("service.warp.persistence-failed");
+                return;
+            }
+            if (existing.isPresent()
+                    && !invocation.hasPermission("cellulosesz.warp.overwrite")
+                    && !invocation.hasPermission("cellulosesz.warp.overwrite." + key)) {
+                invocation.errorKey("commands.warp.set-warp-command.error.exists", Map.of("warp", args[0]));
+                return;
+            }
+            platform.callOnServerThread(() -> platform.location(self.orElseThrow()))
+                    .thenCompose(location -> warps.setWarp(key, location, self.orElseThrow().uuid()))
+                    .whenComplete((_, saveFailure) -> {
+                        if (saveFailure != null) invocation.errorKey("service.warp.persistence-failed");
+                        else invocation.replyKey("commands.warp.set-warp-command.reply.1", Map.of("value0", args[0]));
+                    });
+        });
         return 1;
     }
 

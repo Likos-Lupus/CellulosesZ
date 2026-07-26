@@ -52,66 +52,54 @@ public final class HomeCommand extends AbstractHomeCommand {
     public int execute(CommandInvocation invocation) {
         var self = player(invocation);
         if (self.isEmpty()) return 0;
-
+        var player = self.orElseThrow();
         var args = invocation.args();
         if (invocation.label().equalsIgnoreCase("homes")) {
-            var names = homes.homes(self.get().uuid()).join().keySet();
-            if (names.isEmpty()) {
-                invocation.replyKey("commands.home.list-empty");
-            } else {
-                invocation.replyKey(
-                        "commands.home.list",
-                        Map.of("homes", String.join(", ", names))
-                );
-            }
+            homes.homes(player.uuid()).whenComplete((knownHomes, failure) -> {
+                if (failure != null) invocation.errorKey("common.persistence-failed");
+                else if (knownHomes.isEmpty()) invocation.replyKey("commands.home.list-empty");
+                else invocation.replyKey("commands.home.list", Map.of("homes", String.join(", ", knownHomes.keySet())));
+            });
             return 1;
         }
 
         var name = nameOrDefault(args);
-        var location = homes.home(self.get().uuid(), name).join();
-        if (location.isEmpty()) {
-            invocation.errorKey(
-                    "commands.home.home-command.error.1",
-                    Map.of("value0", name)
-            );
-            return 0;
-        }
-
         if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown")) {
-            var remaining = cooldowns.remaining(self.get().uuid(), COOLDOWN_KEY);
+            var remaining = cooldowns.remaining(player.uuid(), COOLDOWN_KEY);
             if (!remaining.isZero()) {
-                invocation.errorKey(
-                        "commands.home.cooldown",
-                        Map.of("seconds", Math.max(1L, remaining.toSeconds() + (remaining.toMillisPart() > 0 ? 1 : 0)))
-                );
+                invocation.errorKey("commands.home.cooldown", Map.of("seconds", Math.max(1L, remaining.toSeconds() + (
+                        remaining.toMillisPart() > 0
+                                ? 1
+                                : 0))));
                 return 0;
             }
         }
 
-        teleports.teleport(self.get(), location.get(), options(invocation))
-                .thenAccept(result -> {
-                    if (result.success()) {
-                        if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown")
-                                && config.teleport.cooldownSeconds > 0
-                        ) {
-                            cooldowns.start(
-                                    self.get().uuid(),
-                                    COOLDOWN_KEY,
-                                    Duration.ofSeconds(config.teleport.cooldownSeconds)
-                            );
+        homes.home(player.uuid(), name).whenComplete((location, failure) -> {
+            if (failure != null) {
+                invocation.errorKey("common.persistence-failed");
+                return;
+            }
+            if (location.isEmpty()) {
+                invocation.errorKey("commands.home.home-command.error.1", Map.of("value0", name));
+                return;
+            }
+            platform.callOnServerThread(() -> teleports.teleport(player, location.orElseThrow(), options(invocation)))
+                    .thenCompose(value -> value)
+                    .whenComplete((result, teleportFailure) -> {
+                        if (teleportFailure != null) {
+                            invocation.errorKey("commands.teleport.request.failed", Map.of("reason", teleportFailure.getClass()
+                                    .getSimpleName()));
+                        } else if (result.success()) {
+                            if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
+                                cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
+                            }
+                            invocation.replyKey("commands.home.home-command.reply.1", Map.of("value0", name));
+                        } else {
+                            invocation.error(result.message());
                         }
-                        invocation.replyKey(
-                                "commands.home.home-command.reply.1",
-                                Map.of("value0", name)
-                        );
-                    } else {
-                        invocation.errorKey(
-                                "commands.home.home-command.error.2",
-                                Map.of("value0", result.message())
-                        );
-                    }
-                });
-
+                    });
+        });
         return 1;
     }
 

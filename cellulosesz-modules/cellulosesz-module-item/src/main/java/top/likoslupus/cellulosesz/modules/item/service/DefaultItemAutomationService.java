@@ -9,12 +9,14 @@ import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
 
+import static java.util.Objects.requireNonNull;
+
 public final class DefaultItemAutomationService implements ItemAutomationService {
 
     private final PlatformService platform;
     private final UserService users;
     private final ItemService items;
-    private final ItemConfig config;
+    private volatile ItemConfig config;
 
     public DefaultItemAutomationService(
             PlatformService platform,
@@ -25,7 +27,14 @@ public final class DefaultItemAutomationService implements ItemAutomationService
         this.platform = platform;
         this.users = users;
         this.items = items;
-        this.config = config;
+        configure(config);
+    }
+
+    public void configure(ItemConfig config) {
+        this.config = requireNonNull(config, "config");
+        if (config.unlimitedMinimum < 1) {
+            throw new IllegalArgumentException("unlimitedMinimum must be positive");
+        }
     }
 
     @Override

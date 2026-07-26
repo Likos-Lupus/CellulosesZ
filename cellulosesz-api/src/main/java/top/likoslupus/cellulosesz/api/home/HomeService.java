@@ -9,9 +9,11 @@ import java.util.concurrent.CompletableFuture;
 
 public interface HomeService {
 
-    CompletableFuture<Map<String, CellLocation>> homes(
-            UUID uuid
-    );
+    CompletableFuture<Map<String, CellLocation>> homes(UUID uuid);
+
+    default Map<String, CellLocation> cachedHomes(UUID uuid) {
+        return Map.of();
+    }
 
     CompletableFuture<Optional<CellLocation>> home(
             UUID uuid,

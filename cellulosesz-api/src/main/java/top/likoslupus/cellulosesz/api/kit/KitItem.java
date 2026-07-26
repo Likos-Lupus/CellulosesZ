@@ -1,14 +1,20 @@
 package top.likoslupus.cellulosesz.api.kit;
 
-import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
+import top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot;
 
-public final class KitItem extends ItemDescriptor {
+/**
+ * Lossless inventory stack and its original player-inventory slot.
+ */
+public final class KitItem extends InventoryItemSnapshot {
 
     public KitItem() {
     }
 
-    public KitItem(String item, int count) {
-        super(item, count);
+    public KitItem(
+            int slot,
+            String stack
+    ) {
+        super(slot, stack);
     }
 
 }

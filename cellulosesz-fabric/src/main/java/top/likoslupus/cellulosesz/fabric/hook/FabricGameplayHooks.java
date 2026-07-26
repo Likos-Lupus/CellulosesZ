@@ -17,11 +17,14 @@ import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.sign.SignService;
+import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 
 import java.util.*;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 public final class FabricGameplayHooks {
 
@@ -133,33 +136,55 @@ public final class FabricGameplayHooks {
         var wrapped = platform.player(player);
         if (wrapped.isEmpty()) return InteractionResult.PASS;
 
-        var front = lines(sign.getFrontText().getMessages(false));
-        var result = signs.get().use(
+        var location = new CellLocation(
+                level.dimension().identifier().toString(),
+                hit.getBlockPos().getX() + 0.5D,
+                hit.getBlockPos().getY(),
+                hit.getBlockPos().getZ() + 0.5D,
+                player.getYRot(),
+                player.getXRot()
+        );
+        var front = sign.isFacingFrontText(player);
+        var signLines = lines(
+                (front
+                        ? sign.getFrontText()
+                        : sign.getBackText()
+                ).getMessages(false)
+        );
+        var execution = signs.get().use(
                 wrapped.get(),
+                location,
                 front,
+                signLines,
                 player.isShiftKeyDown()
         );
-        if (!result.handled()) {
-            var back = lines(sign.getBackText().getMessages(false));
-            result = signs.get().use(
-                    wrapped.get(),
-                    back,
-                    player.isShiftKeyDown()
-            );
-        }
-        if (!result.handled()) return InteractionResult.PASS;
+        if (!execution.handled()) return InteractionResult.PASS;
 
-        result.optionalMessage()
-                .ifPresent(message ->
+        execution.result().whenComplete((result, failure) ->
+                platform.runOnServerThread(() -> {
+                    if (failure != null) {
                         platform.sendMessage(
                                 wrapped.get(),
                                 renderer.render(
                                         locales.locale(wrapped.get()),
-                                        message.key(),
-                                        message.placeholders()
+                                        "service.sign.execution-failed",
+                                        Map.of("reason", safeReason(failure))
                                 )
-                        )
-                );
+                        );
+                        return;
+                    }
+                    result.optionalMessage().ifPresent(message ->
+                            platform.sendMessage(
+                                    wrapped.get(),
+                                    renderer.render(
+                                            locales.locale(wrapped.get()),
+                                            message.key(),
+                                            message.placeholders()
+                                    )
+                            )
+                    );
+                })
+        );
         return InteractionResult.SUCCESS;
     }
 
@@ -167,6 +192,20 @@ public final class FabricGameplayHooks {
         return Arrays.stream(messages)
                 .map(Component::getString)
                 .toList();
+    }
+
+    private String safeReason(Throwable throwable) {
+        var cause = throwable;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+                && cause.getCause() != null
+        ) {
+            cause = cause.getCause();
+        }
+
+        var message = cause.getMessage();
+        return message == null || message.isBlank()
+                ? cause.getClass().getSimpleName()
+                : message;
     }
 
     public void tick(MinecraftServer server) {

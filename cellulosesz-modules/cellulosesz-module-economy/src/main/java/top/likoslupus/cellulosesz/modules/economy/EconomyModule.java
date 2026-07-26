@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.WorthService;
+import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
@@ -18,14 +19,14 @@ import top.likoslupus.cellulosesz.modules.economy.command.*;
 import top.likoslupus.cellulosesz.modules.economy.service.JsonEconomyService;
 import top.likoslupus.cellulosesz.modules.economy.service.JsonWorthService;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "economy",
         name = "Economy",
         description = "Internal economy, balance, payments, balance top, and worth services.",
         phase = ModulePhase.FEATURE,
-        requires = {"user", "command"}
+        requires = {"user", "command", "item"}
 )
 public final class EconomyModule implements CellulosesZModule {
 
@@ -48,7 +49,7 @@ public final class EconomyModule implements CellulosesZModule {
         var storage = context.services().require(StorageService.class);
         var root = context.dataDirectory().getParent().resolve("economy");
 
-        Objects.requireNonNull(config, "EconomyConfig has not been initialized");
+        requireNonNull(config, "EconomyConfig has not been initialized");
 
         economy = new JsonEconomyService(storage, config, root, context.logger());
         worths = new JsonWorthService(storage, root);
@@ -67,10 +68,11 @@ public final class EconomyModule implements CellulosesZModule {
         var confirmations = context.services().require(ConfirmationService.class);
         var messages = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
+        var items = context.services().require(ItemService.class);
 
-        Objects.requireNonNull(economy, "EconomyService has not been initialized");
-        Objects.requireNonNull(config, "EconomyConfig has not been initialized");
-        Objects.requireNonNull(worths, "WorthService has not been initialized");
+        requireNonNull(economy, "EconomyService has not been initialized");
+        requireNonNull(config, "EconomyConfig has not been initialized");
+        requireNonNull(worths, "WorthService has not been initialized");
 
         context.commands().register(new BalanceCommand(platform, users, economy, config));
         context.commands().register(new BalanceTopCommand(platform, users, economy, config));
@@ -79,8 +81,19 @@ public final class EconomyModule implements CellulosesZModule {
         context.commands().register(new PayToggleCommand(platform, users, economy, config));
         context.commands().register(new PayConfirmToggleCommand(platform, users, economy, config));
         context.commands().register(new EcoCommand(platform, users, economy, config));
-        context.commands().register(new WorthCommand(worths));
+        context.commands().register(new WorthCommand(platform, items, worths, economy));
+        context.commands().register(new SellCommand(platform, items, worths, economy, context.logger()));
         context.commands().register(new SetWorthCommand(worths));
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        var current = requireNonNull(config, "EconomyConfig has not been initialized");
+        current.copyFrom(context.configs().require("module.economy", EconomyConfig.class));
+
+        if (economy instanceof JsonEconomyService service) {
+            service.configure(current);
+        }
     }
 
 }
