@@ -49,6 +49,9 @@ final class MessageCatalogTest {
             assertFalse(combined.contains("stagee"));
             assertFalse(combined.contains("stage e"));
             assertFalse(combined.contains("phase-e"));
+            assertFalse(combined.contains("stagef"));
+            assertFalse(combined.contains("stage f"));
+            assertFalse(combined.contains("阶段 f"));
         });
     }
 

@@ -82,6 +82,16 @@ final class SignMessages {
         messages.put("service.sign.platform-rollback-failed", "<red>The sign world change failed and the saved record could not be rolled back. Contact an administrator.");
         messages.put("service.sign.trade-inventory-changed", "<red>The inventory changed before the trade could commit.");
         messages.put("service.sign.workstation-format", "<red>The workstation sign type is invalid or unavailable.");
+        messages.put("commands.sign.editsign.clipboard-empty", "<red>Your sign clipboard is empty.");
+        messages.put("commands.sign.editsign.copied", "<primary>Copied the <secondary>{side}<primary> side of the sign.");
+        messages.put("commands.sign.editsign.failed", "<red>Unable to update the sign consistently: <secondary>{reason}<red>.");
+        messages.put("commands.sign.editsign.format-denied", "<red>You do not have permission for the requested text formatting.");
+        messages.put("commands.sign.editsign.invalid-line", "<red>Line must be an integer from 1 to 4.");
+        messages.put("commands.sign.editsign.invalid-text", "<red>Sign text is invalid or exceeds <secondary>{maximum}<red> characters.");
+        messages.put("commands.sign.editsign.no-sign", "<red>No editable sign is in sight.");
+        messages.put("commands.sign.editsign.success", "<primary>Updated the selected sign side.");
+        messages.put("commands.sign.editsign.usage", "<red>Usage: <secondary>{usage}");
+        messages.put("commands.sign.editsign.waxed", "<red>The selected sign is waxed.");
         return Map.copyOf(messages);
     }
 
@@ -159,6 +169,16 @@ final class SignMessages {
         messages.put("service.sign.platform-rollback-failed", "<red>告示牌世界修改失败，且保存记录未能回滚，请联系管理员。");
         messages.put("service.sign.trade-inventory-changed", "<red>交易提交前背包已发生变化。");
         messages.put("service.sign.workstation-format", "<red>工作站告示牌类型无效或平台不支持。");
+        messages.put("commands.sign.editsign.clipboard-empty", "<red>你的告示牌剪贴板为空。");
+        messages.put("commands.sign.editsign.copied", "<primary>已复制告示牌的<secondary>{side}<primary>面。");
+        messages.put("commands.sign.editsign.failed", "<red>无法一致地更新告示牌：<secondary>{reason}<red>。");
+        messages.put("commands.sign.editsign.format-denied", "<red>你没有使用所请求文本格式的权限。");
+        messages.put("commands.sign.editsign.invalid-line", "<red>行号必须是 1 到 4 的整数。");
+        messages.put("commands.sign.editsign.invalid-text", "<red>告示牌文本无效或超过 <secondary>{maximum}<red> 个字符。");
+        messages.put("commands.sign.editsign.no-sign", "<red>视线范围内没有可编辑的告示牌。");
+        messages.put("commands.sign.editsign.success", "<primary>已更新所选告示牌面。");
+        messages.put("commands.sign.editsign.usage", "<red>用法：<secondary>{usage}");
+        messages.put("commands.sign.editsign.waxed", "<red>所选告示牌已上蜡。");
         return Map.copyOf(messages);
     }
 

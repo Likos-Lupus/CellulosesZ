@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.playerstate;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
@@ -10,6 +11,7 @@ import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
@@ -19,6 +21,8 @@ import top.likoslupus.cellulosesz.modules.playerstate.command.*;
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultPlayerStateService;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishService;
+
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -145,6 +149,32 @@ public final class PlayerStateModule implements CellulosesZModule {
         context.commands().register(new SpeedCommand(platform));
         context.commands().register(new PTimeCommand(platform, users));
         context.commands().register(new PWeatherCommand(platform, users));
+        var playerOperations = context.services().require(PlayerStatePlatformService.class);
+        context.commands().register(new PingCommand());
+        context.commands().register(new CompassCommand(platform));
+        context.commands().register(new DepthCommand(platform, playerOperations));
+        context.commands().register(new GetPosCommand(platform, currentVanish));
+        context.commands().register(new RealNameCommand(platform, displayNames, currentVanish));
+        context.commands().register(new ExpCommand(platform, playerOperations));
+        context.commands().register(new RestCommand(platform, playerOperations));
+        registerCommandPermissions(context.services().require(PermissionCatalog.class));
+    }
+
+
+    private static void registerCommandPermissions(PermissionCatalog catalog) {
+        Map.ofEntries(
+                Map.entry("cellulosesz.command.getpos.others", "Inspect another visible player's position"),
+                Map.entry("cellulosesz.command.rest.others", "Reset another player's rest statistic"),
+                Map.entry("cellulosesz.command.exp.others", "Inspect another player's experience"),
+                Map.entry("cellulosesz.command.exp.set", "Set personal experience"),
+                Map.entry("cellulosesz.command.exp.set.others", "Set another player's experience"),
+                Map.entry("cellulosesz.command.exp.give", "Give personal experience"),
+                Map.entry("cellulosesz.command.exp.give.others", "Give another player experience"),
+                Map.entry("cellulosesz.command.exp.take", "Take personal experience"),
+                Map.entry("cellulosesz.command.exp.take.others", "Take another player's experience"),
+                Map.entry("cellulosesz.command.exp.reset", "Reset personal experience"),
+                Map.entry("cellulosesz.command.exp.reset.others", "Reset another player's experience")
+        ).forEach(catalog::register);
     }
 
     @Override

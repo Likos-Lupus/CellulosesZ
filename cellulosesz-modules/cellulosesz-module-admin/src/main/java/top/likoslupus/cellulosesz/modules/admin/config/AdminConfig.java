@@ -22,6 +22,8 @@ public final class AdminConfig {
     public boolean tempBanKickOnlinePlayers = true;
     public int jailedPlayerCheckSeconds = 5;
     public double jailConfinementRadius = 3.0D;
+    public int maximumBurnSeconds = 86_400;
+    public int sudoMaximumCommandLength = 512;
 
     public void copyFrom(AdminConfig source) {
         defaultMuteSeconds = source.defaultMuteSeconds;
@@ -33,6 +35,17 @@ public final class AdminConfig {
         tempBanKickOnlinePlayers = source.tempBanKickOnlinePlayers;
         jailedPlayerCheckSeconds = source.jailedPlayerCheckSeconds;
         jailConfinementRadius = source.jailConfinementRadius;
+        maximumBurnSeconds = source.maximumBurnSeconds;
+        sudoMaximumCommandLength = source.sudoMaximumCommandLength;
+    }
+
+    public void validate() {
+        if (maximumBurnSeconds < 0 || maximumBurnSeconds > 31_536_000) {
+            throw new IllegalArgumentException("maximumBurnSeconds must be between 0 and 31536000");
+        }
+        if (sudoMaximumCommandLength < 1 || sudoMaximumCommandLength > 4096) {
+            throw new IllegalArgumentException("sudoMaximumCommandLength must be between 1 and 4096");
+        }
     }
 
 }

@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
+import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
@@ -13,6 +15,7 @@ import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
@@ -54,6 +57,7 @@ public final class AdminModule implements CellulosesZModule {
                 "modules/admin.yml",
                 AdminConfig::new
         );
+        requireNonNull(config, "AdminConfig has not been initialized").validate();
     }
 
     @Override
@@ -227,6 +231,21 @@ public final class AdminModule implements CellulosesZModule {
         context.commands().register(new JailsCommand(platform, users, jails));
         context.commands().register(new JailedPlayersCommand(platform, users, jails));
 
+        var playerOperations = context.services().require(PlayerStatePlatformService.class);
+        var permissionService = context.services().require(PermissionService.class);
+        context.commands().register(new BurnCommand(playerOperations, config));
+        context.commands().register(new ExtCommand(platform, playerOperations));
+        context.commands().register(new IceCommand(platform, playerOperations));
+        context.commands().register(new KillCommand(playerOperations, permissionService));
+        context.commands().register(new SudoCommand(
+                platform,
+                context.services().require(PlayerCommandDispatchService.class),
+                permissionService,
+                config
+        ));
+        context.commands().register(new SuicideCommand(platform, playerOperations));
+        registerCommandPermissions(context.services().require(PermissionCatalog.class));
+
         var suggestions = context.services().require(CommandSuggestionRegistry.class);
         var jailNames = (Function<CommandSuggestionContext, Collection<String>>) _ ->
                 jails.jails().stream()
@@ -269,9 +288,21 @@ public final class AdminModule implements CellulosesZModule {
     @Override
     public void onReload(ModuleContext context) {
         var current = requireNonNull(config, "AdminConfig has not been initialized");
-        current.copyFrom(context.configs().require("module.admin", AdminConfig.class));
+        var candidate = context.configs().require("module.admin", AdminConfig.class);
+        candidate.validate();
+        current.copyFrom(candidate);
         requireNonNull(muteCommandPolicy, "MuteCommandMiddleware has not been initialized")
                 .configure(current);
+    }
+
+    private static void registerCommandPermissions(PermissionCatalog catalog) {
+        Map.ofEntries(
+                Map.entry("cellulosesz.command.ext.others", "Extinguish other players"),
+                Map.entry("cellulosesz.command.ice.others", "Freeze other players"),
+                Map.entry("cellulosesz.command.kill.exempt", "Exempt a player from administrative kill"),
+                Map.entry("cellulosesz.command.kill.force", "Bypass kill exemptions and a prevented death"),
+                Map.entry("cellulosesz.command.sudo.exempt", "Exempt a player from sudo")
+        ).forEach(catalog::register);
     }
 
     private void enforceJail(

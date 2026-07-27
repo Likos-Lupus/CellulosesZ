@@ -9,11 +9,17 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
+import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
@@ -35,6 +41,8 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
     private @Nullable FabricVanillaCommandBridge vanillaCommands;
     private @Nullable FabricGameplayHooks gameplayHooks;
     private @Nullable FabricPlatformEventBridge platformEvents;
+    private @Nullable FabricPlayerCommandDispatchService commandDispatch;
+    private @Nullable FabricEntityOperations entityOperations;
 
     @Override
     public void onInitializeServer() {
@@ -61,6 +69,14 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
         bootstrap.registerService(PlatformService.class, platform);
         bootstrap.registerService(FabricPlatformService.class, platform);
+        commandDispatch = new FabricPlayerCommandDispatchService(platform);
+        bootstrap.registerService(PlayerCommandDispatchService.class, commandDispatch);
+        bootstrap.registerService(PlayerStatePlatformService.class, new FabricPlayerStateOperations(platform));
+        bootstrap.registerService(InventoryPlatformService.class, new FabricInventoryOperations(platform));
+        bootstrap.registerService(WorldPlatformService.class, new FabricWorldOperations(platform));
+        entityOperations = new FabricEntityOperations(platform);
+        bootstrap.registerService(EntityPlatformService.class, entityOperations);
+        bootstrap.registerService(RecipePlatformService.class, new FabricRecipeOperations(platform));
         bootstrap.initialize();
         platform.messages(
                 bootstrap.serviceRegistry().require(MessageRenderer.class),
@@ -102,10 +118,15 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
             try {
                 bootstrap.onServerStopping(server);
             } finally {
+                var tracked = entityOperations;
+                if (tracked != null) tracked.clearTrackedEntities();
                 platform.close();
             }
         });
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            commandDispatch.beginTick();
+            var tracked = entityOperations;
+            if (tracked != null) tracked.tick();
             bootstrap.tick();
             gameplayHooks.tick(server);
             platformEvents.tick(server);

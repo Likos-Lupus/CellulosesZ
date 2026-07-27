@@ -28,6 +28,16 @@ final class CommonMessages {
         messages.put("service.user.load-failed", "<red>Player data could not be loaded.");
         messages.put("service.user.rollback-failed", "<red>The operation failed and player data could not be fully rolled back. Contact an administrator.");
         messages.put("common.player-not-found", "<red>Player not found: <secondary>{player}");
+        messages.put("commands.common.no-permission", "<red>You do not have permission for this operation.");
+        messages.put("commands.common.platform.invalid-argument", "<red>The platform rejected the supplied parameters.");
+        messages.put("commands.common.platform.target-not-found", "<red>The platform could not find the requested target.");
+        messages.put("commands.common.platform.state-not-allowed", "<red>The current game state does not allow this operation.");
+        messages.put("commands.common.platform.exempt", "<red>The target is exempt from this operation.");
+        messages.put("commands.common.platform.unsupported", "<red>This operation is not supported by the current platform.");
+        messages.put("commands.common.platform.conflict", "<red>The target changed before the operation could be committed; nothing was changed.");
+        messages.put("commands.common.platform.partial-success", "<red>The platform completed only part of the requested operation.");
+        messages.put("commands.common.platform.rollback-failed", "<red>The operation failed and rollback was incomplete; contact an administrator.");
+        messages.put("commands.common.platform.internal-error", "<red>The platform could not complete the operation because of an internal error.");
         return Map.copyOf(messages);
     }
 
@@ -51,6 +61,16 @@ final class CommonMessages {
         messages.put("service.user.load-failed", "<red>无法加载玩家数据。");
         messages.put("service.user.rollback-failed", "<red>操作失败且玩家数据未能完整回滚，请联系管理员。");
         messages.put("common.player-not-found", "<red>找不到玩家：<secondary>{player}");
+        messages.put("commands.common.no-permission", "<red>你没有执行此操作所需的权限。");
+        messages.put("commands.common.platform.invalid-argument", "<red>平台拒绝了提供的参数。");
+        messages.put("commands.common.platform.target-not-found", "<red>平台找不到请求的目标。");
+        messages.put("commands.common.platform.state-not-allowed", "<red>当前游戏状态不允许执行此操作。");
+        messages.put("commands.common.platform.exempt", "<red>目标已被豁免，无法执行此操作。");
+        messages.put("commands.common.platform.unsupported", "<red>当前平台不支持此操作。");
+        messages.put("commands.common.platform.conflict", "<red>提交前目标状态已变化，本次未进行修改。");
+        messages.put("commands.common.platform.partial-success", "<red>平台只完成了请求中的部分操作。");
+        messages.put("commands.common.platform.rollback-failed", "<red>操作失败且回滚不完整，请联系管理员。");
+        messages.put("commands.common.platform.internal-error", "<red>平台发生内部错误，无法完成此操作。");
         return Map.copyOf(messages);
     }
 

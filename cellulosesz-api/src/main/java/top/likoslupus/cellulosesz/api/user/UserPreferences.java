@@ -11,6 +11,7 @@ public final class UserPreferences {
     public boolean teleportRequests = true;
     public boolean teleportAutoAccept;
     public boolean confirmLargePayments = true;
+    public boolean confirmInventoryClears = true;
     /**
      * When enabled, /reply targets the last player this user messaged rather than the last incoming sender.
      */

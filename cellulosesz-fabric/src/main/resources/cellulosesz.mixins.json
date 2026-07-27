@@ -3,11 +3,13 @@
   "package": "top.likoslupus.cellulosesz.fabric.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "BaseSpawnerAccessor",
     "ChunkMapTrackedEntityMixin",
     "CommandNodeAccessor",
     "FishingHookEventMixin",
     "ItemEntityPickupMixin",
     "PlayerDisplayNameMixin",
+    "RecipeResultAccessor",
     "ServerGamePacketListenerEventMixin",
     "ServerPlayerDisplayNameMixin"
   ],

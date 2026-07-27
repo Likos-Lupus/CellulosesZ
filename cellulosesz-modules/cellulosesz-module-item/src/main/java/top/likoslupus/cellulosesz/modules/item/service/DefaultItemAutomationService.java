@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
+import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
@@ -8,7 +10,6 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -17,18 +18,20 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     private final PlatformService platform;
     private final UserService users;
     private final ItemService items;
-    private final Set<UUID> executingPowerTools = ConcurrentHashMap.newKeySet();
+    private final PlayerCommandDispatchService dispatch;
     private volatile ItemConfig config;
 
     public DefaultItemAutomationService(
             PlatformService platform,
             UserService users,
             ItemService items,
+            PlayerCommandDispatchService dispatch,
             ItemConfig config
     ) {
         this.platform = platform;
         this.users = users;
         this.items = items;
+        this.dispatch = requireNonNull(dispatch, "dispatch");
         configure(config);
     }
 
@@ -127,9 +130,8 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     @Override
     public boolean executePowerTool(CellPlayer player, String clickedPlayerName) {
         if (!config.powerToolsEnabled || !powerToolsEnabled(player.uuid())) return false;
-        if (!executingPowerTools.add(player.uuid())) return false;
 
-        try {
+        {
             var held = items.heldItemId(player);
             if (held.isEmpty()) return false;
 
@@ -151,14 +153,12 @@ public final class DefaultItemAutomationService implements ItemAutomationService
                     platform.sendChatMessage(player, message);
                 } else {
                     if (value.isBlank()) continue;
-                    platform.dispatchPlayerCommand(player, value);
+                    dispatch.dispatch(player, value, CommandDispatchOrigin.POWER_TOOL);
                 }
                 used = true;
             }
 
             return used;
-        } finally {
-            executingPowerTools.remove(player.uuid());
         }
     }
 

@@ -5,8 +5,23 @@ import java.util.Locale;
 public final class SignConfig {
 
     public boolean enabled = true;
+    public int editTargetDistance = 20;
+    public int editMaximumLineLength = 384;
     public Interaction interaction = new Interaction();
     public Signs signs = new Signs();
+
+    public void validate() {
+        if (editTargetDistance < 1 || editTargetDistance > 128) {
+            throw new IllegalArgumentException("editTargetDistance must be between 1 and 128");
+        }
+        if (editMaximumLineLength < 1 || editMaximumLineLength > 4096) {
+            throw new IllegalArgumentException("editMaximumLineLength must be between 1 and 4096");
+        }
+        if (interaction == null || interaction.cooldownTicks < 0 || interaction.cooldownTicks > 1200) {
+            throw new IllegalArgumentException("interaction.cooldownTicks must be between 0 and 1200");
+        }
+        if (signs == null) throw new IllegalArgumentException("signs must not be null");
+    }
 
     public static final class Interaction {
 

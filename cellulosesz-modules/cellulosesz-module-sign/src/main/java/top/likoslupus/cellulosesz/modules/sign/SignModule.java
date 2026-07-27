@@ -2,7 +2,9 @@ package top.likoslupus.cellulosesz.modules.sign;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.SignBreakEvent;
 import top.likoslupus.cellulosesz.api.event.SignCreateEvent;
 import top.likoslupus.cellulosesz.api.event.SignEditEvent;
@@ -27,7 +29,9 @@ import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
+import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.modules.sign.command.EditSignCommand;
 import top.likoslupus.cellulosesz.modules.sign.handler.*;
 import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
@@ -44,13 +48,14 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {
                 "permission", "economy", "item", "teleport", "warp", "kit",
-                "playerstate", "world", "text", "messaging"
+                "playerstate", "world", "text", "messaging", "command"
         }
 )
 public final class SignModule implements CellulosesZModule {
 
     private @Nullable SignConfig config;
     private @Nullable DefaultSignService signs;
+    private @Nullable EditSignCommand editSign;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -60,6 +65,7 @@ public final class SignModule implements CellulosesZModule {
                 "modules/sign.yml",
                 SignConfig::new
         );
+        requireNonNull(config, "SignConfig has not been initialized").validate();
     }
 
     @Override
@@ -143,6 +149,10 @@ public final class SignModule implements CellulosesZModule {
         var renderer = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
 
+        context.events().listen(PlayerDisconnectEvent.class, event -> {
+            var command = editSign;
+            if (command != null) command.clearClipboard(event.player().uuid());
+        });
         context.events().listen(SignCreateEvent.class, event -> {
             var execution = service.create(event.player(), event.location(), event.front(), event.lines());
             if (!execution.handled()) return;
@@ -195,8 +205,25 @@ public final class SignModule implements CellulosesZModule {
     }
 
     @Override
+    public void registerCommands(ModuleContext context) {
+        editSign = new EditSignCommand(
+                context.services().require(PlatformService.class),
+                context.services().require(WorldPlatformService.class),
+                requireNonNull(signs, "SignService has not been initialized"),
+                requireNonNull(config, "SignConfig has not been initialized")
+        );
+        context.commands().register(editSign);
+        var catalog = context.services().require(PermissionCatalog.class);
+        catalog.register("cellulosesz.command.editsign.waxed", "Edit waxed signs");
+        catalog.register("cellulosesz.command.editsign.color", "Use legacy colors on edited signs");
+        catalog.register("cellulosesz.command.editsign.format", "Use formatted sign text");
+        catalog.register("cellulosesz.command.editsign.rgb", "Use RGB colors on edited signs");
+    }
+
+    @Override
     public void onReload(ModuleContext context) {
         var candidate = context.configs().require("module.sign", SignConfig.class);
+        candidate.validate();
         requireNonNull(signs, "SignService has not been initialized").configure(candidate);
         config = candidate;
     }

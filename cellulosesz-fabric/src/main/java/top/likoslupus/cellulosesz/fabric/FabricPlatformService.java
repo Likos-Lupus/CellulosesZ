@@ -763,6 +763,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
             case "loom" -> openWorkstationMenu(nativePlayer, MenuType.LOOM, "loom");
             case "smithing", "smithingtable" -> openWorkstationMenu(nativePlayer, MenuType.SMITHING, "smithing");
             case "workbench", "crafting" -> openWorkstationMenu(nativePlayer, MenuType.CRAFTING, "crafting");
+            case "stonecutter" -> openWorkstationMenu(nativePlayer, MenuType.STONECUTTER, "stonecutter");
             case "disposal" -> openDisposal(nativePlayer);
             default -> false;
         };
@@ -1597,6 +1598,40 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
                 player.getGameProfile().name(),
                 player
         );
+    }
+
+
+    MinecraftServer requireServer() {
+        return requireNonNull(server, "Server has not started");
+    }
+
+    Optional<ServerLevel> serverLevel(String world) {
+        return level(world);
+    }
+
+    ServerPlayer nativePlayer(CellPlayer player) {
+        return requireNative(player);
+    }
+
+    CellPlayer wrapPlayer(ServerPlayer player) {
+        return wrap(player);
+    }
+
+    Optional<ItemStack> decodeSnapshot(InventoryItemSnapshot snapshot) {
+        requireNonNull(snapshot, "snapshot");
+        return decodeItemStack(snapshot.validatedStack());
+    }
+
+    Optional<String> encodeStack(ItemStack stack) {
+        return encodeItemStack(stack);
+    }
+
+    String stackItemId(ItemStack stack) {
+        return itemId(stack);
+    }
+
+    boolean sameNativeStack(ItemStack first, ItemStack second) {
+        return sameStack(first, second);
     }
 
     public void server(MinecraftServer server) {

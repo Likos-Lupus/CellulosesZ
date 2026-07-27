@@ -221,6 +221,101 @@ public final class DefaultCommandSpecFactory {
             case "setwarp", "delwarp", "warpinfo" -> routes(route(
                     required("name", STRING)
             ));
+            case "ping" -> routes(
+                    route(),
+                    route(optional("message", GREEDY_STRING))
+            );
+            case "compass", "depth", "gc", "rest", "suicide", "beezooka", "kittycannon" -> routes(route());
+            case "getpos" -> routes(route(), route(required("player", PLAYER)));
+            case "realname" -> routes(route(required("nickname", STRING)));
+            case "exp" -> routes(
+                    route(choice("action", false, "show")),
+                    route(choice("action", false, "show"), required("player", PLAYER)),
+                    route(choice("action", false, "reset")),
+                    route(choice("action", false, "reset"), required("player", PLAYER)),
+                    route(choice("action", false, "set", "give", "take"), required("amount", WORD)),
+                    route(choice("action", false, "set", "give", "take"), required("player", PLAYER), required("amount", WORD))
+            );
+            case "burn" -> routes(route(required("player", PLAYER), required("seconds", INTEGER)));
+            case "ext", "ice" -> routes(route(), route(required("player", PLAYER)));
+            case "kill" -> routes(route(required("player", PLAYER)));
+            case "sudo" -> routes(route(required("player", PLAYER), required("command", GREEDY_STRING)));
+            case "clearinventory" -> routes(
+                    route(),
+                    route(choice("target", false, "self")),
+                    route(choice("target", false, "self"), required("filter", WORD)),
+                    route(choice("target", false, "self"), required("filter", WORD), required("amount", INTEGER)),
+                    route(required("player", PLAYER)),
+                    route(required("player", PLAYER), required("filter", WORD)),
+                    route(required("player", PLAYER), required("filter", WORD), required("amount", INTEGER)),
+                    route(choice("target", false, "*")),
+                    route(choice("target", false, "*"), required("filter", WORD)),
+                    route(choice("target", false, "*"), required("filter", WORD), required("amount", INTEGER)),
+                    route(choice("action", false, "confirm"), required("token", WORD))
+            );
+            case "clearinventoryconfirmtoggle", "powertooltoggle" -> routes(
+                    route(),
+                    route(choice("state", false, "on", "off"))
+            );
+            case "more" -> routes(route(), route(required("amount", INTEGER)));
+            case "hat" -> routes(route(), route(choice("action", false, "remove")));
+            case "powertoollist" -> routes(route(), route(required("page", INTEGER)));
+            case "itemdb" -> routes(route(), route(required("item", ITEM)));
+            case "condense" -> routes(route(), route(required("item", ITEM)));
+            case "recipe" -> routes(
+                    route(required("item", WORD)),
+                    route(required("item", WORD), required("number", INTEGER))
+            );
+            case "book" -> routes(
+                    route(),
+                    route(choice("action", false, "title"), required("title", GREEDY_STRING)),
+                    route(choice("action", false, "author"), required("author", GREEDY_STRING))
+            );
+            case "skull" -> routes(
+                    route(),
+                    route(required("owner", STRING)),
+                    route(required("owner", STRING), required("player", PLAYER))
+            );
+            case "break", "antioch" -> command.name().equalsIgnoreCase("antioch")
+                    ? routes(route(), route(optional("message", GREEDY_STRING)))
+                    : routes(route());
+            case "editsign" -> routes(
+                    route(choice("action", false, "set"), required("line", INTEGER), required("text", GREEDY_STRING)),
+                    route(choice("action", false, "clear"), required("line", INTEGER)),
+                    route(choice("action", false, "copy", "paste"))
+            );
+            case "spawner" -> routes(
+                    route(required("entity", WORD)),
+                    route(required("entity", WORD), required("delay", INTEGER))
+            );
+            case "spawnmob" -> routes(
+                    route(required("entity", WORD)),
+                    route(required("entity", WORD), required("amount", INTEGER)),
+                    route(required("entity", WORD), required("amount", INTEGER), required("player", PLAYER))
+            );
+            case "tree" -> routes(
+                    route(),
+                    route(choice("type", false, "tree", "oak", "birch", "redwood", "spruce", "redmushroom", "brownmushroom", "jungle", "junglebush", "swamp"))
+            );
+            case "bigtree" -> routes(
+                    route(),
+                    route(choice("type", false, "tree", "oak", "redwood", "spruce", "jungle", "darkoak"))
+            );
+            case "thunder" -> routes(
+                    route(required("enabled", BOOLEAN)),
+                    route(required("enabled", BOOLEAN), required("duration", INTEGER))
+            );
+            case "lightning" -> routes(
+                    route(),
+                    route(required("player", PLAYER)),
+                    route(required("player", PLAYER), required("damage", DOUBLE))
+            );
+            case "fireball" -> routes(
+                    route(),
+                    route(choice("projectile", false, "fireball", "small", "large", "arrow", "skull", "egg", "snowball", "expbottle", "dragon", "splashpotion", "lingeringpotion", "trident")),
+                    route(choice("projectile", false, "fireball", "small", "large", "arrow", "skull", "egg", "snowball", "expbottle", "dragon", "splashpotion", "lingeringpotion", "trident"), required("speed", DOUBLE))
+            );
+            case "nuke" -> routes(route(), route(required("player", PLAYER)));
 
             // Items and kits. ITEM is a greedy Minecraft item descriptor and must remain last.
             case "give" -> routes(route(
@@ -336,8 +431,8 @@ public final class DefaultCommandSpecFactory {
                             required("flags", WORD)
                     )
             );
-            case "anvil", "cartographytable", "grindstone", "loom", "smithingtable", "workbench", "disposal" ->
-                    routes(route());
+            case "anvil", "cartographytable", "grindstone", "loom", "smithingtable", "workbench", "disposal",
+                 "stonecutter" -> routes(route());
             case "createkit" -> routes(route(
                     required("name", STRING),
                     required("cooldown", WORD)
