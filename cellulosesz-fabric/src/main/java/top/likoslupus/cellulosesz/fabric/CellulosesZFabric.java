@@ -14,6 +14,7 @@ import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
@@ -32,7 +33,8 @@ import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
-import java.util.Objects;
+
+import static java.util.Objects.requireNonNull;
 
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
@@ -42,6 +44,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
     private @Nullable FabricGameplayHooks gameplayHooks;
     private @Nullable FabricPlatformEventBridge platformEvents;
     private @Nullable FabricPlayerCommandDispatchService commandDispatch;
+    private @Nullable FabricBanPlatformService banPlatform;
     private @Nullable FabricEntityOperations entityOperations;
 
     @Override
@@ -64,11 +67,13 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 new Slf4jCellulosesZLogger(LoggerFactory.getLogger("CellulosesZ"))
         );
         vanillaCommands = new FabricVanillaCommandBridge();
-        platform = new FabricPlatformService(vanillaCommands);
+        platform = new FabricPlatformService();
         validatePlatformCapabilities(platform);
 
         bootstrap.registerService(PlatformService.class, platform);
         bootstrap.registerService(FabricPlatformService.class, platform);
+        banPlatform = new FabricBanPlatformService();
+        bootstrap.registerService(BanPlatformService.class, banPlatform);
         commandDispatch = new FabricPlayerCommandDispatchService(platform);
         bootstrap.registerService(PlayerCommandDispatchService.class, commandDispatch);
         bootstrap.registerService(PlayerStatePlatformService.class, new FabricPlayerStateOperations(platform));
@@ -91,7 +96,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 bootstrap.serviceRegistry().require(LocaleResolver.class)
         );
         gameplayHooks.register();
-        platformEvents = new FabricPlatformEventBridge(bootstrap.eventRegistry(), platform);
+        platformEvents = new FabricPlatformEventBridge(bootstrap.eventRegistry(), platform, commandDispatch);
         platformEvents.register();
         FabricVanishBridge.visibility((viewer, target) ->
                 bootstrap.serviceRegistry()
@@ -109,6 +114,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
             platform.server(server);
+            banPlatform.server(server);
             bootstrap.onServerStarting(server);
         });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
@@ -118,8 +124,12 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
             try {
                 bootstrap.onServerStopping(server);
             } finally {
+                var events = platformEvents;
+                if (events != null) events.close();
                 var tracked = entityOperations;
                 if (tracked != null) tracked.clearTrackedEntities();
+                var bans = banPlatform;
+                if (bans != null) bans.clearServer();
                 platform.close();
             }
         });
@@ -153,7 +163,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
     }
 
     private PermissionBackend permissionBackend() {
-        Objects.requireNonNull(bootstrap, "CellulosesZBootstrap has not been initialized");
+        requireNonNull(bootstrap, "CellulosesZBootstrap has not been initialized");
         var permissionConfig = bootstrap.configRegistry()
                 .optional("module.permission", PermissionConfig.class)
                 .orElseGet(PermissionConfig::new);

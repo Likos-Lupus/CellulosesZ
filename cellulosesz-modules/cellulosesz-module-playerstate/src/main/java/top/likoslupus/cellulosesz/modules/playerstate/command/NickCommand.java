@@ -46,8 +46,8 @@ public final class NickCommand extends AbstractPlayerStateCommand {
 
         if (invocation.args().length < 1) {
             invocation.errorKey(
-                    "commands.playerstate.nick-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.playerstate.nick-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

@@ -60,7 +60,7 @@ public final class TempBanIpCommand extends AbstractAdminCommand {
 
         var duration = DurationParser.parseMillis(args[1]);
         if (duration.isEmpty()) {
-            invocation.errorKey("commands.admin.temp-ban-command.error.2");
+            invocation.errorKey("commands.admin.temp-ban-command.error.invalid-duration-examples-m-h-d");
             return 0;
         }
 

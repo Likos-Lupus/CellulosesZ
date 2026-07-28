@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.AddressBookService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.data.AddressBookDocument;
 
@@ -10,17 +11,20 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-public final class JsonAddressBookService implements AddressBookService {
+public final class JsonAddressBookService implements AddressBookService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
     private AddressBookDocument document;
     private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
-    public JsonAddressBookService(StorageService storage, Path path) {
+    public JsonAddressBookService(
+            StorageService storage,
+            Path path
+    ) {
         this.storage = storage;
         this.path = path;
-        this.document = storage.load(path, AddressBookDocument.class, AddressBookDocument::new).join();
+        this.document = new AddressBookDocument();
         validate(document);
     }
 
@@ -40,13 +44,31 @@ public final class JsonAddressBookService implements AddressBookService {
     }
 
     @Override
-    public synchronized CompletableFuture<Void> remember(UUID uuid, String name, String address) {
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, AddressBookDocument.class, AddressBookDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
+    }
+
+    @Override
+    public synchronized CompletableFuture<Void> remember(
+            UUID uuid,
+            String name,
+            String address
+    ) {
         var normalizedName = requireValue(name, "name");
         var normalizedAddress = IpAddresses.normalize(address)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid IP address"));
         var result = new CompletableFuture<Void>();
-        mutationTail = mutationTail.handle((ignored, failure) -> null)
-                .thenCompose(ignored -> {
+        mutationTail = mutationTail.handle((_, _) -> null)
+                .thenCompose(_ -> {
                     AddressBookDocument next;
                     synchronized (this) {
                         next = copy(document);
@@ -55,7 +77,7 @@ public final class JsonAddressBookService implements AddressBookService {
                     entry.name = normalizedName;
                     entry.address = normalizedAddress;
                     next.players.put(uuid.toString(), entry);
-                    return storage.save(path, next).whenComplete((saved, failure) -> {
+                    return storage.save(path, next).whenComplete((_, failure) -> {
                         if (failure == null) {
                             synchronized (this) {
                                 document = next;
@@ -66,7 +88,7 @@ public final class JsonAddressBookService implements AddressBookService {
                         }
                     });
                 });
-        mutationTail.whenComplete((ignored, failure) -> {
+        mutationTail.whenComplete((_, failure) -> {
             if (failure != null) result.completeExceptionally(failure);
         });
         return result;
@@ -75,7 +97,9 @@ public final class JsonAddressBookService implements AddressBookService {
     @Override
     public synchronized Optional<String> address(UUID uuid) {
         var entry = document.players.get(uuid.toString());
-        return entry == null ? Optional.empty() : Optional.of(entry.address);
+        return entry == null
+                ? Optional.empty()
+                : Optional.of(entry.address);
     }
 
     @Override

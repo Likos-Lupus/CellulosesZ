@@ -35,8 +35,8 @@ public final class DelKitCommand extends AbstractKitCommand {
         var args = invocation.args();
         if (args.length != 1) {
             invocation.errorKey(
-                    "commands.kit.del-kit-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.kit.del-kit-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -46,13 +46,13 @@ public final class DelKitCommand extends AbstractKitCommand {
                 invocation.errorKey("service.kit.persistence-failed");
             } else if (Boolean.TRUE.equals(deleted)) {
                 invocation.replyKey(
-                        "commands.kit.del-kit-command.reply.1",
-                        Map.of("value0", args[0])
+                        "commands.kit.del-kit-command.reply.deleted-kit",
+                        Map.of("kit", args[0])
                 );
             } else {
                 invocation.errorKey(
-                        "commands.kit.del-kit-command.error.2",
-                        Map.of("value0", args[0])
+                        "commands.kit.del-kit-command.error.kit-does-not-exist",
+                        Map.of("kit", args[0])
                 );
             }
         });

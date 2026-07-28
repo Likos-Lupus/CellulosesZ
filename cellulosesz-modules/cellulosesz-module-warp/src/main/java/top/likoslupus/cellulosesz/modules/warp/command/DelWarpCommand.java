@@ -33,19 +33,20 @@ public final class DelWarpCommand extends AbstractWarpCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey("commands.warp.del-warp-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.warp.del-warp-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         try {
             warps.deleteWarp(args[0]).whenComplete((deleted, failure) -> {
                 if (failure != null) invocation.errorKey("service.warp.persistence-failed");
                 else if (deleted)
-                    invocation.replyKey("commands.warp.del-warp-command.reply.1", Map.of("value0", args[0]));
-                else invocation.errorKey("commands.warp.del-warp-command.error.2", Map.of("value0", args[0]));
+                    invocation.replyKey("commands.warp.del-warp-command.reply.deleted-warp", Map.of("warp", args[0]));
+                else
+                    invocation.errorKey("commands.warp.del-warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
             });
             return 1;
         } catch (IllegalArgumentException _) {
-            invocation.errorKey("commands.warp.del-warp-command.error.2", Map.of("value0", args[0]));
+            invocation.errorKey("commands.warp.del-warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
             return 0;
         }
     }

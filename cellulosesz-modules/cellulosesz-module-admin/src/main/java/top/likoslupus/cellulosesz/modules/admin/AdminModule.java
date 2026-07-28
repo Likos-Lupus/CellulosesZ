@@ -15,6 +15,7 @@ import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -60,9 +61,11 @@ public final class AdminModule implements CellulosesZModule {
         requireNonNull(config, "AdminConfig has not been initialized").validate();
     }
 
+    @SuppressWarnings("resource")
     @Override
     public void registerServices(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
+        var banPlatform = context.services().require(BanPlatformService.class);
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
         var root = context.dataDirectory().getParent().resolve("admin");
@@ -72,7 +75,7 @@ public final class AdminModule implements CellulosesZModule {
 
         requireNonNull(config, "AdminConfig has not been initialized");
 
-        bans = new DefaultBanService(platform, renderer, locales, permissions);
+        bans = new DefaultBanService(platform, banPlatform, renderer, locales, permissions);
         tempBans = new JsonTempBanService(
                 storage,
                 root.resolve("temp-bans.json"),
@@ -171,7 +174,7 @@ public final class AdminModule implements CellulosesZModule {
             event.cancel();
             platform.sendMessage(event.player(), renderer.render(
                     locales.locale(event.player()),
-                    "commands.admin.mute-command-middleware.error.1",
+                    "commands.admin.mute-command-middleware.error.muted-cannot-use-command",
                     Map.of()
             ));
         });

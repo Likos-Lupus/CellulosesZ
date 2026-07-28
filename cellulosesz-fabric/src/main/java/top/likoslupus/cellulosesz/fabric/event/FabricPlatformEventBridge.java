@@ -18,6 +18,9 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
@@ -38,15 +41,17 @@ public final class FabricPlatformEventBridge {
 
     private final EventRegistry events;
     private final PlatformService platform;
+    private final PlayerCommandDispatchService commandDispatch;
     private final Map<UUID, PlayerSnapshot> snapshots = new HashMap<>();
-    private final Set<UUID> commandRedispatch = new HashSet<>();
 
     public FabricPlatformEventBridge(
             EventRegistry events,
-            PlatformService platform
+            PlatformService platform,
+            PlayerCommandDispatchService commandDispatch
     ) {
         this.events = events;
         this.platform = platform;
+        this.commandDispatch = commandDispatch;
     }
 
     public static boolean allowCommand(ServerPlayer nativePlayer, String command) {
@@ -57,9 +62,6 @@ public final class FabricPlatformEventBridge {
     }
 
     private boolean command(ServerPlayer nativePlayer, String command) {
-        var uuid = nativePlayer.getUUID();
-        if (commandRedispatch.remove(uuid)) return true;
-
         var wrapped = wrap(nativePlayer);
         if (wrapped.isEmpty()) return true;
 
@@ -70,13 +72,13 @@ public final class FabricPlatformEventBridge {
 
         if (event.command().equals(normalized)) return true;
 
-        commandRedispatch.add(uuid);
-        try {
-            platform.dispatchPlayerCommand(wrapped.get(), stripSlash(event.command()));
-            return false;
-        } finally {
-            commandRedispatch.remove(uuid);
-        }
+        commandDispatch.dispatch(PlayerCommandDispatchRequest.start(
+                wrapped.orElseThrow(),
+                nativePlayer.getUUID(),
+                CommandDispatchOrigin.PREPROCESS_REWRITE,
+                stripSlash(event.command())
+        ));
+        return false;
     }
 
     private Optional<CellPlayer> wrap(ServerPlayer player) {
@@ -201,6 +203,9 @@ public final class FabricPlatformEventBridge {
     }
 
     public void register() {
+        if (active != null) {
+            throw new IllegalStateException("FabricPlatformEventBridge is already installed");
+        }
         active = this;
 
         ServerMessageEvents.ALLOW_CHAT_MESSAGE.register((message, sender, _) ->
@@ -450,6 +455,12 @@ public final class FabricPlatformEventBridge {
         if (previous.containerId == 0 || previous.containerId == current.containerId) return;
 
         events.fire(new InventoryCloseEvent(player, previous.inventoryType));
+    }
+
+    public void close() {
+        if (active == this) active = null;
+        snapshots.clear();
+        SIGN_BREAK_BYPASS_DEPTH.remove();
     }
 
     private record PlayerSnapshot(

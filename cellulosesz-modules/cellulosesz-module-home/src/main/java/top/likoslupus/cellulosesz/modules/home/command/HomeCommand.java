@@ -81,7 +81,7 @@ public final class HomeCommand extends AbstractHomeCommand {
                 return;
             }
             if (location.isEmpty()) {
-                invocation.errorKey("commands.home.home-command.error.1", Map.of("value0", name));
+                invocation.errorKey("commands.home.home-command.error.home-does-not-exist", Map.of("home", name));
                 return;
             }
             platform.callOnServerThread(() -> teleports.teleport(player, location.orElseThrow(), options(invocation)))
@@ -94,7 +94,7 @@ public final class HomeCommand extends AbstractHomeCommand {
                             if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
                                 cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
                             }
-                            invocation.replyKey("commands.home.home-command.reply.1", Map.of("value0", name));
+                            invocation.replyKey("commands.home.home-command.reply.teleported-home", Map.of("home", name));
                         } else {
                             invocation.error(result.message());
                         }

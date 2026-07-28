@@ -39,8 +39,8 @@ public final class GiveCommand extends AbstractItemCommand {
         var args = invocation.args();
         if (args.length < 2) {
             invocation.errorKey(
-                    "commands.item.give-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.give-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -50,7 +50,7 @@ public final class GiveCommand extends AbstractItemCommand {
 
         var descriptor = items.parse(join(args, 1));
         if (descriptor.isEmpty()) {
-            invocation.errorKey("commands.item.give-command.error.2");
+            invocation.errorKey("commands.item.give-command.error.invalid-item-description");
             return 0;
         }
 
@@ -59,16 +59,16 @@ public final class GiveCommand extends AbstractItemCommand {
         }
 
         if (!items.give(target.get(), descriptor.get())) {
-            invocation.errorKey("commands.item.give-command.error.3");
+            invocation.errorKey("commands.item.give-command.error.failed-give-item");
             return 0;
         }
 
         invocation.replyKey(
-                "commands.item.give-command.reply.1",
+                "commands.item.give-command.reply.gave",
                 Map.of(
-                        "value0", target.get().name(),
-                        "value1", descriptor.get().count,
-                        "value2", descriptor.get().normalizedItem()
+                        "player", target.get().name(),
+                        "item", descriptor.get().count,
+                        "count", descriptor.get().normalizedItem()
                 )
         );
         return 1;

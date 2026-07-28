@@ -53,7 +53,7 @@ public final class TpDenyCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.errorKey("commands.teleport.tp-deny-command.error.1");
+            invocation.errorKey("commands.teleport.tp-deny-command.error.command-can-only-used-by-player");
             return 0;
         }
         if (invocation.args().length > 1) {
@@ -64,7 +64,7 @@ public final class TpDenyCommand implements CellCommand {
                 ? requests.newestFor(self.orElseThrow().uuid())
                 : selected(invocation, self.orElseThrow().uuid(), invocation.args()[0]);
         if (request.isEmpty()) {
-            invocation.errorKey("commands.teleport.tp-deny-command.error.2");
+            invocation.errorKey("commands.teleport.tp-deny-command.error.there-no-pending-teleport-request");
             return 0;
         }
         var denied = request.orElseThrow();
@@ -83,7 +83,7 @@ public final class TpDenyCommand implements CellCommand {
                                 Map.of("player", self.orElseThrow().name())
                         )
                 ));
-        invocation.replyKey("commands.teleport.tp-deny-command.reply.1");
+        invocation.replyKey("commands.teleport.tp-deny-command.reply.teleport-request-denied");
         return 1;
     }
 

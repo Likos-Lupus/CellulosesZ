@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -14,7 +16,7 @@ import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 
-public final class JsonMailService implements MailService {
+public final class JsonMailService implements MailService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -31,7 +33,18 @@ public final class JsonMailService implements MailService {
         this.storage = requireNonNull(storage, "storage");
         this.config = requireNonNull(config, "config").validatedCopy();
         this.path = requireNonNull(path, "path");
-        this.document = validate(storage.load(path, MailDocument.class, MailDocument::new).join());
+        this.document = new MailDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, MailDocument.class, MailDocument::new)
+                .thenApply(JsonMailService::validate)
+                .thenAccept(loaded -> {
+                    synchronized (queueLock) {
+                        document = loaded;
+                    }
+                });
     }
 
     private static MailDocument validate(MailDocument document) {

@@ -49,26 +49,26 @@ public final class RepairCommand extends AbstractItemCommand {
         var all = args.length == 1 && args[0].equalsIgnoreCase("all");
         if (args.length > 1 || (args.length == 1 && !all && !args[0].equalsIgnoreCase("hand"))) {
             invocation.errorKey(
-                    "commands.item.repair-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.repair-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
 
         if (all && (!config.repairAllEnabled || !invocation.hasPermission("cellulosesz.item.repair.all"))) {
-            invocation.errorKey("commands.item.repair-command.error.2");
+            invocation.errorKey("commands.item.repair-command.error.do-not-permission-repair-all-items");
             return 0;
         }
 
         var repaired = platform.repairItems(self.get(), all);
         if (repaired <= 0) {
-            invocation.errorKey("commands.item.repair-command.error.3");
+            invocation.errorKey("commands.item.repair-command.error.there-no-repairable-items");
             return 0;
         }
 
         invocation.replyKey(
-                "commands.item.repair-command.reply.1",
-                Map.of("value0", repaired)
+                "commands.item.repair-command.reply.repaired-item-s",
+                Map.of("count", repaired)
         );
         return 1;
     }

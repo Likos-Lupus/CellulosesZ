@@ -35,7 +35,8 @@ abstract class AbstractEconomyCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.errorKey("commands.economy.abstract-economy-command.error.1");
+        if (player.isEmpty())
+            invocation.errorKey("commands.economy.abstract-economy-command.error.command-can-only-used-by-player");
         return player;
     }
 
@@ -43,8 +44,8 @@ abstract class AbstractEconomyCommand implements CellCommand {
         var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty()) {
             invocation.errorKey(
-                    "commands.economy.abstract-economy-command.error.2",
-                    Map.of("value0", name)
+                    "commands.economy.abstract-economy-command.error.online-player-not-found",
+                    Map.of("player", name)
             );
         }
         return player;
@@ -54,8 +55,8 @@ abstract class AbstractEconomyCommand implements CellCommand {
         var uuid = invocation.resolvePlayer(name).optionalUuid();
         if (uuid.isEmpty()) {
             invocation.errorKey(
-                    "commands.economy.abstract-economy-command.error.3",
-                    Map.of("value0", name)
+                    "commands.economy.abstract-economy-command.error.player-not-found",
+                    Map.of("player", name)
             );
         }
         return uuid;
@@ -65,14 +66,14 @@ abstract class AbstractEconomyCommand implements CellCommand {
         try {
             var amount = new BigDecimal(value);
             if (amount.signum() <= 0) {
-                invocation.errorKey("commands.economy.abstract-economy-command.error.4");
+                invocation.errorKey("commands.economy.abstract-economy-command.error.amount-must-greater-than");
                 return Optional.empty();
             }
             return Optional.of(amount);
         } catch (NumberFormatException _) {
             invocation.errorKey(
-                    "commands.economy.abstract-economy-command.error.5",
-                    Map.of("value0", value)
+                    "commands.economy.abstract-economy-command.error.invalid-amount",
+                    Map.of("amount", value)
             );
             return Optional.empty();
         }

@@ -42,8 +42,8 @@ public final class WeatherCommand extends AbstractWorldCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.world.weather-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.world.weather-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -51,8 +51,8 @@ public final class WeatherCommand extends AbstractWorldCommand {
         var type = weatherType(args[0]);
         if (type.isEmpty()) {
             invocation.errorKey(
-                    "commands.world.weather-command.error.2",
-                    Map.of("value0", args[0])
+                    "commands.world.weather-command.error.unknown-weather-type",
+                    Map.of("weather", args[0])
             );
             return 0;
         }

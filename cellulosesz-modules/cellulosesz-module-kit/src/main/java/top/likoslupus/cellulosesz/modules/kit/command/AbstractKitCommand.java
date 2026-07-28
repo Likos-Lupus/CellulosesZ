@@ -23,7 +23,9 @@ abstract class AbstractKitCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.errorKey("commands.kit.abstract-kit-command.error.1");
+        if (player.isEmpty()) {
+            invocation.errorKey("commands.kit.abstract-kit-command.error.command-can-only-used-by-player");
+        }
         return player;
     }
 

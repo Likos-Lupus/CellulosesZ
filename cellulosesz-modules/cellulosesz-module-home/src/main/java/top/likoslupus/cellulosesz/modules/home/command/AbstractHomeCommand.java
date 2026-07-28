@@ -40,7 +40,8 @@ abstract class AbstractHomeCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.errorKey("commands.home.abstract-home-command.error.1");
+        if (player.isEmpty())
+            invocation.errorKey("commands.home.abstract-home-command.error.command-can-only-used-by-player");
         return player;
     }
 
@@ -51,16 +52,16 @@ abstract class AbstractHomeCommand implements CellCommand {
     protected boolean validName(CommandInvocation invocation, String name) {
         if (name.length() < config.naming.minLength || name.length() > config.naming.maxLength) {
             invocation.errorKey(
-                    "commands.home.abstract-home-command.error.2",
+                    "commands.home.abstract-home-command.error.home-names-must-between-characters-long",
                     Map.of(
-                            "value0", config.naming.minLength,
-                            "value1", config.naming.maxLength
+                            "minimum_length", config.naming.minLength,
+                            "maximum_length", config.naming.maxLength
                     )
             );
             return false;
         }
         if (!Pattern.matches(config.naming.pattern, name)) {
-            invocation.errorKey("commands.home.abstract-home-command.error.3");
+            invocation.errorKey("commands.home.abstract-home-command.error.home-names-may-only-contain-configured-characters");
             return false;
         }
         return true;

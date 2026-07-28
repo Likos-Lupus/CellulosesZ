@@ -5,6 +5,7 @@ import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.nio.file.*;
@@ -26,6 +27,14 @@ public final class JacksonCodecs {
             return YAML.readValue(path.toFile(), type);
         } catch (RuntimeException exception) {
             throw new IOException("Failed to read YAML: " + path, exception);
+        }
+    }
+
+    public static <T> T readYaml(InputStream input, Class<T> type) throws IOException {
+        try {
+            return YAML.readValue(input, type);
+        } catch (RuntimeException exception) {
+            throw new IOException("Failed to read YAML resource", exception);
         }
     }
 

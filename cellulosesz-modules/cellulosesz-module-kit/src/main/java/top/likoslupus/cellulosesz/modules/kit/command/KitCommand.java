@@ -67,14 +67,14 @@ public final class KitCommand extends AbstractKitCommand {
         var kit = kits.kit(args[0]);
         if (kit.isEmpty()) {
             invocation.errorKey(
-                    "commands.kit.kit-command.error.1",
-                    Map.of("value0", args[0])
+                    "commands.kit.kit-command.error.kit-does-not-exist",
+                    Map.of("kit", args[0])
             );
             return 0;
         }
 
         if (!kit.get().permission.isBlank() && !invocation.hasPermission(kit.get().permission)) {
-            invocation.errorKey("commands.kit.kit-command.error.2");
+            invocation.errorKey("commands.kit.kit-command.error.do-not-permission-claim-kit");
             return 0;
         }
 

@@ -48,8 +48,8 @@ public final class InvSeeCommand extends AbstractItemCommand {
         var args = invocation.args();
         if (args.length != 1) {
             invocation.errorKey(
-                    "commands.item.inv-see-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.inv-see-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -58,18 +58,18 @@ public final class InvSeeCommand extends AbstractItemCommand {
         if (target.isEmpty()) return 0;
 
         if (target.get().uuid().equals(self.get().uuid())) {
-            invocation.errorKey("commands.item.inv-see-command.error.2");
+            invocation.errorKey("commands.item.inv-see-command.error.cannot-inspect-own-inventory-with-command");
             return 0;
         }
 
         if (!platform.openInventory(self.get(), target.get())) {
-            invocation.errorKey("commands.item.inv-see-command.error.3");
+            invocation.errorKey("commands.item.inv-see-command.error.unable-open-target-inventory");
             return 0;
         }
 
         invocation.replyKey(
-                "commands.item.inv-see-command.reply.1",
-                Map.of("value0", target.get().name())
+                "commands.item.inv-see-command.reply.viewing-s-inventory",
+                Map.of("player", target.get().name())
         );
         return 1;
     }

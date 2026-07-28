@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
@@ -18,7 +19,6 @@ import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
@@ -37,12 +37,16 @@ final class EconomyCommandBehaviorTest {
         var mutation = new TrackingMutation();
         var platform = proxy(
                 PlatformService.class,
-                (method, _) -> switch (method.getName()) {
+                (method, args) -> switch (method.getName()) {
                     case "player" -> Optional.of(player);
                     case "inventorySnapshot" -> Optional.of(List.of(snapshot));
                     case "plainInventoryItem" -> true;
                     case "describeInventoryItem" -> Optional.of(new ItemDescriptor("minecraft:stone", 3));
                     case "prepareInventoryRemoval" -> Optional.of(mutation);
+                    case "runOnServerThread" -> {
+                        ((Runnable) args[0]).run();
+                        yield null;
+                    }
                     default -> defaultValue(method);
                 }
         );
@@ -54,9 +58,11 @@ final class EconomyCommandBehaviorTest {
         );
         var economy = proxy(
                 EconomyService.class,
-                (method, _) -> method.getName().equals("deposit")
-                        ? CompletableFuture.failedFuture(new IllegalStateException("disk failure"))
-                        : defaultValue(method)
+                (method, args) -> switch (method.getName()) {
+                    case "deposit" -> CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+                    case "format" -> ((BigDecimal) args[0]).toPlainString();
+                    default -> defaultValue(method);
+                }
         );
         var items = proxy(
                 ItemService.class,
@@ -94,8 +100,6 @@ final class EconomyCommandBehaviorTest {
                             default -> throw new UnsupportedOperationException(method.getName());
                         };
                     }
-
-                    if (method.isDefault()) return InvocationHandler.invokeDefault(instance, method, args);
 
                     return behavior.apply(method, args);
                 }
@@ -148,7 +152,9 @@ final class EconomyCommandBehaviorTest {
         );
         var economy = proxy(
                 EconomyService.class,
-                (method, _) -> defaultValue(method)
+                (method, args) -> method.getName().equals("format")
+                        ? ((BigDecimal) args[0]).toPlainString()
+                        : defaultValue(method)
         );
         var items = proxy(
                 ItemService.class,
@@ -190,9 +196,10 @@ final class EconomyCommandBehaviorTest {
                         new EconomyConfig()
                 ).execute(invocation)
         );
-        assertEquals("commands.economy.balance-top-command.error.1", invocation.errorKey);
+        assertEquals("commands.economy.balance-top-command.error.page-number-must-integer", invocation.errorKey);
     }
 
+    @NullMarked
     private static NameCacheService names() {
         return new NameCacheService() {
             @Override
@@ -221,6 +228,7 @@ final class EconomyCommandBehaviorTest {
         };
     }
 
+    @NullMarked
     private static final class TrackingMutation implements InventoryMutation {
 
         private boolean committed;
@@ -240,6 +248,7 @@ final class EconomyCommandBehaviorTest {
 
     }
 
+    @NullMarked
     private static final class TestInvocation implements CommandInvocation {
 
         private final String[] args;
@@ -282,7 +291,13 @@ final class EconomyCommandBehaviorTest {
 
         @Override
         public ResolvedPlayer resolvePlayer(String input) {
-            return new ResolvedPlayer(ResolvedPlayerState.UNKNOWN, null, input, null, false);
+            return new ResolvedPlayer(
+                    ResolvedPlayerState.UNKNOWN,
+                    null,
+                    input,
+                    null,
+                    false
+            );
         }
 
         @Override
@@ -318,6 +333,7 @@ final class EconomyCommandBehaviorTest {
 
     }
 
+    @NullMarked
     private static final class NoopLogger implements CellulosesZLogger {
 
         @Override

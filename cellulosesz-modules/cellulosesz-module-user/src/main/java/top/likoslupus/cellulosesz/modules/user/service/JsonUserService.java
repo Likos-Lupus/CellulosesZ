@@ -1,5 +1,8 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
@@ -10,17 +13,26 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
-public final class JsonUserService implements UserService {
+import static java.util.Objects.requireNonNull;
+
+public final class JsonUserService implements
+        UserService,
+        AsyncInitializable,
+        AsyncCloseable {
 
     private final StorageService storage;
     private final NameCacheService nameCache;
     private final Path usersDirectory;
     private final CellulosesZLogger logger;
     private final ConcurrentHashMap<UUID, CellUser> users = new ConcurrentHashMap<>();
+    private final Set<UUID> knownUuids = ConcurrentHashMap.newKeySet();
     private final Set<UUID> dirty = ConcurrentHashMap.newKeySet();
+    private final ConcurrentHashMap<UUID, CompletableFuture<CellUser>> loadFutures = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, CompletableFuture<Void>> updateTails = new ConcurrentHashMap<>();
+    private final AtomicBoolean closing = new AtomicBoolean();
 
     public JsonUserService(
             StorageService storage,
@@ -34,6 +46,42 @@ public final class JsonUserService implements UserService {
         this.logger = logger;
     }
 
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.loadDirectory(usersDirectory, CellUser.class)
+                .thenAccept(documents ->
+                        documents.forEach(user -> {
+                            validate(user, user.uuid, true);
+                            knownUuids.add(user.uuid);
+                            if (user.lastKnownName != null) {
+                                nameCache.remember(user.uuid, user.lastKnownName);
+                            }
+                        })
+                );
+    }
+
+    private void validate(
+            CellUser user,
+            UUID expectedUuid,
+            boolean resetInterruptedSession
+    ) {
+        requireNonNull(user, "user");
+        if (!expectedUuid.equals(user.uuid)) {
+            throw new IllegalArgumentException("User document UUID does not match its file name");
+        }
+        requireNonNull(user.timestamps, "timestamps");
+        requireNonNull(user.state, "state");
+        requireNonNull(user.preferences, "preferences");
+        requireNonNull(user.relations, "relations");
+        requireNonNull(user.cooldowns, "cooldowns");
+        if (user.timestamps.playTimeMillis < 0L) {
+            throw new IllegalArgumentException("playTimeMillis must not be negative");
+        }
+        // Only a document read can contain an interrupted session. Normal in-memory updates must preserve it.
+        if (resetInterruptedSession) user.timestamps.activeSessionStartedAt = null;
+    }
+
     public void markQuit(Object player) {
         var uuid = PlayerIdentity.uuid(player);
         if (uuid.isEmpty()) return;
@@ -44,28 +92,58 @@ public final class JsonUserService implements UserService {
         var now = System.currentTimeMillis();
         user.timestamps.lastQuit = now;
         if (user.timestamps.activeSessionStartedAt != null) {
-            user.timestamps.playTimeMillis = Math.addExact(
-                    user.timestamps.playTimeMillis,
-                    Math.max(0L, now - user.timestamps.activeSessionStartedAt)
-            );
+            var elapsed = Math.max(0L, now - user.timestamps.activeSessionStartedAt);
+            try {
+                user.timestamps.playTimeMillis = Math.addExact(user.timestamps.playTimeMillis, elapsed);
+            } catch (ArithmeticException overflow) {
+                user.timestamps.playTimeMillis = Long.MAX_VALUE;
+                logger.warn("User play time overflowed and was saturated for " + uuid.get());
+            }
             user.timestamps.activeSessionStartedAt = null;
         }
         markDirty(uuid.get());
     }
 
     @Override
+    public CompletableFuture<Void> closeAsync() {
+        closing.set(true);
+        var loads = CompletableFuture.allOf(loadFutures.values().toArray(CompletableFuture[]::new));
+        var updates = CompletableFuture.allOf(updateTails.values().toArray(CompletableFuture[]::new));
+        return CompletableFuture.allOf(loads, updates).thenCompose(_ -> saveAll());
+    }
+
+    private Path userPath(UUID uuid) {
+        return usersDirectory.resolve(uuid + ".json");
+    }
+
+    @Override
     public CompletableFuture<CellUser> load(UUID uuid) {
+        requireNonNull(uuid, "uuid");
         var cached = users.get(uuid);
         if (cached != null) return CompletableFuture.completedFuture(cached);
+        if (closing.get()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("User service is closing"));
+        }
 
-        return storage.load(userPath(uuid), CellUser.class, () -> create(uuid))
-                .thenApply(user -> {
-                    validate(user, uuid, true);
-                    users.put(uuid, user);
-                    if (user.lastKnownName != null) {
-                        nameCache.remember(uuid, user.lastKnownName);
-                    }
-                    return user;
+        return loadFutures.computeIfAbsent(
+                uuid,
+                key -> {
+                    var created = storage.createIfMissing(
+                                    userPath(key),
+                                    CellUser.class,
+                                    () -> create(key)
+                            )
+                            .thenApply(user -> {
+                                validate(user, key, true);
+                                users.put(key, user);
+                                knownUuids.add(key);
+                                if (user.lastKnownName != null) {
+                                    nameCache.remember(key, user.lastKnownName);
+                                }
+                                return user;
+                            });
+                    created.whenComplete((_, _) -> loadFutures.remove(key, created));
+                    return created;
                 });
     }
 
@@ -115,20 +193,26 @@ public final class JsonUserService implements UserService {
 
     @Override
     public Collection<UUID> knownUuids() {
-        var known = new LinkedHashSet<>(nameCache.entries().keySet());
+        var known = new LinkedHashSet<>(knownUuids);
+        known.addAll(nameCache.entries().keySet());
         known.addAll(users.keySet());
         return Set.copyOf(known);
     }
 
     @Override
     public <T> CompletableFuture<T> update(UUID uuid, Function<CellUser, T> mutation) {
-        Objects.requireNonNull(uuid, "uuid");
-        Objects.requireNonNull(mutation, "mutation");
+        requireNonNull(uuid, "uuid");
+        requireNonNull(mutation, "mutation");
+        if (closing.get()) {
+            return CompletableFuture.failedFuture(new IllegalStateException("User service is closing"));
+        }
         var result = new CompletableFuture<T>();
-        updateTails.compute(uuid, (ignored, previous) -> {
-            var tail = previous == null ? CompletableFuture.completedFuture(null) : previous;
-            var next = tail.handle((unused, failure) -> null)
-                    .thenCompose(unused -> load(uuid))
+        updateTails.compute(uuid, (_, previous) -> {
+            var tail = previous == null
+                    ? CompletableFuture.completedFuture(null)
+                    : previous;
+            var next = tail.handle((_, _) -> null)
+                    .thenCompose(_ -> load(uuid))
                     .thenCompose(current -> {
                         CellUser replacement;
                         synchronized (current) {
@@ -139,7 +223,7 @@ public final class JsonUserService implements UserService {
                             value = mutation.apply(replacement);
                             validate(replacement, uuid, false);
                         } catch (RuntimeException exception) {
-                            return CompletableFuture.<Void>failedFuture(exception);
+                            return CompletableFuture.failedFuture(exception);
                         }
                         return storage.save(userPath(uuid), replacement)
                                 .thenRun(() -> {
@@ -148,7 +232,7 @@ public final class JsonUserService implements UserService {
                                     result.complete(value);
                                 });
                     });
-            next.whenComplete((unused, failure) -> {
+            next.whenComplete((_, failure) -> {
                 updateTails.remove(uuid, next);
                 if (failure != null) result.completeExceptionally(failure);
             });
@@ -192,26 +276,8 @@ public final class JsonUserService implements UserService {
 
     private CellUser create(UUID uuid) {
         var user = new CellUser(uuid);
-        var now = System.currentTimeMillis();
-        user.timestamps.firstJoin = now;
+        user.timestamps.firstJoin = System.currentTimeMillis();
         return user;
-    }
-
-    private void validate(CellUser user, UUID expectedUuid, boolean resetInterruptedSession) {
-        Objects.requireNonNull(user, "user");
-        if (!expectedUuid.equals(user.uuid)) {
-            throw new IllegalArgumentException("User document UUID does not match its file name");
-        }
-        Objects.requireNonNull(user.timestamps, "timestamps");
-        Objects.requireNonNull(user.state, "state");
-        Objects.requireNonNull(user.preferences, "preferences");
-        Objects.requireNonNull(user.relations, "relations");
-        Objects.requireNonNull(user.cooldowns, "cooldowns");
-        if (user.timestamps.playTimeMillis < 0L) {
-            throw new IllegalArgumentException("playTimeMillis must not be negative");
-        }
-        // Only a document read can contain an interrupted session. Normal in-memory updates must preserve it.
-        if (resetInterruptedSession) user.timestamps.activeSessionStartedAt = null;
     }
 
     private CellUser copy(CellUser source) {
@@ -242,6 +308,7 @@ public final class JsonUserService implements UserService {
         copy.preferences.teleportRequests = source.preferences.teleportRequests;
         copy.preferences.teleportAutoAccept = source.preferences.teleportAutoAccept;
         copy.preferences.confirmLargePayments = source.preferences.confirmLargePayments;
+        copy.preferences.confirmInventoryClears = source.preferences.confirmInventoryClears;
         copy.preferences.replyToLastRecipient = source.preferences.replyToLastRecipient;
         copy.preferences.powerToolsEnabled = source.preferences.powerToolsEnabled;
         copy.preferences.socialSpy = source.preferences.socialSpy;
@@ -251,10 +318,6 @@ public final class JsonUserService implements UserService {
         copy.relations.ignored.addAll(source.relations.ignored);
         copy.cooldowns.putAll(source.cooldowns);
         return copy;
-    }
-
-    private Path userPath(UUID uuid) {
-        return usersDirectory.resolve(uuid + ".json");
     }
 
 }

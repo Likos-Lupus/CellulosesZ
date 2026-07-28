@@ -35,13 +35,15 @@ public final class DelHomeCommand extends AbstractHomeCommand {
         if (self.isEmpty()) return 0;
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey("commands.home.del-home-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.home.del-home-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         homes.deleteHome(self.orElseThrow().uuid(), args[0]).whenComplete((deleted, failure) -> {
             if (failure != null) invocation.errorKey("common.persistence-failed");
-            else if (deleted) invocation.replyKey("commands.home.del-home-command.reply.1", Map.of("value0", args[0]));
-            else invocation.errorKey("commands.home.del-home-command.error.2", Map.of("value0", args[0]));
+            else if (deleted)
+                invocation.replyKey("commands.home.del-home-command.reply.deleted-home", Map.of("home", args[0]));
+            else
+                invocation.errorKey("commands.home.del-home-command.error.home-does-not-exist", Map.of("home", args[0]));
         });
         return 1;
     }

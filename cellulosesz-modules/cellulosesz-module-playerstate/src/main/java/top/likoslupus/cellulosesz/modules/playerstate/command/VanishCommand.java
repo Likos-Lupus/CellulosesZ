@@ -68,15 +68,15 @@ public final class VanishCommand extends AbstractPlayerStateCommand {
 
         if (args.length > 0 && !toggleWord(args[0])) {
             if (!invocation.hasPermission("cellulosesz.playerstate.vanish.other")) {
-                invocation.errorKey("commands.playerstate.vanish-command.error.1");
+                invocation.errorKey("commands.playerstate.vanish-command.error.do-not-permission-change-another-players-vanish-state");
                 return 0;
             }
 
             var online = invocation.resolvePlayer(args[0]).online();
             if (online.isEmpty()) {
                 invocation.errorKey(
-                        "commands.playerstate.vanish-command.error.2",
-                        Map.of("value0", args[0])
+                        "commands.playerstate.vanish-command.error.player-not-online",
+                        Map.of("player", args[0])
                 );
                 return 0;
             }
@@ -87,8 +87,8 @@ public final class VanishCommand extends AbstractPlayerStateCommand {
 
         if (args.length > stateIndex + 1) {
             invocation.errorKey(
-                    "commands.playerstate.vanish-command.error.3",
-                    Map.of("value0", usage())
+                    "commands.playerstate.vanish-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

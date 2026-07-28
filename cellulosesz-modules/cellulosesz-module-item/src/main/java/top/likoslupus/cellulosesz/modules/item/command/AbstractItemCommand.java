@@ -34,7 +34,8 @@ abstract class AbstractItemCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.errorKey("commands.item.abstract-item-command.error.1");
+        if (player.isEmpty())
+            invocation.errorKey("commands.item.abstract-item-command.error.command-can-only-used-by-player");
         return player;
     }
 
@@ -42,8 +43,8 @@ abstract class AbstractItemCommand implements CellCommand {
         var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty())
             invocation.errorKey(
-                    "commands.item.abstract-item-command.error.2",
-                    Map.of("value0", name)
+                    "commands.item.abstract-item-command.error.player-not-online",
+                    Map.of("player", name)
             );
         return player;
     }

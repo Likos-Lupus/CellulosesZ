@@ -40,8 +40,8 @@ public final class KitResetCommand extends AbstractKitCommand {
         var args = invocation.args();
         if (args.length < 1 || args.length > 2) {
             invocation.errorKey(
-                    "commands.kit.kit-reset-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.kit.kit-reset-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -73,15 +73,15 @@ public final class KitResetCommand extends AbstractKitCommand {
         var uuid = resolved.optionalUuid();
         if (uuid.isEmpty()) {
             invocation.errorKey(
-                    "commands.kit.kit-reset-command.error.2",
-                    Map.of("value0", targetName)
+                    "commands.kit.kit-reset-command.error.player-not-found",
+                    Map.of("player", targetName)
             );
             return 0;
         }
 
         kits.resetCooldown(uuid.orElseThrow(), args[0]).whenComplete((_, failure) -> {
             if (failure != null) invocation.errorKey("service.kit.persistence-failed");
-            else invocation.replyKey("commands.kit.kit-reset-command.reply.1", Map.of(
+            else invocation.replyKey("commands.kit.kit-reset-command.reply.kit-cooldown-reset", Map.of(
                     "kit", args[0], "player", resolved.name()));
         });
         return 1;

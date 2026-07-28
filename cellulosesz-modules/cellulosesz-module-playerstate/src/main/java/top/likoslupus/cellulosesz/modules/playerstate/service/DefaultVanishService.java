@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 public final class DefaultVanishService implements VanishService {
 
@@ -40,9 +41,13 @@ public final class DefaultVanishService implements VanishService {
             this.previous = previous;
         }
 
-    }    @Override
+    }
+
+    @Override
     public boolean vanished(UUID uuid) {
-        return users.cached(uuid).map(user -> user.state.vanished).orElse(false);
+        return users.cached(uuid)
+                .map(user -> user.state.vanished)
+                .orElse(false);
     }
 
     @Override
@@ -98,10 +103,8 @@ public final class DefaultVanishService implements VanishService {
     }
 
     private Throwable unwrap(Throwable failure) {
-        return failure instanceof java.util.concurrent.CompletionException completion
+        return failure instanceof CompletionException completion
                 && completion.getCause() != null ? completion.getCause() : failure;
     }
-
-
 
 }

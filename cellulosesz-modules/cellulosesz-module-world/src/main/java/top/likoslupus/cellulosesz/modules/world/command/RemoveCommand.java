@@ -46,8 +46,8 @@ public final class RemoveCommand extends AbstractWorldCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.world.remove-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.world.remove-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

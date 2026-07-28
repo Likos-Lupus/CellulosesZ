@@ -68,7 +68,7 @@ public final class TpaAllCommand implements CellCommand {
         }
         var requester = platform.player(invocation);
         if (requester.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpa-command.error.2");
+            invocation.errorKey("commands.teleport.tpa-command.error.command-can-only-used-by-player");
             return 0;
         }
         var candidates = platform.onlinePlayers().stream()

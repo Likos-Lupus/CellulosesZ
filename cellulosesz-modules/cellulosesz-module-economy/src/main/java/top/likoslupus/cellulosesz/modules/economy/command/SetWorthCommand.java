@@ -61,7 +61,7 @@ public final class SetWorthCommand implements CellCommand {
             amount = new BigDecimal(args[1]);
             if (amount.signum() < 0) throw new NumberFormatException();
         } catch (NumberFormatException _) {
-            invocation.errorKey("commands.economy.set-worth-command.error.1", Map.of("value0", args[1]));
+            invocation.errorKey("commands.economy.set-worth-command.error.invalid-amount", Map.of("amount", args[1]));
             return 0;
         }
 
@@ -71,8 +71,8 @@ public final class SetWorthCommand implements CellCommand {
                     invocation.errorKey("common.persistence-failed");
                 } else {
                     invocation.replyKey(
-                            "commands.economy.set-worth-command.reply.1",
-                            Map.of("value0", args[0], "value1", amount.stripTrailingZeros().toPlainString())
+                            "commands.economy.set-worth-command.reply.set-worth",
+                            Map.of("item", args[0], "amount", amount.stripTrailingZeros().toPlainString())
                     );
                 }
             });

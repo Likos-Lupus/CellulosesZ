@@ -90,7 +90,7 @@ public final class TeleportRequestExecutor {
     ) {
         var selected = requests.pending(requestId);
         if (selected.isEmpty() || !selected.orElseThrow().target().equals(acceptingPlayer.uuid())) {
-            invocation.errorKey("commands.teleport.tp-accept-command.error.2");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.there-no-pending-teleport-request");
             return false;
         }
         var claimed = requests.claim(requestId);
@@ -102,7 +102,7 @@ public final class TeleportRequestExecutor {
         var requester = online(pending.requester());
         if (requester.isEmpty()) {
             requests.complete(pending.id());
-            invocation.errorKey("commands.teleport.tp-accept-command.error.3");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.requesting-player-no-longer-online");
             return false;
         }
 
@@ -141,7 +141,7 @@ public final class TeleportRequestExecutor {
                     invocation.replyKey(
                             automatic
                                     ? "commands.teleport.request.auto-accepted"
-                                    : "commands.teleport.tp-accept-command.reply.1",
+                                    : "commands.teleport.tp-accept-command.reply.teleport-request-accepted",
                             Map.of(
                                     "player", requester.orElseThrow().name(),
                                     "request", pending.id()
@@ -181,7 +181,7 @@ public final class TeleportRequestExecutor {
                 ? requests.newestFor(acceptingPlayer.uuid())
                 : requests.pendingFor(acceptingPlayer.uuid(), requesterId);
         if (request.isEmpty()) {
-            invocation.errorKey("commands.teleport.tp-accept-command.error.2");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.there-no-pending-teleport-request");
             return false;
         }
         return acceptRequest(invocation, acceptingPlayer, request.orElseThrow().id(), automatic);

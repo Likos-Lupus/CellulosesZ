@@ -42,7 +42,7 @@ public final class TpAcceptCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.errorKey("commands.teleport.tp-accept-command.error.1");
+            invocation.errorKey("commands.teleport.tp-accept-command.error.command-can-only-used-by-player");
             return 0;
         }
         if (invocation.args().length > 1) {

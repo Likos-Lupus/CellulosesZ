@@ -41,8 +41,8 @@ public final class EcoCommand extends AbstractEconomyCommand {
         var args = invocation.args();
         if (args.length != 3) {
             invocation.errorKey(
-                    "commands.economy.eco-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.economy.eco-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -68,8 +68,8 @@ public final class EcoCommand extends AbstractEconomyCommand {
 
         if (result.isEmpty()) {
             invocation.errorKey(
-                    "commands.economy.eco-command.error.2",
-                    Map.of("value0", usage())
+                    "commands.economy.eco-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

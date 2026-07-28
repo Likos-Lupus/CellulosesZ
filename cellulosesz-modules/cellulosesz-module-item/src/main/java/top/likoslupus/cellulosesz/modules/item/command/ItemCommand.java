@@ -48,8 +48,8 @@ public final class ItemCommand extends AbstractItemCommand {
         var descriptor = items.parse(join(invocation.args(), 0));
         if (descriptor.isEmpty()) {
             invocation.errorKey(
-                    "commands.item.item-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.item-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -59,15 +59,15 @@ public final class ItemCommand extends AbstractItemCommand {
         }
 
         if (!items.give(self.get(), descriptor.get())) {
-            invocation.errorKey("commands.item.item-command.error.2");
+            invocation.errorKey("commands.item.item-command.error.failed-give-item");
             return 0;
         }
 
         invocation.replyKey(
-                "commands.item.item-command.reply.1",
+                "commands.item.item-command.reply.received",
                 Map.of(
-                        "value0", descriptor.get().count,
-                        "value1", descriptor.get().normalizedItem()
+                        "item", descriptor.get().count,
+                        "count", descriptor.get().normalizedItem()
                 )
         );
         return 1;

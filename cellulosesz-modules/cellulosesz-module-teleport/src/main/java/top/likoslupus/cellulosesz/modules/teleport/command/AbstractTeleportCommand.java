@@ -27,7 +27,7 @@ abstract class AbstractTeleportCommand implements CellCommand {
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
         if (player.isEmpty()) {
-            invocation.errorKey("commands.teleport.abstract-teleport-command.error.1");
+            invocation.errorKey("commands.teleport.abstract-teleport-command.error.command-can-only-used-by-player");
         }
         return player;
     }
@@ -36,8 +36,8 @@ abstract class AbstractTeleportCommand implements CellCommand {
         var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty()) {
             invocation.errorKey(
-                    "commands.teleport.abstract-teleport-command.error.2",
-                    Map.of("value0", name)
+                    "commands.teleport.abstract-teleport-command.error.online-player-not-found",
+                    Map.of("player", name)
             );
         }
         return player;
@@ -52,13 +52,13 @@ abstract class AbstractTeleportCommand implements CellCommand {
                 .thenAccept(result -> {
                     if (result.success()) {
                         invocation.replyKey(
-                                "commands.teleport.abstract-teleport-command.reply.1",
-                                Map.of("value0", result.location().compact())
+                                "commands.teleport.abstract-teleport-command.reply.teleported",
+                                Map.of("target", result.location().compact())
                         );
                     } else {
                         invocation.errorKey(
-                                "commands.teleport.abstract-teleport-command.error.3",
-                                Map.of("value0", result.message())
+                                "commands.teleport.abstract-teleport-command.error.teleport-failed",
+                                Map.of("reason", result.message())
                         );
                     }
                 });

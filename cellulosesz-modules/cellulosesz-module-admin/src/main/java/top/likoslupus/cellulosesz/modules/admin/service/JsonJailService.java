@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.service;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.admin.*;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -14,7 +15,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public final class JsonJailService implements JailService {
+public final class JsonJailService implements JailService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -33,19 +34,37 @@ public final class JsonJailService implements JailService {
         this.path = path;
         this.platform = platform;
         this.config = config;
-        this.document = storage.load(path, JailDocument.class, JailDocument::new).join();
-        validate(document);
+        this.document = new JailDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, JailDocument.class, JailDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validate(JailDocument candidate) {
         candidate.jails.forEach(jail -> {
-            if (normalize(jail.name).isEmpty()) throw new IllegalStateException("Jail name must not be blank");
-            if (jail.location == null) throw new IllegalStateException("Jail location is required");
+            if (normalize(jail.name).isEmpty()) {
+                throw new IllegalStateException("Jail name must not be blank");
+            }
         });
         candidate.jailed.forEach(record -> {
-            if (record.uuid == null) throw new IllegalStateException("Jailed player UUID is required");
-            if (record.jail.isBlank()) throw new IllegalStateException("Jailed player jail is required");
-            if (record.expiresAt != null && record.expiresAt > 0L && record.expiresAt <= record.createdAt) {
+            if (record.jail.isBlank()) {
+                throw new IllegalStateException("Jailed player jail is required");
+            }
+            if (record.expiresAt != null
+                    && record.expiresAt > 0L
+                    && record.expiresAt <= record.createdAt
+            ) {
                 throw new IllegalStateException("Jail expiry must be after creation");
             }
         });
@@ -64,8 +83,11 @@ public final class JsonJailService implements JailService {
         var normalized = normalize(name);
         if (normalized.isEmpty()) {
             return CompletableFuture.completedFuture(AdminResult.failure(
-                    AdminStatus.INVALID_INPUT, "service.admin.jail-invalid-name"));
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.jail-invalid-name"
+            ));
         }
+
         var jail = new Jail();
         jail.name = normalized;
         jail.location = copy(location);
@@ -142,7 +164,9 @@ public final class JsonJailService implements JailService {
 
     @Override
     public synchronized Collection<Jail> jails() {
-        return document.jails.stream().map(this::copy).toList();
+        return document.jails.stream()
+                .map(this::copy)
+                .toList();
     }
 
     @Override
@@ -154,7 +178,7 @@ public final class JsonJailService implements JailService {
             String reason
     ) {
         final Jail jail;
-        final @Nullable JailedPlayer previous;
+        final JailedPlayer previous;
         synchronized (this) {
             var found = document.jails.stream()
                     .filter(value -> value.name.equalsIgnoreCase(normalize(jailName)))
@@ -176,14 +200,16 @@ public final class JsonJailService implements JailService {
 
         var beforeTeleport = copy(platform.location(player));
         var createdAt = System.currentTimeMillis();
-        final @Nullable Long expiresAt;
+        final Long expiresAt;
         try {
             expiresAt = durationMillis == null || durationMillis <= 0L
                     ? null
                     : Math.addExact(createdAt, durationMillis);
         } catch (ArithmeticException exception) {
             return CompletableFuture.completedFuture(AdminResult.failure(
-                    AdminStatus.INVALID_INPUT, "service.admin.invalid-duration"));
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.invalid-duration"
+            ));
         }
 
         var record = new JailedPlayer();

@@ -21,7 +21,7 @@ import top.likoslupus.cellulosesz.modules.user.service.DefaultNameCacheService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultPlayerResolver;
 import top.likoslupus.cellulosesz.modules.user.service.JsonUserService;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "user",
@@ -46,6 +46,7 @@ public final class UserModule implements CellulosesZModule {
         );
     }
 
+    @SuppressWarnings("resource")
     @Override
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
@@ -61,7 +62,7 @@ public final class UserModule implements CellulosesZModule {
                 context.logger()
         );
 
-        Objects.requireNonNull(config, "UserConfig has not been initialized");
+        requireNonNull(config, "UserConfig has not been initialized");
 
         var platform = context.services().require(PlatformService.class);
         var permissions = context.services().require(PermissionService.class);
@@ -81,35 +82,41 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void registerEvents(ModuleContext context) {
-        Objects.requireNonNull(users, "JsonUserService has not been initialized");
-        Objects.requireNonNull(displayNames, "DisplayNameService has not been initialized");
-        Objects.requireNonNull(config, "UserConfig has not been initialized");
+        requireNonNull(users, "JsonUserService has not been initialized");
+        requireNonNull(displayNames, "DisplayNameService has not been initialized");
+        requireNonNull(config, "UserConfig has not been initialized");
 
-        context.events().listen(PlayerJoinEvent.class, event ->
-                users.loadFromPlayer(event.player().nativeHandle())
-                        .thenApply(user -> {
-                            displayNames.refresh(event.player());
-                            return user;
-                        })
-                        .thenCompose(user -> users.save(user.uuid))
-                        .whenComplete((_, exception) -> {
-                            if (exception != null) {
-                                context.logger().error("Failed to load user data for joining player", exception);
-                            }
-                        })
+        context.events().listen(
+                PlayerJoinEvent.class,
+                event ->
+                        users.loadFromPlayer(event.player().nativeHandle())
+                                .thenApply(user -> {
+                                    displayNames.refresh(event.player());
+                                    return user;
+                                })
+                                .thenCompose(user -> users.save(user.uuid))
+                                .whenComplete((_, exception) -> {
+                                    if (exception != null) {
+                                        context.logger()
+                                                .error("Failed to load user data for joining player", exception);
+                                    }
+                                })
         );
-        context.events().listen(PlayerDisconnectEvent.class, event -> {
-            users.markQuit(event.player().nativeHandle());
-            if (config.saveOnQuit) {
-                users.saveAll();
-            }
-        });
+        context.events().listen(
+                PlayerDisconnectEvent.class,
+                event -> {
+                    users.markQuit(event.player().nativeHandle());
+                    if (config.saveOnQuit) {
+                        users.saveAll();
+                    }
+                }
+        );
     }
 
     @Override
     public void onServerStarted(ModuleContext context) {
-        Objects.requireNonNull(users, "JsonUserService has not been initialized");
-        Objects.requireNonNull(config, "UserConfig has not been initialized");
+        requireNonNull(users, "JsonUserService has not been initialized");
+        requireNonNull(config, "UserConfig has not been initialized");
 
         context.scheduler().syncRepeating(
                 () -> users.saveAll(),
@@ -120,14 +127,13 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void onReload(ModuleContext context) {
-        Objects.requireNonNull(displayNames, "DisplayNameService has not been initialized");
+        requireNonNull(displayNames, "DisplayNameService has not been initialized");
         displayNames.refreshAll();
     }
 
     @Override
     public void onServerStopping(ModuleContext context) {
-        Objects.requireNonNull(users, "JsonUserService has not been initialized");
-        users.saveAll().join();
+        requireNonNull(users, "JsonUserService has not been initialized");
     }
 
 }

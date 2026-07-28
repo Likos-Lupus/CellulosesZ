@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.sign;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.item.InventoryMutation;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
@@ -15,7 +17,6 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.modules.sign.handler.TradeSignHandler;
 import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
-import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
@@ -29,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class SignTransactionBehaviorTest {
 
     @Test
+    @NullMarked
     void cooldownIsScopedToPlayerSignSideAndHandler() {
         var config = new SignConfig();
         config.interaction.cooldownTicks = 200;
@@ -57,6 +59,7 @@ final class SignTransactionBehaviorTest {
         assertTrue(service.use(player, second, true, formatted, false).result().join().success());
     }
 
+    @NullMarked
     private static PermissionService allowAllPermissions() {
         return new PermissionService() {
             @Override
@@ -148,7 +151,6 @@ final class SignTransactionBehaviorTest {
                     default -> throw new UnsupportedOperationException(method.getName());
                 };
             }
-            if (method.isDefault()) return InvocationHandler.invokeDefault(instance, method, args);
             return behavior.apply(method, args);
         });
     }
@@ -169,12 +171,19 @@ final class SignTransactionBehaviorTest {
         throw new UnsupportedOperationException(method.toString());
     }
 
+    @NullMarked
     private static final class MemoryStorage implements StorageService {
 
-        private Object document;
+        private @Nullable Object document;
 
         @Override
-        public <T> CompletableFuture<T> load(Path path, Class<T> type, Supplier<T> defaults) {
+        public <T> CompletableFuture<T> loadOrDefault(Path path, Class<T> type, Supplier<T> defaults) {
+            if (document == null) return CompletableFuture.completedFuture(defaults.get());
+            return CompletableFuture.completedFuture(type.cast(document));
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(Path path, Class<T> type, Supplier<T> defaults) {
             if (document == null) document = defaults.get();
             return CompletableFuture.completedFuture(type.cast(document));
         }

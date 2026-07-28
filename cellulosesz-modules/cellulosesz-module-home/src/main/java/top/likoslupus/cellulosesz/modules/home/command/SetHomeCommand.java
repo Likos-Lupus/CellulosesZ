@@ -44,14 +44,14 @@ public final class SetHomeCommand extends AbstractHomeCommand {
             if (!existing.containsKey(name.toLowerCase(java.util.Locale.ROOT))
                     && existing.size() >= config.limits.defaultMaxHomes
                     && !invocation.hasPermission("cellulosesz.home.bypass-limit")) {
-                invocation.errorKey("commands.home.set-home-command.error.1", Map.of("value0", config.limits.defaultMaxHomes));
+                invocation.errorKey("commands.home.set-home-command.error.reached-home-limit", Map.of("limit", config.limits.defaultMaxHomes));
                 return;
             }
             platform.callOnServerThread(() -> platform.location(self.orElseThrow()))
                     .thenCompose(location -> homes.setHome(uuid, name, location))
                     .whenComplete((saved, saveFailure) -> {
                         if (saveFailure != null) invocation.errorKey("common.persistence-failed");
-                        else invocation.replyKey("commands.home.set-home-command.reply.1", Map.of("value0", name));
+                        else invocation.replyKey("commands.home.set-home-command.reply.set-home", Map.of("home", name));
                     });
         });
         return 1;

@@ -37,7 +37,7 @@ public final class JumpCommand extends AbstractTeleportCommand {
         var target = platform.targetLocation(self.get(), 120)
                 .flatMap(platform::safeLocation);
         if (target.isEmpty()) {
-            invocation.errorKey("commands.teleport.jump-command.error.1");
+            invocation.errorKey("commands.teleport.jump-command.error.no-valid-teleport-target-found");
             return 0;
         }
 

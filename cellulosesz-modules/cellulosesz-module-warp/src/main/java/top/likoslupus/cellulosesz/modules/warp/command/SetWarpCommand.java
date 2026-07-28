@@ -42,7 +42,7 @@ public final class SetWarpCommand extends AbstractWarpCommand {
         if (self.isEmpty()) return 0;
         var args = invocation.args();
         if (args.length != 1) {
-            invocation.errorKey("commands.warp.set-warp-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.warp.set-warp-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         if (!validName(invocation, args[0])) return 0;
@@ -62,7 +62,8 @@ public final class SetWarpCommand extends AbstractWarpCommand {
                     .thenCompose(location -> warps.setWarp(key, location, self.orElseThrow().uuid()))
                     .whenComplete((_, saveFailure) -> {
                         if (saveFailure != null) invocation.errorKey("service.warp.persistence-failed");
-                        else invocation.replyKey("commands.warp.set-warp-command.reply.1", Map.of("value0", args[0]));
+                        else
+                            invocation.replyKey("commands.warp.set-warp-command.reply.set-warp", Map.of("warp", args[0]));
                     });
         });
         return 1;

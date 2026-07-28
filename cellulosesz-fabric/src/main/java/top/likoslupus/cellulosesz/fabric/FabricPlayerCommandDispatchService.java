@@ -1,21 +1,18 @@
 package top.likoslupus.cellulosesz.fabric;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchResult;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.command.service.*;
 
 import java.util.*;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Server-thread command dispatch with one shared recursion budget for sudo and PowerTool execution.
+ * Guarded server-thread dispatch for the three explicitly permitted player-command origins.
  */
 public final class FabricPlayerCommandDispatchService implements PlayerCommandDispatchService {
 
+    private static final int MAX_COMMAND_LENGTH = 2_048;
     private static final int MAX_DEPTH = 8;
     private static final int MAX_INDIRECT_EXECUTIONS_PER_TICK = 64;
 
@@ -27,73 +24,50 @@ public final class FabricPlayerCommandDispatchService implements PlayerCommandDi
         this.platform = requireNonNull(platform, "platform");
     }
 
-    @Override
-    public PlayerCommandDispatchResult dispatch(
-            CellPlayer player,
-            String command,
-            CommandDispatchOrigin origin
-    ) {
-        requireNonNull(player, "player");
-        requireNonNull(command, "command");
-        requireNonNull(origin, "origin");
+    private static String syntaxDetail(CommandSyntaxException exception) {
+        return exception.getRawMessage().getString();
+    }
 
-        var server = platform.requireServer();
+    @Override
+    public PlayerCommandDispatchResult dispatch(PlayerCommandDispatchRequest request) {
+        requireNonNull(request, "request");
+
+        final var server = platform.requireServer();
         if (!server.isSameThread()) {
-            return failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Player command dispatch requires the server thread");
+            return failure(
+                    CommandDispatchStatus.REJECTED_BY_GUARD,
+                    "Player command dispatch requires the server thread"
+            );
         }
 
-        var normalized = normalize(command);
+        var normalized = normalize(request.command());
         if (normalized.isEmpty()) {
-            return failure(PlatformOperationStatus.INVALID_ARGUMENT, "Command is blank");
+            return failure(CommandDispatchStatus.REJECTED_BY_GUARD, "Command is blank");
+        }
+        if (normalized.length() > MAX_COMMAND_LENGTH) {
+            return failure(CommandDispatchStatus.REJECTED_BY_GUARD,
+                    "Command exceeds the maximum length of " + MAX_COMMAND_LENGTH);
         }
         if (containsControl(normalized)) {
-            return failure(PlatformOperationStatus.INVALID_ARGUMENT, "Command contains control characters");
+            return failure(CommandDispatchStatus.REJECTED_BY_GUARD,
+                    "Command contains control characters");
         }
 
         var stack = chain.get();
         if (stack.size() >= MAX_DEPTH) {
-            return failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Maximum indirect command depth exceeded");
+            return failure(CommandDispatchStatus.REJECTED_BY_GUARD,
+                    "Maximum indirect command depth exceeded");
         }
 
-        var frame = new Frame(player.uuid(), root(normalized), origin);
-        if (containsCycle(stack, frame)) {
-            return failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Recursive command dispatch was blocked");
-        }
-
-        var executions = tickExecutions.merge(player.uuid(), 1, Integer::sum);
-        if (executions > MAX_INDIRECT_EXECUTIONS_PER_TICK) {
-            return failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Per-tick indirect command budget exceeded");
-        }
-
-        stack.push(frame);
-        try {
-            var result = server.getCommands().getDispatcher().execute(
-                    normalized,
-                    platform.nativePlayer(player).createCommandSourceStack()
-            );
-            return result > 0
-                    ? new PlayerCommandDispatchResult(PlatformOperationStatus.SUCCESS, result, "")
-                    : new PlayerCommandDispatchResult(
-                            PlatformOperationStatus.STATE_NOT_ALLOWED,
-                            result,
-                            "Command returned a non-success result"
-                    );
-        } catch (CommandSyntaxException failure) {
-            return new PlayerCommandDispatchResult(
-                    PlatformOperationStatus.INVALID_ARGUMENT,
-                    0,
-                    failure.getRawMessage().getString()
-            );
-        } catch (RuntimeException failure) {
-            return new PlayerCommandDispatchResult(
-                    PlatformOperationStatus.INTERNAL_ERROR,
-                    0,
-                    failure.getClass().getSimpleName()
-            );
-        } finally {
-            stack.pop();
-            if (stack.isEmpty()) chain.remove();
-        }
+        var frame = new Frame(
+                request.actorId(),
+                request.target().uuid(),
+                root(normalized),
+                request.origin(),
+                request.chainToken()
+        );
+        var guardFailure = guardFailure(stack, frame);
+        return failure(CommandDispatchStatus.REJECTED_BY_GUARD, guardFailure);
     }
 
     @Override
@@ -101,39 +75,70 @@ public final class FabricPlayerCommandDispatchService implements PlayerCommandDi
         tickExecutions.clear();
     }
 
-    private static PlayerCommandDispatchResult failure(PlatformOperationStatus status, String detail) {
-        return new PlayerCommandDispatchResult(status, 0, detail);
+    private static PlayerCommandDispatchResult failure(CommandDispatchStatus status, String detail) {
+        return PlayerCommandDispatchResult.failure(status, detail);
     }
 
     private static String normalize(String command) {
         var normalized = command.strip();
-        if (normalized.startsWith("/")) normalized = normalized.substring(1);
+        while (normalized.startsWith("/")) normalized = normalized.substring(1);
         return normalized.strip();
     }
 
     private static boolean containsControl(String value) {
-        return value.codePoints().anyMatch(codePoint -> codePoint == 0 || Character.isISOControl(codePoint));
+        return value.codePoints().anyMatch(codePoint ->
+                codePoint == 0 || Character.isISOControl(codePoint)
+        );
     }
 
     private static String root(String command) {
         var split = command.indexOf(' ');
-        return (split < 0 ? command : command.substring(0, split)).toLowerCase(Locale.ROOT);
+        return (split < 0
+                ? command
+                : command.substring(0, split)
+        ).toLowerCase(Locale.ROOT);
     }
 
-    private static boolean containsCycle(ArrayDeque<Frame> chain, Frame candidate) {
-        Set<UUID> players = new HashSet<>();
+    private static String guardFailure(ArrayDeque<Frame> chain, Frame candidate) {
+        Set<UUID> actors = new HashSet<>();
         for (var frame : chain) {
-            if (frame.equals(candidate)) return true;
-            players.add(frame.player());
+            if (frame.equals(candidate)) {
+                return "Recursive command dispatch was blocked";
+            }
+            if (frame.actor().equals(candidate.target())
+                    && frame.target().equals(candidate.actor())
+            ) {
+                return "Mutual sudo or command-dispatch loop was blocked";
+            }
+
+            if (frame.target().equals(candidate.target())
+                    && frame.root().equals(candidate.root())
+            ) {
+                return "Repeated command root in one target chain was blocked";
+            }
+            if (candidate.origin() == CommandDispatchOrigin.PREPROCESS_REWRITE
+                    && frame.origin() == CommandDispatchOrigin.PREPROCESS_REWRITE
+                    && frame.target().equals(candidate.target())
+            ) {
+                return "Command preprocess rewrite re-entry was blocked";
+            }
+            actors.add(frame.actor());
         }
-        return players.contains(candidate.player()) && chain.stream()
-                .anyMatch(frame -> frame.root().equals(candidate.root()));
+        if (actors.contains(candidate.target())
+                && chain.stream().anyMatch(frame -> frame.root().equals(candidate.root()))
+        ) {
+            return "PowerTool and sudo command cycle was blocked";
+        }
+        // FIXME: return null on null marked package
+        return null;
     }
 
     private record Frame(
-            UUID player,
+            UUID actor,
+            UUID target,
             String root,
-            CommandDispatchOrigin origin
+            CommandDispatchOrigin origin,
+            UUID token
     ) {
 
     }

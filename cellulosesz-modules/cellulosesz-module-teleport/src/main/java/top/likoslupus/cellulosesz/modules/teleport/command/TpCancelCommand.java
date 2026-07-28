@@ -42,7 +42,7 @@ public final class TpCancelCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.errorKey("commands.teleport.tp-cancel-command.error.1");
+            invocation.errorKey("commands.teleport.tp-cancel-command.error.command-can-only-used-by-player");
             return 0;
         }
         if (invocation.args().length > 1) {
@@ -70,10 +70,10 @@ public final class TpCancelCommand implements CellCommand {
             }
         }
         if (removed <= 0) {
-            invocation.errorKey("commands.teleport.tp-cancel-command.error.2");
+            invocation.errorKey("commands.teleport.tp-cancel-command.error.there-no-teleport-request-cancel");
             return 0;
         }
-        invocation.replyKey("commands.teleport.tp-cancel-command.reply.1", Map.of("count", removed));
+        invocation.replyKey("commands.teleport.tp-cancel-command.reply.teleport-request-cancelled", Map.of("count", removed));
         return removed;
     }
 

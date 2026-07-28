@@ -33,15 +33,15 @@ abstract class AbstractPlayerStateCommand implements CellCommand {
     ) {
         if (invocation.args().length > index) {
             if (!invocation.hasPermission(otherPermission)) {
-                invocation.errorKey("commands.playerstate.abstract-player-state-command.error.1");
+                invocation.errorKey("commands.playerstate.abstract-player-state-command.error.do-not-permission-affect-another-player");
                 return Optional.empty();
             }
 
             var player = invocation.resolvePlayer(invocation.args()[index]).online();
             if (player.isEmpty()) {
                 invocation.errorKey(
-                        "commands.playerstate.abstract-player-state-command.error.2",
-                        Map.of("value0", invocation.args()[index])
+                        "commands.playerstate.abstract-player-state-command.error.online-player-not-found",
+                        Map.of("player", invocation.args()[index])
                 );
             }
             return player;
@@ -52,7 +52,7 @@ abstract class AbstractPlayerStateCommand implements CellCommand {
     protected Optional<CellPlayer> self(CommandInvocation invocation) {
         var player = platform.player(invocation);
         if (player.isEmpty()) {
-            invocation.errorKey("commands.playerstate.abstract-player-state-command.error.3");
+            invocation.errorKey("commands.playerstate.abstract-player-state-command.error.command-can-only-used-by-player");
         }
         return player;
     }

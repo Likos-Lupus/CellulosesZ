@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -14,7 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-public final class DefaultBackLocationService implements BackLocationService {
+public final class DefaultBackLocationService implements BackLocationService, AsyncInitializable {
 
     private final PlatformService platform;
     private final StorageService storage;
@@ -30,18 +32,26 @@ public final class DefaultBackLocationService implements BackLocationService {
         this.platform = platform;
         this.storage = storage;
         this.path = path;
-        this.document = storage.load(path, BackLocationDocument.class, BackLocationDocument::new).join();
-        validate(document);
+        this.document = new BackLocationDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, BackLocationDocument.class, BackLocationDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validate(BackLocationDocument candidate) {
-        if (candidate.locations == null) {
-            throw new IllegalArgumentException("Back location document is missing locations");
-        }
-        candidate.locations.forEach((uuid, location) -> {
-            UUID.fromString(uuid);
-            if (location == null) throw new IllegalArgumentException("Back location must not be null");
-        });
+        //noinspection ResultOfMethodCallIgnored
+        candidate.locations.forEach((uuid, _) -> UUID.fromString(uuid));
     }
 
     @Override
@@ -66,8 +76,8 @@ public final class DefaultBackLocationService implements BackLocationService {
 
     private synchronized CompletableFuture<Void> mutate(Consumer<BackLocationDocument> mutation) {
         var result = new CompletableFuture<Void>();
-        mutationTail = mutationTail.handle((unused, failure) -> null)
-                .thenCompose(unused -> {
+        mutationTail = mutationTail.handle((_, _) -> null)
+                .thenCompose(_ -> {
                     BackLocationDocument next;
                     synchronized (this) {
                         next = copy(document);
@@ -79,7 +89,7 @@ public final class DefaultBackLocationService implements BackLocationService {
                         }
                     });
                 });
-        mutationTail.whenComplete((unused, failure) -> {
+        mutationTail.whenComplete((_, failure) -> {
             if (failure == null) result.complete(null);
             else result.completeExceptionally(failure);
         });

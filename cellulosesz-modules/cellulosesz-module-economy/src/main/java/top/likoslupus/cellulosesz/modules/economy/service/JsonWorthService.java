@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
 import top.likoslupus.cellulosesz.api.economy.WorthService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.data.WorthDocument;
 
@@ -12,7 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-public final class JsonWorthService implements WorthService {
+public final class JsonWorthService implements WorthService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -23,8 +24,21 @@ public final class JsonWorthService implements WorthService {
     public JsonWorthService(StorageService storage, Path directory) {
         this.storage = storage;
         this.path = directory.resolve("worth.json");
-        this.document = storage.load(path, WorthDocument.class, WorthDocument::new).join();
-        validate(document);
+        this.document = new WorthDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, WorthDocument.class, WorthDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (lock) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validate(WorthDocument candidate) {

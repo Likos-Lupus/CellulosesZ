@@ -63,8 +63,8 @@ public final class TpCommand extends AbstractTeleportCommand {
         }
 
         invocation.errorKey(
-                "commands.teleport.tp-command.error.1",
-                Map.of("value0", usage())
+                "commands.teleport.tp-command.error.usage",
+                Map.of("usage", usage())
         );
         return 0;
     }

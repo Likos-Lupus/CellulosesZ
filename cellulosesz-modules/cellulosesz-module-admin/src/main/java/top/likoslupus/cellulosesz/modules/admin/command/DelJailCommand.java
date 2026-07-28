@@ -39,8 +39,8 @@ public final class DelJailCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
             invocation.errorKey(
-                    "commands.admin.del-jail-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.del-jail-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

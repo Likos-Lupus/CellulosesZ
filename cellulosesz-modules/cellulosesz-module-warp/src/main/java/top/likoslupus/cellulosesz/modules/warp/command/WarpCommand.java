@@ -68,7 +68,7 @@ public final class WarpCommand extends AbstractWarpCommand {
             return 1;
         }
         if (args.length != 1) {
-            invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown")) {
@@ -88,11 +88,11 @@ public final class WarpCommand extends AbstractWarpCommand {
                     return;
                 }
                 if (warp.isEmpty()) {
-                    invocation.errorKey("commands.warp.warp-command.error.2", Map.of("value0", args[0]));
+                    invocation.errorKey("commands.warp.warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
                     return;
                 }
                 if (!allowed(invocation, warp.orElseThrow())) {
-                    invocation.errorKey("commands.warp.warp-command.error.3");
+                    invocation.errorKey("commands.warp.warp-command.error.do-not-permission-use-warp");
                     return;
                 }
                 platform.callOnServerThread(() -> teleports.teleport(player, warp.orElseThrow().location, options(invocation)))
@@ -105,13 +105,13 @@ public final class WarpCommand extends AbstractWarpCommand {
                                 if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
                                     cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
                                 }
-                                invocation.replyKey("commands.warp.warp-command.reply.1", Map.of("value0", warp.orElseThrow().displayName));
+                                invocation.replyKey("commands.warp.warp-command.reply.teleported-warp", Map.of("target", warp.orElseThrow().displayName));
                             } else invocation.error(result.message());
                         });
             });
             return 1;
         } catch (IllegalArgumentException _) {
-            invocation.errorKey("commands.warp.warp-command.error.2", Map.of("value0", args[0]));
+            invocation.errorKey("commands.warp.warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
             return 0;
         }
     }
@@ -140,14 +140,14 @@ public final class WarpCommand extends AbstractWarpCommand {
             var pageSize = Math.max(1, config.list.pageSize);
             var pages = Math.max(1, (visible.size() + pageSize - 1) / pageSize);
             if (requestedPage < 1 || requestedPage > pages) {
-                invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
+                invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
                 return;
             }
             final int from;
             try {
                 from = Math.multiplyExact(requestedPage - 1, pageSize);
             } catch (ArithmeticException _) {
-                invocation.errorKey("commands.warp.warp-command.error.1", Map.of("value0", usage()));
+                invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
                 return;
             }
             var names = visible.subList(from, Math.min(visible.size(), from + pageSize)).stream()

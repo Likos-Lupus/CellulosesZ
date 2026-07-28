@@ -56,8 +56,8 @@ public final class RootCellulosesZCommand implements CellCommand {
                     Map.of("version", runtime.version())
             );
             invocation.replyKey(
-                    "commands.command.root-celluloses-z-command.reply.1",
-                    Map.of("value0", usage())
+                    "commands.command.root-celluloses-z-command.reply.usage",
+                    Map.of("usage", usage())
             );
             return 1;
         }
@@ -145,10 +145,10 @@ public final class RootCellulosesZCommand implements CellCommand {
             return 0;
         }
         invocation.replyKey(
-                "commands.command.root-celluloses-z-command.reply.2",
+                "commands.command.root-celluloses-z-command.reply.debug-summary",
                 Map.of(
-                        "value0", runtime.version(),
-                        "value1", runtime.modules().size()
+                        "version", runtime.version(),
+                        "modules", runtime.modules().size()
                 )
         );
         return 1;

@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.warp.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.warp.Warp;
@@ -9,9 +11,11 @@ import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
-public final class JsonWarpService implements WarpService {
+public final class JsonWarpService implements WarpService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path warpsDirectory;
@@ -19,7 +23,11 @@ public final class JsonWarpService implements WarpService {
     private final ConcurrentHashMap<String, Warp> warps = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompletableFuture<Void>> writeTails = new ConcurrentHashMap<>();
 
-    public JsonWarpService(StorageService storage, Path warpsDirectory, WarpConfig config) {
+    public JsonWarpService(
+            StorageService storage,
+            Path warpsDirectory,
+            WarpConfig config
+    ) {
         this.storage = storage;
         this.warpsDirectory = warpsDirectory;
         this.config = config;
@@ -46,23 +54,33 @@ public final class JsonWarpService implements WarpService {
     }
 
     @Override
-    public CompletableFuture<Warp> setWarp(String name, CellLocation location, UUID creator) {
+    public CompletableFuture<Warp> setWarp(
+            String name,
+            CellLocation location,
+            UUID creator
+    ) {
         var key = normalize(name);
         var replacement = new Warp(key, location);
         replacement.createdBy = creator;
-        return enqueue(key, () -> storage.save(path(key), replacement).thenApply(_ -> {
-            warps.put(key, replacement);
-            return replacement;
-        }));
+        return enqueue(
+                key,
+                () -> storage.save(path(key), replacement).thenApply(_ -> {
+                    warps.put(key, replacement);
+                    return replacement;
+                })
+        );
     }
 
     @Override
     public CompletableFuture<Boolean> deleteWarp(String name) {
         var key = normalize(name);
-        return enqueue(key, () -> storage.delete(path(key)).thenApply(deleted -> {
-            var removed = warps.remove(key);
-            return deleted || removed != null;
-        }));
+        return enqueue(
+                key,
+                () -> storage.delete(path(key)).thenApply(deleted -> {
+                    var removed = warps.remove(key);
+                    return deleted || removed != null;
+                })
+        );
     }
 
     @Override
@@ -73,27 +91,27 @@ public final class JsonWarpService implements WarpService {
 
     @Override
     public CompletableFuture<Void> reload() {
-        return storage.loadDirectory(warpsDirectory, Warp.class).thenAccept(loaded -> {
-            var replacement = new LinkedHashMap<String, Warp>();
-            for (var warp : loaded) {
-                validate(warp);
-                replacement.put(normalize(warp.name), warp);
-            }
-            warps.clear();
-            warps.putAll(replacement);
-        });
+        return storage.loadDirectory(warpsDirectory, Warp.class)
+                .thenAccept(loaded -> {
+                    var replacement = new LinkedHashMap<String, Warp>();
+                    loaded.forEach(warp -> {
+                        validate(warp);
+                        replacement.put(normalize(warp.name), warp);
+                    });
+                    warps.clear();
+                    warps.putAll(replacement);
+                });
     }
 
-    private void validate(Warp warp) {
-        if (warp.name.isBlank()) throw new IllegalArgumentException("Warp name must not be blank");
-        if (warp.location == null) throw new IllegalArgumentException("Warp location must not be null");
-    }
-
-    private <T> CompletableFuture<T> enqueue(String key, java.util.function.Supplier<CompletableFuture<T>> operation) {
+    private <T> CompletableFuture<T> enqueue(String key, Supplier<CompletableFuture<T>> operation) {
         var result = new CompletableFuture<T>();
         writeTails.compute(key, (_, previous) -> {
-            var tail = previous == null ? CompletableFuture.completedFuture(null) : previous;
-            var next = tail.handle((_, _) -> null).thenCompose(_ -> operation.get().thenAccept(result::complete));
+            var tail = previous == null
+                    ? CompletableFuture.completedFuture(null)
+                    : previous;
+            var next = tail
+                    .handle((_, _) -> null)
+                    .thenCompose(_ -> operation.get().thenAccept(result::complete));
             next.whenComplete((_, failure) -> {
                 writeTails.remove(key, next);
                 if (failure != null) result.completeExceptionally(unwrap(failure));
@@ -108,8 +126,9 @@ public final class JsonWarpService implements WarpService {
     }
 
     private Throwable unwrap(Throwable failure) {
-        return failure instanceof java.util.concurrent.CompletionException completion
-                && completion.getCause() != null ? completion.getCause() : failure;
+        return failure instanceof CompletionException completion && completion.getCause() != null
+                ? completion.getCause()
+                : failure;
     }
 
     private String normalize(String name) {
@@ -119,7 +138,18 @@ public final class JsonWarpService implements WarpService {
     }
 
     private List<Warp> sorted() {
-        return warps.values().stream().sorted(Comparator.comparing(warp -> warp.name)).toList();
+        return warps.values().stream()
+                .sorted(Comparator.comparing(warp -> warp.name))
+                .toList();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return reload();
+    }
+
+    private void validate(Warp warp) {
+        if (warp.name.isBlank()) throw new IllegalArgumentException("Warp name must not be blank");
     }
 
 }

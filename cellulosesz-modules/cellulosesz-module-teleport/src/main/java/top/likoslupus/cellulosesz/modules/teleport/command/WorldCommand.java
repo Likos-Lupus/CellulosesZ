@@ -41,8 +41,8 @@ public final class WorldCommand extends AbstractTeleportCommand {
         var args = invocation.args();
         if (args.length == 0) {
             invocation.replyKey(
-                    "commands.teleport.world-command.reply.1",
-                    Map.of("value0", String.join(", ", platform.worlds()))
+                    "commands.teleport.world-command.reply.available-worlds",
+                    Map.of("worlds", String.join(", ", platform.worlds()))
             );
             return 1;
         }

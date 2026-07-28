@@ -47,8 +47,8 @@ public final class CreateKitCommand extends AbstractKitCommand {
         var args = invocation.args();
         if (args.length != 2) {
             invocation.errorKey(
-                    "commands.kit.create-kit-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.kit.create-kit-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -94,7 +94,7 @@ public final class CreateKitCommand extends AbstractKitCommand {
 
         kits.save(kit).whenComplete((_, failure) -> {
             if (failure != null) invocation.errorKey("service.kit.persistence-failed");
-            else invocation.replyKey("commands.kit.create-kit-command.reply.1", Map.of("value0", kit.id));
+            else invocation.replyKey("commands.kit.create-kit-command.reply.created-kit", Map.of("kit", kit.id));
         });
         return 1;
     }

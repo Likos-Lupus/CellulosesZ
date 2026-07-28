@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.kit.service;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
@@ -83,12 +85,22 @@ final class DefaultKitServiceTest {
         assertTrue(service.kit("daily").isEmpty());
     }
 
+    @NullMarked
     private static final class DelayedStorage implements StorageService {
 
-        private CompletableFuture<Void> pendingSave;
+        private @Nullable CompletableFuture<Void> pendingSave;
 
         @Override
-        public <T> CompletableFuture<T> load(
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
+            return CompletableFuture.completedFuture(defaultSupplier.get());
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(
                 Path path,
                 Class<T> type,
                 Supplier<T> defaultSupplier
@@ -134,6 +146,7 @@ final class DefaultKitServiceTest {
 
     }
 
+    @NullMarked
     private static final class NoopUsers implements UserService {
 
         @Override
@@ -182,6 +195,7 @@ final class DefaultKitServiceTest {
 
     }
 
+    @NullMarked
     private static final class NoopPlatform implements PlatformService {
 
         @Override

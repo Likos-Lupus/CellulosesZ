@@ -39,8 +39,8 @@ public final class KickCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
             invocation.errorKey(
-                    "commands.admin.kick-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.kick-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -48,8 +48,8 @@ public final class KickCommand extends AbstractAdminCommand {
         var target = invocation.resolvePlayer(invocation.args()[0]).online();
         if (target.isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.1",
-                    Map.of("value0", invocation.args()[0])
+                    "commands.admin.abstract-admin-command.error.online-player-not-found",
+                    Map.of("player", invocation.args()[0])
             );
             return 0;
         }

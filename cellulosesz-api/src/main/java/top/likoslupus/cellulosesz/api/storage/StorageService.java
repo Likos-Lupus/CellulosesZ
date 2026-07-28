@@ -7,24 +7,30 @@ import java.util.function.Supplier;
 
 public interface StorageService {
 
-    <T> CompletableFuture<T> load(
+    /**
+     * Reads a document or returns a new default without writing it.
+     */
+    <T> CompletableFuture<T> loadOrDefault(
             Path path,
             Class<T> type,
             Supplier<T> defaultSupplier
     );
 
-    <T> CompletableFuture<Void> save(
+    /**
+     * Reads a document, creating and persisting the default when it does not exist.
+     */
+    <T> CompletableFuture<T> createIfMissing(
             Path path,
-            T value
+            Class<T> type,
+            Supplier<T> defaultSupplier
     );
+
+    <T> CompletableFuture<Void> save(Path path, T value);
 
     CompletableFuture<Boolean> exists(Path path);
 
     CompletableFuture<Boolean> delete(Path path);
 
-    <T> CompletableFuture<List<T>> loadDirectory(
-            Path directory,
-            Class<T> type
-    );
+    <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type);
 
 }

@@ -12,12 +12,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+
 public final class JacksonConfigRegistry implements ConfigRegistry {
 
     private final Path root;
     private final CellulosesZLogger logger;
     private final Map<String, ConfigDefinition<?>> definitions = new LinkedHashMap<>();
     private final Map<String, Object> values = new LinkedHashMap<>();
+    private final Map<Path, String> paths = new LinkedHashMap<>();
 
     public JacksonConfigRegistry(
             Path root,
@@ -34,19 +37,33 @@ public final class JacksonConfigRegistry implements ConfigRegistry {
             String relativePath,
             Supplier<T> defaultSupplier
     ) {
-        var definition = new ConfigDefinition<>(
-                key,
-                type,
-                root.resolve(relativePath),
-                defaultSupplier
-        );
+        requireNonBlank(key, "Configuration key");
+        if (definitions.containsKey(key)) {
+            throw new IllegalStateException("Configuration key is already registered: " + key);
+        }
+        var relative = Path.of(relativePath);
+        if (relative.isAbsolute()) {
+            throw new IllegalArgumentException("Configuration path must be relative: " + relativePath);
+        }
+        var normalizedRoot = root.toAbsolutePath().normalize();
+        var resolved = normalizedRoot.resolve(relative).normalize();
+        if (!resolved.startsWith(normalizedRoot)) {
+            throw new IllegalArgumentException("Configuration path escapes the configuration root: " + relativePath);
+        }
+        var existingPath = paths.get(resolved);
+        if (existingPath != null) {
+            throw new IllegalStateException("Configuration path is already registered by " + existingPath + ": " + relativePath);
+        }
+        var definition = new ConfigDefinition<>(key, type, resolved, defaultSupplier);
         definitions.put(key, definition);
+        paths.put(resolved, key);
         try {
             T value = load(definition);
             values.put(key, value);
             return value;
         } catch (IOException exception) {
             definitions.remove(key);
+            paths.remove(resolved);
             throw configurationFailure(definition, exception);
         }
     }

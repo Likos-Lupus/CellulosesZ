@@ -1,27 +1,29 @@
 package top.likoslupus.cellulosesz.core.storage;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.config.JacksonCodecs;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.function.Supplier;
-import java.util.stream.Stream;
 
-public final class JacksonStorageService implements StorageService {
+public final class JacksonStorageService implements StorageService, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_OPERATIONS = 4_096;
 
     private final Path root;
-    private final Executor executor;
     private final CellulosesZLogger logger;
-    private final ConcurrentHashMap<Path, CompletableFuture<Boolean>> fileTails = new ConcurrentHashMap<>();
+    private final SerialAsyncQueue operations;
 
     public JacksonStorageService(
             Path root,
@@ -29,12 +31,12 @@ public final class JacksonStorageService implements StorageService {
             CellulosesZLogger logger
     ) {
         this.root = root.toAbsolutePath().normalize();
-        this.executor = executor;
         this.logger = logger;
+        this.operations = new SerialAsyncQueue(executor, MAXIMUM_PENDING_OPERATIONS);
     }
 
     @Override
-    public <T> CompletableFuture<T> load(
+    public <T> CompletableFuture<T> loadOrDefault(
             Path path,
             Class<T> type,
             Supplier<T> defaultSupplier
@@ -42,71 +44,108 @@ public final class JacksonStorageService implements StorageService {
         var resolved = resolve(path);
         return enqueue(resolved, "load", () -> {
             ensureTargetInsideRoot(resolved);
-            if (Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)) {
-                var value = defaultSupplier.get();
-                write(resolved, value);
-                return value;
-            }
-            return read(resolved, type);
+            return Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)
+                    ? defaultSupplier.get()
+                    : read(resolved, type);
         });
+    }
+
+    @Override
+    public <T> CompletableFuture<T> createIfMissing(
+            Path path,
+            Class<T> type,
+            Supplier<T> defaultSupplier
+    ) {
+        var resolved = resolve(path);
+        return enqueue(
+                resolved,
+                "create or load",
+                () -> {
+                    ensureTargetInsideRoot(resolved);
+                    if (Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)) {
+                        var value = defaultSupplier.get();
+                        write(resolved, value);
+                        return value;
+                    }
+                    return read(resolved, type);
+                }
+        );
     }
 
     @Override
     public <T> CompletableFuture<Void> save(Path path, T value) {
         var resolved = resolve(path);
-        return enqueue(resolved, "save", () -> {
-            ensureTargetInsideRoot(resolved);
-            write(resolved, value);
-            return Boolean.TRUE;
-        }).thenAccept(_ -> {
+        return enqueue(
+                resolved,
+                "save",
+                () -> {
+                    ensureTargetInsideRoot(resolved);
+                    write(resolved, value);
+                    return Boolean.TRUE;
+                }
+        ).thenAccept(_ -> {
         });
     }
 
     @Override
     public CompletableFuture<Boolean> exists(Path path) {
         var resolved = resolve(path);
-        return enqueue(resolved, "inspect", () -> {
-            ensureParentInsideRoot(resolved);
-            return Files.isRegularFile(resolved, LinkOption.NOFOLLOW_LINKS);
-        });
+        return enqueue(
+                resolved,
+                "inspect",
+                () -> {
+                    ensureParentInsideRoot(resolved);
+                    return Files.isRegularFile(resolved, LinkOption.NOFOLLOW_LINKS);
+                }
+        );
     }
 
     @Override
     public CompletableFuture<Boolean> delete(Path path) {
         var resolved = resolve(path);
-        return enqueue(resolved, "delete", () -> {
-            ensureTargetInsideRoot(resolved);
-            return Files.deleteIfExists(resolved);
-        });
+        return enqueue(
+                resolved,
+                "delete",
+                () -> {
+                    ensureTargetInsideRoot(resolved);
+                    return Files.deleteIfExists(resolved);
+                }
+        );
     }
 
     @Override
     public <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type) {
         var resolved = resolve(directory);
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                ensureDirectoryInsideRoot(resolved);
-                try (var stream = Files.list(resolved)) {
-                    return stream
-                            .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
-                            .filter(path -> path.getFileName().toString().endsWith(".json")
-                                    || path.getFileName().toString().endsWith(".yml")
-                                    || path.getFileName().toString().endsWith(".yaml"))
-                            .flatMap(path -> {
-                                try {
-                                    return Stream.of(read(path, type));
-                                } catch (IOException exception) {
-                                    logger.error("Failed to load document at " + path, exception);
-                                    throw new CompletionException(exception);
-                                }
-                            })
-                            .toList();
+        return enqueue(
+                resolved,
+                "load directory",
+                () -> {
+                    ensureDirectoryInsideRoot(resolved);
+                    try (var stream = Files.list(resolved)) {
+                        var paths = stream
+                                .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                                .filter(JacksonStorageService::supportedDocument)
+                                .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                                .toList();
+                        var documents = new java.util.ArrayList<T>(paths.size());
+                        for (var path : paths) documents.add(read(path, type));
+                        return List.copyOf(documents);
+                    }
                 }
-            } catch (IOException exception) {
-                logger.error("Failed to load document directory at " + resolved, exception);
-                throw new CompletionException(exception);
-            }
-        }, executor);
+        );
+    }
+
+    private static boolean supportedDocument(Path path) {
+        var fileName = path.getFileName().toString();
+        return fileName.endsWith(".json") || fileName.endsWith(".yml") || fileName.endsWith(".yaml");
+    }
+
+    private void write(Path path, Object value) throws IOException {
+        if (json(path)) {
+            JacksonCodecs.writeJson(path, value);
+        } else {
+            JacksonCodecs.writeYaml(path, value);
+        }
     }
 
     private Path resolve(Path path) {
@@ -125,28 +164,16 @@ public final class JacksonStorageService implements StorageService {
             String operation,
             IoSupplier<T> task
     ) {
-        var result = new CompletableFuture<T>();
-        fileTails.compute(resolved, (ignored, previous) -> {
-            var tail = previous == null
-                    ? CompletableFuture.completedFuture(Boolean.TRUE)
-                    : previous;
-            var next = tail.handle((_, _) -> Boolean.TRUE)
-                    .thenApplyAsync(_ -> {
-                        try {
-                            result.complete(task.get());
-                            return Boolean.TRUE;
-                        } catch (Throwable exception) {
-                            logger.error("Failed to " + operation + " document at " + resolved, exception);
-                            result.completeExceptionally(exception);
-                            throw exception instanceof RuntimeException runtime
-                                    ? runtime
-                                    : new CompletionException(exception);
-                        }
-                    }, executor);
-            next.whenComplete((_, _) -> fileTails.remove(resolved, next));
-            return next;
+        return operations.submit(() -> {
+            try {
+                return CompletableFuture.completedFuture(task.get());
+            } catch (Throwable exception) {
+                logger.error("Failed to " + operation + " document at " + resolved, exception);
+                return CompletableFuture.failedFuture(exception instanceof CompletionException
+                        ? exception
+                        : new CompletionException(exception));
+            }
         });
-        return result;
     }
 
     private void ensureTargetInsideRoot(Path path) throws IOException {
@@ -163,24 +190,17 @@ public final class JacksonStorageService implements StorageService {
         }
     }
 
-    private void write(Path path, Object value) throws IOException {
-        if (json(path)) {
-            JacksonCodecs.writeJson(path, value);
-        } else {
-            JacksonCodecs.writeYaml(path, value);
-        }
-    }
-
     private <T> T read(Path path, Class<T> type) throws IOException {
-        if (json(path)) {
-            return JacksonCodecs.readJson(path, type);
-        }
-        return JacksonCodecs.readYaml(path, type);
+        return json(path)
+                ? JacksonCodecs.readJson(path, type)
+                : JacksonCodecs.readYaml(path, type);
     }
 
     private void ensureParentInsideRoot(Path path) throws IOException {
         var parent = path.getParent();
-        if (parent == null) throw new IOException("Storage path has no parent: " + path);
+        if (parent == null) {
+            throw new IOException("Storage path has no parent: " + path);
+        }
         ensureDirectoryInsideRoot(parent);
     }
 
@@ -218,10 +238,15 @@ public final class JacksonStorageService implements StorageService {
         }
     }
 
+    @Override
+    public CompletableFuture<Void> closeAsync() {
+        return operations.closeAndDrain();
+    }
+
     @FunctionalInterface
     private interface IoSupplier<T> {
 
-        T get() throws IOException;
+        T get() throws Exception;
 
     }
 

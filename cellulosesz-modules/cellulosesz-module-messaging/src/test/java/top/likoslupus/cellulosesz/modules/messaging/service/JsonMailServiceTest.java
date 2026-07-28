@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -47,13 +49,28 @@ final class JsonMailServiceTest {
         assertEquals(0, service.unreadCount(first).join());
     }
 
+    @NullMarked
     private static final class MemoryStorage implements StorageService {
 
-        private Object document;
+        private @Nullable Object document;
         private boolean failSaves;
 
         @Override
-        public <T> CompletableFuture<T> load(Path path, Class<T> type, Supplier<T> defaultSupplier) {
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
+            if (document == null) return CompletableFuture.completedFuture(defaultSupplier.get());
+            return CompletableFuture.completedFuture(type.cast(document));
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
             if (document == null) document = defaultSupplier.get();
             return CompletableFuture.completedFuture(type.cast(document));
         }

@@ -51,7 +51,7 @@ public final class TpToggleCommand implements CellCommand {
         if (args.length == 0 || (args.length == 1 && isMode(args[0]))) {
             var self = platform.player(invocation);
             if (self.isEmpty()) {
-                invocation.errorKey("commands.teleport.tp-toggle-command.error.1");
+                invocation.errorKey("commands.teleport.tp-toggle-command.error.command-can-only-used-by-player");
                 return 0;
             }
 

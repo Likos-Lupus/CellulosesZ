@@ -36,15 +36,16 @@ public final class RenameHomeCommand extends AbstractHomeCommand {
         if (self.isEmpty()) return 0;
         var args = invocation.args();
         if (args.length != 2) {
-            invocation.errorKey("commands.home.rename-home-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.home.rename-home-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         if (!validName(invocation, args[1])) return 0;
         homes.renameHome(self.orElseThrow().uuid(), args[0], args[1]).whenComplete((renamed, failure) -> {
             if (failure != null) invocation.errorKey("common.persistence-failed");
             else if (renamed)
-                invocation.replyKey("commands.home.rename-home-command.reply.1", Map.of("value0", args[0], "value1", args[1]));
-            else invocation.errorKey("commands.home.rename-home-command.error.2");
+                invocation.replyKey("commands.home.rename-home-command.reply.renamed-home", Map.of("old_name", args[0], "new_name", args[1]));
+            else
+                invocation.errorKey("commands.home.rename-home-command.error.unable-rename-home-old-name-may-not-exist-new-name");
         });
         return 1;
     }

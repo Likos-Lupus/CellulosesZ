@@ -50,8 +50,8 @@ public final class HelpOpCommand extends AbstractMessagingCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.messaging.help-op-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.messaging.help-op-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

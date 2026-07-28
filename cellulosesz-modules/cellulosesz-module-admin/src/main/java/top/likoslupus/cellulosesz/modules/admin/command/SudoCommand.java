@@ -3,9 +3,11 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
 import java.util.Map;
@@ -70,9 +72,21 @@ public final class SudoCommand implements CellCommand {
             invocation.errorKey("commands.admin.sudo.chat-unavailable");
             return 0;
         }
-        var result = dispatch.dispatch(target.orElseThrow(), command, CommandDispatchOrigin.SUDO);
+        var actorId = self.map(player -> player.uuid())
+                .orElse(PlayerCommandDispatchRequest.CONSOLE_ACTOR_ID);
+        var result = dispatch.dispatch(PlayerCommandDispatchRequest.start(
+                target.orElseThrow(),
+                actorId,
+                CommandDispatchOrigin.SUDO,
+                command
+        ));
         if (!result.successful()) {
-            invocation.platformError(result.status());
+            invocation.platformError(switch (result.status()) {
+                case PERMISSION_DENIED, REJECTED_BY_GUARD -> PlatformOperationStatus.STATE_NOT_ALLOWED;
+                case UNKNOWN_COMMAND, SYNTAX_ERROR -> PlatformOperationStatus.INVALID_ARGUMENT;
+                case NOT_READY, INTERNAL_ERROR -> PlatformOperationStatus.INTERNAL_ERROR;
+                case EXECUTED -> throw new IllegalStateException("Successful dispatch reported as failure");
+            });
             return 0;
         }
         invocation.replyKey("commands.admin.sudo.success", Map.of(

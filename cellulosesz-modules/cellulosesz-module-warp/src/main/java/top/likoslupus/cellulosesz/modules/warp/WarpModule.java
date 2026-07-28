@@ -45,6 +45,7 @@ public final class WarpModule implements CellulosesZModule {
         );
     }
 
+    @SuppressWarnings("resource")
     @Override
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
@@ -53,7 +54,6 @@ public final class WarpModule implements CellulosesZModule {
         requireNonNull(config, "WarpConfig has not been initialized");
 
         warps = new JsonWarpService(storage, root.resolve("warps"), config);
-        warps.reload().join();
 
         context.services().register(WarpService.class, warps);
         context.services().register(JsonWarpService.class, (JsonWarpService) warps);

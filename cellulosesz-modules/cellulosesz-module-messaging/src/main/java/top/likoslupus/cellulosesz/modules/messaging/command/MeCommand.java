@@ -55,8 +55,8 @@ public final class MeCommand extends AbstractMessagingCommand {
 
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.messaging.me-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.messaging.me-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

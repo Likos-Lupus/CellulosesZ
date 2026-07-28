@@ -6,25 +6,33 @@ import top.likoslupus.cellulosesz.api.admin.BanService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.admin.*;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 public final class DefaultBanService implements BanService {
 
     private final PlatformService platform;
+    private final BanPlatformService banPlatform;
     private final MessageRenderer renderer;
     private final LocaleResolver locales;
     private final PermissionService permissions;
 
     public DefaultBanService(
             PlatformService platform,
+            BanPlatformService banPlatform,
             MessageRenderer renderer,
             LocaleResolver locales,
             PermissionService permissions
     ) {
         this.platform = platform;
+        this.banPlatform = banPlatform;
         this.renderer = renderer;
         this.locales = locales;
         this.permissions = permissions;
@@ -32,26 +40,47 @@ public final class DefaultBanService implements BanService {
 
     @Override
     public AdminResult ban(
-            String target,
+            UUID targetId,
+            String targetName,
             String actor,
             String reason
     ) {
-        return command(
-                "ban %s%s".formatted(target, suffix(reason)),
-                "service.admin.ban-success",
-                "service.admin.ban-failed",
-                Map.of("player", target)
+        var target = new PlayerProfileId(targetId, targetName);
+        final BanPlatformResult result;
+        try {
+            result = banPlatform.banUser(new BanUserRequest(
+                    target,
+                    BanActor.console(actor),
+                    reason,
+                    Instant.now(),
+                    null
+            ));
+        } catch (IllegalArgumentException exception) {
+            return AdminResult.failure(
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.ban-failed",
+                    Map.of("player", targetName)
+            );
+        }
+
+        if (!result.status().successful()) {
+            return failure(result, "service.admin.ban-failed", Map.of("player", targetName));
+        }
+        var disconnected = banPlatform.disconnectMatchingPlayers(
+                BanDisconnectRequest.user(targetId, reason)
         );
+        if (!disconnected.status().successful()) {
+            return AdminResult.partial("service.admin.ban-success", Map.of("player", targetName));
+        }
+        return AdminResult.success("service.admin.ban-success", Map.of("player", targetName));
     }
 
     @Override
-    public AdminResult unban(String target, String actor) {
-        return command(
-                "pardon %s".formatted(target),
-                "service.admin.unban-success",
-                "service.admin.unban-failed",
-                Map.of("player", target)
-        );
+    public AdminResult unban(UUID targetId, String targetName, String actor) {
+        var result = banPlatform.pardonUser(new PlayerProfileId(targetId, targetName));
+        return result.status().successful()
+                ? AdminResult.success("service.admin.unban-success", Map.of("player", targetName))
+                : failure(result, "service.admin.unban-failed", Map.of("player", targetName));
     }
 
     @Override
@@ -70,12 +99,43 @@ public final class DefaultBanService implements BanService {
         }
 
         var address = normalized.orElseThrow();
-        return command(
-                "ban-ip %s%s".formatted(address, suffix(reason)),
-                "service.admin.ban-ip-success",
-                "service.admin.ban-ip-failed",
-                Map.of("address", address)
+        final InetAddress parsed;
+        try {
+            parsed = InetAddress.getByName(address);
+        } catch (UnknownHostException exception) {
+            return AdminResult.failure(
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.invalid-address",
+                    Map.of("address", target)
+            );
+        }
+
+        final BanPlatformResult result;
+        try {
+            result = banPlatform.banIp(new BanIpRequest(
+                    parsed,
+                    BanActor.console(actor),
+                    reason,
+                    Instant.now(),
+                    null
+            ));
+        } catch (IllegalArgumentException exception) {
+            return AdminResult.failure(
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.ban-ip-failed",
+                    Map.of("address", address)
+            );
+        }
+        if (!result.status().successful()) {
+            return failure(result, "service.admin.ban-ip-failed", Map.of("address", address));
+        }
+        var disconnected = banPlatform.disconnectMatchingPlayers(
+                BanDisconnectRequest.address(parsed, reason)
         );
+        if (!disconnected.status().successful()) {
+            return AdminResult.partial("service.admin.ban-ip-success", Map.of("address", address));
+        }
+        return AdminResult.success("service.admin.ban-ip-success", Map.of("address", address));
     }
 
     @Override
@@ -90,12 +150,20 @@ public final class DefaultBanService implements BanService {
         }
 
         var address = normalized.orElseThrow();
-        return command(
-                "pardon-ip %s".formatted(address),
-                "service.admin.unban-ip-success",
-                "service.admin.unban-ip-failed",
-                Map.of("address", address)
-        );
+        final InetAddress parsed;
+        try {
+            parsed = InetAddress.getByName(address);
+        } catch (UnknownHostException exception) {
+            return AdminResult.failure(
+                    AdminStatus.INVALID_INPUT,
+                    "service.admin.invalid-address",
+                    Map.of("address", target)
+            );
+        }
+        var result = banPlatform.pardonIp(parsed);
+        return result.status().successful()
+                ? AdminResult.success("service.admin.unban-ip-success", Map.of("address", address))
+                : failure(result, "service.admin.unban-ip-failed", Map.of("address", address));
     }
 
     @Override
@@ -105,27 +173,25 @@ public final class DefaultBanService implements BanService {
             String reason
     ) {
         var player = platform.onlinePlayer(target);
-        if (player.isPresent()) {
-            try {
-                platform.kick(player.get(), kickReason(player.get(), reason));
-            } catch (RuntimeException exception) {
-                return AdminResult.failure(
-                        "service.admin.kick-failed",
-                        Map.of("player", target)
-                );
-            }
-
-            return AdminResult.success(
-                    "service.admin.kick-success",
-                    Map.of("player", player.get().name())
+        if (player.isEmpty()) {
+            return AdminResult.failure(
+                    AdminStatus.NOT_FOUND,
+                    "service.admin.kick-failed",
+                    Map.of("player", target)
             );
         }
-
-        return command(
-                "kick %s%s".formatted(target, suffix(reason)),
+        try {
+            platform.kick(player.orElseThrow(), kickReason(player.orElseThrow(), reason));
+        } catch (RuntimeException exception) {
+            return AdminResult.failure(
+                    AdminStatus.PLATFORM_FAILURE,
+                    "service.admin.kick-failed",
+                    Map.of("player", target)
+            );
+        }
+        return AdminResult.success(
                 "service.admin.kick-success",
-                "service.admin.kick-failed",
-                Map.of("player", target)
+                Map.of("player", player.orElseThrow().name())
         );
     }
 
@@ -173,24 +239,19 @@ public final class DefaultBanService implements BanService {
         ).plainText();
     }
 
-    private AdminResult command(
-            String command,
-            String successKey,
-            String failureKey,
+    private static AdminResult failure(
+            BanPlatformResult result,
+            String messageKey,
             Map<String, ?> placeholders
     ) {
-        var result = platform.dispatchNativeConsoleCommand(command);
-        return result.success()
-                ? AdminResult.success(successKey, placeholders)
-                : AdminResult.failure(
-                        AdminStatus.NATIVE_COMMAND_FAILURE,
-                        failureKey,
-                        placeholders
-                );
-    }
-
-    private String suffix(String reason) {
-        return reason.isBlank() ? "" : " " + reason;
+        var status = switch (result.status()) {
+            case ALREADY_BANNED -> AdminStatus.ALREADY_EXISTS;
+            case NOT_FOUND -> AdminStatus.NOT_FOUND;
+            case PERSISTENCE_FAILURE -> AdminStatus.PERSISTENCE_FAILURE;
+            case NOT_READY, WRONG_THREAD, PLATFORM_FAILURE -> AdminStatus.PLATFORM_FAILURE;
+            case SUCCESS -> throw new IllegalArgumentException("Successful platform result is not a failure");
+        };
+        return AdminResult.failure(status, messageKey, placeholders);
     }
 
 }

@@ -5,23 +5,51 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class RemainingCommandSafetyContractTest {
 
     @Test
-    void destructiveOperationsUseTypedServicesInsteadOfConsoleDispatch() throws IOException {
+    void businessCodeHasNoGenericNativeOrConsoleCommandDispatch() throws IOException {
         var source = mainSource();
-        assertFalse(source.contains("dispatchConsoleCommand(\"kill"));
-        assertFalse(source.contains("dispatchConsoleCommand(\"experience"));
-        assertFalse(source.contains("dispatchConsoleCommand(\"setblock"));
-        assertFalse(source.contains("dispatchConsoleCommand(\"summon"));
+        assertFalse(source.contains("dispatchConsoleCommand("));
+        assertFalse(source.contains("dispatchNativeConsoleCommand("));
+        assertFalse(source.contains("dispatchPlayerCommand("));
         assertTrue(source.contains("PlayerStatePlatformService"));
         assertTrue(source.contains("WorldPlatformService"));
         assertTrue(source.contains("EntityPlatformService"));
+        assertTrue(source.contains("BanPlatformService"));
+    }
+
+    @Test
+    void guardedPlayerDispatchCallSitesAreWhitelisted() throws IOException {
+        Set<String> actual;
+        try (var files = Files.walk(projectRoot())) {
+            actual = files.filter(path -> path.toString().endsWith(".java"))
+                    .filter(path -> path.toString().contains("/src/main/java/"))
+                    .filter(path -> {
+                        try {
+                            return Files.readString(path).contains(
+                                    "dispatch(PlayerCommandDispatchRequest.start("
+                            );
+                        } catch (IOException failure) {
+                            throw new java.io.UncheckedIOException(failure);
+                        }
+                    })
+                    .map(path -> projectRoot().relativize(path).toString().replace('\\', '/'))
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+        assertEquals(Set.of(
+                "cellulosesz-fabric/src/main/java/top/likoslupus/cellulosesz/fabric/event/FabricPlatformEventBridge.java",
+                "cellulosesz-modules/cellulosesz-module-admin/src/main/java/top/likoslupus/cellulosesz/modules/admin/command/SudoCommand.java",
+                "cellulosesz-modules/cellulosesz-module-item/src/main/java/top/likoslupus/cellulosesz/modules/item/service/DefaultItemAutomationService.java"
+        ), actual);
     }
 
     private static String mainSource() throws IOException {
@@ -72,7 +100,8 @@ final class RemainingCommandSafetyContractTest {
         var guard = read("cellulosesz-fabric/src/main/java/top/likoslupus/cellulosesz/fabric/FabricPlayerCommandDispatchService.java");
         assertTrue(guard.contains("MAX_DEPTH"));
         assertTrue(guard.contains("MAX_INDIRECT_EXECUTIONS_PER_TICK"));
-        assertTrue(guard.contains("containsCycle"));
+        assertTrue(guard.contains("guardFailure"));
+        assertTrue(guard.contains("Mutual sudo or command-dispatch loop"));
         assertTrue(guard.contains("containsControl"));
         assertTrue(guard.contains("finally"));
         assertTrue(guard.contains("stack.pop()"));

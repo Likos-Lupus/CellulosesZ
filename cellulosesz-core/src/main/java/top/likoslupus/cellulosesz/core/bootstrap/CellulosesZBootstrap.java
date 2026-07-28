@@ -37,9 +37,11 @@ import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
 
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static java.util.Objects.requireNonNull;
 
 public final class CellulosesZBootstrap {
 
@@ -49,7 +51,7 @@ public final class CellulosesZBootstrap {
     private final DefaultServiceRegistry services = new DefaultServiceRegistry();
     private final JacksonConfigRegistry configs;
     private final SimpleEventRegistry events = new SimpleEventRegistry();
-    private final DefaultScheduler scheduler = new DefaultScheduler();
+    private final DefaultScheduler scheduler;
     private final DefaultPermissionCatalog permissionCatalog = new DefaultPermissionCatalog();
     private final DefaultCommandAliasRegistry aliasRegistry = new DefaultCommandAliasRegistry();
     private final DefaultCommandSuggestionRegistry suggestionRegistry = new DefaultCommandSuggestionRegistry();
@@ -74,6 +76,7 @@ public final class CellulosesZBootstrap {
         this.configDirectory = configDirectory;
         this.version = version;
         this.logger = logger;
+        this.scheduler = new DefaultScheduler(logger);
         this.configs = new JacksonConfigRegistry(configDirectory, logger);
         this.storage = new JacksonStorageService(
                 configDirectory.resolve("data"),
@@ -136,8 +139,17 @@ public final class CellulosesZBootstrap {
                 scheduler,
                 logger
         );
-        modules.load();
+        awaitLifecycle("module initialization", modules.loadAsync());
         initialized = true;
+    }
+
+    private void awaitLifecycle(String operation, CompletableFuture<Void> future) {
+        try {
+            future.orTimeout(60, TimeUnit.SECONDS).join();
+        } catch (RuntimeException failure) {
+            logger.error("CellulosesZ " + operation + " failed.", failure);
+            throw failure;
+        }
     }
 
     public void permissionBackend(PermissionBackend backend) {
@@ -150,7 +162,7 @@ public final class CellulosesZBootstrap {
     }
 
     private DefaultModuleManager requireModules() {
-        return Objects.requireNonNull(modules, "CellulosesZ is not initialized");
+        return requireNonNull(modules, "CellulosesZ is not initialized");
     }
 
     public void onServerStarted(Object server) {
@@ -160,7 +172,8 @@ public final class CellulosesZBootstrap {
 
     public void onServerStopping(Object server) {
         logger.info("CellulosesZ server stopping.");
-        requireModules().onServerStopping();
+        awaitLifecycle("module shutdown", requireModules().onServerStoppingAsync());
+        awaitLifecycle("storage shutdown", storage.closeAsync());
         scheduler.close();
     }
 
@@ -191,7 +204,10 @@ public final class CellulosesZBootstrap {
                     var candidateCore = preparedConfigs.require("core", CoreConfig.class);
                     var preparedMessages = messages.prepareReload(
                             candidateCore.locale.defaultLocale,
-                            candidateCore.locale.fallback
+                            candidateCore.locale.fallback,
+                            candidateCore.locale.primaryColor,
+                            candidateCore.locale.secondaryColor,
+                            candidateCore.locale.legacyColors
                     );
                     return new ReloadPlan(preparedConfigs, preparedMessages, candidateCore);
                 }).thenCompose(plan -> platform.runOnServerThreadAsync(() -> applyReload(plan)))
@@ -234,7 +250,7 @@ public final class CellulosesZBootstrap {
     }
 
     public CoreConfig coreConfig() {
-        return Objects.requireNonNull(coreConfig, "CellulosesZ is not initialized");
+        return requireNonNull(coreConfig, "CellulosesZ is not initialized");
     }
 
     private void applyCoreRuntimeConfiguration(CoreConfig config) {
@@ -244,7 +260,7 @@ public final class CellulosesZBootstrap {
     }
 
     private DefaultLocaleResolver requireLocaleResolver() {
-        return Objects.requireNonNull(localeResolver, "CellulosesZ is not initialized");
+        return requireNonNull(localeResolver, "CellulosesZ is not initialized");
     }
 
     public String version() {

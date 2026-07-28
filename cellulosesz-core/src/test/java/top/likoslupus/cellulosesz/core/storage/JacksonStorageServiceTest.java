@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.core.storage;
 
-import lombok.NonNull;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
@@ -39,7 +38,7 @@ final class JacksonStorageServiceTest {
 
             assertThrows(Exception.class, () -> storage.save(path, new BrokenDocument()).join());
             assertArrayEquals(bytes, Files.readAllBytes(root.resolve(path)));
-            assertEquals("stable", storage.load(path, Document.class, Document::new).join().value);
+            assertEquals("stable", storage.createIfMissing(path, Document.class, Document::new).join().value);
         }
     }
 
@@ -50,13 +49,13 @@ final class JacksonStorageServiceTest {
             var defaults = new AtomicInteger();
             var path = Path.of("concurrent.json");
 
-            var first = storage.load(path, Document.class, () -> {
+            var first = storage.createIfMissing(path, Document.class, () -> {
                 defaults.incrementAndGet();
                 var value = new Document();
                 value.value = "created";
                 return value;
             });
-            var second = storage.load(path, Document.class, () -> {
+            var second = storage.createIfMissing(path, Document.class, () -> {
                 defaults.incrementAndGet();
                 var value = new Document();
                 value.value = "duplicate";
@@ -86,19 +85,19 @@ final class JacksonStorageServiceTest {
     private static final class NoopLogger implements CellulosesZLogger {
 
         @Override
-        public void warn(@NonNull String message) {
+        public void warn(String message) {
         }
 
         @Override
-        public void error(@NonNull String message) {
+        public void error(String message) {
         }
 
         @Override
-        public void error(@NonNull String message, @NonNull Throwable throwable) {
+        public void error(String message, Throwable throwable) {
         }
 
         @Override
-        public void info(@NonNull String message) {
+        public void info(String message) {
         }
 
     }

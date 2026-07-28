@@ -42,8 +42,8 @@ public final class TpPosCommand extends AbstractTeleportCommand {
         var args = invocation.args();
         if (args.length < 3 || args.length > 4) {
             invocation.errorKey(
-                    "commands.teleport.tp-pos-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.teleport.tp-pos-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

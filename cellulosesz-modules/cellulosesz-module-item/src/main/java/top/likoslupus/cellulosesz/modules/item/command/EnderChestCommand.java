@@ -54,8 +54,8 @@ public final class EnderChestCommand extends AbstractItemCommand {
         var args = invocation.args();
         if (args.length > 1) {
             invocation.errorKey(
-                    "commands.item.ender-chest-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.ender-chest-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -63,7 +63,7 @@ public final class EnderChestCommand extends AbstractItemCommand {
         var target = self;
         if (args.length == 1) {
             if (!invocation.hasPermission("cellulosesz.item.enderchest.other")) {
-                invocation.errorKey("commands.item.ender-chest-command.error.2");
+                invocation.errorKey("commands.item.ender-chest-command.error.do-not-permission-view-another-players-ender-chest");
                 return 0;
             }
 
@@ -72,7 +72,7 @@ public final class EnderChestCommand extends AbstractItemCommand {
         }
 
         if (!platform.openEnderChest(self.get(), target.get())) {
-            invocation.errorKey("commands.item.ender-chest-command.error.3");
+            invocation.errorKey("commands.item.ender-chest-command.error.unable-open-ender-chest");
             return 0;
         }
 

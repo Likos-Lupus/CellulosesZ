@@ -2,10 +2,8 @@ package top.likoslupus.cellulosesz.fabric;
 
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.serialization.JsonOps;
 import net.minecraft.ChatFormatting;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.core.BlockPos;
@@ -74,7 +72,6 @@ import static java.util.Objects.requireNonNull;
 public final class FabricPlatformService implements PlatformService, AutoCloseable {
 
     private static final Set<PlatformCapability> CAPABILITIES = Set.copyOf(EnumSet.allOf(PlatformCapability.class));
-    private final FabricVanillaCommandBridge vanillaCommands;
     private final ExecutorService backupExecutor = Executors.newSingleThreadExecutor(
             Thread.ofVirtual().name("cellulosesz-backup-", 0).factory()
     );
@@ -83,8 +80,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
     private @Nullable MessageRenderer renderer;
     private @Nullable LocaleResolver locales;
 
-    public FabricPlatformService(FabricVanillaCommandBridge vanillaCommands) {
-        this.vanillaCommands = vanillaCommands;
+    public FabricPlatformService() {
     }
 
     @Override
@@ -1146,15 +1142,6 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
     }
 
     @Override
-    public boolean dispatchPlayerCommand(CellPlayer player, String command) {
-        if (server == null || command.isBlank()) return false;
-        return executeCommand(
-                command,
-                requireNative(player).createCommandSourceStack()
-        ).isPresent();
-    }
-
-    @Override
     public void maintainItemCount(
             CellPlayer player,
             String itemId,
@@ -1196,12 +1183,6 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         current.getPlayerList().getPlayers().forEach(player ->
                 current.getCommands().sendCommands(player)
         );
-    }
-
-    @Override
-    public boolean dispatchConsoleCommand(String command) {
-        if (server == null || command.isBlank()) return false;
-        return executeCommand(command, server.createCommandSourceStack()).isPresent();
     }
 
     @Override
@@ -1256,14 +1237,6 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         );
     }
 
-    @Override
-    public top.likoslupus.cellulosesz.api.platform.NativeCommandResult dispatchNativeConsoleCommand(String command) {
-        if (server == null) {
-            return top.likoslupus.cellulosesz.api.platform.NativeCommandResult.notAvailable("Server has not started");
-        }
-        return vanillaCommands.execute(command, server.createCommandSourceStack());
-    }
-
     private BlockPos blockPosition(CellLocation location) {
         if (!Double.isFinite(location.x) || !Double.isFinite(location.y) || !Double.isFinite(location.z)) {
             throw new IllegalArgumentException("Sign location must contain finite coordinates");
@@ -1296,20 +1269,6 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         return java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
                 .replaceAll("(?i)[§&][0-9A-FK-OR]", "")
                 .strip();
-    }
-
-    private OptionalInt executeCommand(String command, CommandSourceStack source) {
-        if (server == null || command.isBlank()) return OptionalInt.empty();
-
-        var normalized = command.trim();
-        while (normalized.startsWith("/")) normalized = normalized.substring(1);
-        if (normalized.isBlank()) return OptionalInt.empty();
-
-        try {
-            return OptionalInt.of(server.getCommands().getDispatcher().execute(normalized, source));
-        } catch (CommandSyntaxException _) {
-            return OptionalInt.empty();
-        }
     }
 
     private boolean repair(ItemStack stack) {

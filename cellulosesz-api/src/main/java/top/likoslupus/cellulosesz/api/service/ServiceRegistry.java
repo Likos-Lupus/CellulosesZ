@@ -4,7 +4,11 @@ import java.util.Optional;
 
 public interface ServiceRegistry {
 
-    <T> void register(Class<T> type, T instance);
+    default <T> Registration register(Class<T> type, T instance) {
+        return register(type, instance, "global");
+    }
+
+    <T> Registration register(Class<T> type, T instance, String owner);
 
     <T> T require(Class<T> type);
 

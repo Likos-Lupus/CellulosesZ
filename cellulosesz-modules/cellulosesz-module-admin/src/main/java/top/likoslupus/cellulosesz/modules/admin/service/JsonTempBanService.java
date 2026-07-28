@@ -4,6 +4,7 @@ import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.admin.BanRecord;
 import top.likoslupus.cellulosesz.api.admin.TempBanService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -20,7 +21,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public final class JsonTempBanService implements TempBanService {
+public final class JsonTempBanService implements TempBanService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -48,8 +49,21 @@ public final class JsonTempBanService implements TempBanService {
         this.renderer = renderer;
         this.locales = locales;
         this.kickOnlinePlayers = kickOnlinePlayers;
-        this.document = storage.load(path, TempBanDocument.class, TempBanDocument::new).join();
-        validate(document);
+        this.document = new TempBanDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, TempBanDocument.class, TempBanDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validate(TempBanDocument candidate) {

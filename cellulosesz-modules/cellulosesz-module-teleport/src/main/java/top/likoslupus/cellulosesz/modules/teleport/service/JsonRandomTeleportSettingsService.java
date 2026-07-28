@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettings;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
@@ -11,7 +13,9 @@ import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.UnaryOperator;
 
-public final class JsonRandomTeleportSettingsService implements RandomTeleportSettingsService {
+public final class JsonRandomTeleportSettingsService implements
+        RandomTeleportSettingsService,
+        AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -27,12 +31,7 @@ public final class JsonRandomTeleportSettingsService implements RandomTeleportSe
         this.storage = storage;
         this.path = path;
         this.defaults = validate(defaults);
-        this.document = storage.load(
-                path,
-                RandomTeleportSettingsDocument.class,
-                RandomTeleportSettingsDocument::new
-        ).join();
-        validate(document);
+        this.document = new RandomTeleportSettingsDocument();
     }
 
     private RandomTeleportSettings validate(RandomTeleportSettings settings) {
@@ -46,11 +45,26 @@ public final class JsonRandomTeleportSettingsService implements RandomTeleportSe
         return settings;
     }
 
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(
+                        path,
+                        RandomTeleportSettingsDocument.class,
+                        RandomTeleportSettingsDocument::new
+                )
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
+    }
+
     private void validate(RandomTeleportSettingsDocument candidate) {
-        if (candidate.worlds == null) {
-            throw new IllegalArgumentException("Random teleport settings are missing worlds");
-        }
-        candidate.worlds.replaceAll((world, settings) -> validate(settings));
+        candidate.worlds.replaceAll((_, settings) -> validate(settings));
     }
 
     @Override
@@ -59,21 +73,49 @@ public final class JsonRandomTeleportSettingsService implements RandomTeleportSe
     }
 
     @Override
-    public CompletableFuture<Void> setCenter(String world, double x, double z) {
+    public CompletableFuture<Void> setCenter(
+            String world,
+            double x,
+            double z
+    ) {
         if (!Double.isFinite(x) || !Double.isFinite(z)) {
             return CompletableFuture.failedFuture(new IllegalArgumentException("Random teleport center must be finite"));
         }
-        return update(world, old -> new RandomTeleportSettings(x, z, old.minRadius(), old.maxRadius()));
+        return update(
+                world,
+                old -> new RandomTeleportSettings(
+                        x,
+                        z,
+                        old.minRadius(),
+                        old.maxRadius()
+                )
+        );
     }
 
     @Override
     public CompletableFuture<Void> setMinimumRadius(String world, int radius) {
-        return update(world, old -> new RandomTeleportSettings(old.centerX(), old.centerZ(), radius, old.maxRadius()));
+        return update(
+                world,
+                old -> new RandomTeleportSettings(
+                        old.centerX(),
+                        old.centerZ(),
+                        radius,
+                        old.maxRadius()
+                )
+        );
     }
 
     @Override
     public CompletableFuture<Void> setMaximumRadius(String world, int radius) {
-        return update(world, old -> new RandomTeleportSettings(old.centerX(), old.centerZ(), old.minRadius(), radius));
+        return update(
+                world,
+                old -> new RandomTeleportSettings(
+                        old.centerX(),
+                        old.centerZ(),
+                        old.minRadius(),
+                        radius
+                )
+        );
     }
 
     private synchronized CompletableFuture<Void> update(
@@ -82,8 +124,8 @@ public final class JsonRandomTeleportSettingsService implements RandomTeleportSe
     ) {
         var key = normalize(world);
         var result = new CompletableFuture<Void>();
-        mutationTail = mutationTail.handle((unused, failure) -> null)
-                .thenCompose(unused -> {
+        mutationTail = mutationTail.handle((_, _) -> null)
+                .thenCompose(_ -> {
                     RandomTeleportSettingsDocument next;
                     synchronized (this) {
                         next = copy(document);
@@ -96,7 +138,7 @@ public final class JsonRandomTeleportSettingsService implements RandomTeleportSe
                         }
                     });
                 });
-        mutationTail.whenComplete((unused, failure) -> {
+        mutationTail.whenComplete((_, failure) -> {
             if (failure == null) result.complete(null);
             else result.completeExceptionally(failure);
         });

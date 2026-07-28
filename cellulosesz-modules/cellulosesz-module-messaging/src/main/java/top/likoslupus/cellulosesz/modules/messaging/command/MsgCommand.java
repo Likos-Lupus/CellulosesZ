@@ -48,8 +48,8 @@ public final class MsgCommand extends AbstractMessagingCommand {
         var args = invocation.args();
         if (args.length < 2) {
             invocation.errorKey(
-                    "commands.messaging.msg-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.messaging.msg-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

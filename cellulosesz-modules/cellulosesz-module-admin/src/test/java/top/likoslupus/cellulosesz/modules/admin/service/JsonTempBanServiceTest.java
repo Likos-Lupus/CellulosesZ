@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
@@ -17,7 +19,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class JsonTempBanServiceTest {
 
@@ -25,8 +28,12 @@ final class JsonTempBanServiceTest {
     void expirationAdditionOverflowIsRejectedWithoutSaving() {
         var storage = new MemoryStorage();
         var service = service(storage);
-
-        var result = service.tempBanIp("192.0.2.1", "console", Long.MAX_VALUE, "test").join();
+        var result = service.tempBanIp(
+                "192.0.2.1",
+                "console",
+                Long.MAX_VALUE,
+                "test"
+        ).join();
 
         assertEquals(AdminStatus.INVALID_INPUT, result.status());
         assertEquals(0, storage.saves);
@@ -90,13 +97,20 @@ final class JsonTempBanServiceTest {
         assertTrue(storage.saves >= 2);
     }
 
+    @NullMarked
     private static final class MemoryStorage implements StorageService {
 
-        private Object document;
+        private @Nullable Object document;
         private int saves;
 
         @Override
-        public <T> CompletableFuture<T> load(Path path, Class<T> type, Supplier<T> defaults) {
+        public <T> CompletableFuture<T> loadOrDefault(Path path, Class<T> type, Supplier<T> defaults) {
+            if (document == null) return CompletableFuture.completedFuture(defaults.get());
+            return CompletableFuture.completedFuture(type.cast(document));
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(Path path, Class<T> type, Supplier<T> defaults) {
             if (document == null) document = defaults.get();
             return CompletableFuture.completedFuture(type.cast(document));
         }

@@ -42,7 +42,7 @@ public final class TpoCommand extends AbstractTeleportCommand {
             if (subject.isEmpty() || target.isEmpty()) return 0;
             return teleport(invocation, subject.orElseThrow(), platform.location(target.orElseThrow()));
         }
-        invocation.errorKey("commands.teleport.tp-command.error.1", Map.of("value0", usage()));
+        invocation.errorKey("commands.teleport.tp-command.error.usage", Map.of("usage", usage()));
         return 0;
     }
 

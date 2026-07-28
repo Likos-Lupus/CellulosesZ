@@ -47,14 +47,14 @@ public final class BalanceCommand extends AbstractEconomyCommand {
             var self = player(invocation);
             if (self.isEmpty()) return 0;
             invocation.replyKey(
-                    "commands.economy.balance-command.reply.1",
-                    Map.of("value0", format(economy.balance(self.get().uuid())))
+                    "commands.economy.balance-command.reply.balance",
+                    Map.of("balance", format(economy.balance(self.get().uuid())))
             );
             return 1;
         }
 
         if (!invocation.hasPermission("cellulosesz.economy.balance.other")) {
-            invocation.errorKey("commands.economy.balance-command.error.1");
+            invocation.errorKey("commands.economy.balance-command.error.do-not-permission-view-another-players-balance");
             return 0;
         }
 

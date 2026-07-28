@@ -35,8 +35,8 @@ public final class ShowKitCommand extends AbstractKitCommand {
         var args = invocation.args();
         if (args.length != 1) {
             invocation.errorKey(
-                    "commands.kit.show-kit-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.kit.show-kit-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -44,8 +44,8 @@ public final class ShowKitCommand extends AbstractKitCommand {
         var kit = kits.kit(args[0]);
         if (kit.isEmpty()) {
             invocation.errorKey(
-                    "commands.kit.show-kit-command.error.2",
-                    Map.of("value0", args[0])
+                    "commands.kit.show-kit-command.error.kit-does-not-exist",
+                    Map.of("kit", args[0])
             );
             return 0;
         }

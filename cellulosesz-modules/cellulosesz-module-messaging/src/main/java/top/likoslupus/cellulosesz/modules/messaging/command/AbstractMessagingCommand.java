@@ -31,7 +31,7 @@ abstract class AbstractMessagingCommand implements CellCommand {
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
         if (player.isEmpty()) {
-            invocation.errorKey("commands.messaging.abstract-messaging-command.error.1");
+            invocation.errorKey("commands.messaging.abstract-messaging-command.error.command-can-only-used-by-player");
         }
         return player;
     }
@@ -40,8 +40,8 @@ abstract class AbstractMessagingCommand implements CellCommand {
         var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty()) {
             invocation.errorKey(
-                    "commands.messaging.abstract-messaging-command.error.2",
-                    Map.of("value0", name)
+                    "commands.messaging.abstract-messaging-command.error.online-player-not-found",
+                    Map.of("player", name)
             );
         }
         return player;
@@ -51,8 +51,8 @@ abstract class AbstractMessagingCommand implements CellCommand {
         var uuid = invocation.resolvePlayer(name).optionalUuid();
         if (uuid.isEmpty()) {
             invocation.errorKey(
-                    "commands.messaging.abstract-messaging-command.error.3",
-                    Map.of("value0", name)
+                    "commands.messaging.abstract-messaging-command.error.player-not-found",
+                    Map.of("player", name)
             );
         }
         return uuid;
@@ -64,13 +64,13 @@ abstract class AbstractMessagingCommand implements CellCommand {
 
     protected boolean validLength(CommandInvocation invocation, String message) {
         if (message.isBlank()) {
-            invocation.errorKey("commands.messaging.abstract-messaging-command.error.4");
+            invocation.errorKey("commands.messaging.abstract-messaging-command.error.message-cannot-empty");
             return false;
         }
         if (message.length() > config.maxMessageLength) {
             invocation.errorKey(
-                    "commands.messaging.abstract-messaging-command.error.5",
-                    Map.of("value0", config.maxMessageLength)
+                    "commands.messaging.abstract-messaging-command.error.message-too-long-maximum-length",
+                    Map.of("maximum_length", config.maxMessageLength)
             );
             return false;
         }

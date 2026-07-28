@@ -52,7 +52,7 @@ public final class TprCommand implements CellCommand {
     public int execute(CommandInvocation invocation) {
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpr-command.error.1");
+            invocation.errorKey("commands.teleport.tpr-command.error.command-can-only-used-by-player");
             return 0;
         }
         var current = platform.location(self.orElseThrow());
@@ -62,10 +62,10 @@ public final class TprCommand implements CellCommand {
         }
         var location = randomTeleports.randomLocation(current.world, settings.settings(current.world));
         if (location.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpr-command.error.2");
+            invocation.errorKey("commands.teleport.tpr-command.error.unable-find-random-teleport-destination");
             return 0;
         }
-        invocation.replyKey("commands.teleport.tpr-command.reply.1");
+        invocation.replyKey("commands.teleport.tpr-command.reply.finding-random-teleport-destination");
         teleports.teleport(
                 self.orElseThrow(),
                 location.orElseThrow(),

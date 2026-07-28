@@ -32,9 +32,9 @@ public final class IpAddresses {
                 var zone = normalized.indexOf('%');
                 return Optional.of(zone < 0 ? normalized : normalized.substring(0, zone));
             }
-            if (ipv4Shape(value)) {
-                return Optional.of(address.getHostAddress().toLowerCase(Locale.ROOT));
-            }
+            // The JDK materializes IPv4-mapped IPv6 literals as Inet4Address.
+            // Shape validation above already prevents DNS names from reaching this branch.
+            return Optional.of(address.getHostAddress().toLowerCase(Locale.ROOT));
         } catch (UnknownHostException _) {
         }
 

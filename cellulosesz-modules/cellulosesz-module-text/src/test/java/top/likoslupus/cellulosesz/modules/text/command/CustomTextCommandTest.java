@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.text.command;
 
+import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
@@ -9,7 +10,7 @@ import top.likoslupus.cellulosesz.api.text.TextService;
 
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 final class CustomTextCommandTest {
 
@@ -36,6 +37,7 @@ final class CustomTextCommandTest {
         assertEquals("commands.common.invalid-page", zero.errorKey);
     }
 
+    @NullMarked
     private static final class FixedTextService implements TextService {
 
         @Override
@@ -70,6 +72,7 @@ final class CustomTextCommandTest {
 
     }
 
+    @NullMarked
     private static final class TestInvocation implements CommandInvocation {
 
         private final String[] args;

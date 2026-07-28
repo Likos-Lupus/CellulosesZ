@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.sign.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.sign.*;
@@ -13,11 +15,15 @@ import java.nio.file.Path;
 import java.text.Normalizer;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
-public final class DefaultSignService implements SignService {
+import static java.util.Objects.requireNonNull;
+
+public final class DefaultSignService implements SignService, AsyncInitializable {
 
     private static final Pattern LEGACY_FORMAT = Pattern.compile("(?i)[§&][0-9A-FK-OR]");
     private static final Set<String> CONFIGURED_HANDLERS = Set.of(
@@ -43,11 +49,24 @@ public final class DefaultSignService implements SignService {
             Path path
     ) {
         this.config = ConfigSnapshot.from(config);
-        this.permissions = Objects.requireNonNull(permissions, "permissions");
-        this.storage = Objects.requireNonNull(storage, "storage");
-        this.path = Objects.requireNonNull(path, "path");
-        document = storage.load(path, SignDocument.class, SignDocument::new).join();
-        document.validate();
+        this.permissions = requireNonNull(permissions, "permissions");
+        this.storage = requireNonNull(storage, "storage");
+        this.path = requireNonNull(path, "path");
+        document = new SignDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, SignDocument.class, SignDocument::new)
+                .thenApply(loaded -> {
+                    loaded.validate();
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     public void configure(SignConfig config) {
@@ -56,7 +75,7 @@ public final class DefaultSignService implements SignService {
 
     @Override
     public synchronized void register(CellSignHandler handler) {
-        var checked = Objects.requireNonNull(handler, "handler");
+        var checked = requireNonNull(handler, "handler");
         var id = normalizeId(checked.id());
         if (id.isEmpty()) throw new IllegalArgumentException("Sign handler id must not be blank");
         if (!CONFIGURED_HANDLERS.contains(id)) {
@@ -74,7 +93,7 @@ public final class DefaultSignService implements SignService {
 
     @Override
     public synchronized List<String> formattedLines(List<String> lines) {
-        Objects.requireNonNull(lines, "lines");
+        requireNonNull(lines, "lines");
         if (lines.isEmpty()) return List.copyOf(lines);
         var handler = handlers.get(normalizeHeader(lines.getFirst()));
         return handler == null ? List.copyOf(lines) : normalizeLines(lines, handler.id());
@@ -179,7 +198,7 @@ public final class DefaultSignService implements SignService {
 
         CompletableFuture<SignUseResult> execution;
         try {
-            execution = Objects.requireNonNull(
+            execution = requireNonNull(
                     handler.use(new SignUseContext(player, location, front, stored.lines, sneaking)),
                     "handler result"
             );
@@ -191,8 +210,6 @@ public final class DefaultSignService implements SignService {
         var result = execution.handle((value, exception) -> {
             activeUses.remove(cooldownKey);
             if (exception != null) return executionFailure(unwrap(exception));
-            if (value == null) return SignUseResult.failure(
-                    "service.sign.execution-failed", Map.of("reason", "null result"));
             if (value.handled() && value.success()) lastUseNanos.put(cooldownKey, System.nanoTime());
             return value;
         });
@@ -225,21 +242,21 @@ public final class DefaultSignService implements SignService {
 
     private synchronized CompletableFuture<SignMutationCommit> enqueueMutation(Supplier<MutationPlan> supplier) {
         var prepared = new CompletableFuture<SignMutationCommit>();
-        mutationTail = mutationTail.handle((ignored, previousFailure) -> null)
-                .thenCompose(ignored -> {
+        mutationTail = mutationTail.handle((_, _) -> null)
+                .thenCompose(_ -> {
                     final MutationPlan plan;
                     final SignDocument previous;
                     synchronized (this) {
-                        plan = Objects.requireNonNull(supplier.get(), "mutation plan");
+                        plan = requireNonNull(supplier.get(), "mutation plan");
                         previous = document.copy();
                     }
                     if (!plan.save()) {
                         prepared.complete(SignMutationCommits.completed(plan.result()));
-                        return CompletableFuture.<Void>completedFuture(null);
+                        return CompletableFuture.completedFuture(null);
                     }
 
                     var operation = new CompletableFuture<Void>();
-                    storage.save(path, plan.next()).whenComplete((saved, saveFailure) -> {
+                    storage.save(path, plan.next()).whenComplete((_, saveFailure) -> {
                         if (saveFailure != null) {
                             prepared.complete(SignMutationCommits.completed(SignUseResult.failure(
                                     "service.sign.save-failed",
@@ -261,7 +278,7 @@ public final class DefaultSignService implements SignService {
                                 operation.complete(null);
                                 return;
                             }
-                            storage.save(path, previous).whenComplete((rollbackSaved, rollbackFailure) -> {
+                            storage.save(path, previous).whenComplete((_, rollbackFailure) -> {
                                 if (rollbackFailure == null) {
                                     synchronized (this) {
                                         document = previous;
@@ -289,13 +306,15 @@ public final class DefaultSignService implements SignService {
 
     private String safeReason(Throwable exception) {
         var message = exception.getMessage();
-        return message == null || message.isBlank() ? exception.getClass().getSimpleName() : message;
+        return message == null || message.isBlank()
+                ? exception.getClass().getSimpleName()
+                : message;
     }
 
     private Throwable unwrap(Throwable throwable) {
         var current = throwable;
-        while ((current instanceof java.util.concurrent.CompletionException
-                || current instanceof java.util.concurrent.ExecutionException)
+        while ((current instanceof CompletionException
+                || current instanceof ExecutionException)
                 && current.getCause() != null) {
             current = current.getCause();
         }
@@ -318,7 +337,7 @@ public final class DefaultSignService implements SignService {
     }
 
     private List<String> normalizeLines(List<String> lines, String displayId) {
-        var result = new ArrayList<String>(List.of("", "", "", ""));
+        var result = new ArrayList<>(List.of("", "", "", ""));
         for (int index = 0; index < Math.min(4, lines.size()); index++) {
             result.set(index, normalizeText(lines.get(index)));
         }
@@ -327,12 +346,16 @@ public final class DefaultSignService implements SignService {
     }
 
     private String normalizeText(String value) {
-        var normalized = Normalizer.normalize(Objects.requireNonNull(value, "value"), Normalizer.Form.NFKC);
-        return LEGACY_FORMAT.matcher(normalized).replaceAll("").strip();
+        var normalized = Normalizer.normalize(
+                requireNonNull(value, "value"),
+                Normalizer.Form.NFKC);
+        return LEGACY_FORMAT.matcher(normalized)
+                .replaceAll("")
+                .strip();
     }
 
     private String normalizeId(String value) {
-        return Objects.requireNonNull(value, "value").strip().toLowerCase(Locale.ROOT);
+        return requireNonNull(value, "value").strip().toLowerCase(Locale.ROOT);
     }
 
     private SignMutationExecution replace(
@@ -343,8 +366,8 @@ public final class DefaultSignService implements SignService {
             List<String> lines,
             boolean creating
     ) {
-        Objects.requireNonNull(previousLines, "previousLines");
-        Objects.requireNonNull(lines, "lines");
+        requireNonNull(previousLines, "previousLines");
+        requireNonNull(lines, "lines");
         var snapshot = config;
         if (!snapshot.enabled() || lines.isEmpty()) return SignMutationExecution.pass();
         var storageKey = key(location, front);
@@ -395,7 +418,7 @@ public final class DefaultSignService implements SignService {
         var context = new SignUseContext(player, location, front, normalized, false);
         final SignUseResult validation;
         try {
-            validation = Objects.requireNonNull(handler.validate(context), "validation result");
+            validation = requireNonNull(handler.validate(context), "validation result");
         } catch (RuntimeException exception) {
             return completedMutation(executionFailure(exception));
         }
@@ -433,7 +456,12 @@ public final class DefaultSignService implements SignService {
         return config.enabled(id);
     }
 
-    private CooldownKey cooldownKey(UUID player, CellLocation location, boolean front, String type) {
+    private CooldownKey cooldownKey(
+            UUID player,
+            CellLocation location,
+            boolean front,
+            String type
+    ) {
         var c = coordinates(location);
         return new CooldownKey(player, location.world, c[0], c[1], c[2], front, normalizeId(type));
     }
@@ -457,7 +485,7 @@ public final class DefaultSignService implements SignService {
         private final CompletableFuture<SignUseResult> completion = new CompletableFuture<>();
 
         private PendingMutationCommit(SignUseResult result) {
-            this.result = Objects.requireNonNull(result, "result");
+            this.result = requireNonNull(result, "result");
         }
 
         @Override
@@ -481,7 +509,7 @@ public final class DefaultSignService implements SignService {
         }
 
         private void finish(SignUseResult finalResult) {
-            completion.complete(Objects.requireNonNull(finalResult, "finalResult"));
+            completion.complete(requireNonNull(finalResult, "finalResult"));
         }
 
     }
@@ -493,8 +521,8 @@ public final class DefaultSignService implements SignService {
     ) {
 
         private MutationPlan {
-            Objects.requireNonNull(next, "next");
-            Objects.requireNonNull(result, "result");
+            requireNonNull(next, "next");
+            requireNonNull(result, "result");
         }
 
         static MutationPlan save(SignDocument next, SignUseResult result) {
@@ -518,9 +546,9 @@ public final class DefaultSignService implements SignService {
     ) {
 
         private CooldownKey {
-            Objects.requireNonNull(player, "player");
-            Objects.requireNonNull(world, "world");
-            Objects.requireNonNull(type, "type");
+            requireNonNull(player, "player");
+            requireNonNull(world, "world");
+            requireNonNull(type, "type");
         }
 
     }
@@ -533,13 +561,13 @@ public final class DefaultSignService implements SignService {
 
         private ConfigSnapshot {
             if (cooldownNanos < 0L) throw new IllegalArgumentException("cooldownNanos must not be negative");
-            enabledHandlers = Set.copyOf(Objects.requireNonNull(enabledHandlers, "enabledHandlers"));
+            enabledHandlers = Set.copyOf(requireNonNull(enabledHandlers, "enabledHandlers"));
         }
 
         static ConfigSnapshot from(SignConfig source) {
-            var config = Objects.requireNonNull(source, "config");
-            Objects.requireNonNull(config.interaction, "config.interaction");
-            Objects.requireNonNull(config.signs, "config.signs");
+            var config = requireNonNull(source, "config");
+            requireNonNull(config.interaction, "config.interaction");
+            requireNonNull(config.signs, "config.signs");
             if (config.interaction.cooldownTicks < 0) {
                 throw new IllegalArgumentException("interaction.cooldownTicks must not be negative");
             }
@@ -549,7 +577,7 @@ public final class DefaultSignService implements SignService {
                     .forEach(enabled::add);
             return new ConfigSnapshot(
                     config.enabled,
-                    Math.multiplyExact((long) config.interaction.cooldownTicks, 50_000_000L),
+                    Math.multiplyExact(config.interaction.cooldownTicks, 50_000_000L),
                     enabled
             );
         }

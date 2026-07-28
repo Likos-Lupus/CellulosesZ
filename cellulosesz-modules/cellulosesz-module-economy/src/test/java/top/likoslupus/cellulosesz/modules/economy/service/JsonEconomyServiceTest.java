@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
@@ -20,27 +22,50 @@ final class JsonEconomyServiceTest {
     @Test
     void failedSaveDoesNotPublishBalance() {
         var storage = new MemoryStorage();
-        var service = new JsonEconomyService(storage, new EconomyConfig(), Path.of("economy"), new NoopLogger());
+        var service = new JsonEconomyService(
+                storage,
+                new EconomyConfig(),
+                Path.of("economy"),
+                new NoopLogger()
+        );
         var player = UUID.randomUUID();
         storage.failSaves = true;
 
-        assertThrows(Exception.class, () -> service.deposit(
-                player, new BigDecimal("10.00"), TransactionCause.system("test")).join());
+        var result = service.deposit(
+                player,
+                new BigDecimal("10.00"),
+                TransactionCause.system("test")
+        ).join();
+        assertFalse(result.success());
+        assertEquals("service.economy.persistence-failed", result.message().key());
         assertEquals(new BigDecimal("0.00"), service.balance(player));
     }
 
     @Test
     void multiRecipientTransferCommitsAsOneDocument() {
         var storage = new MemoryStorage();
-        var service = new JsonEconomyService(storage, new EconomyConfig(), Path.of("economy"), new NoopLogger());
+        var service = new JsonEconomyService(
+                storage,
+                new EconomyConfig(),
+                Path.of("economy"),
+                new NoopLogger()
+        );
         var payer = UUID.randomUUID();
         var first = UUID.randomUUID();
         var second = UUID.randomUUID();
-        service.deposit(payer, new BigDecimal("30.00"), TransactionCause.system("seed")).join();
+        service.deposit(
+                payer,
+                new BigDecimal("30.00"),
+                TransactionCause.system("seed")
+        ).join();
         var savesBefore = storage.saves;
 
-        var result = service.transferMany(payer, List.of(first, second), new BigDecimal("10.00"),
-                TransactionCause.system("test")).join();
+        var result = service.transferMany(
+                payer,
+                List.of(first, second),
+                new BigDecimal("10.00"),
+                TransactionCause.system("test")
+        ).join();
 
         assertTrue(result.success());
         assertEquals(new BigDecimal("10.00"), service.balance(payer));
@@ -49,14 +74,29 @@ final class JsonEconomyServiceTest {
         assertEquals(savesBefore + 1, storage.saves);
     }
 
+    @NullMarked
     private static final class MemoryStorage implements StorageService {
 
-        private Object document;
+        private @Nullable Object document;
         private boolean failSaves;
         private int saves;
 
         @Override
-        public <T> CompletableFuture<T> load(Path path, Class<T> type, Supplier<T> defaultSupplier) {
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
+            if (document == null) return CompletableFuture.completedFuture(defaultSupplier.get());
+            return CompletableFuture.completedFuture(type.cast(document));
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
             if (document == null) document = defaultSupplier.get();
             return CompletableFuture.completedFuture(type.cast(document));
         }
@@ -87,6 +127,7 @@ final class JsonEconomyServiceTest {
 
     }
 
+    @NullMarked
     private static final class NoopLogger implements CellulosesZLogger {
 
         @Override

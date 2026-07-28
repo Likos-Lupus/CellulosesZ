@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.admin.BanRecord;
 import top.likoslupus.cellulosesz.api.admin.MuteService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.data.MuteDocument;
 
@@ -15,7 +16,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public final class JsonMuteService implements MuteService {
+public final class JsonMuteService implements MuteService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -25,8 +26,21 @@ public final class JsonMuteService implements MuteService {
     public JsonMuteService(StorageService storage, Path path) {
         this.storage = storage;
         this.path = path;
-        this.document = storage.load(path, MuteDocument.class, MuteDocument::new).join();
-        validate(document);
+        this.document = new MuteDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, MuteDocument.class, MuteDocument::new)
+                .thenApply(loaded -> {
+                    validate(loaded);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validate(MuteDocument candidate) {
@@ -44,7 +58,7 @@ public final class JsonMuteService implements MuteService {
             String reason
     ) {
         final long createdAt = System.currentTimeMillis();
-        final @Nullable Long expiresAt;
+        final Long expiresAt;
         try {
             expiresAt = durationMillis == null || durationMillis <= 0L
                     ? null
@@ -103,7 +117,7 @@ public final class JsonMuteService implements MuteService {
             Function<MuteDocument, Mutation<T>> operation,
             CompletableFuture<T> result
     ) {
-        mutationTail = mutationTail.handle((ignored, failure) -> null)
+        mutationTail = mutationTail.handle((_, _) -> null)
                 .thenCompose(ignored -> {
                     MuteDocument current;
                     synchronized (this) {
@@ -116,7 +130,7 @@ public final class JsonMuteService implements MuteService {
                         result.completeExceptionally(exception);
                         return CompletableFuture.completedFuture(null);
                     }
-                    return storage.save(path, mutation.document()).handle((saved, failure) -> {
+                    return storage.save(path, mutation.document()).handle((_, failure) -> {
                         if (failure == null) {
                             synchronized (this) {
                                 document = mutation.document();

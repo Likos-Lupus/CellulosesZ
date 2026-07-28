@@ -53,8 +53,8 @@ public final class JailCommand extends AbstractAdminCommand {
         var args = invocation.args();
         if (args.length < 2) {
             invocation.errorKey(
-                    "commands.admin.jail-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.jail-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

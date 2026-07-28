@@ -3,20 +3,24 @@ package top.likoslupus.cellulosesz.core.module;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
+import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.core.command.ModuleScopedCommandRegistry;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.function.Predicate;
 
 public final class DefaultModuleContext implements ModuleContext {
 
     private final String moduleId;
     private final Path dataDirectory;
-    private final ServiceRegistry services;
+    private final ModuleScopedServiceRegistry services;
     private final ConfigRegistry configs;
     private final EventRegistry events;
     private final CommandRegistry commands;
@@ -37,7 +41,7 @@ public final class DefaultModuleContext implements ModuleContext {
     ) {
         this.moduleId = moduleId;
         this.dataDirectory = dataDirectory;
-        this.services = services;
+        this.services = new ModuleScopedServiceRegistry(moduleId, services);
         this.configs = configs;
         this.events = events;
         this.commands = new ModuleScopedCommandRegistry(moduleId, commands);
@@ -89,6 +93,18 @@ public final class DefaultModuleContext implements ModuleContext {
     @Override
     public boolean moduleEnabled(String moduleId) {
         return enabledPredicate.test(moduleId);
+    }
+
+    List<AsyncInitializable> initializables() {
+        return services.initializables();
+    }
+
+    List<AsyncCloseable> closeablesInReverseOrder() {
+        return services.closeablesInReverseOrder();
+    }
+
+    List<Registration> registrationsInReverseOrder() {
+        return services.registrationsInReverseOrder();
     }
 
 }

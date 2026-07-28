@@ -328,13 +328,6 @@ public interface PlatformService {
         return false;
     }
 
-    default boolean dispatchPlayerCommand(
-            CellPlayer player,
-            String command
-    ) {
-        return false;
-    }
-
     default void maintainItemCount(
             CellPlayer player,
             String itemId,
@@ -355,10 +348,6 @@ public interface PlatformService {
     default void refreshCommandTree() {
     }
 
-    default boolean dispatchConsoleCommand(String command) {
-        return false;
-    }
-
     default boolean replaceSignText(
             CellPlayer player,
             CellLocation location,
@@ -376,15 +365,6 @@ public interface PlatformService {
             List<String> expectedBackLines
     ) {
         return false;
-    }
-
-    /**
-     * Executes a command against the platform command tree captured before CellulosesZ replaces roots with the same
-     * labels. Use this only for internal calls that must reach the native platform implementation rather than a
-     * CellulosesZ command with the same name.
-     */
-    default NativeCommandResult dispatchNativeConsoleCommand(String command) {
-        return NativeCommandResult.notAvailable("Native command dispatch is not supported");
     }
 
 }

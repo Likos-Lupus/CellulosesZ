@@ -57,26 +57,26 @@ public final class TpaCommand implements CellCommand {
         var args = invocation.args();
         if (args.length != 1) {
             invocation.errorKey(
-                    "commands.teleport.tpa-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.teleport.tpa-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
         var requester = platform.player(invocation);
         var target = invocation.resolvePlayer(args[0]).online();
         if (requester.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpa-command.error.2");
+            invocation.errorKey("commands.teleport.tpa-command.error.command-can-only-used-by-player");
             return 0;
         }
         if (target.isEmpty()) {
             invocation.errorKey(
-                    "commands.teleport.tpa-command.error.3",
-                    Map.of("value0", args[0])
+                    "commands.teleport.tpa-command.error.online-player-not-found",
+                    Map.of("player", args[0])
             );
             return 0;
         }
         if (target.orElseThrow().uuid().equals(requester.orElseThrow().uuid())) {
-            invocation.errorKey("commands.teleport.tpa-command.error.4");
+            invocation.errorKey("commands.teleport.tpa-command.error.cannot-send-teleport-request-yourself");
             return 0;
         }
         users.load(target.orElseThrow().uuid()).whenComplete((targetUser, failure) -> {
@@ -114,10 +114,10 @@ public final class TpaCommand implements CellCommand {
                     return;
                 }
                 invocation.replyKey(
-                        "commands.teleport.tpa-command.reply.1",
+                        "commands.teleport.tpa-command.reply.sent-teleport-request-it-expires-seconds",
                         Map.of(
-                                "value0", target.orElseThrow().name(),
-                                "value1", timeoutSeconds
+                                "player", target.orElseThrow().name(),
+                                "expires_seconds", timeoutSeconds
                         )
                 );
             });

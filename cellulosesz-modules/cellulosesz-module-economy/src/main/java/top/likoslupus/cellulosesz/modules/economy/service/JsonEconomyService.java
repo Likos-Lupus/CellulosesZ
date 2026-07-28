@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.economy.BalanceEntry;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
@@ -20,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
-public final class JsonEconomyService implements EconomyService {
+public final class JsonEconomyService implements EconomyService, AsyncInitializable {
 
     private static final int MAX_LOG_ENTRIES = 500;
 
@@ -43,8 +44,21 @@ public final class JsonEconomyService implements EconomyService {
         this.config = ConfigSnapshot.from(config);
         this.path = directory.resolve("economy.json");
         this.logger = logger;
-        this.document = storage.load(path, EconomyDocument.class, EconomyDocument::new).join();
-        validateDocument(document, this.config);
+        this.document = new EconomyDocument();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, EconomyDocument.class, EconomyDocument::new)
+                .thenApply(loaded -> {
+                    validateDocument(loaded, config);
+                    return loaded;
+                })
+                .thenAccept(loaded -> {
+                    synchronized (this) {
+                        document = loaded;
+                    }
+                });
     }
 
     private void validateDocument(EconomyDocument candidate, ConfigSnapshot snapshot) {

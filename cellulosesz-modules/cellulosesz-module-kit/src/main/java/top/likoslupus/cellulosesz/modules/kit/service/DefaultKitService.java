@@ -2,10 +2,12 @@ package top.likoslupus.cellulosesz.modules.kit.service;
 
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.kit.KitClaimResult;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -17,12 +19,14 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
 
-public final class DefaultKitService implements KitService {
+public final class DefaultKitService implements KitService, AsyncInitializable {
 
     private static final Pattern KIT_ID = Pattern.compile("^[a-z0-9][a-z0-9._-]{0,63}$");
 
@@ -33,8 +37,8 @@ public final class DefaultKitService implements KitService {
     private final KitConfig config;
     private final Path kitsDirectory;
     private final LinkedHashMap<String, KitDefinition> kits = new LinkedHashMap<>();
-    private final java.util.concurrent.ConcurrentHashMap<UUID, CompletableFuture<Void>> claimTails = new java.util.concurrent.ConcurrentHashMap<>();
-    private final java.util.concurrent.ConcurrentHashMap<String, CompletableFuture<Void>> definitionTails = new java.util.concurrent.ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, CompletableFuture<Void>> claimTails = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CompletableFuture<Void>> definitionTails = new ConcurrentHashMap<>();
 
     public DefaultKitService(
             StorageService storage,
@@ -50,7 +54,11 @@ public final class DefaultKitService implements KitService {
         this.economy = requireNonNull(economy, "economy");
         this.config = requireNonNull(config, "config");
         this.kitsDirectory = requireNonNull(kitsDirectory, "kitsDirectory");
-        reload().join();
+    }
+
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return reload();
     }
 
     @Override
@@ -82,7 +90,8 @@ public final class DefaultKitService implements KitService {
 
     @Override
     public synchronized List<KitDefinition> kits() {
-        return kits.values().stream().map(this::copyDefinition).toList();
+        return kits.values().stream()
+                .map(this::copyDefinition).toList();
     }
 
     @Override
@@ -135,8 +144,10 @@ public final class DefaultKitService implements KitService {
 
         var result = new CompletableFuture<KitClaimResult>();
         claimTails.compute(player.uuid(), (uuid, previous) -> {
-            var tail = previous == null ? CompletableFuture.<Void>completedFuture(null) : previous;
-            var next = tail.handle((ignored, failure) -> null)
+            var tail = previous == null
+                    ? CompletableFuture.<Void>completedFuture(null)
+                    : previous;
+            var next = tail.handle((ignored, _) -> null)
                     .thenCompose(ignored -> claimSerialized(player, candidate))
                     .handle((claimResult, failure) -> {
                         if (failure == null) result.complete(claimResult);
@@ -152,7 +163,10 @@ public final class DefaultKitService implements KitService {
 
     private CompletableFuture<KitClaimResult> claimSerialized(CellPlayer player, KitDefinition kit) {
         var cooldownKey = cooldownKey(kit.id);
-        return users.update(player.uuid(), user -> reserveCooldown(user, cooldownKey, kit.cooldownSeconds))
+        return users.update(
+                        player.uuid(),
+                        user -> reserveCooldown(user, cooldownKey, kit.cooldownSeconds)
+                )
                 .thenCompose(reservation -> {
                     if (!reservation.accepted()) {
                         return CompletableFuture.completedFuture(reservation.failure());
@@ -165,7 +179,7 @@ public final class DefaultKitService implements KitService {
                                         : KitClaimResult.failure("service.kit.rollback-failed"));
                     }
 
-                    CompletableFuture<Optional<top.likoslupus.cellulosesz.api.economy.TransactionResult>> payment;
+                    CompletableFuture<Optional<TransactionResult>> payment;
                     if (config.chargeKitCost && cost.signum() > 0) {
                         payment = economy.orElseThrow().withdraw(
                                 player.uuid(),
@@ -207,6 +221,7 @@ public final class DefaultKitService implements KitService {
         return "kit:" + key(kitId);
     }
 
+    @SuppressWarnings("WrapperTypeMayBePrimitive")
     private CooldownReservation reserveCooldown(
             CellUser user,
             String cooldownKey,
@@ -256,12 +271,22 @@ public final class DefaultKitService implements KitService {
             boolean charged
     ) {
         var cooldownRollback = rollbackCooldown(uuid, cooldownKey, reservation);
-        var paymentRollback = charged
-                ? economy.orElseThrow().deposit(
-                uuid, cost, TransactionCause.system("kit claim refund")
-        ).thenApply(result -> result.success()).exceptionally(_ -> false)
-                : CompletableFuture.completedFuture(true);
-        return cooldownRollback.thenCombine(paymentRollback, (first, second) -> first && second);
+        CompletableFuture<Boolean> paymentRollback;
+        if (charged) {
+            paymentRollback = economy.orElseThrow().deposit(
+                            uuid,
+                            cost,
+                            TransactionCause.system("kit claim refund")
+                    )
+                    .thenApply(TransactionResult::success)
+                    .exceptionally(_ -> false);
+        } else {
+            paymentRollback = CompletableFuture.completedFuture(true);
+        }
+        return cooldownRollback.thenCombine(
+                paymentRollback,
+                (first, second) -> first && second
+        );
     }
 
     private long nextClaimTime(long now, long cooldownSeconds) {
@@ -278,7 +303,7 @@ public final class DefaultKitService implements KitService {
         return users.update(uuid, user -> {
             user.cooldowns.remove(cooldownKey(kitId));
             return true;
-        }).thenApply(ignored -> null);
+        }).thenApply(_ -> (Void) null);
     }
 
     private KitDefinition validatedCopy(KitDefinition source) {
@@ -293,8 +318,10 @@ public final class DefaultKitService implements KitService {
     ) {
         var result = new CompletableFuture<T>();
         definitionTails.compute(id, (key, previous) -> {
-            var tail = previous == null ? CompletableFuture.<Void>completedFuture(null) : previous;
-            var next = tail.handle((ignored, _) -> null)
+            var tail = previous == null
+                    ? CompletableFuture.<Void>completedFuture(null)
+                    : previous;
+            var next = tail.handle((_, _) -> null)
                     .thenCompose(ignored -> {
                         try {
                             return operation.get();
@@ -364,8 +391,9 @@ public final class DefaultKitService implements KitService {
     }
 
     private Throwable unwrapCompletionFailure(Throwable failure) {
-        if (failure instanceof java.util.concurrent.CompletionException completion
-                && completion.getCause() != null) {
+        if (failure instanceof CompletionException completion
+                && completion.getCause() != null
+        ) {
             return completion.getCause();
         }
         return failure;
@@ -429,7 +457,11 @@ public final class DefaultKitService implements KitService {
                 long reserved
         ) {
             return new CooldownReservation(
-                    true, changed, hadPrevious, previous, reserved,
+                    true,
+                    changed,
+                    hadPrevious,
+                    previous,
+                    reserved,
                     KitClaimResult.failure("service.kit.persistence-failed")
             );
         }

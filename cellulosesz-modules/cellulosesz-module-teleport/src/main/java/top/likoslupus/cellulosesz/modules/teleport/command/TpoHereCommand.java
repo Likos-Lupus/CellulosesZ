@@ -36,7 +36,7 @@ public final class TpoHereCommand extends AbstractTeleportCommand {
     @Override
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length != 1) {
-            invocation.errorKey("commands.teleport.tp-here-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.teleport.tp-here-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
         var self = player(invocation);

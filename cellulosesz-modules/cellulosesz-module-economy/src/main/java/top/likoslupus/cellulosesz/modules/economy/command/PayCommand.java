@@ -71,7 +71,7 @@ public final class PayCommand extends AbstractEconomyCommand {
     public int execute(CommandInvocation invocation) {
         var args = invocation.args();
         if (args.length < 2 || args.length > 3) {
-            invocation.errorKey("commands.economy.pay-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.economy.pay-command.error.usage", Map.of("usage", usage()));
             return 0;
         }
 
@@ -82,8 +82,8 @@ public final class PayCommand extends AbstractEconomyCommand {
         var minimum = decimal(config.pay.minimum, BigDecimal.valueOf(0.01));
         if (amount.orElseThrow().compareTo(minimum) < 0) {
             invocation.errorKey(
-                    "commands.economy.pay-command.error.2",
-                    Map.of("value0", format(minimum))
+                    "commands.economy.pay-command.error.payment-amount-cannot-less-than",
+                    Map.of("minimum_amount", format(minimum))
             );
             return 0;
         }
@@ -162,15 +162,15 @@ public final class PayCommand extends AbstractEconomyCommand {
             var resolved = players.resolveKnown(name, sender);
             if (resolved.state() == ResolvedPlayerState.UNKNOWN || resolved.optionalUuid().isEmpty()) {
                 invocation.errorKey(
-                        "commands.economy.abstract-economy-command.error.3",
-                        Map.of("value0", name)
+                        "commands.economy.abstract-economy-command.error.player-not-found",
+                        Map.of("player", name)
                 );
                 return List.of();
             }
             unique.putIfAbsent(resolved.optionalUuid().orElseThrow(), resolved);
         }
         if (unique.isEmpty()) {
-            invocation.errorKey("commands.economy.pay-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.economy.pay-command.error.usage", Map.of("usage", usage()));
             return List.of();
         }
         return List.copyOf(unique.values());
@@ -205,7 +205,7 @@ public final class PayCommand extends AbstractEconomyCommand {
             }
             if (!recipientUser.preferences.payments) {
                 invocation.errorKey(
-                        "commands.economy.pay-command.error.3",
+                        "commands.economy.pay-command.error.player-not-accepting-payments",
                         Map.of("player", target.name())
                 );
                 return;
@@ -278,11 +278,11 @@ public final class PayCommand extends AbstractEconomyCommand {
                 return;
             }
             invocation.replyKey(
-                    "commands.economy.pay-command.reply.1",
+                    "commands.economy.pay-command.reply.paid-current-balance",
                     Map.of(
-                            "value0", String.join(", ", names),
-                            "value1", format(total),
-                            "value2", format(result.balance())
+                            "recipients", String.join(", ", names),
+                            "amount", format(total),
+                            "balance", format(result.balance())
                     )
             );
             resolvedTargets.forEach(target -> target.online().ifPresent(targetPlayer ->

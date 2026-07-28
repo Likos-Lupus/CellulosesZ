@@ -42,8 +42,8 @@ public final class BroadcastCommand extends AbstractMessagingCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.messaging.broadcast-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.messaging.broadcast-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

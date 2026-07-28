@@ -45,8 +45,8 @@ public final class MuteCommand extends AbstractAdminCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.admin.mute-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.mute-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

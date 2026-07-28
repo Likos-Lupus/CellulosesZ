@@ -39,18 +39,18 @@ public final class BackCommand extends AbstractTeleportCommand {
 
         var location = teleports.backLocation(self.get().uuid());
         if (location.isEmpty()) {
-            invocation.errorKey("commands.teleport.back-command.error.1");
+            invocation.errorKey("commands.teleport.back-command.error.there-no-previous-location-return");
             return 0;
         }
 
         teleports.teleport(self.get(), location.get(), new TeleportOptions().rememberBack(false))
                 .thenAccept(result -> {
                     if (result.success()) {
-                        invocation.replyKey("commands.teleport.back-command.reply.1");
+                        invocation.replyKey("commands.teleport.back-command.reply.returned-previous-location");
                     } else {
                         invocation.errorKey(
-                                "commands.teleport.back-command.error.2",
-                                Map.of("value0", result.message())
+                                "commands.teleport.back-command.error.return-failed",
+                                Map.of("reason", result.message())
                         );
                     }
                 });

@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
 import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
@@ -153,7 +154,12 @@ public final class DefaultItemAutomationService implements ItemAutomationService
                     platform.sendChatMessage(player, message);
                 } else {
                     if (value.isBlank()) continue;
-                    dispatch.dispatch(player, value, CommandDispatchOrigin.POWER_TOOL);
+                    dispatch.dispatch(PlayerCommandDispatchRequest.start(
+                            player,
+                            player.uuid(),
+                            CommandDispatchOrigin.POWER_TOOL,
+                            value
+                    ));
                 }
                 used = true;
             }

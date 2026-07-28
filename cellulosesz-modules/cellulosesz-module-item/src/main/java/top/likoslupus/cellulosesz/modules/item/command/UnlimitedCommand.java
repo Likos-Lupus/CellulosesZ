@@ -66,21 +66,21 @@ public final class UnlimitedCommand extends AbstractItemCommand {
                             itemId,
                             false
                     ));
-            invocation.replyKey("commands.item.unlimited-command.reply.1");
+            invocation.replyKey("commands.item.unlimited-command.reply.cleared-all-unlimited-items");
             return 1;
         }
 
         if (args.length > 1) {
             invocation.errorKey(
-                    "commands.item.unlimited-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.unlimited-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
 
         var held = items.heldItemId(self.get());
         if (held.isEmpty()) {
-            invocation.errorKey("commands.item.unlimited-command.error.2");
+            invocation.errorKey("commands.item.unlimited-command.error.hold-item-first");
             return 0;
         }
 
@@ -95,8 +95,8 @@ public final class UnlimitedCommand extends AbstractItemCommand {
                         || args[0].equalsIgnoreCase("false")
         )) {
             invocation.errorKey(
-                    "commands.item.unlimited-command.error.3",
-                    Map.of("value0", usage())
+                    "commands.item.unlimited-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }

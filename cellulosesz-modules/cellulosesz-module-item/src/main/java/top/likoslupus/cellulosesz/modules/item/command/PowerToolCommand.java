@@ -65,12 +65,12 @@ public final class PowerToolCommand extends AbstractItemCommand {
         if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
             var configured = automation.powerTools(self.get().uuid());
             if (configured.isEmpty()) {
-                invocation.replyKey("commands.item.power-tool-command.reply.1");
+                invocation.replyKey("commands.item.power-tool-command.reply.there-no-powertool-bindings");
             } else {
                 invocation.replyKey(
-                        "commands.item.power-tool-command.reply.2",
+                        "commands.item.power-tool-command.reply.powertool",
                         Map.of(
-                                "value0",
+                                "status",
                                 configured.entrySet().stream()
                                         .map(entry ->
                                                 "%s -> %s".formatted(
@@ -92,13 +92,13 @@ public final class PowerToolCommand extends AbstractItemCommand {
                     .forEach(itemId ->
                             automation.clearPowerTool(self.get().uuid(), itemId)
                     );
-            invocation.replyKey("commands.item.power-tool-command.reply.3");
+            invocation.replyKey("commands.item.power-tool-command.reply.cleared-all-powertool-bindings");
             return 1;
         }
 
         var held = items.heldItemId(self.get());
         if (held.isEmpty()) {
-            invocation.errorKey("commands.item.power-tool-command.error.1");
+            invocation.errorKey("commands.item.power-tool-command.error.hold-item-first");
             return 0;
         }
 
@@ -114,8 +114,8 @@ public final class PowerToolCommand extends AbstractItemCommand {
         ) {
             automation.clearPowerTool(self.get().uuid(), held.get());
             invocation.replyKey(
-                    "commands.item.power-tool-command.reply.4",
-                    Map.of("value0", held.get())
+                    "commands.item.power-tool-command.reply.cleared-powertool-binding",
+                    Map.of("item", held.get())
             );
             return 1;
         }
@@ -171,8 +171,8 @@ public final class PowerToolCommand extends AbstractItemCommand {
 
     private int usageError(CommandInvocation invocation) {
         invocation.errorKey(
-                "commands.item.power-tool-command.error.2",
-                Map.of("value0", usage())
+                "commands.item.power-tool-command.error.usage",
+                Map.of("usage", usage())
         );
         return 0;
     }
@@ -183,10 +183,10 @@ public final class PowerToolCommand extends AbstractItemCommand {
             String command
     ) {
         invocation.replyKey(
-                "commands.item.power-tool-command.reply.5",
+                "commands.item.power-tool-command.reply.bound",
                 Map.of(
-                        "value0", item,
-                        "value1", command
+                        "item", item,
+                        "command", command
                 )
         );
         return 1;

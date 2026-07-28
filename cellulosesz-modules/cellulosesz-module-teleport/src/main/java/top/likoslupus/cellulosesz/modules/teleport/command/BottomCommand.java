@@ -39,7 +39,7 @@ public final class BottomCommand extends AbstractTeleportCommand {
         var safe = platform.safeLocation(target);
 
         if (safe.isEmpty()) {
-            invocation.errorKey("commands.teleport.bottom-command.error.1");
+            invocation.errorKey("commands.teleport.bottom-command.error.no-safe-bottom-position-found");
             return 0;
         }
 

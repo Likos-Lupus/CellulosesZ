@@ -38,8 +38,8 @@ abstract class AbstractAdminCommand implements CellCommand {
         var player = invocation.resolvePlayer(name).online();
         if (player.isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.1",
-                    Map.of("value0", name)
+                    "commands.admin.abstract-admin-command.error.online-player-not-found",
+                    Map.of("player", name)
             );
         }
         return player;
@@ -49,8 +49,8 @@ abstract class AbstractAdminCommand implements CellCommand {
         var uuid = invocation.resolvePlayer(name).optionalUuid();
         if (uuid.isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.2",
-                    Map.of("value0", name)
+                    "commands.admin.abstract-admin-command.error.player-not-found",
+                    Map.of("player", name)
             );
         }
         return uuid;

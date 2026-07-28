@@ -52,13 +52,17 @@ public final class UnbanCommand extends AbstractAdminCommand {
         var resolved = invocation.resolvePlayer(invocation.args()[0]);
         if (resolved.optionalUuid().isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.2",
-                    Map.of("value0", invocation.args()[0])
+                    "commands.admin.abstract-admin-command.error.player-not-found",
+                    Map.of("player", invocation.args()[0])
             );
             return 0;
         }
 
-        var permanent = bans.unban(resolved.name(), actor(invocation));
+        var permanent = bans.unban(
+                resolved.optionalUuid().orElseThrow(),
+                resolved.name(),
+                actor(invocation)
+        );
         temporary.unban(
                 resolved.optionalUuid().orElseThrow(),
                 resolved.name(),

@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.core.scheduler;
 
+import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 
@@ -10,11 +11,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Supplier;
 
+import static java.util.Objects.requireNonNull;
+
 public final class DefaultScheduler implements Scheduler, AutoCloseable {
 
     private final List<ScheduledTask> tasks = new CopyOnWriteArrayList<>();
     private final ExecutorService asyncExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    private final CellulosesZLogger logger;
     private long currentTick;
+
+    public DefaultScheduler(CellulosesZLogger logger) {
+        this.logger = requireNonNull(logger, "logger");
+    }
 
     @Override
     public TaskHandle sync(Runnable task) {
@@ -24,7 +32,7 @@ public final class DefaultScheduler implements Scheduler, AutoCloseable {
     @Override
     public TaskHandle syncLater(Runnable task, long ticks) {
         var scheduled = new ScheduledTask(
-                task,
+                requireNonNull(task, "task"),
                 currentTick + Math.max(0L, ticks),
                 -1L
         );
@@ -33,13 +41,17 @@ public final class DefaultScheduler implements Scheduler, AutoCloseable {
     }
 
     @Override
-    public TaskHandle syncRepeating(Runnable task, long delayTicks, long periodTicks) {
+    public TaskHandle syncRepeating(
+            Runnable task,
+            long delayTicks,
+            long periodTicks
+    ) {
         if (periodTicks <= 0L) {
             throw new IllegalArgumentException("Repeating task period must be greater than 0");
         }
 
         var scheduled = new ScheduledTask(
-                task,
+                requireNonNull(task, "task"),
                 currentTick + Math.max(0L, delayTicks),
                 periodTicks
         );
@@ -49,12 +61,12 @@ public final class DefaultScheduler implements Scheduler, AutoCloseable {
 
     @Override
     public CompletableFuture<Void> async(Runnable task) {
-        return CompletableFuture.runAsync(task, asyncExecutor);
+        return CompletableFuture.runAsync(requireNonNull(task, "task"), asyncExecutor);
     }
 
     @Override
     public <T> CompletableFuture<T> async(Supplier<T> supplier) {
-        return CompletableFuture.supplyAsync(supplier, asyncExecutor);
+        return CompletableFuture.supplyAsync(requireNonNull(supplier, "supplier"), asyncExecutor);
     }
 
     public void tick() {
@@ -64,19 +76,23 @@ public final class DefaultScheduler implements Scheduler, AutoCloseable {
                 tasks.remove(task);
                 return;
             }
-            if (task.nextRunTick <= currentTick) {
+            if (task.nextRunTick > currentTick) return;
+            try {
                 task.runnable.run();
-                if (task.periodTicks <= 0L || task.cancelled()) {
-                    tasks.remove(task);
-                } else {
-                    task.nextRunTick = currentTick + task.periodTicks;
-                }
+            } catch (Throwable failure) {
+                logger.error("Scheduled task failed; other tasks will continue.", failure);
+            }
+            if (task.periodTicks <= 0L || task.cancelled()) {
+                tasks.remove(task);
+            } else {
+                task.nextRunTick = currentTick + task.periodTicks;
             }
         });
     }
 
     @Override
     public void close() {
+        tasks.forEach(TaskHandle::cancel);
         tasks.clear();
         asyncExecutor.shutdownNow();
     }

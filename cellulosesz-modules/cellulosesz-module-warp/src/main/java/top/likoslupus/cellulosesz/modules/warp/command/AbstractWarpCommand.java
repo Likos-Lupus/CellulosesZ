@@ -34,20 +34,21 @@ abstract class AbstractWarpCommand implements CellCommand {
 
     protected Optional<CellPlayer> player(CommandInvocation invocation) {
         var player = platform.player(invocation);
-        if (player.isEmpty()) invocation.errorKey("commands.warp.abstract-warp-command.error.1");
+        if (player.isEmpty())
+            invocation.errorKey("commands.warp.abstract-warp-command.error.command-can-only-used-by-player");
         return player;
     }
 
     protected boolean validName(CommandInvocation invocation, String name) {
         if (name.isBlank() || name.length() > config.naming.maxLength) {
             invocation.errorKey(
-                    "commands.warp.abstract-warp-command.error.2",
-                    Map.of("value0", config.naming.maxLength)
+                    "commands.warp.abstract-warp-command.error.warp-names-cannot-empty-longer-than-characters",
+                    Map.of("maximum_length", config.naming.maxLength)
             );
             return false;
         }
         if (!Pattern.matches(config.naming.pattern, name)) {
-            invocation.errorKey("commands.warp.abstract-warp-command.error.3");
+            invocation.errorKey("commands.warp.abstract-warp-command.error.warp-names-may-only-contain-configured-characters");
             return false;
         }
         return true;

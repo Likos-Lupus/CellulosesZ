@@ -151,7 +151,7 @@ public final class WorthCommand implements CellCommand {
     private Optional<CellPlayer> requirePlayer(CommandInvocation invocation) {
         var player = platform.player(invocation);
         if (player.isEmpty()) {
-            invocation.errorKey("commands.economy.worth-command.error.1", Map.of("value0", usage()));
+            invocation.errorKey("commands.economy.worth-command.error.usage", Map.of("usage", usage()));
         }
         return player;
     }

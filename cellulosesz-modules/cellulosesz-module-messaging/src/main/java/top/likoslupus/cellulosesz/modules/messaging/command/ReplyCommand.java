@@ -57,8 +57,8 @@ public final class ReplyCommand extends AbstractMessagingCommand {
 
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.messaging.reply-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.messaging.reply-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -72,13 +72,13 @@ public final class ReplyCommand extends AbstractMessagingCommand {
                 return;
             }
             if (targetUuid.isEmpty()) {
-                invocation.errorKey("commands.messaging.reply-command.error.2");
+                invocation.errorKey("commands.messaging.reply-command.error.there-no-player-reply");
                 return;
             }
             platform.callOnServerThread(() -> invocation.resolvePlayer(targetUuid.orElseThrow().toString()).online())
                     .whenComplete((target, resolveFailure) -> {
                         if (resolveFailure != null || target.isEmpty()) {
-                            invocation.errorKey("commands.messaging.reply-command.error.3");
+                            invocation.errorKey("commands.messaging.reply-command.error.player-can-reply-no-longer-online");
                             return;
                         }
                         privateMessages.send(self.orElseThrow(), target.orElseThrow(), message)

@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -21,7 +22,10 @@ public final class JsonHomeService implements HomeService {
     private final ConcurrentHashMap<UUID, HomeDocument> cache = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, CompletableFuture<Void>> writeTails = new ConcurrentHashMap<>();
 
-    public JsonHomeService(StorageService storage, Path homesDirectory) {
+    public JsonHomeService(
+            StorageService storage,
+            Path homesDirectory
+    ) {
         this.storage = storage;
         this.homesDirectory = homesDirectory;
     }
@@ -39,7 +43,9 @@ public final class JsonHomeService implements HomeService {
 
     @Override
     public CompletableFuture<Optional<CellLocation>> home(UUID uuid, String name) {
-        return document(uuid).thenApply(document -> Optional.ofNullable(document.homes.get(normalize(name))));
+        return document(uuid).thenApply(document ->
+                Optional.ofNullable(document.homes.get(normalize(name)))
+        );
     }
 
     @Override
@@ -71,7 +77,9 @@ public final class JsonHomeService implements HomeService {
     private <T> CompletableFuture<T> mutate(UUID uuid, Function<HomeDocument, T> mutation) {
         var result = new CompletableFuture<T>();
         writeTails.compute(uuid, (_, previous) -> {
-            var tail = previous == null ? CompletableFuture.completedFuture(null) : previous;
+            var tail = previous == null
+                    ? CompletableFuture.completedFuture(null)
+                    : previous;
             var next = tail.handle((_, _) -> null)
                     .thenCompose(_ -> document(uuid))
                     .thenCompose(current -> {
@@ -80,7 +88,7 @@ public final class JsonHomeService implements HomeService {
                         try {
                             value = mutation.apply(candidate);
                         } catch (RuntimeException failure) {
-                            return CompletableFuture.<Void>failedFuture(failure);
+                            return CompletableFuture.failedFuture(failure);
                         }
                         return storage.save(path(uuid), candidate).thenRun(() -> {
                             cache.put(uuid, candidate);
@@ -103,19 +111,27 @@ public final class JsonHomeService implements HomeService {
     }
 
     private Throwable unwrap(Throwable failure) {
-        return failure instanceof java.util.concurrent.CompletionException completion
-                && completion.getCause() != null ? completion.getCause() : failure;
+        return failure instanceof CompletionException completion
+                && completion.getCause() != null
+                ? completion.getCause()
+                : failure;
     }
 
     private String normalize(String name) {
-        var normalized = name.isBlank() ? "home" : name.trim();
+        var normalized = name.isBlank()
+                ? "home"
+                : name.trim();
         return normalized.toLowerCase(Locale.ROOT);
     }
 
     private CompletableFuture<HomeDocument> document(UUID uuid) {
         var cached = cache.get(uuid);
         if (cached != null) return CompletableFuture.completedFuture(cached);
-        return storage.load(path(uuid), HomeDocument.class, () -> new HomeDocument(uuid))
+        return storage.createIfMissing(
+                        path(uuid),
+                        HomeDocument.class,
+                        () -> new HomeDocument(uuid)
+                )
                 .thenApply(document -> {
                     if (!document.uuid.equals(uuid)) {
                         throw new IllegalArgumentException("Home document UUID does not match its file name");

@@ -39,8 +39,8 @@ public final class BanCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
             invocation.errorKey(
-                    "commands.admin.ban-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.ban-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -48,13 +48,14 @@ public final class BanCommand extends AbstractAdminCommand {
         var target = invocation.resolvePlayer(invocation.args()[0]);
         if (target.optionalUuid().isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.2",
-                    Map.of("value0", invocation.args()[0])
+                    "commands.admin.abstract-admin-command.error.player-not-found",
+                    Map.of("player", invocation.args()[0])
             );
             return 0;
         }
 
         var result = bans.ban(
+                target.optionalUuid().orElseThrow(),
                 target.name(),
                 actor(invocation),
                 join(invocation.args(), 1)

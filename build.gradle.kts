@@ -62,6 +62,7 @@ subprojects {
         "annotationProcessor"(lombokDependency)
         "testCompileOnly"(lombokDependency)
         "testAnnotationProcessor"(lombokDependency)
+        "testCompileOnly"(jspecifyDependency)
         "testImplementation"(junitDependency)
     }
 

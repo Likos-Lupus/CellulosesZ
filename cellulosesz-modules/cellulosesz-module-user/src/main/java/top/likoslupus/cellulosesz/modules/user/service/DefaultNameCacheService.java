@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.modules.user.data.NameCacheDocument;
@@ -12,7 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class DefaultNameCacheService implements NameCacheService {
+public final class DefaultNameCacheService implements NameCacheService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
@@ -25,14 +27,18 @@ public final class DefaultNameCacheService implements NameCacheService {
     ) {
         this.storage = storage;
         this.path = path;
-        load().join();
+
     }
 
-    private CompletableFuture<Void> load() {
-        return storage.load(path, NameCacheDocument.class, NameCacheDocument::new)
-                .thenAccept(document -> document.names.forEach((uuid, name) ->
-                        remember(UUID.fromString(uuid), name)
-                ));
+    @Override
+    public CompletableFuture<Void> initialize() {
+        return storage.createIfMissing(path, NameCacheDocument.class, NameCacheDocument::new)
+                .thenAccept(document ->
+                        document.names
+                                .forEach((uuid, name) ->
+                                        remember(UUID.fromString(uuid), name)
+                                )
+                );
     }
 
     @Override

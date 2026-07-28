@@ -45,15 +45,15 @@ public final class TempBanCommand extends AbstractAdminCommand {
         var args = invocation.args();
         if (args.length < 2) {
             invocation.errorKey(
-                    "commands.admin.temp-ban-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.temp-ban-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
 
         var duration = DurationParser.parseMillis(args[1]);
         if (duration.isEmpty()) {
-            invocation.errorKey("commands.admin.temp-ban-command.error.2");
+            invocation.errorKey("commands.admin.temp-ban-command.error.invalid-duration-examples-m-h-d");
             return 0;
         }
 
@@ -70,8 +70,8 @@ public final class TempBanCommand extends AbstractAdminCommand {
         var target = invocation.resolvePlayer(args[0]);
         if (target.optionalUuid().isEmpty()) {
             invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.2",
-                    Map.of("value0", args[0])
+                    "commands.admin.abstract-admin-command.error.player-not-found",
+                    Map.of("player", args[0])
             );
             return 0;
         }

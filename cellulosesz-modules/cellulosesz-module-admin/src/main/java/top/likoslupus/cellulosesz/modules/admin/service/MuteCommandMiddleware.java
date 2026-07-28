@@ -41,7 +41,7 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
         ) {
             var player = platform.player(invocation);
             if (player.isPresent() && mutes.muted(player.get().uuid())) {
-                invocation.errorKey("commands.admin.mute-command-middleware.error.1");
+                invocation.errorKey("commands.admin.mute-command-middleware.error.muted-cannot-use-command");
                 return 0;
             }
         }

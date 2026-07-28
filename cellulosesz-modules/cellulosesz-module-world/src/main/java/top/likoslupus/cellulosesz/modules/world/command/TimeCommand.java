@@ -40,8 +40,8 @@ public final class TimeCommand extends AbstractWorldCommand {
         var args = invocation.args();
         if (args.length < 1) {
             invocation.errorKey(
-                    "commands.world.time-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.world.time-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -55,8 +55,8 @@ public final class TimeCommand extends AbstractWorldCommand {
         };
         if (time < 0L) {
             invocation.errorKey(
-                    "commands.world.time-command.error.2",
-                    Map.of("value0", args[0])
+                    "commands.world.time-command.error.invalid-time-format",
+                    Map.of("input", args[0])
             );
             return 0;
         }

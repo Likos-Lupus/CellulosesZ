@@ -68,7 +68,7 @@ public final class BalanceTopCommand extends AbstractEconomyCommand {
                     ? Optional.of(new BigDecimal(invocation.args()[2]))
                     : Optional.empty();
         } catch (NumberFormatException _) {
-            invocation.errorKey("commands.economy.balance-top-command.error.1");
+            invocation.errorKey("commands.economy.balance-top-command.error.page-number-must-integer");
             return 0;
         }
 
@@ -85,13 +85,13 @@ public final class BalanceTopCommand extends AbstractEconomyCommand {
             limit = Math.multiplyExact(page, pageSize);
             from = Math.multiplyExact(page - 1, pageSize);
         } catch (ArithmeticException _) {
-            invocation.errorKey("commands.economy.balance-top-command.error.1");
+            invocation.errorKey("commands.economy.balance-top-command.error.page-number-must-integer");
             return 0;
         }
 
         var entries = economy.topBalances(limit, minimum.orElse(null), maximum.orElse(null));
         if (from >= entries.size()) {
-            invocation.errorKey("commands.economy.balance-top-command.error.2");
+            invocation.errorKey("commands.economy.balance-top-command.error.there-no-balance-entries-page");
             return 0;
         }
 

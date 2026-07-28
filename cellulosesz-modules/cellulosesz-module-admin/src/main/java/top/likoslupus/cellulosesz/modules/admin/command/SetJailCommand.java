@@ -45,15 +45,15 @@ public final class SetJailCommand extends AbstractAdminCommand {
     public int execute(CommandInvocation invocation) {
         if (invocation.args().length < 1) {
             invocation.errorKey(
-                    "commands.admin.set-jail-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.admin.set-jail-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
 
         var self = platform.player(invocation);
         if (self.isEmpty()) {
-            invocation.errorKey("commands.admin.set-jail-command.error.2");
+            invocation.errorKey("commands.admin.set-jail-command.error.command-can-only-used-by-player");
             return 0;
         }
 

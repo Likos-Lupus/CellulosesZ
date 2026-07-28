@@ -48,8 +48,8 @@ public final class EnchantCommand extends AbstractItemCommand {
         var args = invocation.args();
         if (args.length < 1 || args.length > 2) {
             invocation.errorKey(
-                    "commands.item.enchant-command.error.1",
-                    Map.of("value0", usage())
+                    "commands.item.enchant-command.error.usage",
+                    Map.of("usage", usage())
             );
             return 0;
         }
@@ -59,26 +59,26 @@ public final class EnchantCommand extends AbstractItemCommand {
             try {
                 level = Integer.parseInt(args[1]);
             } catch (NumberFormatException _) {
-                invocation.errorKey("commands.item.enchant-command.error.2");
+                invocation.errorKey("commands.item.enchant-command.error.enchantment-level-must-integer");
                 return 0;
             }
         }
 
         if (level <= 0 || (!config.allowUnsafeEnchantments && level > 255)) {
-            invocation.errorKey("commands.item.enchant-command.error.3");
+            invocation.errorKey("commands.item.enchant-command.error.enchantment-level-outside-allowed-range");
             return 0;
         }
 
         if (!platform.enchantHeldItem(self.get(), args[0], level)) {
-            invocation.errorKey("commands.item.enchant-command.error.4");
+            invocation.errorKey("commands.item.enchant-command.error.enchanting-failed-check-held-item-enchantment-id");
             return 0;
         }
 
         invocation.replyKey(
-                "commands.item.enchant-command.reply.1",
+                "commands.item.enchant-command.reply.applied-enchantment",
                 Map.of(
-                        "value0", args[0],
-                        "value1", level
+                        "enchantment", args[0],
+                        "level", level
                 )
         );
         return 1;

@@ -56,7 +56,7 @@ public final class TpAllCommand implements CellCommand {
         } else {
             var resolved = invocation.resolvePlayer(invocation.args()[0]).online();
             if (resolved.isEmpty()) {
-                invocation.errorKey("commands.teleport.abstract-teleport-command.error.2", Map.of("value0", invocation.args()[0]));
+                invocation.errorKey("commands.teleport.abstract-teleport-command.error.online-player-not-found", Map.of("player", invocation.args()[0]));
                 return 0;
             }
             destination = resolved.orElseThrow();
