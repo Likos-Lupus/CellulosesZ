@@ -41,13 +41,20 @@ public final class FabricInventoryOperations implements InventoryPlatformService
         return onServerThread(() -> {
             var snapshots = platform.inventorySnapshot(player);
             if (snapshots.isEmpty()) {
-                return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "Inventory snapshot failed");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        "Inventory snapshot failed"
+                );
             }
+
             var views = new ArrayList<InventorySlotView>();
             for (var snapshot : snapshots.orElseThrow()) {
                 var descriptor = platform.describeInventoryItem(snapshot);
                 if (descriptor.isEmpty()) {
-                    return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "Inventory snapshot decode failed");
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.INTERNAL_ERROR,
+                            "Inventory snapshot decode failed"
+                    );
                 }
                 views.add(new InventorySlotView(
                         snapshot,
@@ -61,24 +68,49 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     }
 
     @Override
-    public PlatformResult<HeldStackChange> setHeldCount(CellPlayer player, int targetCount, int permittedMaximum) {
-        if (targetCount < 1 || permittedMaximum < 1 || targetCount > permittedMaximum) {
-            return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Requested stack count is outside the permitted range");
+    public PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot) {
+        var descriptor = platform.describeInventoryItem(requireNonNull(snapshot, "snapshot"));
+        return descriptor
+                .map(PlatformResult::success)
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory snapshot decode failed"
+                ));
+    }
+
+    @Override
+    public PlatformResult<HeldStackChange> setHeldCount(
+            CellPlayer player,
+            int targetCount,
+            int permittedMaximum
+    ) {
+        if (targetCount < 1
+                || permittedMaximum < 1
+                || targetCount > permittedMaximum
+        ) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Requested stack count is outside the permitted range"
+            );
         }
+
         return onServerThread(() -> {
             var nativePlayer = platform.nativePlayer(player);
             var held = nativePlayer.getMainHandItem();
             if (held.isEmpty()) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Main hand is empty");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Main hand is empty"
+                );
             }
+
             var normalMaximum = held.getMaxStackSize();
-            if (targetCount > permittedMaximum) {
-                return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Oversized stack exceeds the configured maximum");
-            }
             var previous = held.getCount();
             var replacement = held.copy();
+
             replacement.setCount(targetCount);
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, replacement);
+
             return PlatformResult.success(new HeldStackChange(
                     platform.stackItemId(replacement),
                     previous,
@@ -89,29 +121,46 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     }
 
     @Override
-    public PlatformResult<HatResult> hat(CellPlayer player, HatAction action, boolean ignoreBindingCurse) {
+    public PlatformResult<HatResult> hat(
+            CellPlayer player,
+            HatAction action,
+            boolean ignoreBindingCurse
+    ) {
         requireNonNull(action, "action");
         return onServerThread(() -> {
             var nativePlayer = platform.nativePlayer(player);
             var inventory = nativePlayer.getInventory();
             var helmet = nativePlayer.getItemBySlot(EquipmentSlot.HEAD);
+
             if (!helmet.isEmpty() && bindingCursed(helmet) && !ignoreBindingCurse) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Helmet has binding curse");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Helmet has binding curse"
+                );
             }
 
             if (action == HatAction.REMOVE) {
                 if (helmet.isEmpty()) {
-                    return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Helmet slot is empty");
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Helmet slot is empty"
+                    );
                 }
                 var destination = firstInsertionSlot(inventory, helmet);
                 if (destination < 0) {
-                    return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Inventory has no space");
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Inventory has no space"
+                    );
                 }
                 var before = platform.stackItemId(helmet);
                 insertExact(inventory, destination, helmet.copy());
                 nativePlayer.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
                 inventory.setChanged();
-                return PlatformResult.success(new HatResult(Optional.of(before), Optional.empty()));
+                return PlatformResult.success(new HatResult(
+                        Optional.of(before),
+                        Optional.empty()
+                ));
             }
 
             var held = nativePlayer.getMainHandItem();

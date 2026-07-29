@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.text.RichText;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface CommandInvocation {
 
@@ -14,13 +15,21 @@ public interface CommandInvocation {
 
     String label();
 
-    String[] args();
-
     boolean player();
 
     Optional<String> playerName();
 
+    default Optional<UUID> playerUuid() {
+        return Optional.empty();
+    }
+
     boolean hasPermission(String permission);
+
+    default String auditSummary() {
+        return "arguments=" + args().length;
+    }
+
+    String[] args();
 
     ResolvedPlayer resolvePlayer(String input);
 

@@ -1,91 +1,455 @@
 package top.likoslupus.cellulosesz.modules.kit.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.kit.KitService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
+import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
+import top.likoslupus.cellulosesz.modules.kit.application.KitCooldown;
+import top.likoslupus.cellulosesz.modules.kit.command.argument.KitCooldownArgument;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
-public final class KitCommand extends AbstractKitCommand {
+import static java.util.Objects.requireNonNull;
 
-    public KitCommand(
-            PlatformService platform,
-            KitService kits
+public final class KitCommand implements CommandContributor {
+
+    private static final String MODULE = "kit";
+
+    private final KitCommandService service;
+
+    public KitCommand(KitCommandService service) {
+        this.service = requireNonNull(service, "service");
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        if (!context.moduleEnabled(MODULE)) {
+            return;
+        }
+
+        var service = this.service;
+
+        registerKit(context, service);
+        registerShow(context, service);
+        registerCreate(context, service);
+        registerDelete(context, service);
+        registerReset(context, service);
+    }
+
+    private void registerKit(
+            CommandRegistrationContext context,
+            KitCommandService service
     ) {
-        super(platform, kits);
-    }
+        var descriptor = player("kit", "cellulosesz.kit.use");
 
-    @Override
-    public List<String> aliases() {
-        return List.of("kits");
-    }
+        var root = Commands.literal("kit")
+                .executes(command -> executeSync(
+                        context,
+                        command,
+                        descriptor,
+                        policy -> service.list(policy::hasPermission)
+                ))
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((command, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        () -> service.claimableNames(
+                                                permission -> context.permissions().has(
+                                                        command.getSource(),
+                                                        permission
+                                                )
+                                        ),
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> {
+                                    var player = policy.currentPlayer();
 
-    @Override
-    public String permission() {
-        return "cellulosesz.kit.use";
-    }
+                                    if (player.isEmpty()) {
+                                        return CompletableFuture.completedFuture(
+                                                offline(policy)
+                                        );
+                                    }
 
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/kit [name] | /kits";
-    }
-
-    @Override
-    public String name() {
-        return "kit";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var args = invocation.args();
-        if (args.length == 0 || invocation.label().equalsIgnoreCase("kits")) {
-            var names = kits.kits().stream()
-                    .filter(kit -> kit.permission.isBlank() || invocation.hasPermission(kit.permission))
-                    .map(kit -> kit.id)
-                    .toList();
-            if (names.isEmpty()) {
-                invocation.replyKey("commands.kit.list-empty");
-            } else {
-                invocation.replyKey(
-                        "commands.kit.list",
-                        Map.of("kits", String.join(", ", names))
+                                    return service.claim(
+                                            player.orElseThrow(),
+                                            StringArgumentType.getString(
+                                                    command,
+                                                    "name"
+                                            ),
+                                            policy::hasPermission
+                                    );
+                                }
+                        ))
                 );
-            }
-            return 1;
-        }
 
-        var kit = kits.kit(args[0]);
-        if (kit.isEmpty()) {
-            invocation.errorKey(
-                    "commands.kit.kit-command.error.kit-does-not-exist",
-                    Map.of("kit", args[0])
-            );
-            return 0;
-        }
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("kits"),
+                "",
+                "/kit [name] | /kits",
+                root
+        );
 
-        if (!kit.get().permission.isBlank() && !invocation.hasPermission(kit.get().permission)) {
-            invocation.errorKey("commands.kit.kit-command.error.do-not-permission-claim-kit");
-            return 0;
-        }
+        context.registerSemantic(
+                moduleId(),
+                descriptor,
+                "kits",
+                Commands.literal("kits")
+                        .executes(command -> executeSync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.list(policy::hasPermission)
+                        ))
+        );
+    }
 
-        kits.claim(self.get(), kit.get()).thenAccept(result -> {
-            if (result.success()) {
-                invocation.reply(result.message());
-            } else {
-                invocation.error(result.message());
-            }
-        });
-        return 1;
+    private void registerShow(
+            CommandRegistrationContext context,
+            KitCommandService service
+    ) {
+        var descriptor = any("showkit", "cellulosesz.kit.show");
+
+        var root = Commands.literal("showkit")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        service::kitNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeSync(
+                                context,
+                                command,
+                                descriptor,
+                                _ -> service.show(
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/showkit <name>",
+                root
+        );
+    }
+
+    private void registerCreate(
+            CommandRegistrationContext context,
+            KitCommandService service
+    ) {
+        var descriptor = player("createkit", "cellulosesz.kit.create");
+
+        var root = Commands.literal("createkit")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .then(Commands.argument(
+                                                "cooldown",
+                                                KitCooldownArgument.cooldown()
+                                        )
+                                        .executes(command -> create(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                service,
+                                                KitCooldownArgument.get(
+                                                        command,
+                                                        "cooldown"
+                                                )
+                                        ))
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/createkit <name> <seconds|once>",
+                root
+        );
+    }
+
+    private void registerDelete(
+            CommandRegistrationContext context,
+            KitCommandService service
+    ) {
+        var descriptor = any("delkit", "cellulosesz.kit.delete");
+
+        var root = Commands.literal("delkit")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        service::kitNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                _ -> service.delete(
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/delkit <name>",
+                root
+        );
+    }
+
+    private void registerReset(
+            CommandRegistrationContext context,
+            KitCommandService service
+    ) {
+        var descriptor = any("kitreset", "cellulosesz.kit.reset");
+
+        var kit = Commands.argument("kit", StringArgumentType.word())
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                service::kitNames,
+                                builder
+                        )
+                )
+                .executes(command -> executeAsync(
+                        context,
+                        command,
+                        descriptor,
+                        policy -> service.reset(
+                                resetRequest(
+                                        policy,
+                                        command,
+                                        Optional.empty()
+                                )
+                        )
+                ))
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        context::onlinePlayerNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.reset(
+                                        resetRequest(
+                                                policy,
+                                                command,
+                                                Optional.of(
+                                                        StringArgumentType.getString(
+                                                                command,
+                                                                "player"
+                                                        )
+                                                )
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/kitreset <kit> [player]",
+                Commands.literal("kitreset").then(kit)
+        );
+    }
+
+    private CommandDescriptor player(String name, String permission) {
+        return new CommandDescriptor(
+                MODULE,
+                name,
+                permission,
+                CommandSourceKind.PLAYER_ONLY
+        );
+    }
+
+    private int executeSync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    KitCommandService.Result
+                    > operation
+    ) {
+        return registration.execute(
+                command,
+                descriptor,
+                "kit request",
+                policy -> {
+                    if (descriptor.requiredSourceKind()
+                            == CommandSourceKind.PLAYER_ONLY
+                            && policy.currentPlayer().isEmpty()
+                    ) {
+                        policy.error(
+                                LocalizedMessage.of(
+                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
+                                )
+                        );
+                        return 0;
+                    }
+
+                    var result = operation.apply(policy);
+
+                    policy.respond(result.success(), result.message());
+                    return result.success() ? 1 : 0;
+                }
+        );
+    }
+
+    private int executeAsync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    CompletableFuture<KitCommandService.Result>
+                    > operation
+    ) {
+        return registration.execute(
+                command,
+                descriptor,
+                "kit request",
+                policy -> {
+                    if (descriptor.requiredSourceKind()
+                            == CommandSourceKind.PLAYER_ONLY
+                            && policy.currentPlayer().isEmpty()
+                    ) {
+                        policy.error(
+                                LocalizedMessage.of(
+                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
+                                )
+                        );
+                        return 0;
+                    }
+
+                    operation.apply(policy)
+                            .whenComplete((result, failure) -> {
+                                if (failure != null) {
+                                    registration.internalFailure(
+                                            policy,
+                                            failure
+                                    );
+                                } else {
+                                    policy.respond(
+                                            result.success(),
+                                            result.message()
+                                    );
+                                }
+                            });
+
+                    return 1;
+                }
+        );
+    }
+
+    private KitCommandService.Result offline(
+            MinecraftCommandPolicyContext policy
+    ) {
+        return new KitCommandService.Result(
+                false,
+                LocalizedMessage.of(
+                        GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                        Map.of(
+                                "player",
+                                policy.playerName().orElse("unknown")
+                        )
+                )
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return MODULE;
+    }
+
+    private CommandDescriptor any(String name, String permission) {
+        return new CommandDescriptor(
+                MODULE,
+                name,
+                permission,
+                CommandSourceKind.ANY
+        );
+    }
+
+    private int create(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            KitCommandService service,
+            KitCooldown cooldown
+    ) {
+        return executeAsync(
+                registration,
+                command,
+                descriptor,
+                policy -> {
+                    var player = policy.currentPlayer();
+
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                offline(policy)
+                        );
+                    }
+
+                    return service.create(
+                            player.orElseThrow(),
+                            StringArgumentType.getString(command, "name"),
+                            cooldown
+                    );
+                }
+        );
+    }
+
+    private KitCommandService.ResetRequest resetRequest(
+            MinecraftCommandPolicyContext policy,
+            CommandContext<CommandSourceStack> command,
+            Optional<String> target
+    ) {
+        return new KitCommandService.ResetRequest(
+                policy.currentPlayer(),
+                StringArgumentType.getString(command, "kit"),
+                target,
+                policy.hasPermission("cellulosesz.kit.reset.others")
+        );
     }
 
 }

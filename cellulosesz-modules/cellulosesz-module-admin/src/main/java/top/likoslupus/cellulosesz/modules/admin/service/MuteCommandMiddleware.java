@@ -1,27 +1,25 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.MuteService;
-import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
 import java.util.Locale;
 
 public final class MuteCommandMiddleware implements CommandMiddleware {
 
-    private final PlatformService platform;
     private final MuteService mutes;
     private volatile AdminConfig config;
 
     public MuteCommandMiddleware(
-            PlatformService platform,
             MuteService mutes,
             AdminConfig config
     ) {
-        this.platform = platform;
         this.mutes = mutes;
         this.config = config;
     }
@@ -32,18 +30,18 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
 
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext context,
             CommandContinuation next
     ) {
-        if (blocked(command.name())
-                && !invocation.hasPermission("cellulosesz.admin.mute.bypass")
+        if (blocked(descriptor.canonicalName())
+                && !context.hasPermission("cellulosesz.admin.mute.bypass")
+                && context.playerUuid().filter(mutes::muted).isPresent()
         ) {
-            var player = platform.player(invocation);
-            if (player.isPresent() && mutes.muted(player.get().uuid())) {
-                invocation.errorKey("commands.admin.mute-command-middleware.error.muted-cannot-use-command");
-                return 0;
-            }
+            context.error(LocalizedMessage.of(
+                    GeneratedMessageKeys.COMMANDS_ADMIN_MUTE_COMMAND_MIDDLEWARE_ERROR_MUTED_CANNOT_USE_COMMAND
+            ));
+            return 0;
         }
         return next.proceed();
     }

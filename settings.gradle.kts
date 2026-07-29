@@ -1,7 +1,31 @@
 pluginManagement {
     repositories {
-        maven("https://maven.fabricmc.net/") { name = "Fabric" }
+        maven("https://maven.architectury.dev/") {
+            name = "Architectury"
+        }
+        maven("https://maven.neoforged.net/releases/") {
+            name = "NeoForge"
+        }
+        maven("https://maven.fabricmc.net/") {
+            name = "Fabric"
+        }
         gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
+    repositories {
+        maven("https://maven.architectury.dev/") {
+            name = "Architectury"
+        }
+        maven("https://maven.neoforged.net/releases/") {
+            name = "NeoForge"
+        }
+        maven("https://maven.fabricmc.net/") {
+            name = "Fabric"
+        }
         mavenCentral()
     }
 }
@@ -10,6 +34,7 @@ rootProject.name = "CellulosesZ"
 
 include(":cellulosesz-api")
 include(":cellulosesz-core")
+include(":cellulosesz-common")
 include(":cellulosesz-fabric")
 
 include(":cellulosesz-modules:cellulosesz-module-user")

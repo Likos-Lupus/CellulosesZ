@@ -148,6 +148,8 @@
 "commands.home.list": "<primary>Home：<secondary><homes>"
 "commands.home.list-empty": "<primary>你还没有设置 Home。"
 "commands.home.rename-home-command.error.unable-rename-home-old-name-may-not-exist-new-name": "<red>无法重命名 Home，可能旧名称不存在或新名称已存在。"
+"commands.home.rename-home-command.error.source-missing": "<red>未找到 Home：<secondary><home><red>。"
+"commands.home.rename-home-command.error.target-exists": "<red>名为 <secondary><home><red> 的 Home 已存在。"
 "commands.home.rename-home-command.error.usage": "<red>用法: <secondary><usage><red>"
 "commands.home.rename-home-command.reply.renamed-home": "<primary>已将 Home <secondary><old_name><primary> 重命名为 <secondary><new_name><primary>"
 "commands.home.set-home-command.error.reached-home-limit": "<red>Home 数量已达到上限: <secondary><limit><red>"

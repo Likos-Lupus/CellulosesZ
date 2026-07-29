@@ -1,10 +1,12 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.Map;
 
@@ -18,16 +20,16 @@ public final class ModuleEnabledCommandMiddleware implements CommandMiddleware {
 
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext policy,
             CommandContinuation continuation
     ) {
-        var moduleId = context.commands().moduleId(command).orElse("unknown");
+        var moduleId = descriptor.moduleId();
         if (!"unknown".equals(moduleId) && !context.moduleEnabled(moduleId)) {
-            invocation.errorKey(
-                    "common.module-disabled",
+            policy.error(LocalizedMessage.of(
+                    GeneratedMessageKeys.COMMON_MODULE_DISABLED,
                     Map.of("module", moduleId)
-            );
+            ));
             return 0;
         }
         return continuation.proceed();

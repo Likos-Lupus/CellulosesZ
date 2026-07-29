@@ -148,6 +148,8 @@
 "commands.home.list": "<primary>Homes: <secondary><homes>"
 "commands.home.list-empty": "<primary>You have not set any homes."
 "commands.home.rename-home-command.error.unable-rename-home-old-name-may-not-exist-new-name": "<red>Unable to rename the home; the old name may not exist or the new name may already be in use."
+"commands.home.rename-home-command.error.source-missing": "<red>Home not found: <secondary><home><red>."
+"commands.home.rename-home-command.error.target-exists": "<red>A home already exists with the name <secondary><home><red>."
 "commands.home.rename-home-command.error.usage": "<red>Usage: <secondary><usage><red>"
 "commands.home.rename-home-command.reply.renamed-home": "<primary>Renamed home <secondary><old_name><primary> to <secondary><new_name><primary>."
 "commands.home.set-home-command.error.reached-home-limit": "<red>You have reached the home limit: <secondary><limit><red>"

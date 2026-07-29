@@ -1,166 +1,365 @@
 package top.likoslupus.cellulosesz.modules.warp.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
-import top.likoslupus.cellulosesz.api.warp.Warp;
-import top.likoslupus.cellulosesz.api.warp.WarpService;
-import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
+import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
+import top.likoslupus.cellulosesz.modules.warp.command.argument.WarpNameArgument;
 
-import java.time.Duration;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
-public final class WarpCommand extends AbstractWarpCommand {
+import static java.util.Objects.requireNonNull;
 
-    private static final String COOLDOWN_KEY = "warp.teleport";
-    private final CooldownService cooldowns;
+public final class WarpCommand implements CommandContributor {
 
-    public WarpCommand(
-            PlatformService platform,
-            WarpService warps,
-            TeleportService teleports,
-            WarpConfig config,
-            CooldownService cooldowns
+    private static final String MODULE = "warp";
+
+    private final WarpCommandService service;
+
+    public WarpCommand(WarpCommandService service) {
+        this.service = requireNonNull(service, "service");
+    }
+
+    @Override
+    public String moduleId() {
+        return MODULE;
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        if (!context.moduleEnabled(MODULE)) {
+            return;
+        }
+
+        var service = this.service;
+
+        registerWarp(context, service);
+        registerSet(context, service);
+        registerDelete(context, service);
+        registerInfo(context, service);
+    }
+
+    private void registerWarp(
+            CommandRegistrationContext context,
+            WarpCommandService service
     ) {
-        super(platform, warps, teleports, config);
-        this.cooldowns = cooldowns;
+        var descriptor = player(
+                "warp",
+                "cellulosesz.warp.use"
+        );
+
+        var root = Commands.literal("warp")
+                .executes(command -> executeAsync(
+                        context,
+                        command,
+                        descriptor,
+                        policy -> service.list(
+                                1,
+                                policy::hasPermission
+                        )
+                ))
+                .then(Commands.argument(
+                                        "page",
+                                        IntegerArgumentType.integer(1)
+                                )
+                                .executes(command -> executeAsync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        policy -> service.list(
+                                                IntegerArgumentType.getInteger(
+                                                        command,
+                                                        "page"
+                                                ),
+                                                policy::hasPermission
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "name",
+                                        WarpNameArgument.warpName()
+                                )
+                                .suggests((command, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                () -> service.usableNames(
+                                                        permission -> context.permissions()
+                                                                .has(
+                                                                        command.getSource(),
+                                                                        permission
+                                                                )
+                                                ),
+                                                builder
+                                        )
+                                )
+                                .executes(command -> executeAsync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        policy -> service.teleport(
+                                                request(policy),
+                                                WarpNameArgument.get(
+                                                        command,
+                                                        "name"
+                                                ),
+                                                policy::hasPermission
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("warps"),
+                "",
+                "/warp [name|page]",
+                root
+        );
+
+        context.registerSemantic(
+                moduleId(),
+                descriptor,
+                "warps",
+                Commands.literal("warps")
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.list(
+                                        1,
+                                        policy::hasPermission
+                                )
+                        ))
+                        .then(Commands.argument(
+                                                "page",
+                                                IntegerArgumentType.integer(1)
+                                        )
+                                        .executes(command -> executeAsync(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                policy -> service.list(
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "page"
+                                                        ),
+                                                        policy::hasPermission
+                                                )
+                                        ))
+                        )
+        );
     }
 
-    @Override
-    public List<String> aliases() {
-        return List.of("warps");
+    private void registerSet(
+            CommandRegistrationContext context,
+            WarpCommandService service
+    ) {
+        var descriptor = player(
+                "setwarp",
+                "cellulosesz.warp.create"
+        );
+
+        var root = Commands.literal("setwarp")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.set(
+                                        request(policy),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        ),
+                                        policy::hasPermission
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/setwarp <name>",
+                root
+        );
     }
 
-    @Override
-    public String permission() {
-        return "cellulosesz.warp.use";
+    private void registerDelete(
+            CommandRegistrationContext context,
+            WarpCommandService service
+    ) {
+        var descriptor = any(
+                "delwarp",
+                "cellulosesz.warp.delete"
+        );
+
+        var root = Commands.literal("delwarp")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        service::cachedNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                _ -> service.delete(
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/delwarp <name>",
+                root
+        );
     }
 
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
+    private void registerInfo(
+            CommandRegistrationContext context,
+            WarpCommandService service
+    ) {
+        var descriptor = any(
+                "warpinfo",
+                "cellulosesz.warp.info"
+        );
+
+        var root = Commands.literal("warpinfo")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        service::cachedNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                _ -> service.info(
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/warpinfo <name>",
+                root
+        );
     }
 
-    @Override
-    public String usage() {
-        return "/warp [name|page]";
-    }
+    private int executeAsync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    CompletableFuture<WarpCommandService.Result>
+                    > operation
+    ) {
+        return registration.execute(
+                command,
+                descriptor,
+                "warp request",
+                policy -> {
+                    if (descriptor.requiredSourceKind()
+                            == CommandSourceKind.PLAYER_ONLY
+                            && policy.playerUuid().isEmpty()
+                    ) {
+                        policy.error(
+                                LocalizedMessage.of(
+                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
+                                )
+                        );
+                        return 0;
+                    }
 
-    @Override
-    public String name() {
-        return "warp";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-        var player = self.orElseThrow();
-        var args = invocation.args();
-
-        if (invocation.label().equalsIgnoreCase("warps") || args.length == 0
-                || (args.length == 1 && numeric(args[0]))) {
-            var page = args.length == 1 && numeric(args[0]) ? Integer.parseInt(args[0]) : 1;
-            list(invocation, page);
-            return 1;
-        }
-        if (args.length != 1) {
-            invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown")) {
-            var remaining = cooldowns.remaining(player.uuid(), COOLDOWN_KEY);
-            if (!remaining.isZero()) {
-                invocation.errorKey("commands.warp.cooldown", Map.of("seconds", Math.max(1L, remaining.toSeconds() + (
-                        remaining.toMillisPart() > 0
-                                ? 1
-                                : 0))));
-                return 0;
-            }
-        }
-        try {
-            warps.warp(args[0]).whenComplete((warp, failure) -> {
-                if (failure != null) {
-                    invocation.errorKey("service.warp.persistence-failed");
-                    return;
-                }
-                if (warp.isEmpty()) {
-                    invocation.errorKey("commands.warp.warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
-                    return;
-                }
-                if (!allowed(invocation, warp.orElseThrow())) {
-                    invocation.errorKey("commands.warp.warp-command.error.do-not-permission-use-warp");
-                    return;
-                }
-                platform.callOnServerThread(() -> teleports.teleport(player, warp.orElseThrow().location, options(invocation)))
-                        .thenCompose(value -> value)
-                        .whenComplete((result, teleportFailure) -> {
-                            if (teleportFailure != null) {
-                                invocation.errorKey("commands.teleport.request.failed", Map.of("reason", teleportFailure.getClass()
-                                        .getSimpleName()));
-                            } else if (result.success()) {
-                                if (!invocation.hasPermission("cellulosesz.warp.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
-                                    cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
+                    operation.apply(policy)
+                            .whenComplete((result, failure) -> {
+                                if (failure != null) {
+                                    registration.internalFailure(
+                                            policy,
+                                            failure
+                                    );
+                                } else {
+                                    policy.respond(
+                                            result.success(),
+                                            result.message()
+                                    );
                                 }
-                                invocation.replyKey("commands.warp.warp-command.reply.teleported-warp", Map.of("target", warp.orElseThrow().displayName));
-                            } else invocation.error(result.message());
-                        });
-            });
-            return 1;
-        } catch (IllegalArgumentException _) {
-            invocation.errorKey("commands.warp.warp-command.error.warp-does-not-exist", Map.of("warp", args[0]));
-            return 0;
-        }
+                            });
+
+                    return 1;
+                }
+        );
     }
 
-    private boolean numeric(String value) {
-        try {
-            return Integer.parseInt(value) > 0;
-        } catch (NumberFormatException _) {
-            return false;
-        }
+    private WarpCommandService.Request request(
+            MinecraftCommandPolicyContext context
+    ) {
+        return new WarpCommandService.Request(
+                context.playerUuid().orElseThrow(),
+                context.playerName().orElse(""),
+                context.hasPermission(
+                        "cellulosesz.warp.bypass-cooldown"
+                ),
+                context.hasPermission(
+                        "cellulosesz.warp.bypass-warmup"
+                )
+        );
     }
 
-    private void list(CommandInvocation invocation, int requestedPage) {
-        warps.warps().whenComplete((available, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.warp.persistence-failed");
-                return;
-            }
-            var visible = available.stream()
-                    .filter(warp -> !config.list.hideNoPermission || allowed(invocation, warp))
-                    .toList();
-            if (visible.isEmpty()) {
-                invocation.replyKey("commands.warp.list-empty");
-                return;
-            }
-            var pageSize = Math.max(1, config.list.pageSize);
-            var pages = Math.max(1, (visible.size() + pageSize - 1) / pageSize);
-            if (requestedPage < 1 || requestedPage > pages) {
-                invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
-                return;
-            }
-            final int from;
-            try {
-                from = Math.multiplyExact(requestedPage - 1, pageSize);
-            } catch (ArithmeticException _) {
-                invocation.errorKey("commands.warp.warp-command.error.usage", Map.of("usage", usage()));
-                return;
-            }
-            var names = visible.subList(from, Math.min(visible.size(), from + pageSize)).stream()
-                    .map(warp -> warp.displayName).toList();
-            invocation.replyKey("commands.warp.list-page", Map.of(
-                    "warps", String.join(", ", names), "page", requestedPage, "pages", pages));
-        });
+    private CommandDescriptor player(
+            String name,
+            String permission
+    ) {
+        return new CommandDescriptor(
+                MODULE,
+                name,
+                permission,
+                CommandSourceKind.PLAYER_ONLY
+        );
     }
 
-    private boolean allowed(CommandInvocation invocation, Warp warp) {
-        return warps.requiredPermission(warp)
-                .map(invocation::hasPermission)
-                .orElse(true);
+    private CommandDescriptor any(
+            String name,
+            String permission
+    ) {
+        return new CommandDescriptor(
+                MODULE,
+                name,
+                permission,
+                CommandSourceKind.ANY
+        );
     }
 
 }

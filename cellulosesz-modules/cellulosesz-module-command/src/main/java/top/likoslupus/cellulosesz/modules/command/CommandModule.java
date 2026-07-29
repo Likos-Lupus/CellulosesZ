@@ -1,15 +1,17 @@
 package top.likoslupus.cellulosesz.modules.command;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
 import top.likoslupus.cellulosesz.modules.command.middleware.*;
+
+import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
         id = "command",
@@ -20,7 +22,7 @@ import top.likoslupus.cellulosesz.modules.command.middleware.*;
 )
 public final class CommandModule implements CellulosesZModule {
 
-    private CommandConfig config;
+    private @Nullable CommandConfig config;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -30,6 +32,7 @@ public final class CommandModule implements CellulosesZModule {
                 "modules/command.yml",
                 CommandConfig::new
         );
+        requireNonNull(config, "CommandConfig has not been initialized");
     }
 
     @Override
@@ -38,14 +41,12 @@ public final class CommandModule implements CellulosesZModule {
         registry.disabledCommands(config.disabledCommands);
 
         var middlewares = context.services().require(CommandMiddlewareRegistry.class);
-        var messages = context.services().require(MessageService.class);
-
-        middlewares.addMiddleware(new SourceKindCommandMiddleware(messages));
+        middlewares.addMiddleware(new SourceKindCommandMiddleware());
         middlewares.addMiddleware(new ModuleEnabledCommandMiddleware(context));
-        middlewares.addMiddleware(new PermissionCommandMiddleware(messages));
+        middlewares.addMiddleware(new PermissionCommandMiddleware());
         middlewares.addMiddleware(new CommandCostMiddleware(
-                context.services().require(PlatformService.class),
-                context.services().require(CommandCostService.class)
+                context.services().require(CommandCostService.class),
+                context.services().require(ServerThreadExecutor.class)
         ));
 
         if (config.auditCommands) {
@@ -57,6 +58,12 @@ public final class CommandModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         context.commands().register(new RootCellulosesZCommand(context));
         context.commands().register(new HelpCommand(context, config));
+    }
+
+    @Override
+    public void onReload(ModuleContext context) {
+        config = context.configs().require("module.command", CommandConfig.class);
+        context.services().require(DefaultCommandRegistry.class).disabledCommands(config.disabledCommands);
     }
 
 }

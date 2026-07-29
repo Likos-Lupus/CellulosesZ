@@ -10,6 +10,8 @@ public interface InventoryPlatformService {
 
     PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player);
 
+    PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot);
+
     PlatformResult<HeldStackChange> setHeldCount(
             CellPlayer player,
             int targetCount,

@@ -16,7 +16,7 @@ dependencies {
 val messageResourceDirectory = layout.projectDirectory.dir("src/main/resources/messages")
 val generatedMessageKeysDirectory = layout.buildDirectory.dir("generated/sources/messageKeys/java/main")
 
-val generateMessageKeys by tasks.registering {
+val generateMessageKeys = tasks.register("generateMessageKeys") {
     val english = messageResourceDirectory.file("en_us.yml")
     val chinese = messageResourceDirectory.file("zh_cn.yml")
     val output = generatedMessageKeysDirectory.map {

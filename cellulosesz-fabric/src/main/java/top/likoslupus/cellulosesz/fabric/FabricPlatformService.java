@@ -39,6 +39,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
@@ -47,6 +48,7 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
@@ -76,11 +78,13 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
             Thread.ofVirtual().name("cellulosesz-backup-", 0).factory()
     );
     private final AtomicBoolean backupRunning = new AtomicBoolean();
+    private final CellulosesZLogger logger;
     private @Nullable MinecraftServer server;
     private @Nullable MessageRenderer renderer;
     private @Nullable LocaleResolver locales;
 
-    public FabricPlatformService() {
+    public FabricPlatformService(CellulosesZLogger logger) {
+        this.logger = requireNonNull(logger, "logger");
     }
 
     @Override
@@ -277,7 +281,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
 
     @Override
     public void sendMessage(CellPlayer player, RichText message) {
-        requireNative(player).sendSystemMessage(FabricTextAdapter.toComponent(message));
+        requireNative(player).sendSystemMessage(MinecraftTextAdapter.toComponent(message, logger));
     }
 
     @Override
@@ -288,7 +292,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
     @Override
     public void setDisplayName(CellPlayer player, RichText displayName) {
         var nativePlayer = requireNative(player);
-        var component = FabricTextAdapter.toComponent(displayName);
+        var component = MinecraftTextAdapter.toComponent(displayName, logger);
         FabricDisplayNameBridge.displayName(player.uuid(), component);
         if (server != null) {
             var packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(nativePlayer));
@@ -1116,11 +1120,11 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         var mirror = new InventoryMirror(targetNative.getInventory(), 54);
         viewerNative.openMenu(new SimpleMenuProvider(
                 (id, inventory, _) -> ChestMenu.sixRows(id, inventory, mirror),
-                FabricTextAdapter.toComponent(message(
+                MinecraftTextAdapter.toComponent(message(
                         viewer,
                         "platform.inventory.title",
                         Map.of("player", target.name())
-                ))
+                ), logger)
         ));
         return true;
     }
@@ -1132,11 +1136,11 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         var enderChest = targetNative.getEnderChestInventory();
         viewerNative.openMenu(new SimpleMenuProvider(
                 (id, inventory, _) -> ChestMenu.threeRows(id, inventory, enderChest),
-                FabricTextAdapter.toComponent(message(
+                MinecraftTextAdapter.toComponent(message(
                         viewer,
                         "platform.ender-chest.title",
                         Map.of("player", target.name())
-                ))
+                ), logger)
         ));
         return true;
     }
@@ -1559,6 +1563,10 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         );
     }
 
+    public boolean serverThread() {
+        var current = server;
+        return current != null && current.isSameThread();
+    }
 
     MinecraftServer requireServer() {
         return requireNonNull(server, "Server has not started");
@@ -1597,6 +1605,10 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
         this.server = server;
     }
 
+    public void clearServer() {
+        this.server = null;
+    }
+
     public void messages(
             MessageRenderer renderer,
             LocaleResolver locales
@@ -1607,6 +1619,7 @@ public final class FabricPlatformService implements PlatformService, AutoCloseab
 
     @Override
     public void close() {
+        server = null;
         backupExecutor.shutdownNow();
     }
 

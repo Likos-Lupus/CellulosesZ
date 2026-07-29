@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.core.module;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
@@ -18,6 +19,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
+import static java.util.Objects.requireNonNull;
+
 public final class DefaultModuleManager {
 
     private final ModuleScanner scanner;
@@ -32,6 +35,7 @@ public final class DefaultModuleManager {
     private final Map<String, ModuleDescriptor> descriptors = new LinkedHashMap<>();
     private final Map<String, CellulosesZModule> loadedModules = new LinkedHashMap<>();
     private final Map<String, DefaultModuleContext> contexts = new LinkedHashMap<>();
+    private @Nullable ModulesConfig modulesConfig;
 
     public DefaultModuleManager(
             ModuleScanner scanner,
@@ -58,7 +62,7 @@ public final class DefaultModuleManager {
         try {
             var scanned = scanner.scan();
             var defaultModulesConfig = defaultModulesConfig(scanned);
-            var modulesConfig = configs.register(
+            modulesConfig = configs.register(
                     "modules",
                     ModulesConfig.class,
                     "modules.yml",
@@ -76,8 +80,9 @@ public final class DefaultModuleManager {
                 }
             });
 
+            var currentModules = requireModulesConfig();
             var enabled = scanned.stream()
-                    .filter(descriptor -> modulesConfig.modules.getOrDefault(
+                    .filter(descriptor -> currentModules.modules.getOrDefault(
                             descriptor.id(),
                             descriptor.enabledByDefault()
                     ))
@@ -101,6 +106,10 @@ public final class DefaultModuleManager {
                 descriptor.enabledByDefault()
         ));
         return config;
+    }
+
+    private ModulesConfig requireModulesConfig() {
+        return requireNonNull(modulesConfig, "ModulesConfig has not been initialized");
     }
 
     private CompletableFuture<Void> loadModuleAsync(ModuleDescriptor descriptor) {
@@ -150,7 +159,9 @@ public final class DefaultModuleManager {
     }
 
     public boolean moduleEnabled(String moduleId) {
-        return loadedModules.containsKey(moduleId);
+        var descriptor = descriptors.get(moduleId);
+        if (descriptor == null || !loadedModules.containsKey(moduleId)) return false;
+        return requireModulesConfig().modules.getOrDefault(moduleId, descriptor.enabledByDefault());
     }
 
     private void runPhase(
@@ -230,6 +241,7 @@ public final class DefaultModuleManager {
     }
 
     public void onReload() {
+        modulesConfig = configs.require("modules", ModulesConfig.class);
         loadedModules.forEach((id, module) -> runLifecycle(
                 id,
                 "reload",
@@ -293,7 +305,7 @@ public final class DefaultModuleManager {
                         descriptor.name(),
                         descriptor.description(),
                         descriptor.phase(),
-                        loadedModules.containsKey(descriptor.id()),
+                        moduleEnabled(descriptor.id()),
                         descriptor.moduleClass().getName()
                 ))
                 .toList();

@@ -3,7 +3,7 @@
   "id": "cellulosesz",
   "version": "${version}",
   "name": "CellulosesZ",
-  "description": "A Fabric-native modular server essentials mod.",
+  "description": "A modular cross-loader server essentials mod. This artifact targets Fabric.",
   "authors": [
     "Likos-Lupus",
     "Chiloven945"
@@ -23,7 +23,8 @@
     "fabricloader": ">=${loader_version}",
     "minecraft": "~${minecraft_version}",
     "java": ">=25",
-    "fabric-api": ">=${fabric_version}"
+    "fabric-api": ">=${fabric_version}",
+    "architectury": ">=${architectury_version}"
   },
   "suggests": {
     "luckperms": "*"

@@ -2,21 +2,22 @@ package top.likoslupus.cellulosesz.modules.kit;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
-import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.kit.command.*;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.modules.kit.application.DefaultKitCommandService;
+import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
+import top.likoslupus.cellulosesz.modules.kit.command.KitCommand;
 import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
-
-import java.util.Collection;
-import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
@@ -44,6 +45,7 @@ public final class KitModule implements CellulosesZModule {
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
@@ -55,32 +57,26 @@ public final class KitModule implements CellulosesZModule {
 
         kits = new DefaultKitService(storage, users, platform, economy, config, root);
         context.services().register(KitService.class, kits);
-        context.services().register(DefaultKitService.class, (DefaultKitService) kits);
+        context.services().register(
+                DefaultKitService.class,
+                (DefaultKitService) kits
+        );
+        context.services().register(
+                KitCommandService.class,
+                new DefaultKitCommandService(
+                        kits,
+                        context.services().require(InventoryPlatformService.class),
+                        context.services().require(PlayerResolver.class),
+                        context.services().require(ServerThreadExecutor.class)
+                )
+        );
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
-        var users = context.services().require(UserService.class);
-
-        requireNonNull(kits, "KitService has not been initialized");
-
-        context.commands().register(new KitCommand(platform, kits));
-        context.commands().register(new ShowKitCommand(platform, kits));
-        context.commands().register(new CreateKitCommand(platform, kits));
-        context.commands().register(new DelKitCommand(platform, kits));
-        context.commands().register(new KitResetCommand(platform, kits, users));
-
-        var suggestions = context.services().require(CommandSuggestionRegistry.class);
-        var kitNames = (Function<CommandSuggestionContext, Collection<String>>) _ ->
-                kits.kits().stream()
-                        .map(kit -> kit.id)
-                        .toList();
-
-        suggestions.register("kit", "name", kitNames);
-        suggestions.register("showkit", "name", kitNames);
-        suggestions.register("delkit", "name", kitNames);
-        suggestions.register("kitreset", "kit", kitNames);
+        var registry = context.services().require(CommandRegistry.class);
+        var service = context.services().require(KitCommandService.class);
+        context.track(registry.register("kit-commands", new KitCommand(service)));
     }
 
     @Override

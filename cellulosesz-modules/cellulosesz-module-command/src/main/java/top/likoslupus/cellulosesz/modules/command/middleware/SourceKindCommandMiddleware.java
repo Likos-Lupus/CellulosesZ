@@ -1,28 +1,27 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.*;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
+import top.likoslupus.cellulosesz.api.command.CommandContinuation;
+import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 public final class SourceKindCommandMiddleware implements CommandMiddleware {
 
-    private final MessageService messages;
-
-    public SourceKindCommandMiddleware(MessageService messages) {
-        this.messages = messages;
-    }
-
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext context,
             CommandContinuation continuation
     ) {
-        if (command.sourceKind() == CommandSourceKind.PLAYER_ONLY && !invocation.player()) {
-            invocation.errorKey("common.player-only");
+        if (descriptor.requiredSourceKind() == CommandSourceKind.PLAYER_ONLY && !context.player()) {
+            context.error(LocalizedMessage.of(GeneratedMessageKeys.COMMON_PLAYER_ONLY));
             return 0;
         }
-        if (command.sourceKind() == CommandSourceKind.CONSOLE_ONLY && invocation.player()) {
-            invocation.errorKey("common.console-only");
+        if (descriptor.requiredSourceKind() == CommandSourceKind.CONSOLE_ONLY && context.player()) {
+            context.error(LocalizedMessage.of(GeneratedMessageKeys.COMMON_CONSOLE_ONLY));
             return 0;
         }
         return continuation.proceed();

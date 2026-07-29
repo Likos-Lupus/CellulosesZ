@@ -1,5 +1,7 @@
 plugins {
-    alias(libs.plugins.fabric.loom) apply false
+    alias(libs.plugins.architectury.plugin) apply false
+    alias(libs.plugins.architectury.loom.no.remap) apply false
+    alias(libs.plugins.shadow) apply false
     `maven-publish`
 }
 
@@ -13,9 +15,14 @@ allprojects {
     version = providers.gradleProperty("mod_version").get()
 
     repositories {
-        maven {
+        maven("https://maven.architectury.dev/") {
+            name = "Architectury"
+        }
+        maven("https://maven.neoforged.net/releases/") {
+            name = "NeoForge"
+        }
+        maven("https://maven.fabricmc.net/") {
             name = "Fabric"
-            url = uri("https://maven.fabricmc.net/")
         }
         mavenCentral()
     }
@@ -28,32 +35,20 @@ subprojects {
         archivesName.set(
             providers.gradleProperty("archives_base_name")
                 .map { baseName ->
-                    if (project.name == "cellulosesz-fabric") {
-                        baseName
-                    } else {
-                        "${baseName}-${project.name}"
-                    }
+                    if (project.name == "cellulosesz-fabric") baseName else "${baseName}-${project.name}"
                 }
         )
     }
 
     extensions.configure<JavaPluginExtension> {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(cellulosesJavaVersion))
-        }
+        toolchain.languageVersion.set(JavaLanguageVersion.of(cellulosesJavaVersion))
         withSourcesJar()
     }
 
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
         options.release.set(cellulosesJavaVersion)
-        options.compilerArgs.addAll(
-            listOf(
-                "-parameters",
-                "-Xlint:unchecked",
-                "-Xlint:deprecation"
-            )
-        )
+        options.compilerArgs.addAll(listOf("-parameters", "-Xlint:unchecked", "-Xlint:deprecation"))
     }
 
     dependencies {
@@ -66,7 +61,5 @@ subprojects {
         "testImplementation"(junitDependency)
     }
 
-    tasks.withType<Test>().configureEach {
-        useJUnitPlatform()
-    }
+    tasks.withType<Test>().configureEach { useJUnitPlatform() }
 }

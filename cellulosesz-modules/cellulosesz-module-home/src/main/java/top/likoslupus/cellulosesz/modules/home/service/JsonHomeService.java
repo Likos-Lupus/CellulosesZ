@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.home.service;
 
+import top.likoslupus.cellulosesz.api.home.HomeRenameStatus;
 import top.likoslupus.cellulosesz.api.home.HomeService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -14,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 public final class JsonHomeService implements HomeService {
 
@@ -38,7 +40,9 @@ public final class JsonHomeService implements HomeService {
     @Override
     public Map<String, CellLocation> cachedHomes(UUID uuid) {
         var document = cache.get(uuid);
-        return document == null ? Map.of() : Map.copyOf(document.homes);
+        return document == null
+                ? Map.of()
+                : Map.copyOf(document.homes);
     }
 
     @Override
@@ -49,7 +53,11 @@ public final class JsonHomeService implements HomeService {
     }
 
     @Override
-    public CompletableFuture<Boolean> setHome(UUID uuid, String name, CellLocation location) {
+    public CompletableFuture<Boolean> setHome(
+            UUID uuid,
+            String name,
+            CellLocation location
+    ) {
         return mutate(uuid, candidate -> {
             candidate.homes.put(normalize(name), location);
             return true;
@@ -58,49 +66,89 @@ public final class JsonHomeService implements HomeService {
 
     @Override
     public CompletableFuture<Boolean> deleteHome(UUID uuid, String name) {
-        return mutate(uuid, candidate -> candidate.homes.remove(normalize(name)) != null);
+        return mutate(
+                uuid,
+                candidate -> candidate.homes.remove(normalize(name)) != null
+        );
     }
 
     @Override
-    public CompletableFuture<Boolean> renameHome(UUID uuid, String oldName, String newName) {
-        return mutate(uuid, candidate -> {
-            var oldKey = normalize(oldName);
-            var newKey = normalize(newName);
-            if (candidate.homes.containsKey(newKey)) return false;
-            var location = candidate.homes.remove(oldKey);
-            if (location == null) return false;
-            candidate.homes.put(newKey, location);
-            return true;
-        });
+    public CompletableFuture<HomeRenameStatus> renameHomeDetailed(
+            UUID uuid,
+            String oldName,
+            String newName
+    ) {
+        return mutate(
+                uuid,
+                candidate -> {
+                    var oldKey = normalize(oldName);
+                    var newKey = normalize(newName);
+
+                    if (!candidate.homes.containsKey(oldKey)) return HomeRenameStatus.SOURCE_MISSING;
+                    if (candidate.homes.containsKey(newKey)) return HomeRenameStatus.TARGET_EXISTS;
+
+                    var location = candidate.homes.remove(oldKey);
+                    candidate.homes.put(newKey, location);
+
+                    return HomeRenameStatus.RENAMED;
+                },
+                status -> status == HomeRenameStatus.RENAMED
+        );
     }
 
-    private <T> CompletableFuture<T> mutate(UUID uuid, Function<HomeDocument, T> mutation) {
+    private <T> CompletableFuture<T> mutate(
+            UUID uuid,
+            Function<HomeDocument, T> mutation
+    ) {
+        return mutate(uuid, mutation, _ -> true);
+    }
+
+    private <T> CompletableFuture<T> mutate(
+            UUID uuid,
+            Function<HomeDocument, T> mutation,
+            Predicate<T> shouldPersist
+    ) {
         var result = new CompletableFuture<T>();
-        writeTails.compute(uuid, (_, previous) -> {
-            var tail = previous == null
-                    ? CompletableFuture.completedFuture(null)
-                    : previous;
-            var next = tail.handle((_, _) -> null)
-                    .thenCompose(_ -> document(uuid))
-                    .thenCompose(current -> {
-                        var candidate = copy(current);
-                        final T value;
-                        try {
-                            value = mutation.apply(candidate);
-                        } catch (RuntimeException failure) {
-                            return CompletableFuture.failedFuture(failure);
-                        }
-                        return storage.save(path(uuid), candidate).thenRun(() -> {
-                            cache.put(uuid, candidate);
-                            result.complete(value);
-                        });
-                    });
-            next.whenComplete((_, failure) -> {
-                writeTails.remove(uuid, next);
-                if (failure != null) result.completeExceptionally(unwrap(failure));
-            });
-            return next;
+        var next = writeTails.compute(
+                uuid,
+                (_, previous) -> {
+                    var tail = previous == null
+                            ? CompletableFuture.completedFuture(null)
+                            : previous;
+
+                    return tail.handle((_, _) -> null)
+                            .thenCompose(_ -> document(uuid))
+                            .thenCompose(current -> {
+                                var candidate = copy(current);
+                                final T value;
+
+                                try {
+                                    value = mutation.apply(candidate);
+                                } catch (RuntimeException failure) {
+                                    return CompletableFuture.failedFuture(failure);
+                                }
+
+                                if (!shouldPersist.test(value)) {
+                                    result.complete(value);
+                                    return CompletableFuture.completedFuture(null);
+                                }
+
+                                return storage.save(
+                                        path(uuid),
+                                        candidate
+                                ).thenRun(() -> {
+                                    cache.put(uuid, candidate);
+                                    result.complete(value);
+                                });
+                            });
+                }
+        );
+
+        next.whenComplete((_, failure) -> {
+            writeTails.remove(uuid, next);
+            if (failure != null) result.completeExceptionally(unwrap(failure));
         });
+
         return result;
     }
 
@@ -111,8 +159,7 @@ public final class JsonHomeService implements HomeService {
     }
 
     private Throwable unwrap(Throwable failure) {
-        return failure instanceof CompletionException completion
-                && completion.getCause() != null
+        return failure instanceof CompletionException completion && completion.getCause() != null
                 ? completion.getCause()
                 : failure;
     }
@@ -127,6 +174,7 @@ public final class JsonHomeService implements HomeService {
     private CompletableFuture<HomeDocument> document(UUID uuid) {
         var cached = cache.get(uuid);
         if (cached != null) return CompletableFuture.completedFuture(cached);
+
         return storage.createIfMissing(
                         path(uuid),
                         HomeDocument.class,

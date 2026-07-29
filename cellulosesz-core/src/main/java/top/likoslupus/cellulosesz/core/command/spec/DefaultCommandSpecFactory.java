@@ -193,34 +193,6 @@ public final class DefaultCommandSpecFactory {
             );
 
             // Homes and warps
-            case "home" -> routes(
-                    route(),
-                    route(
-                            required("name", STRING)
-                    )
-            );
-            case "sethome" -> routes(
-                    route(),
-                    route(
-                            required("name", STRING)
-                    )
-            );
-            case "delhome" -> routes(route(
-                    required("name", STRING)
-            ));
-            case "renamehome" -> routes(route(
-                    required("old", STRING),
-                    required("new", STRING)
-            ));
-            case "warp" -> routes(
-                    route(),
-                    route(
-                            required("name", STRING)
-                    )
-            );
-            case "setwarp", "delwarp", "warpinfo" -> routes(route(
-                    required("name", STRING)
-            ));
             case "ping" -> routes(
                     route(),
                     route(optional("message", GREEDY_STRING))
@@ -433,28 +405,6 @@ public final class DefaultCommandSpecFactory {
             );
             case "anvil", "cartographytable", "grindstone", "loom", "smithingtable", "workbench", "disposal",
                  "stonecutter" -> routes(route());
-            case "createkit" -> routes(route(
-                    required("name", STRING),
-                    required("cooldown", WORD)
-            ));
-            case "delkit", "showkit" -> routes(route(
-                    required("name", STRING)
-            ));
-            case "kit" -> routes(
-                    route(),
-                    route(
-                            required("name", STRING)
-                    )
-            );
-            case "kitreset" -> routes(
-                    route(
-                            required("kit", STRING)
-                    ),
-                    route(
-                            required("kit", STRING),
-                            required("player", KNOWN_PLAYER)
-                    )
-            );
 
             // Messaging
             case "broadcast", "helpop", "me", "r" -> routes(route(
@@ -795,21 +745,6 @@ public final class DefaultCommandSpecFactory {
                     route(
                             required("time", WORD),
                             required("world", WORLD)
-                    )
-            );
-            case "info", "motd", "rules" -> routes(
-                    route(),
-                    route(
-                            required("page", INTEGER)
-                    )
-            );
-            case "customtext" -> routes(
-                    route(
-                            required("name", STRING)
-                    ),
-                    route(
-                            required("name", STRING),
-                            required("page", INTEGER)
                     )
             );
             case "backup" -> routes(route());

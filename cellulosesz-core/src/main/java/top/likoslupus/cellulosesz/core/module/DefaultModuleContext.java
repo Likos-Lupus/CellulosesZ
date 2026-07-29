@@ -13,8 +13,12 @@ import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.core.command.ModuleScopedCommandRegistry;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultModuleContext implements ModuleContext {
 
@@ -27,6 +31,7 @@ public final class DefaultModuleContext implements ModuleContext {
     private final Scheduler scheduler;
     private final CellulosesZLogger logger;
     private final Predicate<String> enabledPredicate;
+    private final List<Registration> trackedRegistrations = new ArrayList<>();
 
     public DefaultModuleContext(
             String moduleId,
@@ -95,6 +100,11 @@ public final class DefaultModuleContext implements ModuleContext {
         return enabledPredicate.test(moduleId);
     }
 
+    @Override
+    public synchronized void track(Registration registration) {
+        trackedRegistrations.add(requireNonNull(registration, "registration"));
+    }
+
     List<AsyncInitializable> initializables() {
         return services.initializables();
     }
@@ -103,8 +113,12 @@ public final class DefaultModuleContext implements ModuleContext {
         return services.closeablesInReverseOrder();
     }
 
-    List<Registration> registrationsInReverseOrder() {
-        return services.registrationsInReverseOrder();
+    synchronized List<Registration> registrationsInReverseOrder() {
+        var result = new ArrayList<>(services.registrationsInReverseOrder());
+        var tracked = new ArrayList<>(trackedRegistrations);
+        Collections.reverse(tracked);
+        result.addAll(0, tracked);
+        return List.copyOf(result);
     }
 
 }

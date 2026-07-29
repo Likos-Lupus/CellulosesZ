@@ -31,7 +31,16 @@ public interface HomeService {
             String name
     );
 
-    CompletableFuture<Boolean> renameHome(
+    default CompletableFuture<Boolean> renameHome(
+            UUID uuid,
+            String oldName,
+            String newName
+    ) {
+        return renameHomeDetailed(uuid, oldName, newName)
+                .thenApply(status -> status == HomeRenameStatus.RENAMED);
+    }
+
+    CompletableFuture<HomeRenameStatus> renameHomeDetailed(
             UUID uuid,
             String oldName,
             String newName

@@ -95,7 +95,7 @@ public final class AdminModule implements CellulosesZModule {
         context.services().register(MuteService.class, mutes);
         context.services().register(JailService.class, jails);
 
-        muteCommandPolicy = new MuteCommandMiddleware(platform, mutes, config);
+        muteCommandPolicy = new MuteCommandMiddleware(mutes, config);
         context.services().require(CommandMiddlewareRegistry.class).addMiddleware(muteCommandPolicy);
     }
 

@@ -1,51 +1,52 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.Map;
 
 public final class CommandCostMiddleware implements CommandMiddleware {
 
-    private final PlatformService platform;
     private final CommandCostService costs;
+    private final ServerThreadExecutor serverThread;
 
     public CommandCostMiddleware(
-            PlatformService platform,
-            CommandCostService costs
+            CommandCostService costs,
+            ServerThreadExecutor serverThread
     ) {
-        this.platform = platform;
         this.costs = costs;
+        this.serverThread = serverThread;
     }
 
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext context,
             CommandContinuation continuation
     ) {
-        var cost = costs.cost(command.name());
+        var cost = costs.cost(descriptor.canonicalName());
         if (cost.signum() <= 0) return continuation.proceed();
+        var playerUuid = context.playerUuid();
+        if (playerUuid.isEmpty()) return continuation.proceed();
 
-        var player = platform.player(invocation);
-        if (player.isEmpty()) return continuation.proceed();
-
-        costs.charge(player.orElseThrow().uuid(), command.name())
-                .whenComplete((charged, failure) -> platform.runOnServerThread(() -> {
-                    if (failure != null || !Boolean.TRUE.equals(charged)) {
-                        invocation.errorKey(
-                                "common.command-cost-failed",
-                                Map.of("cost", cost.toPlainString())
-                        );
-                        return;
-                    }
-                    continuation.proceed();
-                }));
-        // Brigadier cannot await storage; the final command result is delivered after the charge commits.
+        costs.charge(playerUuid.orElseThrow(), descriptor.canonicalName())
+                .whenComplete((charged, failure) ->
+                        serverThread.execute(() -> {
+                            if (failure != null || !Boolean.TRUE.equals(charged)) {
+                                context.error(LocalizedMessage.of(
+                                        GeneratedMessageKeys.COMMON_COMMAND_COST_FAILED,
+                                        Map.of("cost", cost.toPlainString())
+                                ));
+                                return;
+                            }
+                            continuation.proceed();
+                        }));
         return 1;
     }
 

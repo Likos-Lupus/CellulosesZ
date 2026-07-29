@@ -1,7 +1,13 @@
 plugins {
-    alias(libs.plugins.fabric.loom)
+    alias(libs.plugins.architectury.loom.no.remap)
+    alias(libs.plugins.architectury.plugin)
+    alias(libs.plugins.shadow)
 }
 
+architectury {
+    platformSetupLoomIde()
+    fabric()
+}
 
 loom {
     mods {
@@ -11,85 +17,122 @@ loom {
     }
 }
 
+val commonConfiguration = configurations.create("common") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+val developmentFabric = configurations.named("developmentFabric")
+val shadowBundle = configurations.create("shadowBundle") {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+configurations.named("compileClasspath") { extendsFrom(commonConfiguration) }
+configurations.named("runtimeClasspath") { extendsFrom(commonConfiguration) }
+configurations.named("testCompileClasspath") { extendsFrom(commonConfiguration) }
+configurations.named("testRuntimeClasspath") { extendsFrom(commonConfiguration) }
+developmentFabric.configure { extendsFrom(commonConfiguration) }
+
+val commonProjects = listOf(
+    ":cellulosesz-common",
+    ":cellulosesz-modules:cellulosesz-module-text",
+    ":cellulosesz-modules:cellulosesz-module-home",
+    ":cellulosesz-modules:cellulosesz-module-warp",
+    ":cellulosesz-modules:cellulosesz-module-kit"
+)
+val pureJavaProjects = listOf(
+    ":cellulosesz-api",
+    ":cellulosesz-core",
+    ":cellulosesz-modules:cellulosesz-module-user",
+    ":cellulosesz-modules:cellulosesz-module-command",
+    ":cellulosesz-modules:cellulosesz-module-permission",
+    ":cellulosesz-modules:cellulosesz-module-teleport",
+    ":cellulosesz-modules:cellulosesz-module-economy",
+    ":cellulosesz-modules:cellulosesz-module-item",
+    ":cellulosesz-modules:cellulosesz-module-messaging",
+    ":cellulosesz-modules:cellulosesz-module-admin",
+    ":cellulosesz-modules:cellulosesz-module-playerstate",
+    ":cellulosesz-modules:cellulosesz-module-world",
+    ":cellulosesz-modules:cellulosesz-module-sign"
+)
+
 dependencies {
     minecraft(libs.minecraft)
-
     implementation(libs.fabric.loader)
     implementation(libs.fabric.api)
+    implementation(libs.architectury.fabric)
 
-    implementation(project(":cellulosesz-api"))
-    implementation(project(":cellulosesz-core"))
+    commonProjects.forEach { path ->
+        add(
+            commonConfiguration.name,
+            project(path = path)
+        ) {
+            isTransitive = false
+        }
+        add(
+            shadowBundle.name,
+            project(
+                path = path,
+                configuration = "transformProductionFabric"
+            )
+        ) {
+            isTransitive = false
+        }
+    }
 
-    implementation(project(":cellulosesz-modules:cellulosesz-module-user"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-command"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-permission"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-teleport"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-home"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-warp"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-economy"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-kit"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-item"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-messaging"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-admin"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-playerstate"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-world"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-sign"))
-    implementation(project(":cellulosesz-modules:cellulosesz-module-text"))
-
-    include(project(":cellulosesz-api"))
-    include(project(":cellulosesz-core"))
-    include(project(":cellulosesz-modules:cellulosesz-module-user"))
-    include(project(":cellulosesz-modules:cellulosesz-module-command"))
-    include(project(":cellulosesz-modules:cellulosesz-module-permission"))
-    include(project(":cellulosesz-modules:cellulosesz-module-teleport"))
-    include(project(":cellulosesz-modules:cellulosesz-module-home"))
-    include(project(":cellulosesz-modules:cellulosesz-module-warp"))
-    include(project(":cellulosesz-modules:cellulosesz-module-economy"))
-    include(project(":cellulosesz-modules:cellulosesz-module-kit"))
-    include(project(":cellulosesz-modules:cellulosesz-module-item"))
-    include(project(":cellulosesz-modules:cellulosesz-module-messaging"))
-    include(project(":cellulosesz-modules:cellulosesz-module-admin"))
-    include(project(":cellulosesz-modules:cellulosesz-module-playerstate"))
-    include(project(":cellulosesz-modules:cellulosesz-module-world"))
-    include(project(":cellulosesz-modules:cellulosesz-module-sign"))
-    include(project(":cellulosesz-modules:cellulosesz-module-text"))
+    pureJavaProjects.forEach { path ->
+        implementation(project(path))
+        add(
+            shadowBundle.name,
+            project(path)
+        ) {
+            isTransitive = false
+        }
+    }
 
     implementation(libs.jackson.databind)
     implementation(libs.jackson.yaml)
     implementation(libs.classgraph)
-
-    include(libs.jackson.databind)
-    include(libs.jackson.yaml)
-    include(libs.classgraph)
+    add(shadowBundle.name, libs.jackson.databind)
+    add(shadowBundle.name, libs.jackson.yaml)
+    add(shadowBundle.name, libs.classgraph)
 }
 
-tasks.named<ProcessResources>("processResources") {
-    val modVersion = project.version.toString()
-    val minecraftVersion = libs.versions.minecraft.get()
-    val loaderVersion = libs.versions.fabric.loader.get()
-    val fabricVersion = libs.versions.fabric.api.get()
+val archiveBaseName = providers.gradleProperty("archives_base_name")
+val licenseFile = rootProject.file("LICENSE.txt")
 
-    inputs.property("version", modVersion)
-    inputs.property("minecraft_version", minecraftVersion)
-    inputs.property("loader_version", loaderVersion)
-    inputs.property("fabric_version", fabricVersion)
-
-    filesMatching("fabric.mod.json") {
-        expand(
-            mapOf(
-                "version" to modVersion,
-                "minecraft_version" to minecraftVersion,
-                "loader_version" to loaderVersion,
-                "fabric_version" to fabricVersion
-            )
-        )
+tasks.named<Jar>("jar") {
+    archiveClassifier.set("raw")
+    inputs.property("archivesName", archiveBaseName)
+    from(licenseFile) {
+        rename {
+            "${it}_${archiveBaseName.get()}"
+        }
     }
 }
 
-tasks.named<Jar>("jar") {
-    val archiveBaseName = providers.gradleProperty("archives_base_name")
+tasks.shadowJar {
+    configurations.set(listOf(shadowBundle))
+    archiveClassifier.set("")
+    mergeServiceFiles()
     inputs.property("archivesName", archiveBaseName)
-    from(rootProject.file("LICENSE.txt")) {
-        rename { "${it}_${archiveBaseName.get()}" }
+    from(licenseFile) {
+        rename {
+            "${it}_${archiveBaseName.get()}"
+        }
+    }
+}
+
+tasks.named<ProcessResources>("processResources") {
+    val values = mapOf(
+        "version" to project.version.toString(),
+        "minecraft_version" to libs.versions.minecraft.get(),
+        "loader_version" to libs.versions.fabric.loader.get(),
+        "fabric_version" to libs.versions.fabric.api.get(),
+        "architectury_version" to libs.versions.architectury.api.get()
+    )
+    values.forEach(inputs::property)
+    filesMatching("fabric.mod.json") {
+        expand(values)
     }
 }

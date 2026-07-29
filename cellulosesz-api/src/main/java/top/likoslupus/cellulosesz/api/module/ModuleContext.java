@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
+import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 
 import java.nio.file.Path;
@@ -28,5 +29,10 @@ public interface ModuleContext {
     CellulosesZLogger logger();
 
     boolean moduleEnabled(String moduleId);
+
+    /**
+     * Tracks a module-owned registration so failed load and shutdown roll it back.
+     */
+    void track(Registration registration);
 
 }

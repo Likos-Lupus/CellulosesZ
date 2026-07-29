@@ -58,6 +58,49 @@ public final class Checks {
         return value;
     }
 
+    public static String requireMaxLength(
+            String value,
+            int maximum,
+            String name
+    ) {
+        requireNonNull(value, name);
+        requireNonNegative(maximum, "maximum");
+        if (value.length() > maximum) {
+            throw new IllegalArgumentException(name + " length must be at most " + maximum + ", but was " + value.length());
+        }
+        return value;
+    }
+
+    public static int requireNonNegative(int value, String name) {
+        if (value < 0) {
+            throw new IllegalArgumentException(name + " must be at least 0, but was " + value);
+        }
+        return value;
+    }
+
+    public static double requireNonNegative(double value, String name) {
+        requireFinite(value, name);
+        if (value < 0.0D) throw new IllegalArgumentException(name + " must be at least 0, but was " + value);
+        return value;
+    }
+
+    public static double requireFinite(double value, String name) {
+        if (!Double.isFinite(value)) {
+            throw new IllegalArgumentException(name + " must be finite, but was " + value);
+        }
+        return value;
+    }
+
+    public static double requirePositive(double value, String name) {
+        requireFinite(value, name);
+        if (value <= 0.0D) throw new IllegalArgumentException(name + " must be greater than 0, but was " + value);
+        return value;
+    }
+
+    public static int requireRange(int value, int minimum, int maximum, String name) {
+        return requireInRange(value, minimum, maximum, name);
+    }
+
     public static int requireInRange(
             int value,
             int minimum,
@@ -81,6 +124,15 @@ public final class Checks {
         }
     }
 
+    public static long requireRange(
+            long value,
+            long minimum,
+            long maximum,
+            String name
+    ) {
+        return requireInRange(value, minimum, maximum, name);
+    }
+
     public static long requireInRange(
             long value,
             long minimum,
@@ -92,6 +144,15 @@ public final class Checks {
             throw new IllegalArgumentException(name + " must be in [" + minimum + ", " + maximum + "], but was " + value);
         }
         return value;
+    }
+
+    public static double requireRange(
+            double value,
+            double minimum,
+            double maximum,
+            String name
+    ) {
+        return requireInRange(value, minimum, maximum, name);
     }
 
     public static double requireInRange(
@@ -112,29 +173,8 @@ public final class Checks {
         return value;
     }
 
-    public static double requireFinite(double value, String name) {
-        if (!Double.isFinite(value)) {
-            throw new IllegalArgumentException(name + " must be finite, but was " + value);
-        }
-        return value;
-    }
-
-    public static String requireMaxLength(
-            String value,
-            int maximum,
-            String name
-    ) {
-        requireNonNull(value, name);
-        requireNonNegative(maximum, "maximum");
-        if (value.length() > maximum) {
-            throw new IllegalArgumentException(name + " length must be at most " + maximum + ", but was " + value.length());
-        }
-        return value;
-    }
-
-    public static int requireNonNegative(int value, String name) {
-        if (value < 0) throw new IllegalArgumentException(name + " must be at least 0, but was " + value);
-        return value;
+    public static void requireState(boolean condition, String message) {
+        if (!condition) throw new IllegalStateException(requireNonNull(message, "message"));
     }
 
     public static String requireNoControlCharacters(String value, String name) {

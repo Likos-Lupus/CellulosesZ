@@ -1,106 +1,342 @@
 package top.likoslupus.cellulosesz.modules.home.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
-import top.likoslupus.cellulosesz.api.home.HomeService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
-import top.likoslupus.cellulosesz.modules.home.HomeConfig;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
+import top.likoslupus.cellulosesz.modules.home.application.HomeCommandService;
 
-import java.time.Duration;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
-public final class HomeCommand extends AbstractHomeCommand {
+import static java.util.Objects.requireNonNull;
 
-    private static final String COOLDOWN_KEY = "home.teleport";
+public final class HomeCommand implements CommandContributor {
 
-    private final CooldownService cooldowns;
+    private static final String MODULE = "home";
 
-    public HomeCommand(
-            PlatformService platform,
-            HomeService homes,
-            TeleportService teleports,
-            HomeConfig config,
-            CooldownService cooldowns
+    private final HomeCommandService service;
+
+    public HomeCommand(HomeCommandService service) {
+        this.service = requireNonNull(service, "service");
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        if (!context.moduleEnabled(MODULE)) {
+            return;
+        }
+
+        var service = this.service;
+
+        registerHome(context, service);
+        registerSet(context, service);
+        registerDelete(context, service);
+        registerRename(context, service);
+    }
+
+    private void registerHome(
+            CommandRegistrationContext context,
+            HomeCommandService service
     ) {
-        super(platform, homes, teleports, config);
-        this.cooldowns = cooldowns;
+        var descriptor = descriptor(
+                "home",
+                "cellulosesz.home.use"
+        );
+
+        var root = Commands.literal("home")
+                .executes(command -> executeAsync(
+                        context,
+                        command,
+                        descriptor,
+                        policy -> service.teleport(
+                                request(policy),
+                                "home"
+                        )
+                ))
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((command, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        () -> context.player(command.getSource())
+                                                .map(player -> service.cachedNames(
+                                                        player.uuid()
+                                                ))
+                                                .orElseGet(Set::of),
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.teleport(
+                                        request(policy),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("homes"),
+                "",
+                "/home [name] | /homes",
+                root
+        );
+
+        context.registerSemantic(
+                moduleId(),
+                descriptor,
+                "homes",
+                Commands.literal("homes")
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.list(
+                                        policy.playerUuid().orElseThrow()
+                                )
+                        ))
+        );
+    }
+
+    private void registerSet(
+            CommandRegistrationContext context,
+            HomeCommandService service
+    ) {
+        var descriptor = descriptor(
+                "sethome",
+                "cellulosesz.home.set"
+        );
+
+        var root = Commands.literal("sethome")
+                .executes(command -> executeAsync(
+                        context,
+                        command,
+                        descriptor,
+                        policy -> service.set(
+                                request(policy),
+                                "home",
+                                policy.hasPermission(
+                                        "cellulosesz.home.bypass-limit"
+                                )
+                        )
+                ))
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.set(
+                                        request(policy),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        ),
+                                        policy.hasPermission(
+                                                "cellulosesz.home.bypass-limit"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/sethome [name]",
+                root
+        );
+    }
+
+    private void registerDelete(
+            CommandRegistrationContext context,
+            HomeCommandService service
+    ) {
+        var descriptor = descriptor(
+                "delhome",
+                "cellulosesz.home.delete"
+        );
+
+        var root = Commands.literal("delhome")
+                .then(Commands.argument("name", StringArgumentType.word())
+                        .suggests((command, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        () -> context.player(command.getSource())
+                                                .map(player -> service.cachedNames(
+                                                        player.uuid()
+                                                ))
+                                                .orElseGet(Set::of),
+                                        builder
+                                )
+                        )
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> service.delete(
+                                        policy.playerUuid().orElseThrow(),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/delhome <name>",
+                root
+        );
+    }
+
+    private void registerRename(
+            CommandRegistrationContext context,
+            HomeCommandService service
+    ) {
+        var descriptor = descriptor(
+                "renamehome",
+                "cellulosesz.home.rename"
+        );
+
+        var root = Commands.literal("renamehome")
+                .then(Commands.argument("old", StringArgumentType.word())
+                        .suggests((command, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        () -> context.player(command.getSource())
+                                                .map(player -> service.cachedNames(
+                                                        player.uuid()
+                                                ))
+                                                .orElseGet(Set::of),
+                                        builder
+                                )
+                        )
+                        .then(Commands.argument(
+                                                "new",
+                                                StringArgumentType.word()
+                                        )
+                                        .executes(command -> executeAsync(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                policy -> service.rename(
+                                                        policy.playerUuid()
+                                                                .orElseThrow(),
+                                                        StringArgumentType.getString(
+                                                                command,
+                                                                "old"
+                                                        ),
+                                                        StringArgumentType.getString(
+                                                                command,
+                                                                "new"
+                                                        )
+                                                )
+                                        ))
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "",
+                "/renamehome <old> <new>",
+                root
+        );
+    }
+
+    private CommandDescriptor descriptor(
+            String name,
+            String permission
+    ) {
+        return new CommandDescriptor(
+                MODULE,
+                name,
+                permission,
+                CommandSourceKind.PLAYER_ONLY
+        );
+    }
+
+    private int executeAsync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    CompletableFuture<HomeCommandService.Result>
+                    > operation
+    ) {
+        return registration.execute(
+                command,
+                descriptor,
+                "home request",
+                policy -> {
+                    if (policy.playerUuid().isEmpty()) {
+                        policy.error(
+                                LocalizedMessage.of(
+                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
+                                )
+                        );
+                        return 0;
+                    }
+
+                    operation.apply(policy)
+                            .whenComplete((result, failure) -> {
+                                if (failure != null) {
+                                    registration.internalFailure(
+                                            policy,
+                                            failure
+                                    );
+                                } else {
+                                    policy.respond(
+                                            result.success(),
+                                            result.message()
+                                    );
+                                }
+                            });
+
+                    return 1;
+                }
+        );
+    }
+
+    private HomeCommandService.Request request(
+            MinecraftCommandPolicyContext context
+    ) {
+        return new HomeCommandService.Request(
+                context.playerUuid().orElseThrow(),
+                context.playerName().orElse(""),
+                context.hasPermission(
+                        "cellulosesz.home.bypass-cooldown"
+                ),
+                context.hasPermission(
+                        "cellulosesz.home.bypass-warmup"
+                )
+        );
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("homes");
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.home.use";
-    }
-
-    @Override
-    public String usage() {
-        return "/home [name] | /homes";
-    }
-
-    @Override
-    public String name() {
-        return "home";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-        var player = self.orElseThrow();
-        var args = invocation.args();
-        if (invocation.label().equalsIgnoreCase("homes")) {
-            homes.homes(player.uuid()).whenComplete((knownHomes, failure) -> {
-                if (failure != null) invocation.errorKey("common.persistence-failed");
-                else if (knownHomes.isEmpty()) invocation.replyKey("commands.home.list-empty");
-                else invocation.replyKey("commands.home.list", Map.of("homes", String.join(", ", knownHomes.keySet())));
-            });
-            return 1;
-        }
-
-        var name = nameOrDefault(args);
-        if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown")) {
-            var remaining = cooldowns.remaining(player.uuid(), COOLDOWN_KEY);
-            if (!remaining.isZero()) {
-                invocation.errorKey("commands.home.cooldown", Map.of("seconds", Math.max(1L, remaining.toSeconds() + (
-                        remaining.toMillisPart() > 0
-                                ? 1
-                                : 0))));
-                return 0;
-            }
-        }
-
-        homes.home(player.uuid(), name).whenComplete((location, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("common.persistence-failed");
-                return;
-            }
-            if (location.isEmpty()) {
-                invocation.errorKey("commands.home.home-command.error.home-does-not-exist", Map.of("home", name));
-                return;
-            }
-            platform.callOnServerThread(() -> teleports.teleport(player, location.orElseThrow(), options(invocation)))
-                    .thenCompose(value -> value)
-                    .whenComplete((result, teleportFailure) -> {
-                        if (teleportFailure != null) {
-                            invocation.errorKey("commands.teleport.request.failed", Map.of("reason", teleportFailure.getClass()
-                                    .getSimpleName()));
-                        } else if (result.success()) {
-                            if (!invocation.hasPermission("cellulosesz.home.bypass-cooldown") && config.teleport.cooldownSeconds > 0) {
-                                cooldowns.start(player.uuid(), COOLDOWN_KEY, Duration.ofSeconds(config.teleport.cooldownSeconds));
-                            }
-                            invocation.replyKey("commands.home.home-command.reply.teleported-home", Map.of("home", name));
-                        } else {
-                            invocation.error(result.message());
-                        }
-                    });
-        });
-        return 1;
+    public String moduleId() {
+        return MODULE;
     }
 
 }

@@ -4,7 +4,10 @@ java = "25"
 
 fabric-loader = "0.19.3"
 fabric-api = "0.154.0+26.1.2"
-loom = "1.17.13"
+loom = "1.17-SNAPSHOT"
+architectury-api = "20.0.9"
+architectury-plugin = "3.5.169"
+shadow = "9.6.1"
 
 jackson = "3.2.0"
 jspecify = "1.0.0"
@@ -18,6 +21,8 @@ minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
 
 fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-loader" }
 fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
+architectury-common = { module = "dev.architectury:architectury", version.ref = "architectury-api" }
+architectury-fabric = { module = "dev.architectury:architectury-fabric", version.ref = "architectury-api" }
 
 jackson-databind = { module = "tools.jackson.core:jackson-databind", version.ref = "jackson" }
 jackson-yaml = { module = "tools.jackson.dataformat:jackson-dataformat-yaml", version.ref = "jackson" }
@@ -29,4 +34,6 @@ adventure-minimessage = { module = "net.kyori:adventure-text-minimessage", versi
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 
 [plugins]
-fabric-loom = { id = "net.fabricmc.fabric-loom", version.ref = "loom" }
+architectury-plugin = { id = "architectury-plugin", version.ref = "architectury-plugin" }
+architectury-loom-no-remap = { id = "dev.architectury.loom-no-remap", version.ref = "loom" }
+shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }

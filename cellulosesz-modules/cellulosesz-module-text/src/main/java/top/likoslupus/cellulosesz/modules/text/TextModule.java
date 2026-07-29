@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.modules.text;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
@@ -10,10 +9,11 @@ import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.TextService;
-import top.likoslupus.cellulosesz.modules.text.command.CustomTextCommand;
-import top.likoslupus.cellulosesz.modules.text.command.InfoCommand;
-import top.likoslupus.cellulosesz.modules.text.command.MotdCommand;
-import top.likoslupus.cellulosesz.modules.text.command.RulesCommand;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
+import top.likoslupus.cellulosesz.modules.text.application.DefaultTextCommandService;
+import top.likoslupus.cellulosesz.modules.text.application.TextCommandService;
+import top.likoslupus.cellulosesz.modules.text.command.TextCommand;
 import top.likoslupus.cellulosesz.modules.text.config.TextConfig;
 import top.likoslupus.cellulosesz.modules.text.service.ConfigTextService;
 
@@ -41,36 +41,40 @@ public final class TextModule implements CellulosesZModule {
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         texts = new ConfigTextService(requireNonNull(config, "TextConfig has not been initialized"));
         context.services().register(TextService.class, texts);
         context.services().register(ConfigTextService.class, texts);
+        context.services().register(TextCommandService.class, new DefaultTextCommandService(texts));
     }
 
     @Override
     public void registerEvents(ModuleContext context) {
         var platform = context.services().require(PlatformService.class);
         var renderer = context.services().require(MessageRenderer.class);
+
         context.events().listen(PlayerJoinEvent.class, event -> {
             var current = requireNonNull(config, "TextConfig has not been initialized");
             if (!current.showMotdOnJoin) return;
+
             var service = requireNonNull(texts, "TextService has not been initialized");
             service.motd().forEach(line -> platform.sendMessage(
                     event.player(),
-                    renderer.render(platform.locale(event.player()), "commands.text.line", Map.of("line", line))
+                    renderer.render(
+                            platform.locale(event.player()),
+                            GeneratedMessageKeys.COMMANDS_TEXT_LINE,
+                            Map.of("line", line)
+                    )
             ));
         });
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var service = requireNonNull(texts, "TextService has not been initialized");
-        context.commands().register(new InfoCommand(service));
-        context.commands().register(new MotdCommand(service));
-        context.commands().register(new RulesCommand(service));
-        context.commands().register(new CustomTextCommand(service));
-        context.services().require(CommandSuggestionRegistry.class)
-                .register("customtext", "name", ignored -> service.customNames());
+        var registry = context.services().require(CommandRegistry.class);
+        var service = context.services().require(TextCommandService.class);
+        context.track(registry.register("text-commands", new TextCommand(service)));
     }
 
     @Override

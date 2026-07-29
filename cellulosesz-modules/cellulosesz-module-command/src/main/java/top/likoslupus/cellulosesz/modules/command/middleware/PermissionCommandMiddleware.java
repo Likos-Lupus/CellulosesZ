@@ -1,27 +1,22 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 public final class PermissionCommandMiddleware implements CommandMiddleware {
 
-    private final MessageService messages;
-
-    public PermissionCommandMiddleware(MessageService messages) {
-        this.messages = messages;
-    }
-
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext context,
             CommandContinuation continuation
     ) {
-        if (!command.permission().isBlank() && !invocation.hasPermission(command.permission())) {
-            invocation.errorKey("common.no-permission");
+        if (!descriptor.permission().isBlank() && !context.hasPermission(descriptor.permission())) {
+            context.error(LocalizedMessage.of(GeneratedMessageKeys.COMMON_NO_PERMISSION));
             return 0;
         }
         return continuation.proceed();

@@ -1,12 +1,10 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-
-import java.util.Arrays;
 
 public final class AuditCommandMiddleware implements CommandMiddleware {
 
@@ -18,11 +16,15 @@ public final class AuditCommandMiddleware implements CommandMiddleware {
 
     @Override
     public int invoke(
-            CellCommand command,
-            CommandInvocation invocation,
+            CommandDescriptor descriptor,
+            CommandPolicyContext context,
             CommandContinuation continuation
     ) {
-        logger.debug("Command /%s %s".formatted(invocation.label(), String.join(" ", Arrays.asList(invocation.args()))));
+        logger.debug("Command /%s canonical=%s %s".formatted(
+                context.invokedLabel(),
+                descriptor.canonicalName(),
+                context.auditSummary()
+        ));
         return continuation.proceed();
     }
 

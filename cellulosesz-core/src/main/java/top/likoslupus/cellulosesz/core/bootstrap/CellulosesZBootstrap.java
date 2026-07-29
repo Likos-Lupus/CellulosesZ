@@ -3,6 +3,8 @@ package top.likoslupus.cellulosesz.core.bootstrap;
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.CommandRegistry;
+import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
+import top.likoslupus.cellulosesz.api.command.execution.CommandExecutionPipeline;
 import top.likoslupus.cellulosesz.api.command.service.*;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
@@ -20,6 +22,8 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
+import top.likoslupus.cellulosesz.core.command.catalog.DefaultCommandCatalog;
+import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecutionPipeline;
 import top.likoslupus.cellulosesz.core.command.service.*;
 import top.likoslupus.cellulosesz.core.config.CoreConfig;
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
@@ -55,7 +59,9 @@ public final class CellulosesZBootstrap {
     private final DefaultPermissionCatalog permissionCatalog = new DefaultPermissionCatalog();
     private final DefaultCommandAliasRegistry aliasRegistry = new DefaultCommandAliasRegistry();
     private final DefaultCommandSuggestionRegistry suggestionRegistry = new DefaultCommandSuggestionRegistry();
-    private final DefaultCommandRegistry commands = new DefaultCommandRegistry(permissionCatalog, aliasRegistry);
+    private final DefaultCommandExecutionPipeline commandPipeline;
+    private final DefaultCommandRegistry commands;
+    private final DefaultCommandCatalog commandCatalog = new DefaultCommandCatalog();
     private final DefaultPermissionService permissions = new DefaultPermissionService();
     private final JacksonStorageService storage;
     private final DefaultMessageService messages;
@@ -77,6 +83,8 @@ public final class CellulosesZBootstrap {
         this.version = version;
         this.logger = logger;
         this.scheduler = new DefaultScheduler(logger);
+        this.commandPipeline = new DefaultCommandExecutionPipeline(logger);
+        this.commands = new DefaultCommandRegistry(permissionCatalog, aliasRegistry, commandPipeline);
         this.configs = new JacksonConfigRegistry(configDirectory, logger);
         this.storage = new JacksonStorageService(
                 configDirectory.resolve("data"),
@@ -86,10 +94,12 @@ public final class CellulosesZBootstrap {
         this.messages = new DefaultMessageService(configDirectory.resolve("messages"), logger);
     }
 
+    @SuppressWarnings("resource")
     public <T> void registerService(Class<T> type, T instance) {
         services.register(type, instance);
     }
 
+    @SuppressWarnings("resource")
     public synchronized void initialize() {
         if (initialized) return;
 
@@ -113,7 +123,9 @@ public final class CellulosesZBootstrap {
         services.register(EventRegistry.class, events);
         services.register(Scheduler.class, scheduler);
         services.register(CommandRegistry.class, commands);
-        services.register(CommandMiddlewareRegistry.class, commands);
+        services.register(CommandMiddlewareRegistry.class, commandPipeline);
+        services.register(CommandExecutionPipeline.class, commandPipeline);
+        services.register(CommandCatalog.class, commandCatalog);
         services.register(DefaultCommandRegistry.class, commands);
         services.register(PermissionService.class, permissions);
         services.register(DefaultPermissionService.class, permissions);
@@ -269,6 +281,11 @@ public final class CellulosesZBootstrap {
 
     public List<LoadedModuleInfo> modules() {
         return requireModules().modules();
+    }
+
+    public boolean moduleEnabled(String moduleId) {
+        return requireModules().modules().stream()
+                .anyMatch(module -> module.id().equals(moduleId) && module.enabled());
     }
 
     public CommandRegistry commandRegistry() {

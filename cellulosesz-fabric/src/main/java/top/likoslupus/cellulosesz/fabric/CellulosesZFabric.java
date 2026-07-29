@@ -1,34 +1,28 @@
 package top.likoslupus.cellulosesz.fabric;
 
 import net.fabricmc.api.DedicatedServerModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
-import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.common.CellulosesZCommon;
+import top.likoslupus.cellulosesz.common.bootstrap.CommonRuntime;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
-import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
-import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
-import top.likoslupus.cellulosesz.fabric.hook.FabricGameplayHooks;
-import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
+import top.likoslupus.cellulosesz.fabric.bridge.FabricCommandRootMutator;
+import top.likoslupus.cellulosesz.fabric.lifecycle.FabricCommonRuntimeHooks;
+import top.likoslupus.cellulosesz.fabric.player.FabricPlayerLocationService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
@@ -36,123 +30,89 @@ import java.util.EnumSet;
 
 import static java.util.Objects.requireNonNull;
 
+/**
+ * Thin Fabric composition root; common lifecycle and command registration are owned by Architectury common code.
+ */
 public final class CellulosesZFabric implements DedicatedServerModInitializer {
 
     private @Nullable CellulosesZBootstrap bootstrap;
-    private @Nullable FabricPlatformService platform;
-    private @Nullable FabricVanillaCommandBridge vanillaCommands;
-    private @Nullable FabricGameplayHooks gameplayHooks;
-    private @Nullable FabricPlatformEventBridge platformEvents;
-    private @Nullable FabricPlayerCommandDispatchService commandDispatch;
-    private @Nullable FabricBanPlatformService banPlatform;
-    private @Nullable FabricEntityOperations entityOperations;
 
     @Override
     public void onInitializeServer() {
-        var configDirectory = FabricLoader.getInstance()
-                .getConfigDir()
-                .resolve("cellulosesz");
-        var version = FabricLoader.getInstance()
-                .getModContainer("cellulosesz")
+        var loader = FabricLoader.getInstance();
+        var configDirectory = loader.getConfigDir().resolve("cellulosesz");
+        var version = loader.getModContainer("cellulosesz")
                 .map(container ->
                         container.getMetadata()
                                 .getVersion()
                                 .getFriendlyString()
-                )
-                .orElse("unknown");
+                ).orElse("unknown");
 
-        bootstrap = new CellulosesZBootstrap(
-                configDirectory,
-                version,
-                new Slf4jCellulosesZLogger(LoggerFactory.getLogger("CellulosesZ"))
-        );
-        vanillaCommands = new FabricVanillaCommandBridge();
-        platform = new FabricPlatformService();
+        var logger = new Slf4jCellulosesZLogger(LoggerFactory.getLogger("CellulosesZ"));
+        var currentBootstrap = new CellulosesZBootstrap(configDirectory, version, logger);
+        bootstrap = currentBootstrap;
+        var platform = new FabricPlatformService(logger);
         validatePlatformCapabilities(platform);
 
-        bootstrap.registerService(PlatformService.class, platform);
-        bootstrap.registerService(FabricPlatformService.class, platform);
-        banPlatform = new FabricBanPlatformService();
-        bootstrap.registerService(BanPlatformService.class, banPlatform);
-        commandDispatch = new FabricPlayerCommandDispatchService(platform);
-        bootstrap.registerService(PlayerCommandDispatchService.class, commandDispatch);
-        bootstrap.registerService(PlayerStatePlatformService.class, new FabricPlayerStateOperations(platform));
-        bootstrap.registerService(InventoryPlatformService.class, new FabricInventoryOperations(platform));
-        bootstrap.registerService(WorldPlatformService.class, new FabricWorldOperations(platform));
-        entityOperations = new FabricEntityOperations(platform);
-        bootstrap.registerService(EntityPlatformService.class, entityOperations);
-        bootstrap.registerService(RecipePlatformService.class, new FabricRecipeOperations(platform));
-        bootstrap.initialize();
-        platform.messages(
-                bootstrap.serviceRegistry().require(MessageRenderer.class),
-                bootstrap.serviceRegistry().require(LocaleResolver.class)
+        currentBootstrap.registerService(
+                PlatformService.class,
+                platform
         );
-        bootstrap.permissionBackend(permissionBackend());
+        currentBootstrap.registerService(
+                FabricPlatformService.class,
+                platform
+        );
+        currentBootstrap.registerService(
+                PlayerLocationPlatformService.class,
+                new FabricPlayerLocationService(platform)
+        );
 
-        gameplayHooks = new FabricGameplayHooks(
-                bootstrap.serviceRegistry(),
+        var bans = new FabricBanPlatformService();
+        currentBootstrap.registerService(BanPlatformService.class, bans);
+
+        var dispatch = new FabricPlayerCommandDispatchService(platform);
+        currentBootstrap.registerService(
+                PlayerCommandDispatchService.class,
+                dispatch
+        );
+        currentBootstrap.registerService(
+                PlayerStatePlatformService.class,
+                new FabricPlayerStateOperations(platform)
+        );
+        currentBootstrap.registerService(
+                InventoryPlatformService.class,
+                new FabricInventoryOperations(platform)
+        );
+        currentBootstrap.registerService(
+                WorldPlatformService.class,
+                new FabricWorldOperations(platform)
+        );
+
+        var entities = new FabricEntityOperations(platform);
+        currentBootstrap.registerService(
+                EntityPlatformService.class,
+                entities
+        );
+        currentBootstrap.registerService(
+                RecipePlatformService.class,
+                new FabricRecipeOperations(platform)
+        );
+
+        var hooks = new FabricCommonRuntimeHooks(
+                currentBootstrap,
                 platform,
-                bootstrap.serviceRegistry().require(MessageRenderer.class),
-                bootstrap.serviceRegistry().require(LocaleResolver.class)
+                bans,
+                dispatch,
+                entities,
+                this::permissionBackend
         );
-        gameplayHooks.register();
-        platformEvents = new FabricPlatformEventBridge(bootstrap.eventRegistry(), platform, commandDispatch);
-        platformEvents.register();
-        FabricVanishBridge.visibility((viewer, target) ->
-                bootstrap.serviceRegistry()
-                        .optional(VanishService.class)
-                        .flatMap(service ->
-                                platform.player(viewer)
-                                        .map(wrapped -> service.canSee(wrapped, target.getUUID()))
-                        )
-                        .orElse(true)
-        );
-
-        var binder = new FabricCommandBinder(bootstrap, vanillaCommands);
-        bootstrap.registerService(CommandTreeService.class, binder);
-        CommandRegistrationCallback.EVENT.register(binder::bind);
-
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            platform.server(server);
-            banPlatform.server(server);
-            bootstrap.onServerStarting(server);
-        });
-        ServerLifecycleEvents.SERVER_STARTED.register(server ->
-                bootstrap.onServerStarted(server)
-        );
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            try {
-                bootstrap.onServerStopping(server);
-            } finally {
-                var events = platformEvents;
-                if (events != null) events.close();
-                var tracked = entityOperations;
-                if (tracked != null) tracked.clearTrackedEntities();
-                var bans = banPlatform;
-                if (bans != null) bans.clearServer();
-                platform.close();
-            }
-        });
-        ServerTickEvents.END_SERVER_TICK.register(server -> {
-            commandDispatch.beginTick();
-            var tracked = entityOperations;
-            if (tracked != null) tracked.tick();
-            bootstrap.tick();
-            gameplayHooks.tick(server);
-            platformEvents.tick(server);
-        });
-
-        ServerPlayConnectionEvents.JOIN.register((handler, _, _) -> {
-            platformEvents.playerJoined(handler.getPlayer());
-            bootstrap.onPlayerJoin(handler.getPlayer());
-        });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, _) -> {
-            platformEvents.playerDisconnected(handler.getPlayer());
-            FabricDisplayNameBridge.clear(handler.getPlayer().getUUID());
-            bootstrap.onPlayerDisconnect(handler.getPlayer());
-        });
+        CellulosesZCommon.initialize(new CommonRuntime(
+                currentBootstrap,
+                platform,
+                hooks,
+                new FabricCommandRootMutator()
+        ));
     }
-
 
     private static void validatePlatformCapabilities(PlatformService platform) {
         var required = EnumSet.allOf(PlatformCapability.class);
@@ -163,22 +123,23 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
     }
 
     private PermissionBackend permissionBackend() {
-        requireNonNull(bootstrap, "CellulosesZBootstrap has not been initialized");
-        var permissionConfig = bootstrap.configRegistry()
+        var current = requireNonNull(bootstrap, "CellulosesZBootstrap has not been initialized");
+        var permissionConfig = current.configRegistry()
                 .optional("module.permission", PermissionConfig.class)
                 .orElseGet(PermissionConfig::new);
         var backends = new ArrayList<PermissionBackend>();
 
-        if (permissionConfig.provider.preferLuckPerms && FabricLoader.getInstance().isModLoaded("luckperms")) {
+        if (permissionConfig.provider.preferLuckPerms
+                && FabricLoader.getInstance().isModLoaded("luckperms")
+        ) {
             backends.add(new ReflectionLuckPermsPermissionBackend());
         }
         if (permissionConfig.provider.opFallback) {
             backends.add(new FabricOpPermissionBackend(permissionConfig.provider.opLevel));
         }
         if (backends.isEmpty()) {
-            backends.add(new FabricOpPermissionBackend(bootstrap.coreConfig().permissions.opFallbackLevel));
+            backends.add(new FabricOpPermissionBackend(current.coreConfig().permissions.opFallbackLevel));
         }
-
         return new CompositePermissionBackend(backends);
     }
 
