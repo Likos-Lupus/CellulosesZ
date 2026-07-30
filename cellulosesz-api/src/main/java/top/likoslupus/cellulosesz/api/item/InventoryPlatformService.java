@@ -10,6 +10,19 @@ public interface InventoryPlatformService {
 
     PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player);
 
+    /**
+     * Returns the lossless snapshot of the current main-hand stack.
+     */
+    PlatformResult<InventorySlotView> heldSlot(CellPlayer player);
+
+    /**
+     * Prepares an exact-slot, conflict-detecting removal transaction.
+     */
+    PlatformResult<InventoryMutation> prepareRemoval(
+            CellPlayer player,
+            List<InventoryStackSelection> selections
+    );
+
     PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot);
 
     PlatformResult<HeldStackChange> setHeldCount(

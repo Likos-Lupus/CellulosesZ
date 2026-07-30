@@ -1,95 +1,129 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import org.jspecify.annotations.Nullable;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
 
-import java.util.Map;
-import java.util.Optional;
+import static java.util.Objects.requireNonNull;
 
-public final class GameModeCommand implements CellCommand {
+public final class GameModeCommand implements CommandContributor {
 
-    private final PlatformService platform;
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
-    public GameModeCommand(PlatformService platform) {
-        this.platform = platform;
+    public GameModeCommand(
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.gamemode";
-    }
-
-    @Override
-    public String usage() {
-        return "/gamemode <survival|creative|adventure|spectator> [player]";
-    }
-
-    @Override
-    public String name() {
-        return "gamemode";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-
-        if (args.length < 1 || args.length > 2) {
-            invocation.errorKey(
-                    "commands.playerstate.gamemode-usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var target = target(invocation, args.length == 2 ? args[1] : null);
-        if (target.isEmpty()) return 0;
-
-        if (args.length == 2
-                && !invocation.hasPermission("cellulosesz.playerstate.gamemode.others")
-        ) {
-            invocation.errorKey("common.no-permission");
-            return 0;
-        }
-
-        if (!platform.setGameMode(target.get(), args[0])) {
-            invocation.errorKey(
-                    "commands.playerstate.gamemode-invalid",
-                    Map.of("mode", args[0])
-            );
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.playerstate.gamemode-set",
-                Map.of(
-                        "player", target.get().name(),
-                        "mode", platform.gameMode(target.get()).orElse(args[0])
-                )
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "gamemode",
+                "cellulosesz.playerstate.gamemode",
+                CommandSourceKind.ANY
         );
-        return 1;
+
+        var root = Commands.literal("gamemode");
+
+        Arrays.stream(GameModeKind.values())
+                .map(mode -> Commands.literal(mode.name().toLowerCase(Locale.ROOT))
+                        .executes(command -> PlayerStateCommandSupport.async(
+                                context,
+                                command,
+                                descriptor,
+                                "gamemode self",
+                                policy -> PlayerStateCommandSupport.currentPlayer(
+                                                policy,
+                                                players
+                                        )
+                                        .map(player ->
+                                                service.gameMode(
+                                                        player,
+                                                        mode
+                                                )
+                                        )
+                                        .orElseGet(() ->
+                                                CompletableFuture.completedFuture(
+                                                        PlayerStateCommandResult.failure(
+                                                                "common.player-only"
+                                                        )
+                                                )
+                                        )
+                        ))
+                        .then(Commands.argument(
+                                                "player",
+                                                PlayerNameArgument.playerName()
+                                        )
+                                        .requires(source -> context.permissions().has(
+                                                source,
+                                                "cellulosesz.playerstate.gamemode.others"
+                                        ))
+                                        .suggests((_, builder) ->
+                                                CommandSuggestionSupport.suggest(
+                                                        players::onlinePlayerNames,
+                                                        builder
+                                                )
+                                        )
+                                        .executes(command ->
+                                                PlayerStateCommandSupport.async(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        "gamemode other",
+                                                        _ -> {
+                                                            var name = PlayerNameArgument.get(
+                                                                    command,
+                                                                    "player"
+                                                            );
+
+                                                            return players.onlinePlayer(name)
+                                                                    .map(player ->
+                                                                            service.gameMode(
+                                                                                    player,
+                                                                                    mode
+                                                                            )
+                                                                    )
+                                                                    .orElseGet(() ->
+                                                                            PlayerStateCommandSupport.offline(
+                                                                                    name
+                                                                            )
+                                                                    );
+                                                        }
+                                                )
+                                        )
+                        )
+                )
+                .forEach(root::then);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.gamemode",
+                "/gamemode <survival|creative|adventure|spectator> [player]",
+                root
+        );
     }
 
-    private Optional<CellPlayer> target(CommandInvocation invocation, @Nullable String name) {
-        if (name == null) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.common.player-required");
-            }
-            return self;
-        }
-
-        var target = invocation.resolvePlayer(name).online();
-        if (target.isEmpty()) {
-            invocation.errorKey(
-                    "commands.common.player-offline",
-                    Map.of("player", name)
-            );
-        }
-        return target;
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

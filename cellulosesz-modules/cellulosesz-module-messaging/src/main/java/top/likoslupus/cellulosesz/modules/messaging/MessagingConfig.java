@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.modules.messaging;
 import java.time.ZoneId;
 
 import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class MessagingConfig {
 
@@ -28,14 +29,16 @@ public final class MessagingConfig {
     }
 
     public MessagingConfig validatedCopy() {
-        if (maxMailPerPlayer < 1) throw new IllegalArgumentException("maxMailPerPlayer must be positive");
-        if (mailPageSize < 1) throw new IllegalArgumentException("mailPageSize must be positive");
-        if (maxMessageLength < 1) throw new IllegalArgumentException("maxMessageLength must be positive");
-        if (maximumTemporaryMailSeconds < 1L)
-            throw new IllegalArgumentException("maximumTemporaryMailSeconds must be positive");
-        if (expiredMailSweepSeconds < 1L)
-            throw new IllegalArgumentException("expiredMailSweepSeconds must be positive");
-        if (maxSendAllRecipients < 1) throw new IllegalArgumentException("maxSendAllRecipients must be positive");
+        requirePositive(maxMailPerPlayer, "maxMailPerPlayer");
+        requirePositive(mailPageSize, "mailPageSize");
+        requirePositive(maxMessageLength, "maxMessageLength");
+        requirePositive(maximumTemporaryMailSeconds, "maximumTemporaryMailSeconds");
+        requirePositive(expiredMailSweepSeconds, "expiredMailSweepSeconds");
+        if (expiredMailSweepSeconds > Long.MAX_VALUE / 20L) {
+            throw new IllegalArgumentException("expiredMailSweepSeconds is too large");
+        }
+        requirePositive(maxSendAllRecipients, "maxSendAllRecipients");
+        //noinspection ResultOfMethodCallIgnored
         ZoneId.of(requireNonNull(mailTimeZone, "mailTimeZone"));
 
         var copy = new MessagingConfig();

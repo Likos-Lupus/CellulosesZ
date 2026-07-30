@@ -1,51 +1,109 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-public final class HealCommand extends AbstractPlayerStateCommand {
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
+
+public final class HealCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public HealCommand(
-            PlatformService platform,
-            UserService users,
-            PlayerStateService states
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, states);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.heal";
-    }
-
-    @Override
-    public String usage() {
-        return "/heal [player]";
-    }
-
-    @Override
-    public String name() {
-        return "heal";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var target = target(
-                invocation,
-                0,
-                "cellulosesz.playerstate.heal.other"
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "heal",
+                "cellulosesz.playerstate.heal",
+                CommandSourceKind.ANY
         );
-        if (target.isEmpty()) return 0;
 
-        var result = states.heal(target.get());
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        var root = Commands.literal("heal")
+                .executes(command -> PlayerStateCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "heal self",
+                        policy -> PlayerStateCommandSupport.currentPlayer(
+                                        policy,
+                                        players
+                                )
+                                .map(service::heal)
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                PlayerStateCommandResult.failure(
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.playerstate.heal.other"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> PlayerStateCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "heal other",
+                                        _ -> {
+                                            var name = PlayerNameArgument.get(
+                                                    command,
+                                                    "player"
+                                            );
+
+                                            return players.onlinePlayer(name)
+                                                    .map(service::heal)
+                                                    .orElseGet(() ->
+                                                            PlayerStateCommandSupport.offline(
+                                                                    name
+                                                            )
+                                                    );
+                                        }
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.heal",
+                "/heal [player]",
+                root
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

@@ -2,29 +2,24 @@ package top.likoslupus.cellulosesz.modules.economy.command;
 
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.WorthService;
-import top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot;
-import top.likoslupus.cellulosesz.api.item.InventoryMutation;
-import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
-import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
-import top.likoslupus.cellulosesz.api.text.RichText;
-import top.likoslupus.cellulosesz.api.user.NameCacheService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.modules.economy.application.ItemValueCommandService;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,21 +27,28 @@ final class EconomyCommandBehaviorTest {
 
     @Test
     void sellRollsBackExactPreparedMutationWhenBalanceSaveFails() {
-        var player = new CellPlayer(UUID.randomUUID(), "seller", new Object());
-        var snapshot = new InventoryItemSnapshot(4, "lossless-stack");
+        var player = new CellPlayer(
+                UUID.randomUUID(),
+                "seller",
+                new Object()
+        );
+        var snapshot = new InventoryItemSnapshot(
+                4,
+                "lossless-stack"
+        );
+        var slot = new InventorySlotView(
+                snapshot,
+                new ItemDescriptor("minecraft:stone", 3),
+                InventorySlotKind.MAIN,
+                true
+        );
         var mutation = new TrackingMutation();
-        var platform = proxy(
-                PlatformService.class,
-                (method, args) -> switch (method.getName()) {
-                    case "player" -> Optional.of(player);
-                    case "inventorySnapshot" -> Optional.of(List.of(snapshot));
-                    case "plainInventoryItem" -> true;
-                    case "describeInventoryItem" -> Optional.of(new ItemDescriptor("minecraft:stone", 3));
-                    case "prepareInventoryRemoval" -> Optional.of(mutation);
-                    case "runOnServerThread" -> {
-                        ((Runnable) args[0]).run();
-                        yield null;
-                    }
+        var inventories = proxy(
+                InventoryPlatformService.class,
+                (method, _) -> switch (method.getName()) {
+                    case "inventorySlots" -> PlatformResult.success(List.of(slot));
+                    case "heldSlot" -> PlatformResult.success(slot);
+                    case "prepareRemoval" -> PlatformResult.success(mutation);
                     default -> defaultValue(method);
                 }
         );
@@ -64,19 +66,25 @@ final class EconomyCommandBehaviorTest {
                     default -> defaultValue(method);
                 }
         );
-        var items = proxy(
-                ItemService.class,
-                (method, _) -> defaultValue(method)
+        var service = new ItemValueCommandService(
+                inventories,
+                proxy(ItemService.class, (method, _) -> defaultValue(method)),
+                worth,
+                economy,
+                new ImmediateServerThreadExecutor()
         );
-        var invocation = new TestInvocation("all");
 
-        assertEquals(
-                1,
-                new SellCommand(platform, items, worth, economy, new NoopLogger()).execute(invocation)
-        );
+        var result = service.sell(
+                player,
+                ItemValueCommandService.SellSelector.ALL,
+                Optional.empty(),
+                1
+        ).join();
+
+        assertFalse(result.success());
+        assertEquals("service.economy.persistence-failed", result.messages().getFirst().key());
         assertTrue(mutation.committed);
         assertTrue(mutation.rolledBack);
-        assertEquals("service.economy.persistence-failed", invocation.errorKey);
     }
 
     @SuppressWarnings("unchecked")
@@ -91,58 +99,60 @@ final class EconomyCommandBehaviorTest {
                     var args = rawArgs == null
                             ? new Object[0]
                             : rawArgs;
-
-                    if (method.getDeclaringClass() == Object.class) {
-                        return switch (method.getName()) {
-                            case "toString" -> type.getSimpleName() + "TestProxy";
-                            case "hashCode" -> System.identityHashCode(instance);
-                            case "equals" -> instance == args[0];
-                            default -> throw new UnsupportedOperationException(method.getName());
-                        };
-                    }
-
-                    return behavior.apply(method, args);
+                    return method.getDeclaringClass() != Object.class
+                            ? behavior.apply(method, args)
+                            : switch (method.getName()) {
+                                case "toString" -> type.getSimpleName() + "TestProxy";
+                                case "hashCode" -> System.identityHashCode(instance);
+                                case "equals" -> instance == args[0];
+                                default -> throw new UnsupportedOperationException(method.getName());
+                            };
                 }
         );
     }
 
     private static Object defaultValue(Method method) {
         var type = method.getReturnType();
-        return switch (type) {
-            case Class<?> t when t == void.class -> null;
-            case Class<?> t when t == boolean.class -> false;
-            case Class<?> t when t == int.class -> 0;
-            case Class<?> t when t == long.class -> 0L;
-            case Class<?> t when t == double.class -> 0.0D;
-            case Class<?> t when t == String.class -> "";
-            case Class<?> t when Optional.class.isAssignableFrom(t) -> Optional.empty();
-            case Class<?> t when List.class.isAssignableFrom(t) -> List.of();
-            case Class<?> t when Set.class.isAssignableFrom(t) -> Set.of();
-            case Class<?> t when Collection.class.isAssignableFrom(t) -> List.of();
-            case Class<?> t when Map.class.isAssignableFrom(t) -> Map.of();
-            case Class<?> t when CompletableFuture.class.isAssignableFrom(t) -> CompletableFuture.completedFuture(null);
-            case Class<?> t when t == BigDecimal.class -> BigDecimal.ZERO;
-            default -> throw new UnsupportedOperationException(method.toString());
-        };
+        if (type == void.class) return null;
+        if (type == boolean.class) return false;
+        if (type == int.class) return 0;
+        if (type == long.class) return 0L;
+        if (type == double.class) return 0.0D;
+        if (type == String.class) return "";
+        if (Optional.class.isAssignableFrom(type)) return Optional.empty();
+        if (List.class.isAssignableFrom(type)) return List.of();
+        if (CompletableFuture.class.isAssignableFrom(type)) return CompletableFuture.completedFuture(null);
+        if (BigDecimal.class.isAssignableFrom(type)) return BigDecimal.ZERO;
+        if (PlatformResult.class.isAssignableFrom(type)) {
+            return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "unsupported test operation");
+        }
+        throw new UnsupportedOperationException(method.toString());
     }
 
     @Test
     void worthInventoryUsesEveryStackQuantity() {
-        var player = new CellPlayer(UUID.randomUUID(), "owner", new Object());
-        var first = new InventoryItemSnapshot(1, "first");
-        var second = new InventoryItemSnapshot(7, "second");
-        var platform = proxy(
-                PlatformService.class,
-                (method, args) -> switch (method.getName()) {
-                    case "player" -> Optional.of(player);
-                    case "inventorySnapshot" -> Optional.of(List.of(first, second));
-                    case "plainInventoryItem" -> true;
-                    case "describeInventoryItem" -> Optional.of(new ItemDescriptor(
-                            "minecraft:stone",
-                            ((InventoryItemSnapshot) args[0]).validatedStack().equals("first") ? 2 : 3
-                    ));
-                    default -> defaultValue(method);
-                }
+        var player = new CellPlayer(
+                UUID.randomUUID(),
+                "owner",
+                new Object()
+        );
+        var first = new InventorySlotView(
+                new InventoryItemSnapshot(1, "first"),
+                new ItemDescriptor("minecraft:stone", 2),
+                InventorySlotKind.MAIN,
+                true
+        );
+        var second = new InventorySlotView(
+                new InventoryItemSnapshot(7, "second"),
+                new ItemDescriptor("minecraft:stone", 3),
+                InventorySlotKind.MAIN,
+                true
+        );
+        var inventories = proxy(
+                InventoryPlatformService.class,
+                (method, _) -> method.getName().equals("inventorySlots")
+                        ? PlatformResult.success(List.of(first, second))
+                        : defaultValue(method)
         );
         var worth = proxy(
                 WorthService.class,
@@ -156,76 +166,65 @@ final class EconomyCommandBehaviorTest {
                         ? ((BigDecimal) args[0]).toPlainString()
                         : defaultValue(method)
         );
-        var items = proxy(
-                ItemService.class,
-                (method, _) -> defaultValue(method)
+        var service = new ItemValueCommandService(
+                inventories,
+                proxy(ItemService.class, (method, _) -> defaultValue(method)),
+                worth,
+                economy,
+                new ImmediateServerThreadExecutor()
         );
-        var invocation = new TestInvocation("inventory");
 
-        assertEquals(1, new WorthCommand(platform, items, worth, economy).execute(invocation));
-        assertEquals("10.00", invocation.replyPlaceholders.get("total"));
-        assertTrue(String.valueOf(invocation.replyPlaceholders.get("rows")).contains("x5"));
+        var result = service.worth(
+                player,
+                ItemValueCommandService.WorthSelector.INVENTORY
+        ).join();
+
+        assertTrue(result.success());
+        assertEquals("10.00", result.messages().getLast().placeholders().get("total"));
+        assertEquals(5L, result.messages().getFirst().placeholders().get("count"));
     }
 
     @Test
-    void balanceTopRejectsPageZeroBeforeQueryingServices() {
-        var platform = proxy(
-                PlatformService.class,
-                (method, _) -> defaultValue(method)
+    void componentBearingInventoryIsRejectedWithoutPreparingMutation() {
+        var player = new CellPlayer(
+                UUID.randomUUID(),
+                "owner",
+                new Object()
         );
-        var users = proxy(
-                UserService.class,
-                (method, _) -> defaultValue(method)
+        var slot = new InventorySlotView(
+                new InventoryItemSnapshot(1, "component-stack"),
+                new ItemDescriptor("minecraft:stone", 1),
+                InventorySlotKind.MAIN,
+                false
         );
-        var economy = proxy(
-                EconomyService.class,
-                (method, _) -> {
-                    fail("Economy must not be queried for an invalid page");
-                    return defaultValue(method);
+        var inventories = proxy(
+                InventoryPlatformService.class,
+                (method, _) -> switch (method.getName()) {
+                    case "inventorySlots" -> PlatformResult.success(List.of(slot));
+                    case "prepareRemoval" -> throw new AssertionError("mutation must not be prepared");
+                    default -> defaultValue(method);
                 }
         );
-        var invocation = new TestInvocation("0");
-
-        assertEquals(
-                0,
-                new BalanceTopCommand(
-                        platform,
-                        users,
-                        names(),
-                        economy,
-                        new EconomyConfig()
-                ).execute(invocation)
+        var service = new ItemValueCommandService(
+                inventories,
+                proxy(ItemService.class, (method, _) -> defaultValue(method)),
+                proxy(WorthService.class, (_, _) -> Optional.of(BigDecimal.ONE)),
+                proxy(EconomyService.class, (method, _) -> defaultValue(method)),
+                new ImmediateServerThreadExecutor()
         );
-        assertEquals("commands.economy.balance-top-command.error.page-number-must-integer", invocation.errorKey);
-    }
 
-    @NullMarked
-    private static NameCacheService names() {
-        return new NameCacheService() {
-            @Override
-            public void remember(UUID uuid, String name) {
-            }
+        var result = service.sell(
+                player,
+                ItemValueCommandService.SellSelector.ALL,
+                Optional.empty(),
+                1
+        ).join();
 
-            @Override
-            public Optional<UUID> findUuid(String name) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Optional<String> findName(UUID uuid) {
-                return Optional.empty();
-            }
-
-            @Override
-            public Map<UUID, String> entries() {
-                return Map.of();
-            }
-
-            @Override
-            public CompletableFuture<Void> save() {
-                return CompletableFuture.completedFuture(null);
-            }
-        };
+        assertFalse(result.success());
+        assertEquals(
+                "commands.economy.component-item-unsupported",
+                result.messages().getFirst().key()
+        );
     }
 
     @NullMarked
@@ -249,107 +248,21 @@ final class EconomyCommandBehaviorTest {
     }
 
     @NullMarked
-    private static final class TestInvocation implements CommandInvocation {
-
-        private final String[] args;
-        private String errorKey = "";
-        private Map<String, ?> replyPlaceholders = Map.of();
-
-        private TestInvocation(String... args) {
-            this.args = args;
-        }
+    private static final class ImmediateServerThreadExecutor implements ServerThreadExecutor {
 
         @Override
-        public Object nativeSource() {
-            return this;
-        }
-
-        @Override
-        public String label() {
-            return "test";
-        }
-
-        @Override
-        public String[] args() {
-            return args.clone();
-        }
-
-        @Override
-        public boolean player() {
+        public boolean isServerThread() {
             return true;
         }
 
         @Override
-        public Optional<String> playerName() {
-            return Optional.of("tester");
+        public void execute(Runnable task) {
+            task.run();
         }
 
         @Override
-        public boolean hasPermission(String permission) {
-            return true;
-        }
-
-        @Override
-        public ResolvedPlayer resolvePlayer(String input) {
-            return new ResolvedPlayer(
-                    ResolvedPlayerState.UNKNOWN,
-                    null,
-                    input,
-                    null,
-                    false
-            );
-        }
-
-        @Override
-        public String locale() {
-            return "en";
-        }
-
-        @Override
-        public void reply(String message) {
-        }
-
-        @Override
-        public void reply(RichText message) {
-        }
-
-        @Override
-        public void replyKey(String key, Map<String, ?> placeholders) {
-            replyPlaceholders = Map.copyOf(placeholders);
-        }
-
-        @Override
-        public void error(String message) {
-        }
-
-        @Override
-        public void error(RichText message) {
-        }
-
-        @Override
-        public void errorKey(String key, Map<String, ?> placeholders) {
-            errorKey = key;
-        }
-
-    }
-
-    @NullMarked
-    private static final class NoopLogger implements CellulosesZLogger {
-
-        @Override
-        public void warn(String message) {
-        }
-
-        @Override
-        public void error(String message) {
-        }
-
-        @Override
-        public void error(String message, Throwable throwable) {
-        }
-
-        @Override
-        public void info(String message) {
+        public <T> CompletableFuture<T> submit(Supplier<T> task) {
+            return CompletableFuture.completedFuture(task.get());
         }
 
     }

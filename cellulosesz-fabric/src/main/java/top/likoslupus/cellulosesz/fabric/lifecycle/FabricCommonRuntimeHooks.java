@@ -119,6 +119,7 @@ public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
         var current = events;
         if (current != null) current.playerDisconnected(player);
         FabricDisplayNameBridge.clear(player.getUUID());
+        FabricVanishBridge.vanished(player.getUUID(), false);
     }
 
     @Override
@@ -126,6 +127,7 @@ public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
         var current = events;
         if (current != null) current.close();
         entities.clearTrackedEntities();
+        FabricVanishBridge.clear();
         bans.clearServer();
         platform.close();
     }

@@ -1,73 +1,120 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
+import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandResult;
 
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-public final class BalanceCommand extends AbstractEconomyCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class BalanceCommand implements CommandContributor {
+
+    private final BalanceCommandService service;
+    private final PlayerDirectory players;
 
     public BalanceCommand(
-            PlatformService platform,
-            UserService users,
-            EconomyService economy,
-            EconomyConfig config
+            BalanceCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, economy, config);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("bal", "money");
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.economy.balance";
-    }
-
-    @Override
-    public String usage() {
-        return "/balance [player]";
-    }
-
-    @Override
-    public String name() {
-        return "balance";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length == 0) {
-            var self = player(invocation);
-            if (self.isEmpty()) return 0;
-            invocation.replyKey(
-                    "commands.economy.balance-command.reply.balance",
-                    Map.of("balance", format(economy.balance(self.get().uuid())))
-            );
-            return 1;
-        }
-
-        if (!invocation.hasPermission("cellulosesz.economy.balance.other")) {
-            invocation.errorKey("commands.economy.balance-command.error.do-not-permission-view-another-players-balance");
-            return 0;
-        }
-
-        var target = uuid(invocation, args[0]);
-        if (target.isEmpty()) return 0;
-        invocation.replyKey(
-                "commands.economy.balance-other",
-                Map.of(
-                        "player", args[0],
-                        "balance", format(economy.balance(target.get()))
-                )
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "balance",
+                "cellulosesz.economy.balance",
+                CommandSourceKind.ANY
         );
-        return 1;
+
+        var root = Commands.literal("balance")
+                .executes(command -> EconomyCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "balance self",
+                        policy -> EconomyCommandSupport.currentPlayer(
+                                        policy.playerUuid(),
+                                        players
+                                )
+                                .map(service::self)
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                EconomyCommandResult.failure(
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.economy.balance.other"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> EconomyCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "balance other",
+                                        policy -> service.other(
+                                                PlayerNameArgument.get(
+                                                        command,
+                                                        "player"
+                                                ),
+                                                EconomyCommandSupport.currentPlayer(
+                                                                policy.playerUuid(),
+                                                                players
+                                                        )
+                                                        .orElse(null)
+                                        )
+                                ))
+                );
+
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("bal", "money"),
+                "commands.description.balance",
+                "/balance [player]",
+                root
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "bal",
+                node
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "money",
+                node
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

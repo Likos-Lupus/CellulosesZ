@@ -1,95 +1,138 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
+import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
 
-import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
+import java.util.List;
+import java.util.function.Supplier;
 
-public final class EcoCommand extends AbstractEconomyCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class EcoCommand implements CommandContributor {
+
+    private final BalanceCommandService service;
+    private final Supplier<EconomyCommandSettings> settings;
 
     public EcoCommand(
-            PlatformService platform,
-            UserService users,
-            EconomyService economy,
-            EconomyConfig config
+            BalanceCommandService service,
+            Supplier<EconomyCommandSettings> settings
     ) {
-        super(platform, users, economy, config);
+        this.service = requireNonNull(service, "service");
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.economy.admin";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "eco",
+                "cellulosesz.economy.admin",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("eco")
+                .then(branch(
+                        context,
+                        descriptor,
+                        "give",
+                        BalanceCommandService.Mutation.GIVE,
+                        true
+                ))
+                .then(branch(
+                        context,
+                        descriptor,
+                        "take",
+                        BalanceCommandService.Mutation.TAKE,
+                        true
+                ))
+                .then(branch(
+                        context,
+                        descriptor,
+                        "set",
+                        BalanceCommandService.Mutation.SET,
+                        false
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.eco",
+                "/eco <give|take|set> <player> <amount>",
+                root
+        );
     }
 
-    @Override
-    public String usage() {
-        return "/eco <give|take|set> <player> <amount>";
-    }
+    private LiteralArgumentBuilder<CommandSourceStack> branch(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            String literal,
+            BalanceCommandService.Mutation mutation,
+            boolean positive
+    ) {
+        var snapshot = settings.get();
 
-    @Override
-    public String name() {
-        return "eco";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length != 3) {
-            invocation.errorKey(
-                    "commands.economy.eco-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var target = uuid(invocation, args[1]);
-        var amount = amount(invocation, args[2]);
-        if (target.isEmpty() || amount.isEmpty()) return 0;
-
-        var cause = cause(invocation, "eco " + args[0]);
-        Optional<CompletableFuture<top.likoslupus.cellulosesz.api.economy.TransactionResult>> result =
-                switch (args[0].toLowerCase()) {
-                    case "give", "add", "deposit" -> Optional.of(
-                            economy.deposit(target.get(), amount.get(), cause)
-                    );
-                    case "take", "remove", "withdraw" -> Optional.of(
-                            economy.withdraw(target.get(), amount.get(), cause)
-                    );
-                    case "set" -> Optional.of(
-                            economy.setBalance(target.get(), amount.get(), cause)
-                    );
-                    default -> Optional.empty();
-                };
-
-        if (result.isEmpty()) {
-            invocation.errorKey(
-                    "commands.economy.eco-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        result.orElseThrow().whenComplete((transaction, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) {
-                invocation.errorKey("service.economy.persistence-failed");
-            } else if (!transaction.success()) {
-                invocation.error(transaction.message());
-            } else {
-                invocation.replyKey(
-                        "commands.economy.eco-result",
-                        Map.of(
-                                "result", transaction.message(),
-                                "balance", format(transaction.balance())
-                        )
+        var money = positive
+                ? MoneyArgument.positive(
+                snapshot.scale(),
+                snapshot.maximumBalance()
+        )
+                : MoneyArgument.nonNegative(
+                        snapshot.scale(),
+                        snapshot.maximumBalance()
                 );
-            }
-        }));
-        return 1;
+
+        return Commands.literal(literal)
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                context::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .then(Commands.argument("amount", money)
+                                        .executes(command ->
+                                                EconomyCommandSupport.async(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        "eco " + literal,
+                                                        policy -> service.mutate(
+                                                                mutation,
+                                                                PlayerNameArgument.get(
+                                                                        command,
+                                                                        "player"
+                                                                ),
+                                                                MoneyArgument.get(
+                                                                        command,
+                                                                        "amount"
+                                                                ),
+                                                                policy.playerName()
+                                                                        .orElse(
+                                                                                "console"
+                                                                        )
+                                                        )
+                                                )
+                                        )
+                                )
+                );
+    }
+
+    @Override
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

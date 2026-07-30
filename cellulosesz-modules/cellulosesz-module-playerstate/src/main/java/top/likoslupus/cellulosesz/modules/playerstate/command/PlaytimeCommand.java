@@ -1,92 +1,113 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-import java.util.Map;
-import java.util.UUID;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
-public final class PlaytimeCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final UserService users;
+public final class PlaytimeCommand implements CommandContributor {
+
+    private final PlayerInformationCommandService service;
+    private final PlayerDirectory players;
+    private final NameCacheService names;
 
     public PlaytimeCommand(
-            PlatformService platform,
-            UserService users
+            PlayerInformationCommandService service,
+            PlayerDirectory players,
+            NameCacheService names
     ) {
-        this.platform = platform;
-        this.users = users;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.names = requireNonNull(names, "names");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.playtime";
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "playtime",
+                "cellulosesz.playerstate.playtime",
+                CommandSourceKind.ANY
+        );
 
-    @Override
-    public String usage() {
-        return "/playtime [player]";
-    }
-
-    @Override
-    public String name() {
-        return "playtime";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        final UUID uuid;
-        final String name;
-
-        if (args.length == 0) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.common.player-required");
-                return 0;
-            }
-
-            uuid = self.get().uuid();
-            name = self.get().name();
-        } else {
-            if (!invocation.hasPermission("cellulosesz.playerstate.playtime.others")) {
-                invocation.errorKey("common.no-permission");
-                return 0;
-            }
-
-            var resolved = invocation.resolvePlayer(args[0]);
-            if (resolved.optionalUuid().isEmpty()) {
-                invocation.errorKey(
-                        "commands.common.unknown-player",
-                        Map.of("player", args[0])
+        var root = Commands.literal("playtime")
+                .executes(command -> PlayerStateCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "playtime self",
+                        policy -> PlayerStateCommandSupport.currentPlayer(
+                                        policy,
+                                        players
+                                )
+                                .map(player -> service.playtime(
+                                        Optional.of(player),
+                                        player.name()
+                                ))
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                PlayerStateCommandResult.failure(
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.playerstate.playtime.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                () -> names.entries().values(),
+                                                builder
+                                        )
+                                )
+                                .executes(command -> PlayerStateCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "playtime",
+                                        policy -> service.playtime(
+                                                PlayerStateCommandSupport.currentPlayer(
+                                                        policy,
+                                                        players
+                                                ),
+                                                PlayerNameArgument.get(
+                                                        command,
+                                                        "player"
+                                                )
+                                        )
+                                ))
                 );
-                return 0;
-            }
 
-            uuid = resolved.optionalUuid().orElseThrow();
-            name = resolved.name();
-        }
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.playtime",
+                "/playtime [player]",
+                root
+        );
+    }
 
-        users.load(uuid).whenComplete((user, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.user.load-failed");
-                return;
-            }
-            try {
-                var total = user.timestamps.playTimeMillis;
-                if (user.timestamps.activeSessionStartedAt != null) {
-                    total = Math.addExact(total, Math.max(0L, System.currentTimeMillis() - user.timestamps.activeSessionStartedAt));
-                }
-                invocation.replyKey("commands.playerstate.playtime", Map.of(
-                        "player", name, "playtime", PlayerTimeFormat.duration(total)));
-            } catch (ArithmeticException _) {
-                invocation.errorKey("commands.playerstate.playtime-invalid");
-            }
-        });
-        return 1;
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

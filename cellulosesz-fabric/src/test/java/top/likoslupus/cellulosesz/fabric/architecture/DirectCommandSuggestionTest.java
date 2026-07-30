@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestion;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
@@ -41,8 +42,11 @@ final class DirectCommandSuggestionTest {
     @Test
     void moduleSnapshotsAndDynamicPermissionsDriveSuggestions() {
         var dispatcher = new CommandDispatcher<CommandSourceStack>();
-        var context = new TreeContext(dispatcher, permission -> !permission.endsWith(".private")
-                && !permission.endsWith(".secret"));
+        var context = new TreeContext(
+                dispatcher,
+                permission -> !permission.endsWith(".private")
+                        && !permission.endsWith(".secret")
+        );
         new TextCommand(textService(false)).register(context);
         new HomeCommand(homeService()).register(context);
         new WarpCommand(warpService()).register(context);
@@ -222,6 +226,18 @@ final class DirectCommandSuggestionTest {
                 LiteralArgumentBuilder<CommandSourceStack> root
         ) {
             return dispatcher.register(root);
+        }
+
+        @Override
+        public void registerAlias(
+                String owner,
+                CommandDescriptor descriptor,
+                String label,
+                CommandNode<CommandSourceStack> target
+        ) {
+            dispatcher.register(
+                    Commands.literal(label).redirect(target)
+            );
         }
 
         @Override

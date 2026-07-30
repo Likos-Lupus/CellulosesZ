@@ -1,134 +1,195 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.messaging.MessageResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
-public final class ReplyToggleCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class ReplyToggleCommand implements CommandContributor {
+
+    private final PrivateMessageCommandService service;
+    private final PlayerDirectory players;
 
     public ReplyToggleCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config
+            PrivateMessageCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.rtoggle";
-    }
-
-    @Override
-    public String usage() {
-        return "/rtoggle [player] [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "rtoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length > 2) return usageError(invocation);
-
-        UUID uuid;
-        String playerName;
-        String mode = "";
-        if (args.length == 0 || (args.length == 1 && isMode(args[0]))) {
-            var self = player(invocation);
-
-            if (self.isEmpty()) {
-                return 0;
-            }
-
-            uuid = self.get().uuid();
-            playerName = self.get().name();
-            if (args.length == 1) {
-                mode = args[0];
-            }
-        } else {
-            if (!invocation.hasPermission("cellulosesz.messaging.rtoggle.others")) {
-                invocation.errorKey("commands.messaging.reply-toggle.others");
-                return 0;
-            }
-
-            var resolved = invocation.resolvePlayer(args[0]);
-            if (resolved.optionalUuid().isEmpty()) {
-                invocation.errorKey(
-                        "commands.messaging.reply-toggle.player",
-                        Map.of("player", args[0])
-                );
-                return 0;
-            }
-
-            uuid = resolved.optionalUuid().orElseThrow();
-            playerName = resolved.name();
-            if (args.length == 2) {
-                mode = args[1];
-            }
-        }
-
-        if (!mode.isBlank() && !isMode(mode)) {
-            return usageError(invocation);
-        }
-
-        var requestedMode = mode;
-        var changedOther = platform.player(invocation)
-                .map(actor -> !actor.uuid().equals(uuid))
-                .orElse(true);
-        users.update(uuid, user -> {
-            var enabled = requestedMode.isBlank()
-                    ? !user.preferences.replyToLastRecipient
-                    : enabled(requestedMode);
-            user.preferences.replyToLastRecipient = enabled;
-            return enabled;
-        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) {
-                invocation.errorKey("service.user.persistence-failed");
-                return;
-            }
-            String key = enabled ? (
-                    changedOther
-                            ? "commands.messaging.reply-toggle.recipient-other"
-                            : "commands.messaging.reply-toggle.recipient"
-            ) : (
-                    changedOther
-                            ? "commands.messaging.reply-toggle.sender-other"
-                            : "commands.messaging.reply-toggle.sender"
-            );
-            invocation.replyKey(key, Map.of("player", playerName));
-        }));
-        return 1;
-    }
-
-    private int usageError(CommandInvocation invocation) {
-        invocation.errorKey(
-                "commands.messaging.reply-toggle.usage",
-                Map.of("usage", usage())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "rtoggle",
+                "cellulosesz.messaging.rtoggle",
+                CommandSourceKind.ANY
         );
-        return 0;
+
+        var root = Commands.literal("rtoggle")
+                .executes(command -> self(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "state",
+                                        ToggleArgument.toggle()
+                                )
+                                .executes(command -> self(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(
+                                                ToggleArgument.get(
+                                                        command,
+                                                        "state"
+                                                ).enabled()
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.messaging.rtoggle.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                service::knownNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty()
+                                ))
+                                .then(Commands.argument(
+                                                        "targetState",
+                                                        ToggleArgument.toggle()
+                                                )
+                                                .executes(command -> other(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        Optional.of(
+                                                                ToggleArgument.get(
+                                                                        command,
+                                                                        "targetState"
+                                                                ).enabled()
+                                                        )
+                                                ))
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.rtoggle",
+                "/rtoggle [on|off|player [on|off]]",
+                root
+        );
     }
 
-    private boolean isMode(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "on", "true", "enable", "off", "false", "disable" -> true;
-            default -> false;
-        };
+    private int self(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> requested
+    ) {
+        return MessagingCommandSupport.requirePlayer(
+                context,
+                command,
+                descriptor,
+                "rtoggle",
+                players,
+                player -> service.replyPreference(
+                        player.uuid(),
+                        player.name(),
+                        requested
+                )
+        );
     }
 
-    private boolean enabled(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "on", "true", "enable" -> true;
-            default -> false;
-        };
+    private int other(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> requested
+    ) {
+        return MessagingCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "rtoggle other",
+                policy -> {
+                    if (!policy.hasPermission(
+                            "cellulosesz.messaging.rtoggle.others"
+                    )) {
+                        return CompletableFuture.completedFuture(
+                                MessageResult.failure(
+                                        "common.no-permission"
+                                )
+                        );
+                    }
+
+                    var token = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    var viewer = MessagingCommandSupport.player(
+                            policy,
+                            players
+                    );
+
+                    if (viewer.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                MessageResult.failure(
+                                        "common.player-only"
+                                )
+                        );
+                    }
+
+                    return service.knownTarget(
+                                    token,
+                                    viewer.orElseThrow()
+                            )
+                            .thenCompose(target ->
+                                    service.replyPreference(
+                                            target.uuid(),
+                                            target.name(),
+                                            requested
+                                    )
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

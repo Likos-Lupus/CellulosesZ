@@ -1,72 +1,92 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
-public final class NickCommand extends AbstractPlayerStateCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class NickCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public NickCommand(
-            PlatformService platform,
-            UserService users,
-            PlayerStateService states
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, states);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.nick";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "nick",
+                "cellulosesz.playerstate.nick",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("nick")
+                .then(Commands.literal("off")
+                        .executes(command ->
+                                PlayerStateCommandSupport.requirePlayer(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "nick clear",
+                                        players,
+                                        player -> service.nick(
+                                                player,
+                                                Optional.empty()
+                                        )
+                                )
+                        )
+                )
+                .then(Commands.argument(
+                                        "name",
+                                        StringArgumentType.word()
+                                )
+                                .executes(command ->
+                                        PlayerStateCommandSupport.requirePlayer(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                "nick set",
+                                                players,
+                                                player -> service.nick(
+                                                        player,
+                                                        Optional.of(
+                                                                StringArgumentType.getString(
+                                                                        command,
+                                                                        "name"
+                                                                )
+                                                        )
+                                                )
+                                        )
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.nick",
+                "/nick <name|off>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/nick <name|off>";
-    }
-
-    @Override
-    public String name() {
-        return "nick";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = self(invocation);
-        if (self.isEmpty()) return 0;
-
-        if (invocation.args().length < 1) {
-            invocation.errorKey(
-                    "commands.playerstate.nick-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var nick = invocation.args()[0].equalsIgnoreCase("off")
-                || invocation.args()[0].equalsIgnoreCase("clear")
-                ? Optional.<String>empty()
-                : Optional.of(invocation.args()[0]);
-        states.setNick(self.orElseThrow().uuid(), self.orElseThrow().name(), nick)
-                .whenComplete((result, failure) -> {
-                    if (failure != null) {
-                        invocation.errorKey("service.user.persistence-failed");
-                    } else if (!result.success()) {
-                        invocation.error(result.message());
-                    } else {
-                        invocation.reply(result.message());
-                    }
-                });
-        return 1;
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

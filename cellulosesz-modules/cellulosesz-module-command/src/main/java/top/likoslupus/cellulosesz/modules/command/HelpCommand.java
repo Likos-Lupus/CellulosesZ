@@ -1,173 +1,351 @@
 package top.likoslupus.cellulosesz.modules.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.command.CommandRegistry;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
+import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.CommandAliasRegistry;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
+import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandExecutions;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.modules.command.argument.HelpQueryArgument;
 
 import java.util.*;
-import java.util.stream.IntStream;
 
-public final class HelpCommand implements CellCommand {
+public final class HelpCommand implements CommandContributor {
 
-    private final ModuleContext context;
+    private static final String MODULE = "command";
 
-    public HelpCommand(
-            ModuleContext context,
-            CommandConfig ignored
-    ) {
-        this.context = context;
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.command.help";
-    }
-
-    @Override
-    public String description() {
-        return "Lists registered CellulosesZ commands.";
-    }
-
-    @Override
-    public String usage() {
-        return "/help [query] [page]";
-    }
-
-    @Override
-    public String name() {
-        return "help";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length > 2) {
-            invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMAND_HELP_USAGE, Map.of("usage", usage()));
-            return 0;
-        }
-        var query = "";
-        var page = 1;
-        if (args.length > 0) {
-            try {
-                page = Integer.parseInt(args[0]);
-            } catch (NumberFormatException ignored) {
-                query = args[0].toLowerCase(Locale.ROOT);
-                if (args.length > 1) {
-                    try {
-                        page = Integer.parseInt(args[1]);
-                    } catch (NumberFormatException failure) {
-                        invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMON_INVALID_PAGE);
-                        return 0;
-                    }
-                }
-            }
-        }
-        if (page < 1) {
-            invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMON_INVALID_PAGE);
-            return 0;
-        }
-
-        var search = query;
-        var visible = entries().stream()
-                .filter(entry -> entry.permission().isBlank() || invocation.hasPermission(entry.permission()))
-                .filter(entry -> switch (entry.sourceKind()) {
-                    case ANY -> true;
-                    case PLAYER_ONLY -> invocation.player();
-                    case CONSOLE_ONLY -> !invocation.player();
-                })
-                .filter(entry -> search.isBlank()
-                        || entry.name().contains(search)
-                        || entry.aliases().stream().anyMatch(alias -> alias.contains(search))
-                        || entry.description().toLowerCase(Locale.ROOT).contains(search)
-                        || entry.usage().toLowerCase(Locale.ROOT).contains(search))
-                .sorted(Comparator.comparing(HelpEntry::name))
-                .toList();
-        if (visible.isEmpty()) {
-            invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMAND_HELP_EMPTY, Map.of("query", query));
-            return 0;
-        }
-
-        var config = context.configs().require("module.command", CommandConfig.class);
-        var pageSize = Math.max(1, config.helpPageSize);
-        var pages = (visible.size() + pageSize - 1) / pageSize;
-        if (page > pages) {
-            invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE, Map.of("pages", pages));
-            return 0;
-        }
-        invocation.replyKey(GeneratedMessageKeys.COMMANDS_COMMAND_HELP_HEADER, Map.of(
-                "page", page,
-                "pages", pages,
-                "query", query
-        ));
-        final int start;
-        try {
-            start = Math.multiplyExact(page - 1, pageSize);
-        } catch (ArithmeticException failure) {
-            invocation.errorKey(GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE, Map.of("pages", pages));
-            return 0;
-        }
-        IntStream.range(start, (int) Math.min((long) start + pageSize, visible.size()))
-                .mapToObj(visible::get)
-                .forEach(entry -> invocation.replyKey(GeneratedMessageKeys.COMMANDS_COMMAND_HELP_ENTRY, Map.of(
-                        "command", entry.name(),
-                        "description", entry.description(),
-                        "usage", entry.usage()
-                )));
-        return 1;
-    }
-
-    private List<HelpEntry> entries() {
-        var result = new LinkedHashMap<String, HelpEntry>();
-        var registry = context.services().require(CommandRegistry.class);
-        var concrete = context.services().require(DefaultCommandRegistry.class);
-        var aliases = context.services().require(CommandAliasRegistry.class);
-        registry.commands().stream()
-                .filter(command -> !concrete.disabled(command.name()))
-                .filter(command -> concrete.moduleId(command)
-                        .map(context::moduleEnabled)
-                        .orElse(false))
-                .map(command -> new HelpEntry(
-                        command.name().toLowerCase(Locale.ROOT),
-                        aliases.aliases(command.name()),
-                        command.permission(),
-                        command.sourceKind(),
-                        command.description(),
-                        command.usage()
-                ))
-                .forEach(entry -> result.put(entry.name(), entry));
-        context.services().require(CommandCatalog.class).directCommands().forEach(entry -> {
-            var descriptor = entry.descriptor();
-            if (!context.moduleEnabled(descriptor.moduleId())) return;
-            var visibleAliases = new java.util.LinkedHashSet<String>();
-            visibleAliases.addAll(entry.aliases());
-            visibleAliases.addAll(aliases.aliases(descriptor.canonicalName()));
-            result.put(descriptor.canonicalName(), new HelpEntry(
-                    descriptor.canonicalName(),
-                    visibleAliases.stream().map(alias -> alias.toLowerCase(Locale.ROOT)).toList(),
-                    descriptor.permission(),
-                    descriptor.requiredSourceKind(),
-                    entry.description(),
-                    entry.usage()
-            ));
-        });
-        return new ArrayList<>(result.values());
-    }
+    private static final CommandDescriptor DESCRIPTOR =
+            new CommandDescriptor(
+                    MODULE,
+                    "help",
+                    "cellulosesz.command.help",
+                    CommandSourceKind.ANY
+            );
 
     private record HelpEntry(
             String name,
             List<String> aliases,
-            String permission,
-            CommandSourceKind sourceKind,
             String description,
             String usage
     ) {
 
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var root = Commands.literal("help")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        "",
+                        1
+                ))
+                .then(Commands.argument(
+                                        "page",
+                                        IntegerArgumentType.integer(1)
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        "",
+                                        IntegerArgumentType.getInteger(
+                                                command,
+                                                "page"
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "query",
+                                        HelpQueryArgument.query()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        HelpQueryArgument.get(
+                                                command,
+                                                "query"
+                                        ),
+                                        1
+                                ))
+                                .then(Commands.argument(
+                                                        "queryPage",
+                                                        IntegerArgumentType.integer(1)
+                                                )
+                                                .executes(command -> execute(
+                                                        context,
+                                                        command,
+                                                        HelpQueryArgument.get(
+                                                                command,
+                                                                "query"
+                                                        ),
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "queryPage"
+                                                        )
+                                                ))
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                DESCRIPTOR,
+                List.of(),
+                "commands.description.help",
+                "/help [page|query] [page]",
+                root
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            String query,
+            int page
+    ) {
+        return CommandExecutions.sync(
+                registration,
+                command,
+                DESCRIPTOR,
+                "help",
+                policy -> show(
+                        registration,
+                        policy,
+                        query,
+                        page
+                )
+        );
+    }
+
+    private int show(
+            CommandRegistrationContext registration,
+            MinecraftCommandPolicyContext policy,
+            String rawQuery,
+            int page
+    ) {
+        var query = rawQuery.toLowerCase(Locale.ROOT);
+
+        var renderer = registration.services()
+                .require(MessageRenderer.class);
+
+        var locale = locale(registration, policy);
+
+        var aliases = registration.services()
+                .require(CommandAliasRegistry.class);
+
+        var visible = registration.services()
+                .require(CommandCatalog.class)
+                .commands()
+                .stream()
+                .filter(entry -> visible(policy, entry))
+                .map(entry -> view(
+                        entry,
+                        aliases,
+                        renderer,
+                        locale
+                ))
+                .filter(entry ->
+                        query.isBlank()
+                                || entry.name().contains(query)
+                                || entry.aliases()
+                                .stream()
+                                .anyMatch(alias ->
+                                        alias.contains(query)
+                                )
+                                || entry.description()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                                || entry.usage()
+                                .toLowerCase(Locale.ROOT)
+                                .contains(query)
+                )
+                .sorted(Comparator.comparing(HelpEntry::name))
+                .toList();
+
+        if (visible.isEmpty()) {
+            policy.error(
+                    LocalizedMessage.of(
+                            "commands.command.help-empty",
+                            Map.of("query", rawQuery)
+                    )
+            );
+
+            return 0;
+        }
+
+        var pageSize = registration.services()
+                .require(ConfigRegistry.class)
+                .require(
+                        "module.command",
+                        CommandConfig.class
+                )
+                .helpPageSize;
+
+        var pages = Math.toIntExact(
+                ((long) visible.size() + pageSize - 1L) / pageSize
+        );
+
+        if (page > pages) {
+            policy.error(
+                    LocalizedMessage.of(
+                            "commands.common.page-out-of-range",
+                            Map.of("pages", pages)
+                    )
+            );
+
+            return 0;
+        }
+
+        var startLong = (long) (page - 1) * pageSize;
+
+        if (startLong >= visible.size()) {
+            policy.error(
+                    LocalizedMessage.of(
+                            "commands.common.page-out-of-range",
+                            Map.of("pages", pages)
+                    )
+            );
+
+            return 0;
+        }
+
+        var start = Math.toIntExact(startLong);
+        var end = (int) Math.min(
+                startLong + pageSize,
+                visible.size()
+        );
+
+        policy.reply(
+                LocalizedMessage.of(
+                        "commands.command.help-header",
+                        Map.of(
+                                "page",
+                                page,
+                                "pages",
+                                pages,
+                                "query",
+                                rawQuery
+                        )
+                )
+        );
+
+        visible.subList(start, end)
+                .forEach(entry -> policy.reply(
+                        LocalizedMessage.of(
+                                "commands.command.help-entry-detail",
+                                Map.of(
+                                        "command",
+                                        entry.name(),
+                                        "aliases",
+                                        String.join(
+                                                ", ",
+                                                entry.aliases()
+                                        ),
+                                        "description",
+                                        entry.description(),
+                                        "usage",
+                                        entry.usage()
+                                )
+                        )
+                ));
+
+        return 1;
+    }
+
+    private boolean visible(
+            MinecraftCommandPolicyContext policy,
+            CommandCatalogEntry entry
+    ) {
+        var descriptor = entry.descriptor();
+
+        if (!descriptor.permission().isBlank()
+                && !policy.hasPermission(descriptor.permission())) {
+            return false;
+        }
+
+        return switch (descriptor.requiredSourceKind()) {
+            case ANY -> true;
+            case PLAYER_ONLY -> policy.player();
+            case CONSOLE_ONLY -> !policy.player();
+        };
+    }
+
+    private HelpEntry view(
+            CommandCatalogEntry entry,
+            CommandAliasRegistry aliases,
+            MessageRenderer renderer,
+            String locale
+    ) {
+        var names = new LinkedHashSet<String>();
+
+        entry.aliases().forEach(alias ->
+                names.add(alias.toLowerCase(Locale.ROOT))
+        );
+
+        aliases.aliases(entry.descriptor().canonicalName())
+                .forEach(alias ->
+                        names.add(alias.toLowerCase(Locale.ROOT))
+                );
+
+        return new HelpEntry(
+                entry.descriptor()
+                        .canonicalName()
+                        .toLowerCase(Locale.ROOT),
+                new ArrayList<>(names),
+                localized(
+                        renderer,
+                        locale,
+                        entry.description()
+                ),
+                localized(
+                        renderer,
+                        locale,
+                        entry.usage()
+                )
+        );
+    }
+
+    private String localized(
+            MessageRenderer renderer,
+            String locale,
+            String value
+    ) {
+        return value.indexOf(' ') < 0 && value.contains(".")
+                ? renderer.render(locale, value).plainText()
+                : value;
+    }
+
+    private String locale(
+            CommandRegistrationContext registration,
+            MinecraftCommandPolicyContext policy
+    ) {
+        var resolver = registration.services()
+                .require(LocaleResolver.class);
+
+        return policy.playerUuid()
+                .flatMap(
+                        registration.services()
+                                .require(PlayerDirectory.class)
+                                ::onlinePlayer
+                )
+                .map(resolver::locale)
+                .orElseGet(resolver::consoleLocale);
+    }
+
+    @Override
+    public String moduleId() {
+        return MODULE;
     }
 
 }

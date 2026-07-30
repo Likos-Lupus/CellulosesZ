@@ -1,159 +1,166 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.economy.WorthService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandResult;
+import top.likoslupus.cellulosesz.modules.economy.application.ItemValueCommandService;
 
-import java.math.BigDecimal;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class WorthCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final ItemService items;
-    private final WorthService worths;
-    private final EconomyService economy;
+public final class WorthCommand implements CommandContributor {
+
+    private final ItemValueCommandService service;
+    private final PlayerDirectory players;
 
     public WorthCommand(
-            PlatformService platform,
-            ItemService items,
-            WorthService worths,
-            EconomyService economy
+            ItemValueCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.items = items;
-        this.worths = worths;
-        this.economy = economy;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.economy.worth";
-    }
-
-    @Override
-    public String usage() {
-        return "/worth [hand|inventory|<item> [amount]]";
-    }
-
-    @Override
-    public String name() {
-        return "worth";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 2) {
-            invocation.errorKey("common.usage", Map.of("usage", usage()));
-            return 0;
-        }
-
-        var quantities = new LinkedHashMap<String, Long>();
-        if (invocation.args().length == 0 || invocation.args()[0].equalsIgnoreCase("hand")) {
-            var player = requirePlayer(invocation);
-            if (player.isEmpty()) return 0;
-            var snapshot = platform.heldInventorySnapshot(player.orElseThrow());
-            if (snapshot.isEmpty()) {
-                invocation.errorKey("commands.economy.sell.empty-hand");
-                return 0;
-            }
-            if (!platform.plainInventoryItem(snapshot.orElseThrow())) {
-                invocation.errorKey("commands.economy.component-item-unsupported");
-                return 0;
-            }
-            var descriptor = platform.describeInventoryItem(snapshot.orElseThrow());
-            if (descriptor.isEmpty()) {
-                invocation.errorKey("commands.economy.sell.inventory-changed");
-                return 0;
-            }
-            quantities.put(descriptor.orElseThrow().normalizedItem(), (long) descriptor.orElseThrow().count);
-        } else if (invocation.args()[0].equalsIgnoreCase("inventory")) {
-            if (invocation.args().length != 1) {
-                invocation.errorKey("common.usage", Map.of("usage", usage()));
-                return 0;
-            }
-            var player = requirePlayer(invocation);
-            if (player.isEmpty()) return 0;
-            var snapshots = platform.inventorySnapshot(player.orElseThrow()).orElseGet(java.util.List::of);
-            for (var snapshot : snapshots) {
-                if (!platform.plainInventoryItem(snapshot)) {
-                    invocation.errorKey("commands.economy.component-item-unsupported");
-                    return 0;
-                }
-                var descriptor = platform.describeInventoryItem(snapshot);
-                if (descriptor.isEmpty()) {
-                    invocation.errorKey("commands.economy.sell.inventory-changed");
-                    return 0;
-                }
-                quantities.merge(
-                        descriptor.orElseThrow().normalizedItem(),
-                        (long) descriptor.orElseThrow().count,
-                        Math::addExact
-                );
-            }
-        } else {
-            var parsed = items.parse(invocation.args()[0]);
-            if (parsed.isEmpty()) {
-                invocation.errorKey("commands.economy.sell.invalid-item", Map.of("item", invocation.args()[0]));
-                return 0;
-            }
-            var amount = 1L;
-            if (invocation.args().length == 2) {
-                try {
-                    amount = Long.parseLong(invocation.args()[1]);
-                    if (amount <= 0L) throw new NumberFormatException();
-                } catch (NumberFormatException _) {
-                    invocation.errorKey("commands.economy.sell.invalid-amount");
-                    return 0;
-                }
-            }
-            quantities.put(parsed.orElseThrow().normalizedItem(), amount);
-        }
-
-        if (quantities.isEmpty()) {
-            invocation.errorKey("commands.economy.sell.no-sellable-items");
-            return 0;
-        }
-
-        var rows = new StringBuilder();
-        var total = BigDecimal.ZERO;
-        var found = 0;
-        for (var entry : quantities.entrySet()) {
-            var unit = worths.worth(entry.getKey());
-            if (unit.isEmpty()) {
-                rows.append("\n").append(entry.getKey()).append(" x").append(entry.getValue()).append(" = -");
-                continue;
-            }
-            var lineTotal = unit.orElseThrow().multiply(BigDecimal.valueOf(entry.getValue()));
-            total = total.add(lineTotal);
-            found++;
-            rows.append("\n")
-                    .append(entry.getKey())
-                    .append(" x")
-                    .append(entry.getValue())
-                    .append(" = ")
-                    .append(economy.format(lineTotal));
-        }
-
-        invocation.replyKey(
-                "commands.economy.worth-batch",
-                Map.of("rows", rows.toString(), "found", found, "total", economy.format(total))
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "worth",
+                "cellulosesz.economy.worth",
+                CommandSourceKind.ANY
         );
-        return found;
+
+        var root = Commands.literal("worth")
+                .executes(command -> playerWorth(
+                        context,
+                        command,
+                        descriptor,
+                        ItemValueCommandService.WorthSelector.HAND
+                ))
+                .then(Commands.literal("hand")
+                        .executes(command -> playerWorth(
+                                context,
+                                command,
+                                descriptor,
+                                ItemValueCommandService.WorthSelector.HAND
+                        ))
+                )
+                .then(Commands.literal("inventory")
+                        .executes(command -> playerWorth(
+                                context,
+                                command,
+                                descriptor,
+                                ItemValueCommandService
+                                        .WorthSelector.INVENTORY
+                        ))
+                )
+                .then(Commands.argument(
+                                        "item",
+                                        StringArgumentType.word()
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                service::itemNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> itemWorth(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        1
+                                ))
+                                .then(Commands.argument(
+                                                        "amount",
+                                                        IntegerArgumentType.integer(1)
+                                                )
+                                                .executes(command -> itemWorth(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "amount"
+                                                        )
+                                                ))
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.worth",
+                "/worth [hand|inventory|item [amount]]",
+                root
+        );
     }
 
-    private Optional<CellPlayer> requirePlayer(CommandInvocation invocation) {
-        var player = platform.player(invocation);
-        if (player.isEmpty()) {
-            invocation.errorKey("commands.economy.worth-command.error.usage", Map.of("usage", usage()));
-        }
-        return player;
+    private int playerWorth(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            ItemValueCommandService.WorthSelector selector
+    ) {
+        return EconomyCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "worth inventory",
+                policy -> EconomyCommandSupport.currentPlayer(
+                                policy.playerUuid(),
+                                players
+                        )
+                        .map(player -> service.worth(
+                                player,
+                                selector
+                        ))
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        EconomyCommandResult.failure(
+                                                "commands.economy"
+                                                        + ".worth-command"
+                                                        + ".error.usage"
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private int itemWorth(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int amount
+    ) {
+        return EconomyCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "worth item",
+                _ -> service.worthItem(
+                        StringArgumentType.getString(
+                                command,
+                                "item"
+                        ),
+                        amount
+                )
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

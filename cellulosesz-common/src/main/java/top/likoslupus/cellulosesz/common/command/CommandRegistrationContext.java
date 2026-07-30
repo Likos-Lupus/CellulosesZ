@@ -45,6 +45,13 @@ public interface CommandRegistrationContext {
             LiteralArgumentBuilder<CommandSourceStack> root
     );
 
+    void registerAlias(
+            String owner,
+            CommandDescriptor descriptor,
+            String label,
+            CommandNode<CommandSourceStack> target
+    );
+
     int execute(
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,

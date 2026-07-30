@@ -1,81 +1,74 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.DisplayNameService;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.messaging.application.ChatCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class MeCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final DisplayNameService displayNames;
-    private final MessageRenderer renderer;
+public final class MeCommand implements CommandContributor {
+
+    private final ChatCommandService service;
+    private final PlayerDirectory players;
 
     public MeCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            DisplayNameService displayNames,
-            MessageRenderer renderer
+            ChatCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.displayNames = displayNames;
-        this.renderer = renderer;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.me";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "me",
+                "cellulosesz.messaging.me",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("me")
+                .then(Commands.argument(
+                                        "action",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command ->
+                                        MessagingCommandSupport.requirePlayer(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                "me body redacted",
+                                                players,
+                                                player -> service.me(
+                                                        player,
+                                                        StringArgumentType.getString(
+                                                                command,
+                                                                "action"
+                                                        )
+                                                )
+                                        )
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.me",
+                "/me <action>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/me <action>";
-    }
-
-    @Override
-    public String name() {
-        return "me";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        var args = invocation.args();
-        if (self.isEmpty()) return 0;
-
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.messaging.me-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var action = join(args, 0);
-        if (!validLength(invocation, action)) return 0;
-
-        platform.onlinePlayers().forEach(player -> platform.sendMessage(
-                player,
-                renderer.render(
-                        platform.locale(player),
-                        "messaging.me",
-                        Map.of(
-                                "player", displayNames.displayName(self.get()),
-                                "action", action
-                        )
-                )
-        ));
-        return 1;
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

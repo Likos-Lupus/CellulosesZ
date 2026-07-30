@@ -1,114 +1,193 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.messaging.MessageResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
-public final class SocialSpyCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PrivateMessageService privateMessages;
+public final class SocialSpyCommand implements CommandContributor {
+
+    private final PrivateMessageCommandService service;
+    private final PlayerDirectory players;
 
     public SocialSpyCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            PrivateMessageService privateMessages
+            PrivateMessageCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.privateMessages = privateMessages;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.socialspy";
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "socialspy",
+                "cellulosesz.messaging.socialspy",
+                CommandSourceKind.ANY
+        );
 
-    @Override
-    public String usage() {
-        return "/socialspy [player] [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "socialspy";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        final UUID target;
-        final String targetName;
-
-        var self = platform.player(invocation);
-        if (args.length == 0 || isBoolean(args[0])) {
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.messaging.socialspy-player-required");
-                return 0;
-            }
-
-            target = self.get().uuid();
-            targetName = self.get().name();
-        } else {
-            if (!invocation.hasPermission("cellulosesz.messaging.socialspy.others")) {
-                invocation.errorKey("common.no-permission");
-                return 0;
-            }
-
-            var resolved = uuid(invocation, args[0]);
-            if (resolved.isEmpty()) return 0;
-
-            target = resolved.get();
-            targetName = args[0];
-        }
-
-        var valueIndex = args.length == 0 || isBoolean(args[0]) ? 0 : 1;
-        final Optional<Boolean> requested;
-        if (args.length > valueIndex) {
-            requested = parseBoolean(args[valueIndex]);
-            if (requested.isEmpty()) {
-                invocation.errorKey("commands.common.invalid-boolean");
-                return 0;
-            }
-        } else {
-            requested = Optional.empty();
-        }
-
-        var current = requested.isPresent()
-                ? java.util.concurrent.CompletableFuture.completedFuture(!requested.orElseThrow())
-                : privateMessages.socialSpy(target);
-        current.whenComplete((currentValue, loadFailure) -> {
-            if (loadFailure != null) {
-                invocation.errorKey("commands.messaging.preference-save-failed");
-                return;
-            }
-            var enabled = requested.orElse(!currentValue);
-            privateMessages.setSocialSpy(target, enabled).whenComplete((_, saveFailure) -> {
-                if (saveFailure != null) invocation.errorKey("commands.messaging.preference-save-failed");
-                else invocation.replyKey(
-                        enabled ? "commands.messaging.social-spy-enabled" : "commands.messaging.social-spy-disabled",
-                        Map.of("player", targetName)
+        var root = Commands.literal("socialspy")
+                .executes(command -> self(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "state",
+                                        ToggleArgument.toggle()
+                                )
+                                .executes(command -> self(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(
+                                                ToggleArgument.get(
+                                                        command,
+                                                        "state"
+                                                ).enabled()
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.messaging.socialspy.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                service::knownNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty()
+                                ))
+                                .then(Commands.argument(
+                                                        "targetState",
+                                                        ToggleArgument.toggle()
+                                                )
+                                                .executes(command -> other(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        Optional.of(
+                                                                ToggleArgument.get(
+                                                                        command,
+                                                                        "targetState"
+                                                                ).enabled()
+                                                        )
+                                                ))
+                                )
                 );
-            });
-        });
-        return 1;
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.socialspy",
+                "/socialspy [on|off|player [on|off]]",
+                root
+        );
     }
 
-    private static boolean isBoolean(String value) {
-        return parseBoolean(value).isPresent();
+    private int self(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> requested
+    ) {
+        return MessagingCommandSupport.requirePlayer(
+                context,
+                command,
+                descriptor,
+                "socialspy",
+                players,
+                player -> service.socialSpy(
+                        player.uuid(),
+                        player.name(),
+                        requested
+                )
+        );
     }
 
-    private static Optional<Boolean> parseBoolean(String value) {
-        return switch (value.toLowerCase(java.util.Locale.ROOT)) {
-            case "on", "true", "enable", "enabled" -> Optional.of(Boolean.TRUE);
-            case "off", "false", "disable", "disabled" -> Optional.of(Boolean.FALSE);
-            default -> Optional.empty();
-        };
+    private int other(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> requested
+    ) {
+        return MessagingCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "socialspy other",
+                policy -> {
+                    if (!policy.hasPermission(
+                            "cellulosesz.messaging.socialspy.others"
+                    )) {
+                        return CompletableFuture.completedFuture(
+                                MessageResult.failure(
+                                        "common.no-permission"
+                                )
+                        );
+                    }
+
+                    var viewer = MessagingCommandSupport.player(
+                            policy,
+                            players
+                    );
+
+                    if (viewer.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                MessageResult.failure(
+                                        "common.player-only"
+                                )
+                        );
+                    }
+
+                    return service.knownTarget(
+                                    PlayerNameArgument.get(
+                                            command,
+                                            "player"
+                                    ),
+                                    viewer.orElseThrow()
+                            )
+                            .thenCompose(target ->
+                                    service.socialSpy(
+                                            target.uuid(),
+                                            target.name(),
+                                            requested
+                                    )
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

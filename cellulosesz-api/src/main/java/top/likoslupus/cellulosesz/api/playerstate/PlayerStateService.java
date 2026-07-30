@@ -31,6 +31,20 @@ public interface PlayerStateService {
 
     long idleMillis(UUID uuid);
 
+    CompletableFuture<PersonalWorldState> loadPersonalWorldState(UUID uuid);
+
+    Optional<PersonalWorldState> cachedPersonalWorldState(UUID uuid);
+
+    CompletableFuture<AdminResult> setPersonalTime(
+            CellPlayer player,
+            PersonalTimeSetting setting
+    );
+
+    CompletableFuture<AdminResult> setPersonalWeather(
+            CellPlayer player,
+            PersonalWeatherSetting setting
+    );
+
     CompletableFuture<AdminResult> setNick(
             UUID uuid,
             String name,

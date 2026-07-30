@@ -1,86 +1,113 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.economy.WorthService;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
+import top.likoslupus.cellulosesz.modules.economy.application.ItemValueCommandService;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
 
-import java.math.BigDecimal;
-import java.util.Map;
+import java.util.List;
+import java.util.function.Supplier;
 
-public final class SetWorthCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final WorthService worths;
+public final class SetWorthCommand implements CommandContributor {
 
-    public SetWorthCommand(WorthService worths) {
-        this.worths = worths;
+    private final ItemValueCommandService service;
+    private final Supplier<EconomyCommandSettings> settings;
+
+    public SetWorthCommand(
+            ItemValueCommandService service,
+            Supplier<EconomyCommandSettings> settings
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.economy.setworth";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "setworth",
+                "cellulosesz.economy.setworth",
+                CommandSourceKind.ANY
+        );
+
+        var snapshot = settings.get();
+
+        var root = Commands.literal("setworth")
+                .then(Commands.argument(
+                                        "item",
+                                        StringArgumentType.word()
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                service::itemNames,
+                                                builder
+                                        )
+                                )
+                                .then(Commands.literal("remove")
+                                        .executes(command ->
+                                                EconomyCommandSupport.async(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        "remove worth",
+                                                        _ -> service.removeWorth(
+                                                                StringArgumentType
+                                                                        .getString(
+                                                                                command,
+                                                                                "item"
+                                                                        )
+                                                        )
+                                                )
+                                        )
+                                )
+                                .then(Commands.argument(
+                                                        "amount",
+                                                        MoneyArgument.nonNegative(
+                                                                snapshot.scale(),
+                                                                snapshot.maximumBalance()
+                                                        )
+                                                )
+                                                .executes(command ->
+                                                        EconomyCommandSupport.async(
+                                                                context,
+                                                                command,
+                                                                descriptor,
+                                                                "set worth",
+                                                                _ -> service.setWorth(
+                                                                        StringArgumentType
+                                                                                .getString(
+                                                                                        command,
+                                                                                        "item"
+                                                                                ),
+                                                                        MoneyArgument.get(
+                                                                                command,
+                                                                                "amount"
+                                                                        )
+                                                                )
+                                                        )
+                                                )
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.setworth",
+                "/setworth <item> <amount|remove>",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/setworth <item> <amount|remove>";
-    }
-
-    @Override
-    public String name() {
-        return "setworth";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length != 2) {
-            invocation.errorKey("common.usage", Map.of("usage", usage()));
-            return 0;
-        }
-
-        if (args[1].equalsIgnoreCase("remove")) {
-            try {
-                worths.removeWorth(args[0]).whenComplete((removed, failure) -> {
-                    if (failure != null) {
-                        invocation.errorKey("common.persistence-failed");
-                    } else if (!removed) {
-                        invocation.errorKey("commands.economy.worth-missing", Map.of("item", args[0]));
-                    } else {
-                        invocation.replyKey("commands.economy.worth-removed", Map.of("item", args[0]));
-                    }
-                });
-                return 1;
-            } catch (RuntimeException _) {
-                invocation.errorKey("commands.economy.sell.invalid-item", Map.of("item", args[0]));
-                return 0;
-            }
-        }
-
-        final BigDecimal amount;
-        try {
-            amount = new BigDecimal(args[1]);
-            if (amount.signum() < 0) throw new NumberFormatException();
-        } catch (NumberFormatException _) {
-            invocation.errorKey("commands.economy.set-worth-command.error.invalid-amount", Map.of("amount", args[1]));
-            return 0;
-        }
-
-        try {
-            worths.setWorth(args[0], amount).whenComplete((_, failure) -> {
-                if (failure != null) {
-                    invocation.errorKey("common.persistence-failed");
-                } else {
-                    invocation.replyKey(
-                            "commands.economy.set-worth-command.reply.set-worth",
-                            Map.of("item", args[0], "amount", amount.stripTrailingZeros().toPlainString())
-                    );
-                }
-            });
-            return 1;
-        } catch (RuntimeException _) {
-            invocation.errorKey("commands.economy.sell.invalid-item", Map.of("item", args[0]));
-            return 0;
-        }
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

@@ -1,6 +1,8 @@
 package top.likoslupus.cellulosesz.api.validation;
 
 import java.math.BigDecimal;
+import java.util.Collection;
+import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -8,6 +10,7 @@ import static java.util.Objects.requireNonNull;
  * Stable checks for programmer-visible invariants. User input, configuration documents and persisted documents must
  * translate failures at their own boundaries instead of exposing these exceptions to players.
  */
+@SuppressWarnings("UnusedReturnValue")
 public final class Checks {
 
     private Checks() {
@@ -17,6 +20,90 @@ public final class Checks {
         requireNonNull(value, name);
         if (value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value;
+    }
+
+    @SuppressWarnings("rawtypes")
+    public static <C extends Collection> C requireNonEmpty(C collection, String name) {
+        requireNonNull(collection, name);
+        if (collection.isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be empty");
+        }
+        return collection;
+    }
+
+    @SuppressWarnings("rawtypes")
+    public static <M extends Map> M requireNonEmpty(M map, String name) {
+        requireNonNull(map, name);
+        if (map.isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be empty");
+        }
+        return map;
+    }
+
+    public static int requireLargerThan(
+            int value,
+            int min,
+            String name
+    ) {
+        if (value < min) {
+            throw new IllegalArgumentException(name + " must not be lower than " + min);
+        }
+        return value;
+    }
+
+    public static long requireLargerThan(
+            long value,
+            long min,
+            String name
+    ) {
+        if (value < min) {
+            throw new IllegalArgumentException(name + " must not be lower than " + min);
+        }
+        return value;
+    }
+
+    public static double requireLargerThan(
+            double value,
+            double min,
+            String name
+    ) {
+        if (value < min) {
+            throw new IllegalArgumentException(name + " must not be lower than " + min);
+        }
+        return value;
+    }
+
+    public static int requireSmallerThan(
+            int value,
+            int max,
+            String name
+    ) {
+        if (value > max) {
+            throw new IllegalArgumentException(name + " must not be greater than " + max);
+        }
+        return value;
+    }
+
+    public static long requireSmallerThan(
+            long value,
+            long max,
+            String name
+    ) {
+        if (value > max) {
+            throw new IllegalArgumentException(name + " must not be greater than " + max);
+        }
+        return value;
+    }
+
+    public static double requireSmallerThan(
+            double value,
+            double max,
+            String name
+    ) {
+        if (value > max) {
+            throw new IllegalArgumentException(name + " must not be greater than " + max);
         }
         return value;
     }
@@ -97,10 +184,6 @@ public final class Checks {
         return value;
     }
 
-    public static int requireRange(int value, int minimum, int maximum, String name) {
-        return requireInRange(value, minimum, maximum, name);
-    }
-
     public static int requireInRange(
             int value,
             int minimum,
@@ -124,15 +207,6 @@ public final class Checks {
         }
     }
 
-    public static long requireRange(
-            long value,
-            long minimum,
-            long maximum,
-            String name
-    ) {
-        return requireInRange(value, minimum, maximum, name);
-    }
-
     public static long requireInRange(
             long value,
             long minimum,
@@ -144,15 +218,6 @@ public final class Checks {
             throw new IllegalArgumentException(name + " must be in [" + minimum + ", " + maximum + "], but was " + value);
         }
         return value;
-    }
-
-    public static double requireRange(
-            double value,
-            double minimum,
-            double maximum,
-            String name
-    ) {
-        return requireInRange(value, minimum, maximum, name);
     }
 
     public static double requireInRange(
@@ -174,7 +239,9 @@ public final class Checks {
     }
 
     public static void requireState(boolean condition, String message) {
-        if (!condition) throw new IllegalStateException(requireNonNull(message, "message"));
+        if (!condition) {
+            throw new IllegalStateException(requireNonNull(message, "message"));
+        }
     }
 
     public static String requireNoControlCharacters(String value, String name) {

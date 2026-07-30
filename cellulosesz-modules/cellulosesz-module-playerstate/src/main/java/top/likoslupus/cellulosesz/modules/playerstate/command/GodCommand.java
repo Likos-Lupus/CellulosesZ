@@ -1,52 +1,172 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-public final class GodCommand extends AbstractPlayerStateCommand {
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
+
+public final class GodCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public GodCommand(
-            PlatformService platform,
-            UserService users,
-            PlayerStateService states
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, states);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.god";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "god",
+                "cellulosesz.playerstate.god",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("god")
+                .executes(command -> self(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "state",
+                                        ToggleArgument.toggle()
+                                )
+                                .executes(command -> self(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(
+                                                ToggleArgument.get(
+                                                        command,
+                                                        "state"
+                                                ).enabled()
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.playerstate.god.other"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty()
+                                ))
+                                .then(Commands.argument(
+                                                        "state",
+                                                        ToggleArgument.toggle()
+                                                )
+                                                .executes(command -> other(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        Optional.of(
+                                                                ToggleArgument.get(
+                                                                        command,
+                                                                        "state"
+                                                                ).enabled()
+                                                        )
+                                                ))
+                                )
+                );
+
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.god",
+                "/god [player] [on|off]",
+                root
+        );
+    }
+
+    private int self(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> state
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "god self",
+                policy -> PlayerStateCommandSupport.currentPlayer(
+                                policy,
+                                players
+                        )
+                        .map(player -> service.god(player, state))
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        PlayerStateCommandResult.failure(
+                                                "common.player-only"
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private int other(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> state
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "god other",
+                _ -> {
+                    var name = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    return players.onlinePlayer(name)
+                            .map(player -> service.god(player, state))
+                            .orElseGet(() ->
+                                    PlayerStateCommandSupport.offline(name)
+                            );
+                }
+        );
     }
 
     @Override
-    public String usage() {
-        return "/god [player] [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "god";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var target = target(invocation, 0, "cellulosesz.playerstate.god.other");
-        if (target.isEmpty()) return 0;
-
-        var current = users.cached(target.get().uuid())
-                .map(user -> user.state.god)
-                .orElse(false);
-        var enabled = invocation.args().length > 1
-                ? state(invocation.args()[1]).orElse(!current)
-                : !current;
-        states.setGod(target.get(), enabled).whenComplete((result, failure) -> {
-            if (failure != null) invocation.errorKey("service.user.persistence-failed");
-            else if (result.success()) invocation.reply(result.message());
-            else invocation.error(result.message());
-        });
-        return 1;
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

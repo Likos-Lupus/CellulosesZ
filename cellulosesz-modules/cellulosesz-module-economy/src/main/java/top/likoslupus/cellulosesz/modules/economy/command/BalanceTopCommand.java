@@ -1,121 +1,168 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.NameCacheService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
+import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.stream.IntStream;
+import java.util.function.Supplier;
 
-public final class BalanceTopCommand extends AbstractEconomyCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final NameCacheService names;
+public final class BalanceTopCommand implements CommandContributor {
+
+    private final BalanceCommandService service;
+    private final Supplier<EconomyCommandSettings> settings;
 
     public BalanceTopCommand(
-            PlatformService platform,
-            UserService users,
-            NameCacheService names,
-            EconomyService economy,
-            EconomyConfig config
+            BalanceCommandService service,
+            Supplier<EconomyCommandSettings> settings
     ) {
-        super(platform, users, economy, config);
-        this.names = names;
+        this.service = requireNonNull(service, "service");
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("baltop");
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.economy.balancetop";
-    }
-
-    @Override
-    public String usage() {
-        return "/balancetop [page] [minimum] [maximum]";
-    }
-
-    @Override
-    public String name() {
-        return "balancetop";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 3) {
-            invocation.errorKey("common.usage", Map.of("usage", usage()));
-            return 0;
-        }
-
-        final int page;
-        final Optional<BigDecimal> minimum;
-        final Optional<BigDecimal> maximum;
-        try {
-            page = invocation.args().length >= 1 ? Integer.parseInt(invocation.args()[0]) : 1;
-            if (page < 1) throw new NumberFormatException();
-            minimum = invocation.args().length >= 2
-                    ? Optional.of(new BigDecimal(invocation.args()[1]))
-                    : Optional.empty();
-            maximum = invocation.args().length >= 3
-                    ? Optional.of(new BigDecimal(invocation.args()[2]))
-                    : Optional.empty();
-        } catch (NumberFormatException _) {
-            invocation.errorKey("commands.economy.balance-top-command.error.page-number-must-integer");
-            return 0;
-        }
-
-        if (minimum.isPresent() && maximum.isPresent()
-                && minimum.orElseThrow().compareTo(maximum.orElseThrow()) > 0) {
-            invocation.errorKey("commands.economy.balance-top.invalid-filter");
-            return 0;
-        }
-
-        var pageSize = Math.max(1, config.balanceTop.pageSize);
-        final int limit;
-        final int from;
-        try {
-            limit = Math.multiplyExact(page, pageSize);
-            from = Math.multiplyExact(page - 1, pageSize);
-        } catch (ArithmeticException _) {
-            invocation.errorKey("commands.economy.balance-top-command.error.page-number-must-integer");
-            return 0;
-        }
-
-        var entries = economy.topBalances(limit, minimum.orElse(null), maximum.orElse(null));
-        if (from >= entries.size()) {
-            invocation.errorKey("commands.economy.balance-top-command.error.there-no-balance-entries-page");
-            return 0;
-        }
-
-        var pageEntries = entries.subList(from, Math.min(entries.size(), from + pageSize));
-        var nameSnapshot = names.entries();
-        var rows = new StringBuilder();
-        IntStream.range(0, pageEntries.size())
-                .forEach(offset -> {
-                    var entry = pageEntries.get(offset);
-                    var name = Optional.ofNullable(nameSnapshot.get(entry.uuid()))
-                            .filter(value -> !value.isBlank())
-                            .orElse(entry.uuid().toString());
-                    rows.append("\n")
-                            .append(from + offset + 1)
-                            .append(". ")
-                            .append(name)
-                            .append(" - ")
-                            .append(format(entry.balance()));
-                });
-        invocation.replyKey(
-                "commands.economy.balance-top",
-                Map.of("page", page, "rows", rows.toString())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "balancetop",
+                "cellulosesz.economy.balancetop",
+                CommandSourceKind.ANY
         );
-        return 1;
+
+        var snapshot = settings.get();
+
+        var page = Commands.argument(
+                        "page",
+                        IntegerArgumentType.integer(1)
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        IntegerArgumentType.getInteger(
+                                command,
+                                "page"
+                        ),
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "minimum",
+                                        MoneyArgument.nonNegative(
+                                                snapshot.scale(),
+                                                snapshot.maximumBalance()
+                                        )
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(
+                                                command,
+                                                "page"
+                                        ),
+                                        Optional.of(
+                                                MoneyArgument.get(
+                                                        command,
+                                                        "minimum"
+                                                )
+                                        ),
+                                        Optional.empty()
+                                ))
+                                .then(Commands.argument(
+                                                        "maximum",
+                                                        MoneyArgument.nonNegative(
+                                                                snapshot.scale(),
+                                                                snapshot.maximumBalance()
+                                                        )
+                                                )
+                                                .executes(command -> execute(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "page"
+                                                        ),
+                                                        Optional.of(
+                                                                MoneyArgument.get(
+                                                                        command,
+                                                                        "minimum"
+                                                                )
+                                                        ),
+                                                        Optional.of(
+                                                                MoneyArgument.get(
+                                                                        command,
+                                                                        "maximum"
+                                                                )
+                                                        )
+                                                ))
+                                )
+                );
+
+        var root = Commands.literal("balancetop")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        1,
+                        Optional.empty(),
+                        Optional.empty()
+                ))
+                .then(page);
+
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("baltop"),
+                "commands.description.balancetop",
+                "/balancetop [page] [minimum] [maximum]",
+                root
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "baltop",
+                node
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int page,
+            Optional<BigDecimal> minimum,
+            Optional<BigDecimal> maximum
+    ) {
+        return EconomyCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "balance top",
+                _ -> service.top(
+                        page,
+                        minimum,
+                        maximum
+                )
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

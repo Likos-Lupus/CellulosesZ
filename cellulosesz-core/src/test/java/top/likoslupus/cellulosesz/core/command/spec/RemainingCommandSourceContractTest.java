@@ -14,9 +14,9 @@ final class RemainingCommandSourceContractTest {
 
     private static final List<String> ROOTS = List.of(
             "antioch", "beezooka", "book", "break", "bigtree", "burn", "clearinventory",
-            "clearinventoryconfirmtoggle", "condense", "compass", "depth", "disposal", "exp", "ext",
-            "fireball", "gc", "getpos", "hat", "ice", "itemdb", "kill", "kittycannon", "lightning",
-            "more", "nuke", "ping", "powertoollist", "powertooltoggle", "realname", "recipe", "rest",
+            "clearinventoryconfirmtoggle", "condense", "disposal", "ext",
+            "fireball", "gc", "hat", "ice", "itemdb", "kill", "kittycannon", "lightning",
+            "more", "nuke", "powertoollist", "powertooltoggle", "recipe",
             "editsign", "skull", "spawner", "spawnmob", "stonecutter", "sudo", "suicide", "thunder", "tree"
     );
 

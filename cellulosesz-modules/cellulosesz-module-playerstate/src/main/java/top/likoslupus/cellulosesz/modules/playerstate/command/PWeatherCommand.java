@@ -1,117 +1,172 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.playerstate.PersonalWeatherSetting;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
-public final class PWeatherCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final UserService users;
+public final class PWeatherCommand implements CommandContributor {
 
-    public PWeatherCommand(PlatformService platform, UserService users) {
-        this.platform = platform;
-        this.users = users;
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
+
+    public PWeatherCommand(
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.playerstate.pweather";
-    }
-
-    @Override
-    public String usage() {
-        return "/pweather <clear|rain|thunder|reset> [player]";
-    }
-
-    @Override
-    public String name() {
-        return "pweather";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1 || args.length > 2) {
-            invocation.errorKey("commands.playerstate.pweather-usage", Map.of("usage", usage()));
-            return 0;
-        }
-        if (args.length == 2 && !invocation.hasPermission("cellulosesz.playerstate.pweather.others")) {
-            invocation.errorKey("common.no-permission");
-            return 0;
-        }
-
-        var setting = parse(args[0]);
-        if (setting.isEmpty()) {
-            invocation.errorKey("commands.playerstate.pweather-invalid", Map.of("value", args[0]));
-            return 0;
-        }
-        var target = target(invocation, args.length == 2 ? Optional.of(args[1]) : Optional.empty());
-        if (target.isEmpty()) return 0;
-        var player = target.orElseThrow();
-        var desired = setting.orElseThrow().value();
-
-        users.update(player.uuid(), user -> {
-            var previous = Optional.ofNullable(user.state.personalWeather);
-            user.state.personalWeather = desired.orElse(null);
-            return previous;
-        }).whenComplete((previous, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) {
-                invocation.errorKey("service.user.persistence-failed");
-                return;
-            }
-            if (platform.setPersonalWeather(player, desired.orElse(null))) {
-                invocation.replyKey(
-                        desired.isEmpty()
-                                ? "commands.playerstate.pweather-reset"
-                                : "commands.playerstate.pweather-set",
-                        Map.of("player", player.name(), "weather", desired.orElse("reset"))
-                );
-                return;
-            }
-            users.update(player.uuid(), user -> {
-                user.state.personalWeather = previous.orElse(null);
-                return true;
-            }).whenComplete((ignored, rollbackFailure) -> platform.runOnServerThread(() ->
-                    invocation.errorKey(rollbackFailure == null
-                            ? "commands.playerstate.pweather-failed"
-                            : "commands.playerstate.pweather-rollback-failed")
-            ));
-        }));
-        return 1;
-    }
-
-    private Optional<WeatherSetting> parse(String input) {
-        return switch (input.toLowerCase(Locale.ROOT)) {
-            case "reset" -> Optional.of(new WeatherSetting(Optional.empty()));
-            case "clear", "rain", "thunder" -> Optional.of(
-                    new WeatherSetting(Optional.of(input.toLowerCase(Locale.ROOT)))
-            );
-            default -> Optional.empty();
-        };
-    }
-
-    private Optional<CellPlayer> target(CommandInvocation invocation, Optional<String> name) {
-        if (name.isEmpty()) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) invocation.errorKey("commands.common.player-required");
-            return self;
-        }
-        var target = invocation.resolvePlayer(name.orElseThrow()).online();
-        if (target.isEmpty()) invocation.errorKey(
-                "commands.common.player-offline", Map.of("player", name.orElseThrow())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "pweather",
+                "cellulosesz.playerstate.pweather",
+                CommandSourceKind.ANY
         );
-        return target;
+
+        var root = Commands.literal("pweather");
+
+        Arrays.stream(PersonalWeatherSetting.values())
+                .map(setting ->
+                        branch(
+                                context,
+                                descriptor,
+                                setting
+                        )
+                )
+                .forEach(root::then);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.pweather",
+                "/pweather <clear|rain|thunder|reset> [player]",
+                root
+        );
     }
 
-    private record WeatherSetting(Optional<String> value) {
+    private LiteralArgumentBuilder<CommandSourceStack> branch(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            PersonalWeatherSetting setting
+    ) {
+        return Commands.literal(
+                        setting.name().toLowerCase(Locale.ROOT)
+                )
+                .executes(command -> self(
+                        context,
+                        command,
+                        descriptor,
+                        setting
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.playerstate.pweather.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        setting
+                                ))
+                );
+    }
 
+    private int self(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            PersonalWeatherSetting setting
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "pweather self",
+                policy -> PlayerStateCommandSupport.currentPlayer(
+                                policy,
+                                players
+                        )
+                        .map(player ->
+                                service.personalWeather(
+                                        player,
+                                        setting
+                                )
+                        )
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        PlayerStateCommandResult.failure(
+                                                "common.player-only"
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private int other(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            PersonalWeatherSetting setting
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "pweather other",
+                _ -> {
+                    var name = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    return players.onlinePlayer(name)
+                            .map(player ->
+                                    service.personalWeather(
+                                            player,
+                                            setting
+                                    )
+                            )
+                            .orElseGet(() ->
+                                    PlayerStateCommandSupport.offline(name)
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

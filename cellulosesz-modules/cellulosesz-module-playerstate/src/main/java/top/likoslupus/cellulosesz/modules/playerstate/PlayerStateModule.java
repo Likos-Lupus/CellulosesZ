@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.playerstate;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
@@ -9,20 +10,26 @@ import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.DisplayNameService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.playerstate.VanishService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.player.*;
+import top.likoslupus.cellulosesz.api.playerstate.*;
+import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandSettings;
 import top.likoslupus.cellulosesz.modules.playerstate.command.*;
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultPlayerStateService;
 import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishService;
 
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
@@ -35,10 +42,18 @@ import static java.util.Objects.requireNonNull;
 )
 public final class PlayerStateModule implements CellulosesZModule {
 
+    private final Map<UUID, PersonalTimeSetting> lastTime = new ConcurrentHashMap<>();
+    private final Map<UUID, PersonalWeatherSetting> lastWeather = new ConcurrentHashMap<>();
+
     private @Nullable PlayerStateConfig config;
-    private @Nullable PlayerStateService states;
-    private @Nullable VanishService vanish;
+    private @Nullable PlayerStateCommandSettings settings;
+    private @Nullable DefaultPlayerStateService states;
+    private @Nullable DefaultVanishService vanish;
+    private @Nullable PlayerAbilityCommandService abilities;
+    private @Nullable PlayerInformationCommandService information;
     private @Nullable NearCommand nearCommand;
+    private @Nullable TaskHandle afkTask;
+    private @Nullable TaskHandle personalWorldTask;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -48,61 +63,91 @@ public final class PlayerStateModule implements CellulosesZModule {
                 "modules/playerstate.yml",
                 PlayerStateConfig::new
         );
+        settings = PlayerStateCommandSettings.from(config);
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
+        var players = context.services().require(PlayerDirectory.class);
+        var serverThread = context.services().require(ServerThreadExecutor.class);
         var displayNames = context.services().require(DisplayNameService.class);
+        var statePlatform = context.services().require(PlayerStatePlatformService.class);
 
-        states = new DefaultPlayerStateService(platform, users, displayNames);
-        vanish = new DefaultVanishService(platform, users, permissions, displayNames);
+        states = new DefaultPlayerStateService(statePlatform,
+                serverThread,
+                players,
+                users,
+                displayNames);
+        vanish = new DefaultVanishService(
+                context.services().require(VanishPlatformService.class),
+                players,
+                serverThread,
+                users,
+                permissions,
+                displayNames
+        );
+        abilities = new PlayerAbilityCommandService(
+                states,
+                vanish,
+                statePlatform,
+                serverThread
+        );
+        information = new PlayerInformationCommandService(
+                players,
+                context.services().require(PlayerLocationPlatformService.class),
+                statePlatform,
+                context.services().require(PlayerResolver.class),
+                users,
+                vanish,
+                displayNames,
+                serverThread,
+                requireNonNull(settings, "settings")
+        );
 
         context.services().register(PlayerStateService.class, states);
-        context.services().register(DefaultPlayerStateService.class, (DefaultPlayerStateService) states);
+        context.services().register(DefaultPlayerStateService.class, states);
         context.services().register(VanishService.class, vanish);
-        context.services().register(DefaultVanishService.class, (DefaultVanishService) vanish);
+        context.services().register(DefaultVanishService.class, vanish);
+        context.services().register(PlayerAbilityCommandService.class, abilities);
+        context.services().register(PlayerInformationCommandService.class, information);
     }
 
     @Override
     public void registerEvents(ModuleContext context) {
         context.events().listen(
                 PlayerJoinEvent.class,
-                event -> restoreJoinedState(context, event.player(), 0)
+                event -> restoreJoinedState(context, event.player())
         );
         context.events().listen(
                 PlayerDisconnectEvent.class,
-                event -> {
-                    context.services().require(PlatformService.class)
-                            .setVanishedState(event.player(), false);
-                    context.services().require(DefaultPlayerStateService.class)
-                            .forgetActivity(event.player().uuid());
-                }
+                event -> disconnect(context, event.player())
         );
         context.events().listen(
                 PlayerMoveEvent.class,
                 event -> {
                     if (event.changedBlock()) {
-                        activity(context, event.player());
+                        activity(event.player());
                     }
-                });
+                }
+        );
         context.events().listen(
                 PlayerChatEvent.class,
-                event -> activity(context, event.player())
+                event -> activity(event.player())
         );
         context.events().listen(
                 PlayerCommandPreprocessEvent.class,
-                event -> activity(context, event.player())
+                event -> activity(event.player())
         );
         context.events().listen(
                 PlayerAttackEvent.class,
-                event -> activity(context, event.player())
+                event -> activity(event.player())
         );
         context.events().listen(
                 PlayerPickupEvent.class,
-                event -> activity(context, event.player())
+                event -> activity(event.player())
         );
         context.events().listen(
                 PlayerWorldChangeEvent.class,
@@ -119,47 +164,47 @@ public final class PlayerStateModule implements CellulosesZModule {
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
-        var users = context.services().require(UserService.class);
-        var displayNames = context.services().require(DisplayNameService.class);
-        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
-        var currentStates = requireNonNull(states, "PlayerStateService has not been initialized");
-        var currentVanish = requireNonNull(vanish, "VanishService has not been initialized");
+        var registry = context.services().require(CommandRegistry.class);
+        var players = context.services().require(PlayerDirectory.class);
+        var names = context.services().require(NameCacheService.class);
+        var abilityService = requireNonNull(abilities, "abilities");
+        var informationService = requireNonNull(information, "information");
+        var currentSettings = requireNonNull(settings, "settings");
 
-        context.commands().register(new FlyCommand(platform, users, currentStates));
-        context.commands().register(new GodCommand(platform, users, currentStates));
-        context.commands().register(new HealCommand(platform, users, currentStates));
-        context.commands().register(new FeedCommand(platform, users, currentStates));
-        context.commands().register(new AfkCommand(platform, users, currentStates));
-        context.commands().register(new NickCommand(platform, users, currentStates));
-        context.commands().register(new VanishCommand(
-                platform,
-                users,
-                currentStates,
-                currentVanish,
-                context.services().require(MessageRenderer.class),
-                context.services().require(LocaleResolver.class)
-        ));
-        context.commands().register(new SeenCommand(platform, users, currentVanish));
-        context.commands().register(new WhoisCommand(platform, users, currentVanish));
-        context.commands().register(new PlaytimeCommand(platform, users));
-        nearCommand = new NearCommand(platform, currentVanish, displayNames, currentConfig);
-        context.commands().register(nearCommand);
-        context.commands().register(new GameModeCommand(platform));
-        context.commands().register(new SpeedCommand(platform));
-        context.commands().register(new PTimeCommand(platform, users));
-        context.commands().register(new PWeatherCommand(platform, users));
-        var playerOperations = context.services().require(PlayerStatePlatformService.class);
-        context.commands().register(new PingCommand());
-        context.commands().register(new CompassCommand(platform));
-        context.commands().register(new DepthCommand(platform, playerOperations));
-        context.commands().register(new GetPosCommand(platform, currentVanish));
-        context.commands().register(new RealNameCommand(platform, displayNames, currentVanish));
-        context.commands().register(new ExpCommand(platform, playerOperations));
-        context.commands().register(new RestCommand(platform, playerOperations));
+        track(context, registry, "afk-command", new AfkCommand(abilityService, players));
+        track(context, registry, "compass-command", new CompassCommand(informationService, players));
+        track(context, registry, "depth-command", new DepthCommand(informationService, players));
+        track(context, registry, "exp-command", new ExpCommand(abilityService, players));
+        track(context, registry, "feed-command", new FeedCommand(abilityService, players));
+        track(context, registry, "fly-command", new FlyCommand(abilityService, players));
+        track(context, registry, "gamemode-command", new GameModeCommand(abilityService, players));
+        track(context, registry, "getpos-command", new GetPosCommand(informationService, players));
+        track(context, registry, "god-command", new GodCommand(abilityService, players));
+        track(context, registry, "heal-command", new HealCommand(abilityService, players));
+        nearCommand = new NearCommand(informationService, players, currentSettings);
+        track(context, registry, "near-command", nearCommand);
+        track(context, registry, "nick-command", new NickCommand(abilityService, players));
+        track(context, registry, "ping-command", new PingCommand(currentSettings.maximumPingLength()));
+        track(context, registry, "playtime-command", new PlaytimeCommand(informationService, players, names));
+        track(context, registry, "ptime-command", new PTimeCommand(abilityService, players));
+        track(context, registry, "pweather-command", new PWeatherCommand(abilityService, players));
+        track(context, registry, "realname-command", new RealNameCommand(informationService, players));
+        track(context, registry, "rest-command", new RestCommand(abilityService, players));
+        track(context, registry, "seen-command", new SeenCommand(informationService, players, names));
+        track(context, registry, "speed-command", new SpeedCommand(abilityService, players, currentSettings));
+        track(context, registry, "vanish-command", new VanishCommand(abilityService, players));
+        track(context, registry, "whois-command", new WhoisCommand(informationService, players, names));
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
     }
 
+    private static void track(
+            ModuleContext context,
+            CommandRegistry registry,
+            String id,
+            CommandContributor contributor
+    ) {
+        context.track(registry.register(id, contributor));
+    }
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {
         Map.ofEntries(
@@ -173,180 +218,255 @@ public final class PlayerStateModule implements CellulosesZModule {
                 Map.entry("cellulosesz.command.exp.take", "Take personal experience"),
                 Map.entry("cellulosesz.command.exp.take.others", "Take another player's experience"),
                 Map.entry("cellulosesz.command.exp.reset", "Reset personal experience"),
-                Map.entry("cellulosesz.command.exp.reset.others", "Reset another player's experience")
+                Map.entry("cellulosesz.command.exp.reset.others", "Reset another player's experience"),
+                Map.entry("cellulosesz.playerstate.vanish.see", "See vanished players")
         ).forEach(catalog::register);
     }
 
     @Override
     public void onServerStarted(ModuleContext context) {
-        context.scheduler()
-                .syncRepeating(() -> checkAutomaticAfk(context), 20L, 20L);
-        context.scheduler()
-                .syncRepeating(() -> maintainPersonalWorldState(context), 20L, 20L);
+        scheduleTasks(context);
     }
 
     @Override
     public void onReload(ModuleContext context) {
-        config = context.configs().require("module.playerstate", PlayerStateConfig.class);
+        var current = requireNonNull(config, "config");
+        var candidate = context.configs().require(
+                "module.playerstate",
+                PlayerStateConfig.class
+        );
+        var replacement = PlayerStateCommandSettings.from(candidate);
+
+        current.copyFrom(candidate);
+        settings = replacement;
+        requireNonNull(information, "information").configure(replacement);
+
         if (nearCommand != null) {
-            nearCommand.configure(requireNonNull(config, "PlayerStateConfig has not been initialized"));
+            nearCommand.configure(replacement);
+        }
+
+        lastTime.clear();
+        lastWeather.clear();
+
+        scheduleTasks(context);
+    }
+
+    @Override
+    public void onServerStopping(ModuleContext context) {
+        cancelTasks();
+        lastTime.clear();
+        lastWeather.clear();
+    }
+
+    private void scheduleTasks(ModuleContext context) {
+        cancelTasks();
+        var current = requireNonNull(settings, "settings");
+        afkTask = context.scheduler().syncRepeating(
+                () -> checkAutomaticAfk(context),
+                20L,
+                current.activityCheckTicks()
+        );
+
+        if (current.persistPersonalTimeWeather()) {
+            personalWorldTask = context.scheduler().syncRepeating(
+                    () -> maintainPersonalWorldState(context),
+                    20L,
+                    20L
+            );
+        }
+    }
+
+    private void cancelTasks() {
+        if (afkTask != null) {
+            afkTask.cancel();
+            afkTask = null;
+        }
+        if (personalWorldTask != null) {
+            personalWorldTask.cancel();
+            personalWorldTask = null;
         }
     }
 
     private void checkAutomaticAfk(ModuleContext context) {
-        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
-        if (currentConfig.autoAfkSeconds <= 0L) return;
+        var current = requireNonNull(settings, "settings");
+        if (current.autoAfkMillis() <= 0L) return;
 
-        final long autoAfkMillis;
-        final long kickMillis;
-        try {
-            autoAfkMillis = Math.multiplyExact(currentConfig.autoAfkSeconds, 1000L);
-            kickMillis = currentConfig.afkKickSeconds <= 0L
-                    ? Long.MAX_VALUE
-                    : Math.addExact(autoAfkMillis, Math.multiplyExact(currentConfig.afkKickSeconds, 1000L));
-        } catch (ArithmeticException failure) {
-            context.logger().error("AFK time configuration overflows milliseconds", failure);
-            return;
-        }
-
-        var platform = context.services().require(PlatformService.class);
+        var stateService = requireNonNull(states, "states");
+        var players = context.services().require(PlayerDirectory.class).onlinePlayers();
+        var permissions = context.services().require(PermissionService.class);
+        var connection = context.services().require(PlayerConnectionService.class);
+        var audience = context.services().require(PlayerAudienceService.class);
         var renderer = context.services().require(MessageRenderer.class);
-        var currentStates = requireNonNull(states, "PlayerStateService has not been initialized");
-        platform.onlinePlayers().forEach(player -> {
-            var idle = currentStates.idleMillis(player.uuid());
+        var serverThread = context.services().require(ServerThreadExecutor.class);
+
+        players.forEach(player -> {
+            var idle = stateService.idleMillis(player.uuid());
             if (idle < 0L) {
-                currentStates.activity(player.uuid(), System.currentTimeMillis());
+                stateService.activity(player.uuid(), System.currentTimeMillis());
                 return;
             }
 
-            if (!currentStates.afk(player.uuid()) && idle >= autoAfkMillis) {
-                currentStates.setAfk(player.uuid(), player.name(), true).whenComplete((result, failure) -> {
-                    if (failure != null) {
-                        context.logger().error("Failed to persist automatic AFK state for " + player.uuid(), failure);
-                        return;
-                    }
-                    platform.runOnServerThread(() -> platform.sendMessage(
-                            player,
-                            renderer.render(platform.locale(player), result.message().key(), result.message()
-                                    .placeholders())
-                    ));
-                });
+            if (!stateService.afk(player.uuid())
+                    && idle >= current.autoAfkMillis()
+            ) {
+                stateService
+                        .setAfk(player.uuid(), player.name(), true)
+                        .whenComplete((result, failure) ->
+                                serverThread.execute(() -> {
+                                    var online = context.services()
+                                            .require(PlayerDirectory.class)
+                                            .onlinePlayer(player.uuid());
+                                    if (failure != null) {
+                                        context.logger().error(
+                                                "Failed to persist automatic AFK state for " + player.uuid(),
+                                                failure
+                                        );
+                                    } else {
+                                        online.ifPresent(target -> audience.send(
+                                                target,
+                                                renderer.render(audience.locale(target), result.message())
+                                        ));
+                                    }
+                                })
+                        );
             }
 
-            if (currentStates.afk(player.uuid())
-                    && idle >= kickMillis
-                    && !context.services().require(PermissionService.class)
-                    .has(player.nativeHandle(), "cellulosesz.playerstate.afk.kick.exempt")) {
-                platform.kick(player, renderer.render(platform.locale(player), "commands.playerstate.afk-kicked")
-                        .plainText());
+            var kickAt = saturatedAdd(
+                    current.autoAfkMillis(),
+                    current.afkKickMillis()
+            );
+            if (current.afkKickMillis() > 0L
+                    && stateService.afk(player.uuid())
+                    && idle >= kickAt
+                    && !permissions.has(player, "cellulosesz.playerstate.afk.kick.exempt")
+            ) {
+                connection.disconnect(
+                        player,
+                        renderer.render(
+                                audience.locale(player),
+                                "commands.playerstate.afk-kicked"
+                        )
+                );
             }
         });
     }
 
     private void maintainPersonalWorldState(ModuleContext context) {
-        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
-        if (!currentConfig.persistPersonalTimeWeather) return;
-
-        var platform = context.services().require(PlatformService.class);
-        var users = context.services().require(UserService.class);
-        platform.onlinePlayers().forEach(player ->
-                users.cached(player.uuid()).ifPresent(user -> {
-                    if (user.state.personalTime != null) {
-                        platform.setPersonalTime(player, user.state.personalTime);
-                    }
-                    if (user.state.personalWeather != null) {
-                        platform.setPersonalWeather(player, user.state.personalWeather);
-                    }
-                })
-        );
-    }
-
-    private void activity(ModuleContext context, CellPlayer player) {
-        var currentStates = requireNonNull(states, "PlayerStateService has not been initialized");
-        currentStates.activity(player.uuid(), System.currentTimeMillis());
-        if (!currentStates.afk(player.uuid())) return;
-
-        currentStates.setAfk(player.uuid(), player.name(), false).whenComplete((result, failure) -> {
-            if (failure != null) {
-                context.logger().error("Failed to persist AFK reset for " + player.uuid(), failure);
-                return;
-            }
-            var platform = context.services().require(PlatformService.class);
-            platform.runOnServerThread(() -> platform.sendMessage(
-                    player,
-                    context.services().require(MessageRenderer.class).render(
-                            platform.locale(player), result.message().key(), result.message().placeholders()
-                    )
-            ));
-        });
-    }
-
-    private void restoreJoinedState(
-            ModuleContext context,
-            CellPlayer player,
-            int attempt
-    ) {
-        var platform = context.services().require(PlatformService.class);
-        var users = context.services().require(UserService.class);
-
-        if (platform.onlinePlayers().stream()
-                .noneMatch(online -> online.uuid().equals(player.uuid()))
-        ) return;
-
-        var loaded = users.cached(player.uuid());
-        if (loaded.isEmpty()) {
-            if (attempt < 100) {
-                context.scheduler().syncLater(
-                        () -> restoreJoinedState(context, player, attempt + 1),
-                        1L
+        var stateService = requireNonNull(states, "states");
+        context.services().require(PlayerDirectory.class).onlinePlayers()
+                .forEach(player ->
+                        stateService.cachedPersonalWorldState(player.uuid())
+                                .ifPresent(state ->
+                                        applyPersonalWorldState(context, player, state)
+                                )
                 );
-            } else {
-                context.logger().warn("Timed out waiting for player data before restoring state: " + player.name());
-            }
-            return;
+    }
+
+    private static long saturatedAdd(long first, long second) {
+        try {
+            return Math.addExact(first, second);
+        } catch (ArithmeticException _) {
+            return Long.MAX_VALUE;
         }
+    }
 
-        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
-        var currentStates = requireNonNull(states, "PlayerStateService has not been initialized");
-        var currentVanish = requireNonNull(vanish, "VanishService has not been initialized");
-        var user = loaded.get();
+    private void restoreJoinedState(ModuleContext context, CellPlayer joined) {
+        context.services().require(UserService.class)
+                .load(joined.uuid())
+                .whenComplete((user, failure) ->
+                        context.services().require(ServerThreadExecutor.class)
+                                .execute(() -> {
+                                    var online = context.services()
+                                            .require(PlayerDirectory.class)
+                                            .onlinePlayer(joined.uuid());
 
-        context.services().require(DisplayNameService.class).refresh(player);
-        currentStates.activity(player.uuid(), System.currentTimeMillis());
+                                    if (failure != null) {
+                                        context.logger().error(
+                                                "Failed to restore player state for " + joined.uuid(),
+                                                failure
+                                        );
+                                        return;
+                                    }
 
-        if (currentConfig.persistFlyGod) {
-            if (user.state.flying) currentStates.setFlying(player, true);
-            if (user.state.god) currentStates.setGod(player, true);
+                                    if (online.isEmpty()) return;
+
+                                    var player = online.orElseThrow();
+                                    var statePlatform = context.services()
+                                            .require(PlayerStatePlatformService.class);
+
+                                    if (requireNonNull(settings, "settings").persistFlyGod()) {
+                                        statePlatform.setFlying(player, user.state.flying);
+                                        statePlatform.setInvulnerable(player, user.state.god);
+                                    }
+
+                                    if (requireNonNull(settings, "settings").persistVanish()
+                                            && user.state.vanished
+                                    ) {
+                                        requireNonNull(vanish, "vanish")
+                                                .setVanished(player, true);
+                                    }
+
+                                    requireNonNull(states, "states")
+                                            .cachedPersonalWorldState(player.uuid())
+                                            .ifPresent(state ->
+                                                    applyPersonalWorldState(context, player, state)
+                                            );
+                                    requireNonNull(vanish, "vanish")
+                                            .synchronizeViewer(player);
+                                    requireNonNull(states, "states").activity(
+                                            player.uuid(),
+                                            System.currentTimeMillis()
+                                    );
+                                }));
+    }
+
+    private void disconnect(ModuleContext context, CellPlayer player) {
+        context.services().require(VanishPlatformService.class)
+                .setVanishedState(player, false);
+        requireNonNull(states, "states").forgetActivity(player.uuid());
+
+        lastTime.remove(player.uuid());
+        lastWeather.remove(player.uuid());
+    }
+
+    private void activity(CellPlayer player) {
+        var service = requireNonNull(states, "states");
+        var wasAfk = service.afk(player.uuid());
+
+        service.activity(
+                player.uuid(),
+                System.currentTimeMillis()
+        );
+        if (wasAfk) {
+            service.setAfk(player.uuid(), player.name(), false);
         }
-
-        if ((!currentConfig.persistAfk || !user.state.afk) && user.state.afk) {
-            currentStates.setAfk(player.uuid(), player.name(), false);
-        }
-
-        if (user.state.vanished && currentConfig.persistVanish) {
-            currentVanish.setVanished(player, true);
-        } else {
-            if (user.state.vanished) {
-                user.state.vanished = false;
-                users.markDirty(player.uuid());
-                users.save(player.uuid());
-            }
-            platform.setVanishedState(player, false);
-        }
-
-        restorePersonalWorldState(context, player);
-        currentVanish.synchronizeViewer(player);
     }
 
     private void restorePersonalWorldState(ModuleContext context, CellPlayer player) {
-        var currentConfig = requireNonNull(config, "PlayerStateConfig has not been initialized");
-        if (!currentConfig.persistPersonalTimeWeather) return;
+        lastTime.remove(player.uuid());
+        lastWeather.remove(player.uuid());
 
-        context.services().require(UserService.class).cached(player.uuid()).ifPresent(user -> {
-            var platform = context.services().require(PlatformService.class);
-            platform.setPersonalTime(player, user.state.personalTime);
-            platform.setPersonalWeather(player, user.state.personalWeather);
-        });
+        requireNonNull(states, "states").cachedPersonalWorldState(player.uuid())
+                .ifPresent(state -> applyPersonalWorldState(context, player, state));
+    }
+
+    private void applyPersonalWorldState(
+            ModuleContext context,
+            CellPlayer player,
+            PersonalWorldState state
+    ) {
+        if (!requireNonNull(settings, "settings").persistPersonalTimeWeather()) {
+            return;
+        }
+
+        var platform = context.services().require(PlayerStatePlatformService.class);
+        if (!state.time().equals(lastTime.put(player.uuid(), state.time()))) {
+            platform.setPersonalTime(player, state.time());
+        }
+
+        if (state.weather() != lastWeather.put(player.uuid(), state.weather())) {
+            platform.setPersonalWeather(player, state.weather());
+        }
     }
 
 }

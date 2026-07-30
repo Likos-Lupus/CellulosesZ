@@ -1,75 +1,66 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class CompassCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private static final String[] DIRECTION_KEYS = {
-            "south", "south-west", "west", "north-west",
-            "north", "north-east", "east", "south-east"
-    };
-    private final PlatformService platform;
+public final class CompassCommand implements CommandContributor {
 
-    public CompassCommand(PlatformService platform) {
-        this.platform = platform;
+    private final PlayerInformationCommandService service;
+    private final PlayerDirectory players;
+
+    public CompassCommand(
+            PlayerInformationCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
+
+    public static double normalizeDegrees(double yaw) {
+        return PlayerInformationCommandService.normalizeDegrees(yaw);
+    }    @Override
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "compass",
+                "cellulosesz.command.compass",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("compass")
+                .executes(command ->
+                        PlayerStateCommandSupport.requirePlayer(
+                                context,
+                                command,
+                                descriptor,
+                                "compass",
+                                players,
+                                service::compass
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.compass",
+                "/compass",
+                root
+        );
+    }
+
+
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.compass";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "compass";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 0) {
-            invocation.errorKey("commands.playerstate.compass.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var player = platform.player(invocation).orElseThrow();
-        var degrees = normalizeDegrees(platform.location(player).yaw);
-        invocation.replyKey(directionMessageKey(degrees), Map.of(
-                "degrees", Math.round(degrees * 10.0D) / 10.0D
-        ));
-        return 1;
-    }
-
-    static double normalizeDegrees(double yaw) {
-        var value = yaw % 360.0D;
-        return value < 0.0D ? value + 360.0D : value;
-    }
-
-    private static String directionMessageKey(double yaw) {
-        return switch (directionKey(yaw)) {
-            case "south" -> "commands.playerstate.compass.south";
-            case "south-west" -> "commands.playerstate.compass.south-west";
-            case "west" -> "commands.playerstate.compass.west";
-            case "north-west" -> "commands.playerstate.compass.north-west";
-            case "north" -> "commands.playerstate.compass.north";
-            case "north-east" -> "commands.playerstate.compass.north-east";
-            case "east" -> "commands.playerstate.compass.east";
-            case "south-east" -> "commands.playerstate.compass.south-east";
-            default -> throw new IllegalStateException("Unknown compass direction");
-        };
-    }
-
-    static String directionKey(double yaw) {
-        var degrees = normalizeDegrees(yaw);
-        return DIRECTION_KEYS[(int) Math.floor((degrees + 22.5D) / 45.0D) & 7];
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

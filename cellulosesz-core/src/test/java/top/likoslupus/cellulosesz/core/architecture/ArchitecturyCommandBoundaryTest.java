@@ -1,37 +1,59 @@
 package top.likoslupus.cellulosesz.core.architecture;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static java.util.Objects.requireNonNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 final class ArchitecturyCommandBoundaryTest {
 
     private static final Set<String> DIRECT = Set.of(
             "customtext", "info", "motd", "rules", "home", "sethome", "delhome", "renamehome",
-            "warp", "setwarp", "delwarp", "warpinfo", "kit", "showkit", "createkit", "delkit", "kitreset"
+            "warp", "setwarp", "delwarp", "warpinfo", "kit", "showkit", "createkit", "delkit", "kitreset",
+            "cellulosesz", "help", "broadcast", "broadcastworld", "helpop", "ignore", "list", "mail", "me",
+            "msg", "msgtoggle", "r", "rtoggle", "socialspy", "balance", "balancetop", "eco", "pay",
+            "payconfirmtoggle", "paytoggle", "sell", "setworth", "worth", "afk", "compass", "depth", "exp",
+            "feed", "fly", "gamemode", "getpos", "god", "heal", "near", "nick", "ping", "playtime",
+            "ptime", "pweather", "realname", "rest", "seen", "speed", "vanish", "whois"
+    );
+
+    private static final List<String> COMMON_MODULES = List.of(
+            "text", "home", "warp", "kit", "command", "messaging", "economy", "playerstate"
+    );
+
+    private static final List<String> SEGMENT_2_MODULES = List.of(
+            "command", "messaging", "economy", "playerstate"
     );
 
     @Test
     void pureAndCommonProjectsContainNoLoaderImports() throws IOException {
         var root = projectRoot();
-        for (var relative : List.of("cellulosesz-api/src/main/java", "cellulosesz-core/src/main/java",
-                "cellulosesz-common/src/main/java",
-                "cellulosesz-modules/cellulosesz-module-text/src/main/java",
-                "cellulosesz-modules/cellulosesz-module-home/src/main/java",
-                "cellulosesz-modules/cellulosesz-module-warp/src/main/java",
-                "cellulosesz-modules/cellulosesz-module-kit/src/main/java")) {
+        var sourceRoots = new ArrayList<String>();
+
+        sourceRoots.add("cellulosesz-api/src/main/java");
+        sourceRoots.add("cellulosesz-core/src/main/java");
+        sourceRoots.add("cellulosesz-common/src/main/java");
+
+        COMMON_MODULES.forEach(domain ->
+                sourceRoots.add("cellulosesz-modules/cellulosesz-module-%s/src/main/java".formatted(domain))
+        );
+
+        for (var relative : sourceRoots) {
             for (var source : javaSources(root.resolve(relative))) {
                 var text = Files.readString(source);
                 assertFalse(text.contains("net.fabricmc."), source.toString());
                 assertFalse(text.contains("net.neoforged."), source.toString());
+                assertFalse(text.contains("top.likoslupus.cellulosesz.fabric."), source.toString());
             }
         }
     }
@@ -58,33 +80,23 @@ final class ArchitecturyCommandBoundaryTest {
         for (var source : javaSources(fabric)) {
             var text = Files.readString(source);
             assertFalse(text.contains("CommandRegistrationCallback.EVENT.register"), source.toString());
-            List.of(
-                    "TextCommandRegistrar",
-                    "HomeCommandRegistrar",
-                    "WarpCommandRegistrar",
-                    "KitCommandRegistrar"
-            ).forEach(rejected ->
-                    assertFalse(text.contains(rejected), source.toString())
-            );
-            DIRECT.forEach(command ->
-                    assertFalse(
-                            text.contains("Commands.literal(\"" + command + "\")"),
-                            source.toString()
-                    )
-            );
+            DIRECT.forEach(command -> assertFalse(
+                    text.contains("Commands.literal(\"" + command + "\")"), source.toString()));
         }
         assertFalse(Files.exists(fabric.resolve("top/likoslupus/cellulosesz/fabric/command")));
     }
 
     @Test
-    void moduleCommandsUseDirectBrigadierAndNoLegacyApi() throws IOException {
+    void moduleCommandsUseDirectTreesAndNoLegacyApi() throws IOException {
         var root = projectRoot();
-        for (var domain : List.of("text", "home", "warp", "kit")) {
-            var commandRoot = root.resolve("cellulosesz-modules/cellulosesz-module-" + domain
-                    + "/src/main/java/top/likoslupus/cellulosesz/modules/" + domain + "/command");
+        for (var domain : COMMON_MODULES) {
+            var commandRoot = commandSourceRoot(root, domain);
             var combined = new StringBuilder();
-            for (var source : javaSources(commandRoot)) combined.append(Files.readString(source));
+            for (var source : javaSources(commandRoot)) {
+                combined.append(Files.readString(source));
+            }
             var text = combined.toString();
+
             assertTrue(text.contains("Commands.literal"), domain);
             List.of(
                     "CommandSpec",
@@ -93,7 +105,8 @@ final class ArchitecturyCommandBoundaryTest {
                     "CellCommand",
                     "CommandInvocation",
                     "DefaultCommandSpecFactory",
-                    "String[] args"
+                    "String[] args",
+                    "invocation.args()"
             ).forEach(forbidden ->
                     assertFalse(
                             text.contains(forbidden),
@@ -103,19 +116,47 @@ final class ArchitecturyCommandBoundaryTest {
         }
     }
 
+    private static Path commandSourceRoot(Path root, String domain) {
+        var base = root.resolve("cellulosesz-modules/cellulosesz-module-%s/src/main/java/top/likoslupus/cellulosesz/modules/%s".formatted(domain, domain));
+        return domain.equals("command")
+                ? base
+                : base.resolve("command");
+    }
+
+    @Test
+    void segmentTwoModulesDoNotDependOnBroadPlatformService() throws IOException {
+        var root = projectRoot();
+        for (var domain : SEGMENT_2_MODULES) {
+            var sourceRoot = root.resolve("cellulosesz-modules/cellulosesz-module-%s/src".formatted(domain));
+            for (var source : javaSources(sourceRoot)) {
+                var text = Files.readString(source);
+                assertFalse(text.contains("import top.likoslupus.cellulosesz.api.platform.PlatformService;"), source.toString());
+                assertFalse(text.contains("require(PlatformService.class)"), source.toString());
+            }
+        }
+    }
+
+    @Test
+    void segmentTwoCommandNamesAreNormalBusinessNames() throws IOException {
+        var root = projectRoot();
+        for (var domain : SEGMENT_2_MODULES) {
+            var commandRoot = commandSourceRoot(root, domain);
+            for (var source : javaSources(commandRoot)) {
+                var name = source.getFileName().toString();
+                List.of("Brigadier", "Registrar", "Direct", "V2", "Legacy")
+                        .forEach(rejected -> assertFalse(name.contains(rejected), name));
+            }
+        }
+    }
+
     @Test
     void commonManagerIsFeatureBlindAndArchitecturyOwnsRegistration() throws IOException {
         var root = projectRoot();
         var manager = Files.readString(root.resolve("cellulosesz-common/src/main/java/top/likoslupus/cellulosesz/common/command/CommandManager.java"));
         var common = Files.readString(root.resolve("cellulosesz-common/src/main/java/top/likoslupus/cellulosesz/common/CellulosesZCommon.java"));
-        List.of(
-                "modules.text",
-                "modules.home",
-                "modules.warp",
-                "modules.kit"
-        ).forEach(module -> {
-            assertFalse(manager.contains(module));
-            assertFalse(common.contains(module));
+        COMMON_MODULES.forEach(module -> {
+            assertFalse(manager.contains("modules." + module));
+            assertFalse(common.contains("modules." + module));
         });
         assertTrue(manager.contains("registry.freezeAndSnapshot()"));
         assertTrue(common.contains("CommandRegistrationEvent.EVENT.register"));
@@ -123,17 +164,72 @@ final class ArchitecturyCommandBoundaryTest {
     }
 
     @Test
-    void legacyBoundaryExcludesMigratedRootsAndDoesNotLeakInvocation() throws IOException {
+    void directRootIndexHasExpectedCardinality() throws IOException {
+        assertEquals(62, DIRECT.size());
+        var index = Files.readString(projectRoot().resolve("cellulosesz-core/src/main/java/top/likoslupus/cellulosesz/core/command/DirectCommandMigrationIndex.java"));
+        DIRECT.forEach(command -> assertTrue(index.contains("\"" + command + "\""), command));
+    }
+
+    @Test
+    void segmentTwoLegacyClassesAreDeletedAndContributorCountIsExact() throws IOException {
         var root = projectRoot();
-        var factory = Files.readString(root.resolve(
-                "cellulosesz-core/src/main/java/top/likoslupus/cellulosesz/core/command/spec/DefaultCommandSpecFactory.java"));
-        DIRECT.forEach(command -> assertFalse(factory.contains("case \"" + command + "\""), command));
-        for (var source : javaSources(root)) {
-            var relative = root.relativize(source).toString().replace('\\', '/');
-            var text = Files.readString(source);
-            if (text.contains("MinecraftLegacyCommandInvocation")) {
-                assertTrue(relative.contains("common/command/legacy/"), relative);
+        var contributors = 0;
+        for (var domain : SEGMENT_2_MODULES) {
+            var commandRoot = commandSourceRoot(root, domain);
+            for (var source : javaSources(commandRoot)) {
+                if (Files.readString(source).contains("implements CommandContributor")) contributors++;
             }
+        }
+        assertEquals(45, contributors);
+        Stream.of(
+                        "cellulosesz-modules/cellulosesz-module-messaging/src/main/java/top/likoslupus/cellulosesz/modules/messaging/command/AbstractMessagingCommand.java",
+                        "cellulosesz-modules/cellulosesz-module-economy/src/main/java/top/likoslupus/cellulosesz/modules/economy/command/AbstractEconomyCommand.java",
+                        "cellulosesz-modules/cellulosesz-module-playerstate/src/main/java/top/likoslupus/cellulosesz/modules/playerstate/command/AbstractPlayerStateCommand.java",
+                        "cellulosesz-modules/cellulosesz-module-command/src/main/java/top/likoslupus/cellulosesz/modules/command/RootCellulosesZCommand.java"
+                )
+                .map(s -> Files.exists(root.resolve(s)))
+                .forEach(Assertions::assertFalse);
+    }
+
+    @Test
+    void segmentTwoPersonalWorldStateUsesTypedSettingsOutsideStorageAdapter() throws IOException {
+        var root = projectRoot();
+        var moduleRoot = root.resolve("cellulosesz-modules/cellulosesz-module-playerstate/src/main/java/top/likoslupus/cellulosesz/modules/playerstate");
+        for (var source : javaSources(moduleRoot)) {
+            var normalized = source.toString().replace('\\', '/');
+            if (normalized.endsWith("/service/DefaultPlayerStateService.java")) {
+                continue;
+            }
+
+            var text = Files.readString(source);
+            Arrays.asList(
+                            "state.personalTime",
+                            "state.personalWeather",
+                            "@Nullable Long",
+                            "@Nullable String"
+                    )
+                    .forEach(s -> assertFalse(text.contains(s), source.toString()));
+        }
+    }
+
+    @Test
+    void segmentTwoModulesAreArchitecturyCommonAndFabricTransformsThem() throws IOException {
+        var root = projectRoot();
+        var fabricBuild = Files.readString(root.resolve("cellulosesz-fabric/build.gradle.kts"));
+        for (var domain : SEGMENT_2_MODULES) {
+            var modulePath = ":cellulosesz-modules:cellulosesz-module-" + domain;
+            var build = Files.readString(root.resolve("cellulosesz-modules/cellulosesz-module-%s/build.gradle.kts".formatted(domain)));
+
+            Arrays.asList(
+                            "alias(libs.plugins.architectury.loom.no.remap)",
+                            "alias(libs.plugins.architectury.plugin)",
+                            "common(\"fabric\", \"neoforge\")",
+                            "implementation(project(\":cellulosesz-common\"))"
+                    )
+                    .forEach(s -> assertTrue(build.contains(s), domain));
+
+            assertFalse(build.contains("cellulosesz-fabric"), domain);
+            assertTrue(fabricBuild.contains("\"" + modulePath + "\""), domain);
         }
     }
 

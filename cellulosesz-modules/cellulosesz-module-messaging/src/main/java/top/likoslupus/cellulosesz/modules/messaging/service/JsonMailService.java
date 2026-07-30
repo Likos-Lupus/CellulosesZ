@@ -38,7 +38,11 @@ public final class JsonMailService implements MailService, AsyncInitializable {
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(path, MailDocument.class, MailDocument::new)
+        return storage.createIfMissing(
+                        path,
+                        MailDocument.class,
+                        MailDocument::new
+                )
                 .thenApply(JsonMailService::validate)
                 .thenAccept(loaded -> {
                     synchronized (queueLock) {
@@ -54,9 +58,12 @@ public final class JsonMailService implements MailService, AsyncInitializable {
         document.inboxes.forEach((recipient, messages) -> {
             var uuid = UUID.fromString(recipient);
             requireNonNull(messages, "messages");
+
             messages.forEach(message -> {
                 requireNonNull(message, "message");
-                if (!message.toUuid().equals(uuid)) throw new IllegalArgumentException("Mail recipient mismatch");
+                if (!message.toUuid().equals(uuid)) {
+                    throw new IllegalArgumentException("Mail recipient mismatch");
+                }
             });
         });
 
@@ -78,9 +85,13 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     }
 
     @Override
-    public CompletableFuture<Integer> sendAll(Collection<UUID> recipients, MailMessageFactory factory) {
+    public CompletableFuture<Integer> sendAll(
+            Collection<UUID> recipients,
+            MailMessageFactory factory
+    ) {
         requireNonNull(recipients, "recipients");
         requireNonNull(factory, "factory");
+
         var unique = new LinkedHashSet<>(recipients);
         return mutate(() -> {
             unique.forEach(recipient ->
@@ -93,10 +104,15 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     @Override
     public CompletableFuture<List<MailMessage>> inbox(UUID recipient) {
         requireNonNull(recipient, "recipient");
+
         return mutate(
                 () -> {
                     purgeExpiredInternal(System.currentTimeMillis());
-                    return document.inboxes.getOrDefault(recipient.toString(), List.of()).stream()
+                    return document.inboxes
+                            .getOrDefault(
+                                    recipient.toString(),
+                                    List.of()
+                            ).stream()
                             .sorted(Comparator.comparingLong(MailMessage::sentAt).reversed())
                             .toList();
                 },
@@ -107,10 +123,15 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     @Override
     public CompletableFuture<Integer> unreadCount(UUID recipient) {
         requireNonNull(recipient, "recipient");
+
         return mutate(
                 () -> {
                     purgeExpiredInternal(System.currentTimeMillis());
-                    return (int) document.inboxes.getOrDefault(recipient.toString(), List.of()).stream()
+                    return (int) document.inboxes
+                            .getOrDefault(
+                                    recipient.toString(),
+                                    List.of()
+                            ).stream()
                             .filter(message -> !message.read())
                             .count();
                 },
@@ -121,17 +142,19 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     @Override
     public CompletableFuture<Void> markRead(UUID recipient, Collection<UUID> messageIds) {
         requireNonNull(recipient, "recipient");
+
         var ids = new LinkedHashSet<>(requireNonNull(messageIds, "messageIds"));
         return mutate(() -> {
             var messages = inboxMutable(recipient);
-            IntStream.range(0, messages.size()).forEach(index -> {
-                var message = messages.get(index);
-                if (ids.contains(message.id()) && !message.read()) {
-                    messages.set(index, message.withRead(true));
-                }
-            });
+            IntStream.range(0, messages.size())
+                    .forEach(index -> {
+                        var message = messages.get(index);
+                        if (ids.contains(message.id()) && !message.read()) {
+                            messages.set(index, message.withRead(true));
+                        }
+                    });
             return Boolean.TRUE;
-        }).thenAccept(ignored -> {
+        }).thenAccept(_ -> {
         });
     }
 
@@ -139,6 +162,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     public CompletableFuture<Boolean> delete(UUID recipient, UUID messageId) {
         requireNonNull(recipient, "recipient");
         requireNonNull(messageId, "messageId");
+
         return mutate(() ->
                 inboxMutable(recipient).removeIf(message ->
                         message.id().equals(messageId)
@@ -149,9 +173,12 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     @Override
     public CompletableFuture<Integer> clear(UUID recipient) {
         requireNonNull(recipient, "recipient");
+
         return mutate(() -> {
             var removed = document.inboxes.remove(recipient.toString());
-            return removed == null ? 0 : removed.size();
+            return removed == null
+                    ? 0
+                    : removed.size();
         });
     }
 
@@ -163,13 +190,19 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     private int purgeExpiredInternal(long now) {
         var removed = 0;
         var iterator = document.inboxes.entrySet().iterator();
+
         while (iterator.hasNext()) {
             var entry = iterator.next();
             var before = entry.getValue().size();
+
             entry.getValue().removeIf(message -> message.expired(now));
             removed += before - entry.getValue().size();
-            if (entry.getValue().isEmpty()) iterator.remove();
+
+            if (entry.getValue().isEmpty()) {
+                iterator.remove();
+            }
         }
+
         return removed;
     }
 
@@ -180,13 +213,17 @@ public final class JsonMailService implements MailService, AsyncInitializable {
     private void add(MailMessage message) {
         var messages = inboxMutable(message.toUuid());
         messages.add(message);
-        var maximum = Math.max(1, config.maxMailPerPlayer);
-        while (messages.size() > maximum) messages.removeFirst();
+
+        var maximum = config.maxMailPerPlayer;
+        while (messages.size() > maximum) {
+            messages.removeFirst();
+        }
     }
 
     private <T> CompletableFuture<T> mutate(Supplier<T> operation, boolean alwaysSave) {
         synchronized (queueLock) {
-            var next = tail.handle((_, _) -> Boolean.TRUE)
+            var next = tail
+                    .handle((_, _) -> Boolean.TRUE)
                     .thenCompose(_ -> {
                         var snapshot = document.copy();
                         final T result;
@@ -202,16 +239,18 @@ public final class JsonMailService implements MailService, AsyncInitializable {
                             return CompletableFuture.completedFuture(result);
                         }
 
-                        return storage.save(path, document).handle((_, failure) -> {
-                            if (failure != null) {
-                                document = snapshot;
-                                throw new IllegalStateException("Unable to persist mail data", failure);
-                            }
-                            return result;
-                        });
+                        return storage
+                                .save(path, document)
+                                .handle((_, failure) -> {
+                                    if (failure != null) {
+                                        document = snapshot;
+                                        throw new IllegalStateException("Unable to persist mail data", failure);
+                                    }
+                                    return result;
+                                });
                     });
 
-            tail = next.handle((ignored, _) -> Boolean.TRUE);
+            tail = next.handle((_, _) -> Boolean.TRUE);
             return next;
         }
     }

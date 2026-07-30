@@ -68,6 +68,49 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     }
 
     @Override
+    public PlatformResult<InventorySlotView> heldSlot(CellPlayer player) {
+        return onServerThread(() -> {
+            var snapshot = platform.heldInventorySnapshot(player);
+            if (snapshot.isEmpty()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Main hand is empty"
+                );
+            }
+
+            var descriptor = platform.describeInventoryItem(snapshot.orElseThrow());
+            if (descriptor.isEmpty()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        "Held stack snapshot decode failed"
+                );
+            }
+
+            return PlatformResult.success(new InventorySlotView(
+                    snapshot.orElseThrow(),
+                    descriptor.orElseThrow(),
+                    InventorySlotKind.MAIN,
+                    platform.plainInventoryItem(snapshot.orElseThrow())
+            ));
+        });
+    }
+
+    @Override
+    public PlatformResult<InventoryMutation> prepareRemoval(
+            CellPlayer player,
+            List<InventoryStackSelection> selections
+    ) {
+        return onServerThread(() ->
+                platform.prepareInventoryRemoval(player, selections)
+                        .map(PlatformResult::success)
+                        .orElseGet(() -> PlatformResult.failure(
+                                PlatformOperationStatus.CONFLICT,
+                                "Inventory changed before removal could be prepared"
+                        ))
+        );
+    }
+
+    @Override
     public PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot) {
         var descriptor = platform.describeInventoryItem(requireNonNull(snapshot, "snapshot"));
         return descriptor

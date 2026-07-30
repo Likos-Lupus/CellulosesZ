@@ -38,20 +38,20 @@ val commonProjects = listOf(
     ":cellulosesz-modules:cellulosesz-module-text",
     ":cellulosesz-modules:cellulosesz-module-home",
     ":cellulosesz-modules:cellulosesz-module-warp",
-    ":cellulosesz-modules:cellulosesz-module-kit"
+    ":cellulosesz-modules:cellulosesz-module-kit",
+    ":cellulosesz-modules:cellulosesz-module-command",
+    ":cellulosesz-modules:cellulosesz-module-messaging",
+    ":cellulosesz-modules:cellulosesz-module-economy",
+    ":cellulosesz-modules:cellulosesz-module-playerstate"
 )
 val pureJavaProjects = listOf(
     ":cellulosesz-api",
     ":cellulosesz-core",
     ":cellulosesz-modules:cellulosesz-module-user",
-    ":cellulosesz-modules:cellulosesz-module-command",
     ":cellulosesz-modules:cellulosesz-module-permission",
     ":cellulosesz-modules:cellulosesz-module-teleport",
-    ":cellulosesz-modules:cellulosesz-module-economy",
     ":cellulosesz-modules:cellulosesz-module-item",
-    ":cellulosesz-modules:cellulosesz-module-messaging",
     ":cellulosesz-modules:cellulosesz-module-admin",
-    ":cellulosesz-modules:cellulosesz-module-playerstate",
     ":cellulosesz-modules:cellulosesz-module-world",
     ":cellulosesz-modules:cellulosesz-module-sign"
 )

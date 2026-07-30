@@ -15,6 +15,9 @@ import net.minecraft.commands.arguments.coordinates.Vec3Argument;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.command.CellCommand;
+import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
+import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
+import top.likoslupus.cellulosesz.api.command.catalog.CommandMigrationMode;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionContext;
 import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
 import top.likoslupus.cellulosesz.api.command.spec.CommandParameter;
@@ -28,6 +31,7 @@ import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.common.command.DefaultCommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.MinecraftCommandResponder;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
+import top.likoslupus.cellulosesz.core.command.DirectCommandMigrationIndex;
 import top.likoslupus.cellulosesz.core.command.spec.DefaultCommandSpecFactory;
 
 import java.util.*;
@@ -65,16 +69,26 @@ public final class LegacyCommandBridge {
 
     public void register(DefaultCommandRegistrationContext context) {
         var direct = context.directCanonical();
+        var catalogEntries = new ArrayList<CommandCatalogEntry>();
         bootstrap.commandRegistry().commands().forEach(command -> {
             var canonical = command.name().toLowerCase(Locale.ROOT);
             var descriptor = context.descriptor(command);
-            if (direct.contains(canonical)
+            if (DirectCommandMigrationIndex.contains(canonical)
+                    || direct.contains(canonical)
                     || context.disabled(canonical)
                     || !context.moduleEnabled(descriptor.moduleId())) return;
             register(context, command, canonical);
             command.aliases()
                     .forEach(alias -> register(context, command, alias.toLowerCase(Locale.ROOT)));
+            catalogEntries.add(new CommandCatalogEntry(
+                    descriptor,
+                    command.aliases().stream().map(alias -> alias.toLowerCase(Locale.ROOT)).toList(),
+                    command.description(),
+                    command.usage(),
+                    CommandMigrationMode.LEGACY
+            ));
         });
+        bootstrap.serviceRegistry().require(CommandCatalog.class).replaceLegacy(catalogEntries);
     }
 
     private void register(

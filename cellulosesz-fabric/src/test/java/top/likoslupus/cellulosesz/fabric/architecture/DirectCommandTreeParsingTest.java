@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -251,6 +252,18 @@ final class DirectCommandTreeParsingTest {
                 LiteralArgumentBuilder<CommandSourceStack> root
         ) {
             return dispatcher.register(root);
+        }
+
+        @Override
+        public void registerAlias(
+                String owner,
+                CommandDescriptor descriptor,
+                String label,
+                CommandNode<CommandSourceStack> target
+        ) {
+            dispatcher.register(
+                    Commands.literal(label).redirect(target)
+            );
         }
 
         @Override

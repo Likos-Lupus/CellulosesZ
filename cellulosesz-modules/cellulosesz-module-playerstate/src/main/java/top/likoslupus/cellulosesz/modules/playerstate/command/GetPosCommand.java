@@ -1,105 +1,126 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.VanishService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
-public final class GetPosCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final VanishService vanish;
+public final class GetPosCommand implements CommandContributor {
+
+    private final PlayerInformationCommandService service;
+    private final PlayerDirectory players;
 
     public GetPosCommand(
-            PlatformService platform,
-            VanishService vanish
+            PlayerInformationCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.vanish = vanish;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.getpos";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "getpos",
+                "cellulosesz.command.getpos",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("getpos")
+                .executes(command -> PlayerStateCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "getpos self",
+                        policy -> PlayerStateCommandSupport.currentPlayer(
+                                        policy,
+                                        players
+                                )
+                                .map(player -> service.getPos(
+                                        Optional.of(player),
+                                        player
+                                ))
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                PlayerStateCommandResult.failure(
+                                                        "commands.playerstate.getpos.console-target-required"
+                                                )
+                                        )
+                                )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.getpos.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> PlayerStateCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "getpos other",
+                                        policy -> {
+                                            var name = PlayerNameArgument.get(
+                                                    command,
+                                                    "player"
+                                            );
+
+                                            return players.onlinePlayer(name)
+                                                    .map(target -> service.getPos(
+                                                            PlayerStateCommandSupport.currentPlayer(
+                                                                    policy,
+                                                                    players
+                                                            ),
+                                                            target
+                                                    ))
+                                                    .orElseGet(() ->
+                                                            CompletableFuture.completedFuture(
+                                                                    PlayerStateCommandResult.failure(
+                                                                            "commands.common.unknown-player",
+                                                                            Map.of(
+                                                                                    "player",
+                                                                                    name
+                                                                            )
+                                                                    )
+                                                            )
+                                                    );
+                                        }
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.getpos",
+                "/getpos [player]",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/getpos [player]";
-    }
-
-    @Override
-    public String name() {
-        return "getpos";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) {
-            invocation.errorKey("commands.playerstate.getpos.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var viewer = platform.player(invocation);
-        final CellPlayer target;
-        if (invocation.args().length == 0) {
-            if (viewer.isEmpty()) {
-                invocation.errorKey("commands.playerstate.getpos.console-target-required");
-                return 0;
-            }
-            target = viewer.orElseThrow();
-        } else {
-            if (!invocation.hasPermission("cellulosesz.command.getpos.others")) {
-                invocation.errorKey("commands.common.no-permission");
-                return 0;
-            }
-            var resolved = invocation.resolvePlayer(invocation.args()[0]);
-            if (resolved.online().isEmpty() || hidden(viewer, resolved.online().orElseThrow())) {
-                invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-                return 0;
-            }
-            target = resolved.online().orElseThrow();
-        }
-
-        var location = platform.location(target);
-        var distance = distance(viewer, target);
-        invocation.replyKey("commands.playerstate.getpos.result", Map.ofEntries(
-                Map.entry("player", target.name()),
-                Map.entry("world", location.world),
-                Map.entry("blockX", (int) Math.floor(location.x)),
-                Map.entry("blockY", (int) Math.floor(location.y)),
-                Map.entry("blockZ", (int) Math.floor(location.z)),
-                Map.entry("x", round(location.x)),
-                Map.entry("y", round(location.y)),
-                Map.entry("z", round(location.z)),
-                Map.entry("yaw", round(location.yaw)),
-                Map.entry("pitch", round(location.pitch)),
-                Map.entry("distance", distance.map(GetPosCommand::round).map(Object::toString).orElse("-"))
-        ));
-        return 1;
-    }
-
-    private boolean hidden(Optional<CellPlayer> viewer, CellPlayer target) {
-        return viewer.isPresent() && !vanish.canSee(viewer.orElseThrow(), target.uuid());
-    }
-
-    private Optional<Double> distance(Optional<CellPlayer> viewer, CellPlayer target) {
-        if (viewer.isEmpty() || viewer.orElseThrow().uuid().equals(target.uuid())) return Optional.empty();
-        var from = platform.location(viewer.orElseThrow());
-        var to = platform.location(target);
-        if (!from.world.equals(to.world)) return Optional.empty();
-        return Optional.of(Math.sqrt(
-                Math.pow(from.x - to.x, 2.0D)
-                        + Math.pow(from.y - to.y, 2.0D)
-                        + Math.pow(from.z - to.z, 2.0D)
-        ));
-    }
-
-    private static double round(double value) {
-        return Math.round(value * 100.0D) / 100.0D;
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

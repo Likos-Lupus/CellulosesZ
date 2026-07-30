@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.api.economy;
 
-import org.jspecify.annotations.Nullable;
-
 import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
@@ -49,13 +47,9 @@ public interface EconomyService {
     );
 
     default List<BalanceEntry> topBalances(int limit) {
-        return topBalances(limit, null, null);
+        return topBalances(limit, BalanceFilter.all());
     }
 
-    List<BalanceEntry> topBalances(
-            int limit,
-            @Nullable BigDecimal minimum,
-            @Nullable BigDecimal maximum
-    );
+    List<BalanceEntry> topBalances(int limit, BalanceFilter filter);
 
 }

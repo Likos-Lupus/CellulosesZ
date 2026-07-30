@@ -1,53 +1,64 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.economy.application.PaymentCommandService;
 
-public final class PayToggleCommand extends AbstractEconomyCommand {
+import java.util.List;
+
+import static java.util.Objects.requireNonNull;
+
+public final class PayToggleCommand implements CommandContributor {
+
+    private final PaymentCommandService service;
+    private final PlayerDirectory players;
 
     public PayToggleCommand(
-            PlatformService platform,
-            UserService users,
-            EconomyService economy,
-            EconomyConfig config
+            PaymentCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, economy, config);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.economy.paytoggle";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = EconomyCommandSupport.descriptor(
+                "paytoggle",
+                "cellulosesz.economy.paytoggle",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("paytoggle")
+                .executes(command ->
+                        EconomyCommandSupport.requirePlayer(
+                                context,
+                                command,
+                                descriptor,
+                                "pay preference toggle",
+                                players,
+                                player -> service.togglePayments(
+                                        player.uuid()
+                                )
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.paytoggle",
+                "/paytoggle",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "paytoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        users.update(self.orElseThrow().uuid(), user -> {
-            user.preferences.payments = !user.preferences.payments;
-            return user.preferences.payments;
-        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) invocation.errorKey("service.user.persistence-failed");
-            else invocation.replyKey(enabled
-                    ? "commands.economy.payments-enabled"
-                    : "commands.economy.payments-disabled");
-        }));
-        return 1;
+    public String moduleId() {
+        return EconomyCommandSupport.MODULE;
     }
 
 }

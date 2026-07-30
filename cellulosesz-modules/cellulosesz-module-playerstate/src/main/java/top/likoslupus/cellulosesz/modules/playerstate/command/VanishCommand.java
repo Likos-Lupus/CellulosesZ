@@ -1,129 +1,189 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.playerstate.VanishService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
-public final class VanishCommand extends AbstractPlayerStateCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final VanishService vanish;
-    private final MessageRenderer messages;
-    private final LocaleResolver locales;
+public final class VanishCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public VanishCommand(
-            PlatformService platform,
-            UserService users,
-            PlayerStateService states,
-            VanishService vanish,
-            MessageRenderer messages,
-            LocaleResolver locales
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, states);
-        this.vanish = vanish;
-        this.messages = messages;
-        this.locales = locales;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("v");
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "vanish",
+                "cellulosesz.playerstate.vanish",
+                CommandSourceKind.PLAYER_ONLY
+        );
 
-    @Override
-    public String permission() {
-        return "cellulosesz.playerstate.vanish";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/vanish [player] [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "vanish";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        var self = self(invocation);
-        if (self.isEmpty()) return 0;
-
-        var target = self.get();
-        var stateIndex = 0;
-
-        if (args.length > 0 && !toggleWord(args[0])) {
-            if (!invocation.hasPermission("cellulosesz.playerstate.vanish.other")) {
-                invocation.errorKey("commands.playerstate.vanish-command.error.do-not-permission-change-another-players-vanish-state");
-                return 0;
-            }
-
-            var online = invocation.resolvePlayer(args[0]).online();
-            if (online.isEmpty()) {
-                invocation.errorKey(
-                        "commands.playerstate.vanish-command.error.player-not-online",
-                        Map.of("player", args[0])
+        var root = Commands.literal("vanish")
+                .executes(command -> self(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "state",
+                                        ToggleArgument.toggle()
+                                )
+                                .executes(command -> self(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(
+                                                ToggleArgument.get(
+                                                        command,
+                                                        "state"
+                                                ).enabled()
+                                        )
+                                ))
+                )
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.playerstate.vanish.other"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty()
+                                ))
+                                .then(Commands.argument(
+                                                        "state",
+                                                        ToggleArgument.toggle()
+                                                )
+                                                .executes(command -> other(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        Optional.of(
+                                                                ToggleArgument.get(
+                                                                        command,
+                                                                        "state"
+                                                                ).enabled()
+                                                        )
+                                                ))
+                                )
                 );
-                return 0;
-            }
 
-            target = online.get();
-            stateIndex = 1;
-        }
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("v"),
+                "commands.description.vanish",
+                "/vanish [player] [on|off]",
+                root
+        );
 
-        if (args.length > stateIndex + 1) {
-            invocation.errorKey(
-                    "commands.playerstate.vanish-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var selectedTarget = target;
-        var enabled = args.length == stateIndex
-                ? !vanish.vanished(selectedTarget.uuid())
-                : enabled(args[stateIndex]);
-        vanish.setVanished(selectedTarget, enabled).whenComplete((result, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.user.persistence-failed");
-                return;
-            }
-            if (result.success()) invocation.reply(result.message());
-            else invocation.error(result.message());
-            if (!selectedTarget.uuid().equals(self.orElseThrow().uuid())) {
-                platform.runOnServerThread(() -> platform.sendMessage(
-                        selectedTarget, messages.render(locales.locale(selectedTarget), result.message())));
-            }
-        });
-        return 1;
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "v",
+                node
+        );
     }
 
-    private boolean toggleWord(String value) {
-        return switch (value.toLowerCase()) {
-            case "on", "off", "true", "false", "enable", "disable" -> true;
-            default -> false;
-        };
+    private int self(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> state
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "vanish self",
+                policy -> PlayerStateCommandSupport.currentPlayer(
+                                policy,
+                                players
+                        )
+                        .map(player ->
+                                service.vanish(
+                                        player,
+                                        state
+                                )
+                        )
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        PlayerStateCommandResult.failure(
+                                                "common.player-only"
+                                        )
+                                )
+                        )
+        );
     }
 
-    private boolean enabled(String value) {
-        return switch (value.toLowerCase()) {
-            case "on", "true", "enable" -> true;
-            default -> false;
-        };
+    private int other(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Boolean> state
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "vanish other",
+                _ -> {
+                    var name = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    return players.onlinePlayer(name)
+                            .map(player ->
+                                    service.vanish(
+                                            player,
+                                            state
+                                    )
+                            )
+                            .orElseGet(() ->
+                                    PlayerStateCommandSupport.offline(name)
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

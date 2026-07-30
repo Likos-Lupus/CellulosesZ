@@ -1,73 +1,109 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-import java.util.Map;
-import java.util.Optional;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class RestCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerStatePlatformService operations;
+public final class RestCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public RestCommand(
-            PlatformService platform,
-            PlayerStatePlatformService operations
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.operations = operations;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.rest";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "rest",
+                "cellulosesz.command.rest",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("rest")
+                .executes(command -> PlayerStateCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "rest self",
+                        policy -> PlayerStateCommandSupport.currentPlayer(
+                                        policy,
+                                        players
+                                )
+                                .map(service::rest)
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                PlayerStateCommandResult.failure(
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.rest.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> PlayerStateCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "rest other",
+                                        _ -> {
+                                            var name = PlayerNameArgument.get(
+                                                    command,
+                                                    "player"
+                                            );
+
+                                            return players.onlinePlayer(name)
+                                                    .map(service::rest)
+                                                    .orElseGet(() ->
+                                                            PlayerStateCommandSupport.offline(
+                                                                    name
+                                                            )
+                                                    );
+                                        }
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.rest",
+                "/rest [player]",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/rest [player]";
-    }
-
-    @Override
-    public String name() {
-        return "rest";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) {
-            invocation.errorKey("commands.playerstate.rest.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var target = target(invocation);
-        if (target.isEmpty()) return 0;
-        var result = operations.resetRest(target.orElseThrow());
-        if (!result.successful()) {
-            invocation.errorKey("commands.playerstate.rest.platform-failed");
-            return 0;
-        }
-        invocation.replyKey("commands.playerstate.rest.success", Map.of("player", target.orElseThrow().name()));
-        return 1;
-    }
-
-    private Optional<CellPlayer> target(CommandInvocation invocation) {
-        if (invocation.args().length == 0) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) invocation.errorKey("commands.playerstate.rest.console-target-required");
-            return self;
-        }
-        if (!invocation.hasPermission("cellulosesz.command.rest.others")) {
-            invocation.errorKey("commands.common.no-permission");
-            return Optional.empty();
-        }
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty())
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-        return target;
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

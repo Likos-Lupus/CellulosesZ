@@ -8,6 +8,8 @@ import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
 import top.likoslupus.cellulosesz.modules.command.middleware.*;
 
@@ -26,19 +28,18 @@ public final class CommandModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        config = validate(context.configs().register(
                 "module.command",
                 CommandConfig.class,
                 "modules/command.yml",
                 CommandConfig::new
-        );
-        requireNonNull(config, "CommandConfig has not been initialized");
+        ));
     }
 
     @Override
     public void registerServices(ModuleContext context) {
-        var registry = context.services().require(DefaultCommandRegistry.class);
-        registry.disabledCommands(config.disabledCommands);
+        var current = requireNonNull(config, "CommandConfig has not been initialized");
+        context.services().require(DefaultCommandRegistry.class).disabledCommands(current.disabledCommands);
 
         var middlewares = context.services().require(CommandMiddlewareRegistry.class);
         middlewares.addMiddleware(new SourceKindCommandMiddleware());
@@ -49,21 +50,36 @@ public final class CommandModule implements CellulosesZModule {
                 context.services().require(ServerThreadExecutor.class)
         ));
 
-        if (config.auditCommands) {
+        if (current.auditCommands) {
             middlewares.addMiddleware(new AuditCommandMiddleware(context.logger()));
         }
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
-        context.commands().register(new RootCellulosesZCommand(context));
-        context.commands().register(new HelpCommand(context, config));
+        var registry = context.services().require(CommandRegistry.class);
+        context.track(registry.register(
+                "cellulosesz-command",
+                new CellulosesZCommand(
+                        context.services().require(RuntimeService.class),
+                        context.services().require(ServerThreadExecutor.class)
+                )
+        ));
+        context.track(registry.register("help-command", new HelpCommand()));
     }
 
     @Override
     public void onReload(ModuleContext context) {
-        config = context.configs().require("module.command", CommandConfig.class);
-        context.services().require(DefaultCommandRegistry.class).disabledCommands(config.disabledCommands);
+        config = validate(context.configs().require("module.command", CommandConfig.class));
+        context.services().require(DefaultCommandRegistry.class)
+                .disabledCommands(requireNonNull(config, "config").disabledCommands);
+    }
+
+    private static CommandConfig validate(CommandConfig config) {
+        if (config.helpPageSize <= 0) {
+            throw new IllegalArgumentException("module.command.helpPageSize must be positive");
+        }
+        return config;
     }
 
 }

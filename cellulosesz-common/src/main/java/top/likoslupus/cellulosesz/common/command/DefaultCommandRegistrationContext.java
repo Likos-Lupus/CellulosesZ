@@ -146,18 +146,18 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
                 || !(source.getEntity() instanceof ServerPlayer);
     }
 
+    public boolean disabled(String canonical) {
+        return bootstrap.serviceRegistry()
+                .require(DefaultCommandRegistry.class)
+                .disabled(canonical);
+    }
+
     public List<String> onlinePlayerNames() {
         return platform.onlinePlayers()
                 .stream()
                 .map(CellPlayer::name)
                 .sorted()
                 .toList();
-    }
-
-    public boolean disabled(String canonical) {
-        return bootstrap.serviceRegistry()
-                .require(DefaultCommandRegistry.class)
-                .disabled(canonical);
     }
 
     public Set<String> directCanonical() {
@@ -187,7 +187,6 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
         }
         return platform.player(player);
     }
-
 
     public CommandNode<CommandSourceStack> registerDirect(
             String owner,
@@ -266,6 +265,26 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
                 CommandRootLeaseManager.RegistrationMode.DIRECT,
                 CommandRootLeaseManager.LabelKind.SEMANTIC_ROOT,
                 root
+        );
+    }
+
+    public void registerAlias(
+            String owner,
+            CommandDescriptor descriptor,
+            String label,
+            CommandNode<CommandSourceStack> target
+    ) {
+        if (disabled(descriptor.canonicalName()) || !moduleEnabled(descriptor.moduleId())) {
+            return;
+        }
+        leases.claimAlias(
+                label.toLowerCase(Locale.ROOT),
+                descriptor.canonicalName().toLowerCase(Locale.ROOT),
+                owner,
+                CommandRootLeaseManager.RegistrationMode.DIRECT,
+                Commands.literal(label.toLowerCase(Locale.ROOT))
+                        .requires(target::canUse)
+                        .redirect(target)
         );
     }
 

@@ -1,10 +1,7 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
 import org.jspecify.annotations.Nullable;
-import top.likoslupus.cellulosesz.api.economy.BalanceEntry;
-import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.economy.TransactionCause;
-import top.likoslupus.cellulosesz.api.economy.TransactionResult;
+import top.likoslupus.cellulosesz.api.economy.*;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -20,6 +17,10 @@ import java.text.DecimalFormatSymbols;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public final class JsonEconomyService implements EconomyService, AsyncInitializable {
 
@@ -62,10 +63,8 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
     }
 
     private void validateDocument(EconomyDocument candidate, ConfigSnapshot snapshot) {
-        if (candidate.balances == null || candidate.transactions == null) {
-            throw new IllegalArgumentException("Economy document is incomplete");
-        }
         candidate.balances.forEach((uuid, amount) -> {
+            //noinspection ResultOfMethodCallIgnored
             UUID.fromString(uuid);
             if (!withinBounds(money(amount, snapshot), snapshot)) {
                 throw new IllegalStateException("Stored balance is outside configured bounds");
@@ -74,7 +73,8 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
     }
 
     private boolean withinBounds(BigDecimal amount, ConfigSnapshot snapshot) {
-        return amount.compareTo(snapshot.minimum()) >= 0 && amount.compareTo(snapshot.maximum()) <= 0;
+        return amount.compareTo(snapshot.minimum()) >= 0
+                && amount.compareTo(snapshot.maximum()) <= 0;
     }
 
     private BigDecimal money(String value, ConfigSnapshot snapshot) {
@@ -106,20 +106,26 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
     public String format(BigDecimal amount) {
         var snapshot = config;
         var symbols = DecimalFormatSymbols.getInstance(Locale.ROOT);
+
         symbols.setGroupingSeparator(',');
         symbols.setDecimalSeparator('.');
 
         var pattern = snapshot.grouping() ? "#,##0" : "0";
-        if (snapshot.scale() > 0) pattern += "." + "0".repeat(snapshot.scale());
+        if (snapshot.scale() > 0) {
+            pattern += "." + "0".repeat(snapshot.scale());
+        }
+
         var normalized = normalizeAmount(amount, snapshot);
         var number = new DecimalFormat(pattern, symbols).format(normalized);
         var spacing = snapshot.spaceBetweenSymbolAndAmount() ? " " : "";
+
         var money = snapshot.symbolBefore()
                 ? snapshot.symbol() + spacing + number
                 : number + spacing + snapshot.symbol();
         var unit = normalized.abs().compareTo(BigDecimal.ONE.setScale(snapshot.scale())) == 0
                 ? snapshot.singular()
                 : snapshot.plural();
+
         return snapshot.showName() ? money + " " + unit : money;
     }
 
@@ -133,21 +139,56 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             var snapshot = config;
             var normalized = normalizeAmount(amount, snapshot);
             var balance = read(current, uuid, snapshot);
+
             if (normalized.signum() <= 0) {
-                return failureOutcome(current, null, uuid, normalized, cause,
-                        "service.economy.amount-positive", balance, snapshot);
+                return failureOutcome(
+                        current,
+                        null,
+                        uuid,
+                        normalized,
+                        cause,
+                        "service.economy.amount-positive",
+                        balance,
+                        snapshot
+                );
             }
+
             var nextBalance = balance.add(normalized);
             if (nextBalance.compareTo(snapshot.maximum()) > 0) {
-                return failureOutcome(current, null, uuid, normalized, cause,
-                        "service.economy.balance-maximum", balance, snapshot);
+                return failureOutcome(
+                        current,
+                        null,
+                        uuid,
+                        normalized,
+                        cause,
+                        "service.economy.balance-maximum",
+                        balance,
+                        snapshot
+                );
             }
+
             var next = copy(current);
             write(next, uuid, nextBalance, snapshot);
-            append(next, logEntry(null, uuid, normalized, cause, true,
-                    "service.economy.deposit-success", snapshot));
-            return MutationOutcome.balanceChange(next, TransactionResult.success(
-                    "service.economy.deposit-success", normalized, nextBalance));
+            append(
+                    next,
+                    logEntry(
+                            null,
+                            uuid,
+                            normalized,
+                            cause,
+                            true,
+                            "service.economy.deposit-success",
+                            snapshot
+                    )
+            );
+            return MutationOutcome.balanceChange(
+                    next,
+                    TransactionResult.success(
+                            "service.economy.deposit-success",
+                            normalized,
+                            nextBalance
+                    )
+            );
         });
     }
 
@@ -161,21 +202,56 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             var snapshot = config;
             var normalized = normalizeAmount(amount, snapshot);
             var balance = read(current, uuid, snapshot);
+
             if (normalized.signum() <= 0) {
-                return failureOutcome(current, uuid, null, normalized, cause,
-                        "service.economy.amount-positive", balance, snapshot);
+                return failureOutcome(
+                        current,
+                        uuid,
+                        null,
+                        normalized,
+                        cause,
+                        "service.economy.amount-positive",
+                        balance,
+                        snapshot
+                );
             }
+
             var nextBalance = balance.subtract(normalized);
             if (nextBalance.compareTo(snapshot.minimum()) < 0) {
-                return failureOutcome(current, uuid, null, normalized, cause,
-                        "service.economy.insufficient-funds", balance, snapshot);
+                return failureOutcome(
+                        current,
+                        uuid,
+                        null,
+                        normalized,
+                        cause,
+                        "service.economy.insufficient-funds",
+                        balance,
+                        snapshot
+                );
             }
+
             var next = copy(current);
             write(next, uuid, nextBalance, snapshot);
-            append(next, logEntry(uuid, null, normalized, cause, true,
-                    "service.economy.withdraw-success", snapshot));
-            return MutationOutcome.balanceChange(next, TransactionResult.success(
-                    "service.economy.withdraw-success", normalized, nextBalance));
+            append(
+                    next,
+                    logEntry(
+                            uuid,
+                            null,
+                            normalized,
+                            cause,
+                            true,
+                            "service.economy.withdraw-success",
+                            snapshot
+                    )
+            );
+            return MutationOutcome.balanceChange(
+                    next,
+                    TransactionResult.success(
+                            "service.economy.withdraw-success",
+                            normalized,
+                            nextBalance
+                    )
+            );
         });
     }
 
@@ -189,16 +265,42 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             var snapshot = config;
             var normalized = normalizeAmount(amount, snapshot);
             var balance = read(current, uuid, snapshot);
+
             if (!withinBounds(normalized, snapshot)) {
-                return failureOutcome(current, null, uuid, normalized, cause,
-                        "service.economy.balance-out-of-range", balance, snapshot);
+                return failureOutcome(
+                        current,
+                        null,
+                        uuid,
+                        normalized,
+                        cause,
+                        "service.economy.balance-out-of-range",
+                        balance,
+                        snapshot
+                );
             }
+
             var next = copy(current);
             write(next, uuid, normalized, snapshot);
-            append(next, logEntry(null, uuid, normalized, cause, true,
-                    "service.economy.balance-set", snapshot));
-            return MutationOutcome.balanceChange(next, TransactionResult.success(
-                    "service.economy.balance-set", normalized, normalized));
+            append(
+                    next,
+                    logEntry(
+                            null,
+                            uuid,
+                            normalized,
+                            cause,
+                            true,
+                            "service.economy.balance-set",
+                            snapshot
+                    )
+            );
+            return MutationOutcome.balanceChange(
+                    next,
+                    TransactionResult.success(
+                            "service.economy.balance-set",
+                            normalized,
+                            normalized
+                    )
+            );
         });
     }
 
@@ -220,24 +322,35 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             TransactionCause cause
     ) {
         var immutableRecipients = List.copyOf(recipients);
-        return enqueue(current -> transferOutcome(current, from, immutableRecipients, amountEach, cause));
+        return enqueue(current -> transferOutcome(
+                current,
+                from,
+                immutableRecipients,
+                amountEach,
+                cause
+        ));
     }
 
     @Override
     public synchronized List<BalanceEntry> topBalances(
             int limit,
-            @Nullable BigDecimal minimum,
-            @Nullable BigDecimal maximum
+            BalanceFilter filter
     ) {
+        var minimum = filter.minimum();
+        var maximum = filter.maximum();
+
         if (limit <= 0) return List.of();
+
         var snapshot = config;
         var now = System.currentTimeMillis();
+
         long ttl;
         try {
             ttl = Math.multiplyExact(snapshot.balanceTopCacheSeconds(), 1000L);
         } catch (ArithmeticException exception) {
             ttl = Long.MAX_VALUE;
         }
+
         if (cachedTop.isEmpty() || now - cachedTopAt > ttl) {
             cachedTop = document.balances.entrySet().stream()
                     .map(entry -> new BalanceEntry(
@@ -246,20 +359,32 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                     ))
                     .sorted(Comparator.comparing(BalanceEntry::balance)
                             .reversed()
-                            .thenComparing(entry -> entry.uuid().toString()))
+                            .thenComparing(entry -> entry.uuid().toString())
+                    )
                     .toList();
             cachedTopAt = now;
         }
+
         return cachedTop.stream()
-                .filter(entry -> minimum == null || entry.balance().compareTo(minimum) >= 0)
-                .filter(entry -> maximum == null || entry.balance().compareTo(maximum) <= 0)
+                .filter(entry -> minimum.isEmpty()
+                        || entry.balance().compareTo(minimum.orElseThrow()) >= 0
+                )
+                .filter(entry -> maximum.isEmpty()
+                        || entry.balance().compareTo(maximum.orElseThrow()) <= 0
+                )
                 .limit(limit)
                 .toList();
     }
 
-    private BigDecimal read(EconomyDocument source, UUID uuid, ConfigSnapshot snapshot) {
+    private BigDecimal read(
+            EconomyDocument source,
+            UUID uuid,
+            ConfigSnapshot snapshot
+    ) {
         var value = source.balances.get(uuid.toString());
-        return value == null ? snapshot.starting() : money(value, snapshot);
+        return value == null
+                ? snapshot.starting()
+                : money(value, snapshot);
     }
 
     private MutationOutcome transferOutcome(
@@ -272,67 +397,125 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         var snapshot = config;
         var uniqueRecipients = new LinkedHashSet<>(recipients);
         uniqueRecipients.remove(from);
+
         var normalized = normalizeAmount(amountEach, snapshot);
         var fromBalance = read(current, from, snapshot);
+
         if (uniqueRecipients.isEmpty()) {
-            return failureOutcome(current, from, null, normalized, cause,
-                    "service.economy.self-payment", fromBalance, snapshot);
+            return failureOutcome(
+                    current,
+                    from,
+                    null,
+                    normalized,
+                    cause,
+                    "service.economy.self-payment",
+                    fromBalance,
+                    snapshot
+            );
         }
+
         if (normalized.signum() <= 0) {
-            return failureOutcome(current, from, null, normalized, cause,
-                    "service.economy.amount-positive", fromBalance, snapshot);
+            return failureOutcome(
+                    current,
+                    from,
+                    null,
+                    normalized,
+                    cause,
+                    "service.economy.amount-positive",
+                    fromBalance,
+                    snapshot
+            );
         }
+
         var total = normalized.multiply(BigDecimal.valueOf(uniqueRecipients.size()));
         var nextFrom = fromBalance.subtract(total);
+
         if (nextFrom.compareTo(snapshot.minimum()) < 0) {
-            return failureOutcome(current, from, null, total, cause,
-                    "service.economy.insufficient-funds", fromBalance, snapshot);
+            return failureOutcome(
+                    current,
+                    from,
+                    null,
+                    total,
+                    cause,
+                    "service.economy.insufficient-funds",
+                    fromBalance,
+                    snapshot
+            );
         }
 
         var changes = new LinkedHashMap<UUID, BigDecimal>();
         changes.put(from, nextFrom);
+
         for (var recipient : uniqueRecipients) {
             var recipientBalance = read(current, recipient, snapshot);
             var nextRecipient = recipientBalance.add(normalized);
+
             if (nextRecipient.compareTo(snapshot.maximum()) > 0) {
-                return failureOutcome(current, from, recipient, normalized, cause,
-                        "service.economy.recipient-maximum", fromBalance, snapshot);
+                return failureOutcome(
+                        current,
+                        from,
+                        recipient,
+                        normalized,
+                        cause,
+                        "service.economy.recipient-maximum",
+                        fromBalance,
+                        snapshot
+                );
             }
             changes.put(recipient, nextRecipient);
         }
 
         var next = copy(current);
         changes.forEach((uuid, value) -> write(next, uuid, value, snapshot));
-        uniqueRecipients.forEach(recipient -> append(next, logEntry(
-                from, recipient, normalized, cause, true,
-                "service.economy.transfer-success", snapshot
-        )));
-        return MutationOutcome.balanceChange(next, TransactionResult.success(
-                "service.economy.transfer-success", total, nextFrom));
+        uniqueRecipients.forEach(recipient -> append(
+                next,
+                logEntry(
+                        from,
+                        recipient,
+                        normalized,
+                        cause,
+                        true,
+                        "service.economy.transfer-success",
+                        snapshot
+                )
+        ));
+        return MutationOutcome.balanceChange(
+                next,
+                TransactionResult.success(
+                        "service.economy.transfer-success",
+                        total,
+                        nextFrom
+                )
+        );
     }
 
     private synchronized CompletableFuture<TransactionResult> enqueue(
             Function<EconomyDocument, MutationOutcome> operation
     ) {
         var result = new CompletableFuture<TransactionResult>();
-        mutationTail = mutationTail.handle((unused, failure) -> null)
-                .thenCompose(unused -> {
+        mutationTail = mutationTail
+                .handle((_, _) -> null)
+                .thenCompose(_ -> {
                     EconomyDocument current;
                     synchronized (this) {
                         current = copy(document);
                     }
+
                     final MutationOutcome outcome;
                     try {
                         outcome = operation.apply(current);
                     } catch (RuntimeException exception) {
                         return CompletableFuture.failedFuture(exception);
                     }
+
                     return storage.save(path, outcome.document())
-                            .handle((saved, saveFailure) -> {
+                            .handle((_, saveFailure) -> {
                                 if (saveFailure == null) {
                                     synchronized (this) {
                                         document = outcome.document();
-                                        if (outcome.balanceChanged()) invalidateTop();
+                                        if (outcome.balanceChanged()) {
+                                            invalidateTop();
+                                        }
                                     }
                                     result.complete(outcome.result());
                                 } else if (outcome.balanceChanged()) {
@@ -350,7 +533,8 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                                 return (Void) null;
                             });
                 });
-        mutationTail.whenComplete((unused, failure) -> {
+
+        mutationTail.whenComplete((_, failure) -> {
             if (failure != null) result.completeExceptionally(failure);
         });
         return result;
@@ -367,8 +551,22 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             ConfigSnapshot snapshot
     ) {
         var next = copy(current);
-        append(next, logEntry(from, to, amount, cause, false, message, snapshot));
-        return MutationOutcome.auditOnly(next, TransactionResult.failure(message, amount, balance));
+        append(
+                next,
+                logEntry(
+                        from,
+                        to,
+                        amount,
+                        cause,
+                        false,
+                        message,
+                        snapshot
+                )
+        );
+        return MutationOutcome.auditOnly(
+                next,
+                TransactionResult.failure(message, amount, balance)
+        );
     }
 
     private EconomyDocument copy(EconomyDocument source) {
@@ -376,7 +574,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         copy.balances = new LinkedHashMap<>(source.balances);
         copy.transactions = source.transactions.stream()
                 .map(this::copy)
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+                .collect(Collectors.toCollection(ArrayList::new));
         return copy;
     }
 
@@ -396,7 +594,9 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
 
     private void append(EconomyDocument target, TransactionLogEntry entry) {
         target.transactions.add(entry);
-        while (target.transactions.size() > MAX_LOG_ENTRIES) target.transactions.removeFirst();
+        while (target.transactions.size() > MAX_LOG_ENTRIES) {
+            target.transactions.removeFirst();
+        }
     }
 
     private TransactionLogEntry logEntry(
@@ -420,8 +620,16 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         return entry;
     }
 
-    private void write(EconomyDocument target, UUID uuid, BigDecimal amount, ConfigSnapshot snapshot) {
-        target.balances.put(uuid.toString(), normalizeAmount(amount, snapshot).toPlainString());
+    private void write(
+            EconomyDocument target,
+            UUID uuid,
+            BigDecimal amount,
+            ConfigSnapshot snapshot
+    ) {
+        target.balances.put(
+                uuid.toString(),
+                normalizeAmount(amount, snapshot).toPlainString()
+        );
     }
 
     private record MutationOutcome(
@@ -456,23 +664,15 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
     ) {
 
         private static ConfigSnapshot from(EconomyConfig source) {
-            if (source == null || source.currency == null || source.balanceTop == null || source.pay == null) {
-                throw new IllegalArgumentException("Economy config is incomplete");
-            }
-            if (source.currency.scale < 0 || source.currency.scale > 8) {
-                throw new IllegalArgumentException("currency.scale must be between 0 and 8");
-            }
-            var scale = source.currency.scale;
+            var scale = requireInRange(source.currency.scale, 0, 8, "currency.scale");
             var starting = new BigDecimal(source.startingBalance).setScale(scale, RoundingMode.HALF_UP);
             var minimum = new BigDecimal(source.minimumBalance).setScale(scale, RoundingMode.HALF_UP);
             var maximum = new BigDecimal(source.maximumBalance).setScale(scale, RoundingMode.HALF_UP);
             if (minimum.compareTo(maximum) > 0
                     || starting.compareTo(minimum) < 0
-                    || starting.compareTo(maximum) > 0) {
+                    || starting.compareTo(maximum) > 0
+            ) {
                 throw new IllegalArgumentException("Economy balance bounds are inconsistent");
-            }
-            if (source.balanceTop.cacheSeconds < 0) {
-                throw new IllegalArgumentException("balanceTop.cacheSeconds must not be negative");
             }
             return new ConfigSnapshot(
                     source.currency.singular,
@@ -486,7 +686,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                     starting,
                     minimum,
                     maximum,
-                    source.balanceTop.cacheSeconds
+                    requireNonNegative(source.balanceTop.cacheSeconds, "balanceTop.cacheSeconds")
             );
         }
 

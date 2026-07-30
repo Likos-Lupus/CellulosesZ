@@ -1,174 +1,334 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.*;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.playerstate.ExperienceAction;
+import top.likoslupus.cellulosesz.api.playerstate.ExperienceRequest;
+import top.likoslupus.cellulosesz.api.playerstate.ExperienceUnit;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
+import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
+import top.likoslupus.cellulosesz.modules.playerstate.command.argument.ExperienceAmountArgument;
 
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class ExpCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerStatePlatformService operations;
+public final class ExpCommand implements CommandContributor {
+
+    private final PlayerAbilityCommandService service;
+    private final PlayerDirectory players;
 
     public ExpCommand(
-            PlatformService platform,
-            PlayerStatePlatformService operations
+            PlayerAbilityCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.operations = operations;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.exp";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = PlayerStateCommandSupport.descriptor(
+                "exp",
+                "cellulosesz.command.exp",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("exp")
+                .then(Commands.literal("show")
+                        .executes(command -> selfShow(
+                                context,
+                                command,
+                                descriptor
+                        ))
+                        .then(playerArgument(
+                                        context,
+                                        "cellulosesz.command.exp.others"
+                                )
+                                        .executes(command -> otherShow(
+                                                context,
+                                                command,
+                                                descriptor
+                                        ))
+                        )
+                )
+                .then(mutation(
+                        context,
+                        descriptor,
+                        "reset",
+                        ExperienceAction.RESET,
+                        "cellulosesz.command.exp.reset"
+                ))
+                .then(mutation(
+                        context,
+                        descriptor,
+                        "set",
+                        ExperienceAction.SET,
+                        "cellulosesz.command.exp.set"
+                ))
+                .then(mutation(
+                        context,
+                        descriptor,
+                        "give",
+                        ExperienceAction.GIVE,
+                        "cellulosesz.command.exp.give"
+                ))
+                .then(mutation(
+                        context,
+                        descriptor,
+                        "take",
+                        ExperienceAction.TAKE,
+                        "cellulosesz.command.exp.take"
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.exp",
+                "/exp <show|reset|set|give|take> ...",
+                root
+        );
     }
 
-    @Override
-    public String usage() {
-        return "/exp <show|reset|set|give|take> [player] [amount]";
-    }
-
-    @Override
-    public String name() {
-        return "exp";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1 || invocation.args().length > 3) return usage(invocation);
-        if (invocation.args()[0].equalsIgnoreCase("show")) return show(invocation);
-        final ExperienceAction action;
-        try {
-            action = parseMutationAction(invocation.args()[0]);
-        } catch (IllegalArgumentException failure) {
-            return usage(invocation);
-        }
-        if (!allowed(invocation, action)) return 0;
+    private LiteralArgumentBuilder<CommandSourceStack> mutation(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            String literal,
+            ExperienceAction action,
+            String permission
+    ) {
+        var branch = Commands.literal(literal)
+                .requires(source ->
+                        context.permissions().has(
+                                source,
+                                permission
+                        )
+                );
 
         if (action == ExperienceAction.RESET) {
-            if (invocation.args().length > 2) return usage(invocation);
-            var target = target(invocation, invocation.args().length == 2 ? invocation.args()[1] : null, action);
-            return target.map(player -> mutate(invocation, player, new ExperienceRequest(action, ExperienceUnit.POINTS, 0)))
-                    .orElse(0);
+            return branch
+                    .executes(command -> selfMutation(
+                            context,
+                            command,
+                            descriptor,
+                            new ExperienceRequest(
+                                    action,
+                                    ExperienceUnit.POINTS,
+                                    0
+                            )
+                    ))
+                    .then(playerArgument(
+                                    context,
+                                    permission + ".others"
+                            )
+                                    .executes(command -> otherMutation(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            new ExperienceRequest(
+                                                    action,
+                                                    ExperienceUnit.POINTS,
+                                                    0
+                                            )
+                                    ))
+                    );
         }
-        if (invocation.args().length < 2) return usage(invocation);
-        var amountIndex = invocation.args().length - 1;
-        var parsed = parseAmount(invocation.args()[amountIndex]);
-        if (parsed.isEmpty()) {
-            invocation.errorKey("commands.playerstate.exp.invalid-amount", Map.of("amount", invocation.args()[amountIndex]));
-            return 0;
-        }
-        var targetName = invocation.args().length == 3 ? invocation.args()[1] : null;
-        var target = target(invocation, targetName, action);
-        return target.map(player -> mutate(invocation, player, new ExperienceRequest(
-                action,
-                parsed.orElseThrow().unit(),
-                parsed.orElseThrow().amount()
-        ))).orElse(0);
+
+        return branch
+                .then(Commands.argument(
+                                        "amount",
+                                        ExperienceAmountArgument.amount()
+                                )
+                                .executes(command -> selfMutation(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        request(command, action)
+                                ))
+                )
+                .then(playerArgument(
+                                context,
+                                permission + ".others"
+                        )
+                                .then(Commands.argument(
+                                                        "amount",
+                                                        ExperienceAmountArgument.amount()
+                                                )
+                                                .executes(command -> otherMutation(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        request(command, action)
+                                                ))
+                                )
+                );
     }
 
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.playerstate.exp.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private int show(CommandInvocation invocation) {
-        if (invocation.args().length > 2) return usage(invocation);
-        var target = target(invocation, invocation.args().length == 2 ? invocation.args()[1] : null, null);
-        if (target.isEmpty()) return 0;
-        var result = operations.experience(target.orElseThrow());
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.errorKey("commands.playerstate.exp.platform-failed");
-            return 0;
-        }
-        reply(invocation, target.orElseThrow(), result.value().orElseThrow());
-        return 1;
-    }
-
-    private static ExperienceAction parseMutationAction(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "reset" -> ExperienceAction.RESET;
-            case "set" -> ExperienceAction.SET;
-            case "give" -> ExperienceAction.GIVE;
-            case "take" -> ExperienceAction.TAKE;
-            default -> throw new IllegalArgumentException("Unknown action");
-        };
-    }
-
-    private boolean allowed(CommandInvocation invocation, ExperienceAction action) {
-        var permission = "cellulosesz.command.exp." + action.name().toLowerCase(Locale.ROOT);
-        if (!invocation.hasPermission(permission)) {
-            invocation.errorKey("commands.common.no-permission");
-            return false;
-        }
-        return true;
-    }
-
-    private Optional<CellPlayer> target(CommandInvocation invocation, String name, ExperienceAction action) {
-        var self = platform.player(invocation);
-        if (name == null) {
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.playerstate.exp.console-target-required");
-                return Optional.empty();
-            }
-            return self;
-        }
-        var permission = action == null
-                ? "cellulosesz.command.exp.others"
-                : "cellulosesz.command.exp." + action.name().toLowerCase(Locale.ROOT) + ".others";
-        if (!invocation.hasPermission(permission)) {
-            invocation.errorKey("commands.common.no-permission");
-            return Optional.empty();
-        }
-        var resolved = invocation.resolvePlayer(name).online();
-        if (resolved.isEmpty()) invocation.errorKey("commands.common.unknown-player", Map.of("player", name));
-        return resolved;
-    }
-
-    private int mutate(CommandInvocation invocation, CellPlayer target, ExperienceRequest request) {
-        var result = operations.mutateExperience(target, request);
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        reply(invocation, target, result.value().orElseThrow());
-        return 1;
-    }
-
-    private static Optional<ParsedAmount> parseAmount(String value) {
-        var levels = value.endsWith("L") || value.endsWith("l");
-        var raw = levels ? value.substring(0, value.length() - 1) : value;
-        if (raw.isEmpty() || !raw.chars().allMatch(Character::isDigit)) return Optional.empty();
-        try {
-            return Optional.of(new ParsedAmount(
-                    Integer.parseInt(raw),
-                    levels ? ExperienceUnit.LEVELS : ExperienceUnit.POINTS
-            ));
-        } catch (NumberFormatException failure) {
-            return Optional.empty();
-        }
-    }
-
-    private static void reply(CommandInvocation invocation, CellPlayer target, ExperienceSnapshot snapshot) {
-        invocation.replyKey("commands.playerstate.exp.result", Map.of(
-                "player", target.name(),
-                "total", snapshot.totalPoints(),
-                "level", snapshot.level(),
-                "progress", Math.round(snapshot.progress() * 1000.0D) / 10.0D,
-                "next", snapshot.pointsToNextLevel()
-        ));
-    }
-
-    private record ParsedAmount(
-            int amount,
-            ExperienceUnit unit
+    private RequiredArgumentBuilder<CommandSourceStack, String> playerArgument(
+            CommandRegistrationContext context,
+            String permission
     ) {
+        return Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .requires(source ->
+                        context.permissions().has(
+                                source,
+                                permission
+                        )
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                );
+    }
 
+    private static ExperienceRequest request(
+            CommandContext<CommandSourceStack> command,
+            ExperienceAction action
+    ) {
+        var amount = ExperienceAmountArgument.get(
+                command,
+                "amount"
+        );
+
+        return new ExperienceRequest(
+                action,
+                amount.unit(),
+                amount.amount()
+        );
+    }
+
+    private int selfShow(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "exp show self",
+                policy -> PlayerStateCommandSupport.currentPlayer(
+                                policy,
+                                players
+                        )
+                        .map(service::experience)
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        PlayerStateCommandResult.failure(
+                                                "commands.playerstate.exp.console-target-required"
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private int otherShow(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "exp show other",
+                _ -> {
+                    var name = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    return players.onlinePlayer(name)
+                            .map(service::experience)
+                            .orElseGet(() ->
+                                    PlayerStateCommandSupport.offline(name)
+                            );
+                }
+        );
+    }
+
+    private int selfMutation(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            ExperienceRequest request
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "exp mutation self",
+                policy -> PlayerStateCommandSupport.currentPlayer(
+                                policy,
+                                players
+                        )
+                        .map(player ->
+                                service.mutateExperience(
+                                        player,
+                                        request
+                                )
+                        )
+                        .orElseGet(() ->
+                                CompletableFuture.completedFuture(
+                                        PlayerStateCommandResult.failure(
+                                                "commands.playerstate.exp.console-target-required"
+                                        )
+                                )
+                        )
+        );
+    }
+
+    private int otherMutation(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            ExperienceRequest request
+    ) {
+        return PlayerStateCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "exp mutation other",
+                _ -> {
+                    var name = PlayerNameArgument.get(
+                            command,
+                            "player"
+                    );
+
+                    return players.onlinePlayer(name)
+                            .map(player ->
+                                    service.mutateExperience(
+                                            player,
+                                            request
+                                    )
+                            )
+                            .orElseGet(() ->
+                                    PlayerStateCommandSupport.offline(name)
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return PlayerStateCommandSupport.MODULE;
     }
 
 }

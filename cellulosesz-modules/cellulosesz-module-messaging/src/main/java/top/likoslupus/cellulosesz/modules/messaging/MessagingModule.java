@@ -2,18 +2,29 @@ package top.likoslupus.cellulosesz.modules.messaging;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.modules.messaging.application.ChatCommandService;
+import top.likoslupus.cellulosesz.modules.messaging.application.MailCommandService;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 import top.likoslupus.cellulosesz.modules.messaging.command.*;
 import top.likoslupus.cellulosesz.modules.messaging.service.DefaultPrivateMessageService;
 import top.likoslupus.cellulosesz.modules.messaging.service.JsonMailService;
@@ -32,6 +43,9 @@ public final class MessagingModule implements CellulosesZModule {
     private @Nullable MessagingConfig config;
     private @Nullable PrivateMessageService privateMessages;
     private @Nullable MailService mail;
+    private @Nullable ChatCommandService chatCommands;
+    private @Nullable PrivateMessageCommandService privateMessageCommands;
+    private @Nullable MailCommandService mailCommands;
     private @Nullable TaskHandle mailSweep;
 
     @Override
@@ -41,55 +55,110 @@ public final class MessagingModule implements CellulosesZModule {
                 MessagingConfig.class,
                 "modules/messaging.yml",
                 MessagingConfig::new
-        );
+        ).validatedCopy();
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
+        var current = requireNonNull(config, "MessagingConfig has not been initialized");
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
         var storage = context.services().require(StorageService.class);
-        var path = context.dataDirectory().resolve("mail.json");
+        var players = context.services().require(PlayerDirectory.class);
+        var audiences = context.services().require(PlayerAudienceService.class);
+        var serverThread = context.services().require(ServerThreadExecutor.class);
         var displayNames = context.services().require(DisplayNameService.class);
         var renderer = context.services().require(MessageRenderer.class);
+        var resolver = context.services().require(PlayerResolver.class);
+        var names = context.services().require(NameCacheService.class);
 
-        requireNonNull(config, "MessagingConfig has not been initialized");
-
-        privateMessages = new DefaultPrivateMessageService(platform, users, permissions, displayNames, renderer);
-        mail = new JsonMailService(storage, config, path);
+        privateMessages = new DefaultPrivateMessageService(
+                players,
+                audiences,
+                serverThread,
+                users,
+                permissions,
+                displayNames,
+                renderer
+        );
+        mail = new JsonMailService(
+                storage,
+                current,
+                context.dataDirectory().resolve("mail.json")
+        );
+        chatCommands = new ChatCommandService(
+                context.services(),
+                players,
+                audiences,
+                context.services().require(PlayerLocationPlatformService.class),
+                context.services().require(WorldDirectory.class),
+                serverThread,
+                permissions,
+                displayNames,
+                renderer,
+                current
+        );
+        privateMessageCommands = new PrivateMessageCommandService(
+                resolver,
+                players,
+                names,
+                privateMessages,
+                users,
+                serverThread,
+                current
+        );
+        mailCommands = new MailCommandService(
+                mail,
+                users,
+                resolver,
+                players,
+                audiences,
+                serverThread,
+                displayNames,
+                renderer,
+                privateMessages,
+                current
+        );
 
         context.services().register(PrivateMessageService.class, privateMessages);
         context.services().register(DefaultPrivateMessageService.class, (DefaultPrivateMessageService) privateMessages);
         context.services().register(MailService.class, mail);
         context.services().register(JsonMailService.class, (JsonMailService) mail);
+        context.services().register(ChatCommandService.class, chatCommands);
+        context.services().register(PrivateMessageCommandService.class, privateMessageCommands);
+        context.services().register(MailCommandService.class, mailCommands);
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
-        var users = context.services().require(UserService.class);
-        var permissions = context.services().require(PermissionService.class);
-        var displayNames = context.services().require(DisplayNameService.class);
-        var renderer = context.services().require(MessageRenderer.class);
+        var registry = context.services().require(CommandRegistry.class);
+        var players = context.services().require(PlayerDirectory.class);
+        var chat = requireNonNull(chatCommands, "ChatCommandService has not been initialized");
+        var privateService = requireNonNull(privateMessageCommands, "PrivateMessageCommandService has not been initialized");
+        var mailService = requireNonNull(mailCommands, "MailCommandService has not been initialized");
 
-        requireNonNull(config, "MessagingConfig has not been initialized");
-        requireNonNull(privateMessages, "PrivateMessageService has not been initialized");
-        requireNonNull(mail, "MailService has not been initialized");
+        track(context, registry, "broadcast-command", new BroadcastCommand(chat));
+        track(context, registry, "broadcastworld-command", new BroadcastWorldCommand(chat));
+        track(context, registry, "helpop-command", new HelpOpCommand(chat, players));
+        track(context, registry, "ignore-command", new IgnoreCommand(privateService, players));
+        track(context, registry, "list-command", new ListCommand(chat, players));
+        track(context, registry, "mail-command", new MailCommand(mailService, players, privateService::knownNames));
+        track(context, registry, "me-command", new MeCommand(chat, players));
+        track(context, registry, "msg-command", new MsgCommand(privateService, players));
+        track(context, registry, "msgtoggle-command", new MsgToggleCommand(privateService, players));
+        track(context, registry, "reply-command", new ReplyCommand(privateService, players));
+        track(context, registry, "rtoggle-command", new ReplyToggleCommand(privateService, players));
+        track(context, registry, "socialspy-command", new SocialSpyCommand(privateService, players));
+    }
 
-        context.commands().register(new MsgCommand(platform, users, config, privateMessages));
-        context.commands().register(new ReplyCommand(platform, users, config, privateMessages));
-        context.commands().register(new MsgToggleCommand(platform, users, config));
-        context.commands().register(new ReplyToggleCommand(platform, users, config));
-        context.commands().register(new IgnoreCommand(platform, users, config, privateMessages));
-        context.commands().register(new MailCommand(platform, users, config, mail, displayNames, renderer,
-                privateMessages));
-        context.commands().register(new SocialSpyCommand(platform, users, config, privateMessages));
-        context.commands().register(new HelpOpCommand(platform, users, config, permissions, displayNames, renderer));
-        context.commands().register(new BroadcastCommand(platform, users, config, renderer));
-        context.commands().register(new BroadcastWorldCommand(platform, users, config, renderer));
-        context.commands().register(new MeCommand(platform, users, config, displayNames, renderer));
-        context.commands().register(new ListCommand(platform, users, config, displayNames, renderer));
+    private static void track(
+            ModuleContext context,
+            CommandRegistry registry,
+            String id,
+            CommandContributor contributor
+    ) {
+        context.track(registry.register(id, contributor));
     }
 
     @Override
@@ -118,18 +187,15 @@ public final class MessagingModule implements CellulosesZModule {
         var service = requireNonNull(mail, "MailService has not been initialized");
         var current = requireNonNull(config, "MessagingConfig has not been initialized");
         if (mailSweep != null) mailSweep.cancel();
-        final long period;
-        try {
-            period = Math.max(20L, Math.multiplyExact(current.expiredMailSweepSeconds, 20L));
-        } catch (ArithmeticException exception) {
-            throw new IllegalArgumentException("expiredMailSweepSeconds is too large", exception);
-        }
+
+        final long period = Math.multiplyExact(current.expiredMailSweepSeconds, 20L);
         mailSweep = context.scheduler().syncRepeating(
                 () -> service.purgeExpired(System.currentTimeMillis()).whenComplete((_, failure) -> {
-                    if (failure != null) context.logger().error("Failed to persist expired mail cleanup", failure);
+                    if (failure != null) {
+                        context.logger().error("Failed to persist expired mail cleanup", failure);
+                    }
                 }),
-                20L,
-                period
+                20L, period
         );
     }
 

@@ -1,52 +1,64 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
+import java.util.List;
 
-public final class MsgToggleCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class MsgToggleCommand implements CommandContributor {
+
+    private final PrivateMessageCommandService service;
+    private final PlayerDirectory players;
 
     public MsgToggleCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config
+            PrivateMessageCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.toggle";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "msgtoggle",
+                "cellulosesz.messaging.toggle",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("msgtoggle")
+                .executes(command ->
+                        MessagingCommandSupport.requirePlayer(
+                                context,
+                                command,
+                                descriptor,
+                                "msgtoggle",
+                                players,
+                                player -> service.toggleMessages(
+                                        player.uuid()
+                                )
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.msgtoggle",
+                "/msgtoggle",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "msgtoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        users.update(self.orElseThrow().uuid(), user -> {
-            user.preferences.privateMessages = !user.preferences.privateMessages;
-            return user.preferences.privateMessages;
-        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) invocation.errorKey("service.user.persistence-failed");
-            else invocation.replyKey(enabled
-                    ? "commands.messaging.private-messages-enabled"
-                    : "commands.messaging.private-messages-disabled");
-        }));
-        return 1;
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

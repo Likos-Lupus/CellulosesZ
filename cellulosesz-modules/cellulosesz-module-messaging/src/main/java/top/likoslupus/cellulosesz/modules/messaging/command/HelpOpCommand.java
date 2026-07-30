@@ -1,87 +1,74 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.DisplayNameService;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.messaging.application.ChatCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class HelpOpCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PermissionService permissions;
-    private final DisplayNameService displayNames;
-    private final MessageRenderer renderer;
+public final class HelpOpCommand implements CommandContributor {
+
+    private final ChatCommandService service;
+    private final PlayerDirectory players;
 
     public HelpOpCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            PermissionService permissions,
-            DisplayNameService displayNames,
-            MessageRenderer renderer
+            ChatCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.permissions = permissions;
-        this.displayNames = displayNames;
-        this.renderer = renderer;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.helpop";
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "helpop",
+                "cellulosesz.messaging.helpop",
+                CommandSourceKind.ANY
+        );
 
-    @Override
-    public String usage() {
-        return "/helpop <message>";
-    }
-
-    @Override
-    public String name() {
-        return "helpop";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.messaging.help-op-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var message = join(args, 0);
-        if (!validLength(invocation, message)) return 0;
-
-        var sender = platform.player(invocation)
-                .map(displayNames::displayName)
-                .orElseGet(() -> renderer.render(invocation.locale(), "common.console"));
-        platform.onlinePlayers().stream()
-                .filter(player ->
-                        permissions.has(
-                                player.nativeHandle(),
-                                "cellulosesz.messaging.helpop.receive"
-                        )
-                )
-                .forEach(player -> platform.sendMessage(
-                        player,
-                        renderer.render(
-                                platform.locale(player),
-                                "messaging.helpop",
-                                Map.of(
-                                        "sender", sender,
-                                        "message", message
+        var root = Commands.literal("helpop")
+                .then(Commands.argument(
+                                        "message",
+                                        StringArgumentType.greedyString()
                                 )
-                        )
-                ));
-        invocation.replyKey("messaging.helpop-sent");
-        return 1;
+                                .executes(command -> MessagingCommandSupport.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "helpop body redacted",
+                                        policy -> service.helpOp(
+                                                MessagingCommandSupport.player(
+                                                        policy,
+                                                        players
+                                                ),
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "message"
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.helpop",
+                "/helpop <message>",
+                root
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

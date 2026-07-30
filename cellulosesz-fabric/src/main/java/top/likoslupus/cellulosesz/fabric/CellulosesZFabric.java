@@ -10,8 +10,7 @@ import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.PlatformCapability;
 import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
-import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.VanishPlatformService;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.CellulosesZCommon;
@@ -22,7 +21,6 @@ import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
 import top.likoslupus.cellulosesz.fabric.bridge.FabricCommandRootMutator;
 import top.likoslupus.cellulosesz.fabric.lifecycle.FabricCommonRuntimeHooks;
-import top.likoslupus.cellulosesz.fabric.player.FabricPlayerLocationService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
@@ -62,10 +60,6 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 FabricPlatformService.class,
                 platform
         );
-        currentBootstrap.registerService(
-                PlayerLocationPlatformService.class,
-                new FabricPlayerLocationService(platform)
-        );
 
         var bans = new FabricBanPlatformService();
         currentBootstrap.registerService(BanPlatformService.class, bans);
@@ -76,12 +70,12 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 dispatch
         );
         currentBootstrap.registerService(
-                PlayerStatePlatformService.class,
-                new FabricPlayerStateOperations(platform)
-        );
-        currentBootstrap.registerService(
                 InventoryPlatformService.class,
                 new FabricInventoryOperations(platform)
+        );
+        currentBootstrap.registerService(
+                VanishPlatformService.class,
+                new FabricVanishPlatformService()
         );
         currentBootstrap.registerService(
                 WorldPlatformService.class,

@@ -28,9 +28,15 @@ public final class FabricVanishBridge {
         return VANISHED.contains(uuid);
     }
 
+    public static void clear() {
+        VANISHED.clear();
+        visibility = (_, _) -> false;
+    }
+
     public static boolean hiddenFrom(ServerPlayer viewer, ServerPlayer target) {
-        if (viewer.getUUID().equals(target.getUUID())) return false;
-        return VANISHED.contains(target.getUUID()) && !visibility.test(viewer, target);
+        return !viewer.getUUID().equals(target.getUUID())
+                && VANISHED.contains(target.getUUID())
+                && !visibility.test(viewer, target);
     }
 
 }

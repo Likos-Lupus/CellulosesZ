@@ -1,82 +1,81 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class IgnoreCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PrivateMessageService privateMessages;
+public final class IgnoreCommand implements CommandContributor {
+
+    private final PrivateMessageCommandService service;
+    private final PlayerDirectory players;
 
     public IgnoreCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            PrivateMessageService privateMessages
+            PrivateMessageCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.privateMessages = privateMessages;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.ignore";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "ignore",
+                "cellulosesz.messaging.ignore",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("ignore")
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                service::knownNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command ->
+                                        MessagingCommandSupport.requirePlayer(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                "ignore",
+                                                players,
+                                                actor -> service.ignore(
+                                                        actor,
+                                                        PlayerNameArgument.get(
+                                                                command,
+                                                                "player"
+                                                        )
+                                                )
+                                        )
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.ignore",
+                "/ignore <player>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/ignore <player>";
-    }
-
-    @Override
-    public String name() {
-        return "ignore";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.messaging.ignore-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var self = player(invocation);
-        var target = uuid(invocation, args[0]);
-        if (self.isEmpty() || target.isEmpty()) return 0;
-
-        privateMessages.ignored(self.orElseThrow().uuid(), target.orElseThrow())
-                .whenComplete((currentlyIgnored, loadFailure) -> {
-                    if (loadFailure != null) {
-                        invocation.errorKey("service.user.persistence-failed");
-                        return;
-                    }
-                    var nowIgnored = !currentlyIgnored;
-                    privateMessages.setIgnored(self.orElseThrow().uuid(), target.orElseThrow(), nowIgnored)
-                            .whenComplete((_, saveFailure) -> {
-                                if (saveFailure != null) invocation.errorKey("service.user.persistence-failed");
-                                else invocation.replyKey(
-                                        nowIgnored
-                                                ? "commands.messaging.ignore-enabled"
-                                                : "commands.messaging.ignore-disabled",
-                                        Map.of("player", args[0])
-                                );
-                            });
-                });
-        return 1;
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

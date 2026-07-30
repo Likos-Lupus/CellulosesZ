@@ -1,70 +1,114 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
 import java.util.List;
-import java.util.Map;
 
-public final class MsgCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PrivateMessageService privateMessages;
+public final class MsgCommand implements CommandContributor {
+
+    private final PrivateMessageCommandService service;
+    private final PlayerDirectory players;
 
     public MsgCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            PrivateMessageService privateMessages
+            PrivateMessageCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.privateMessages = privateMessages;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("tell", "w");
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "msg",
+                "cellulosesz.messaging.msg",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("msg")
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .suggests((command, builder) ->
+                                        MessagingCommandSupport.playerFromSource(
+                                                        command.getSource(),
+                                                        players
+                                                )
+                                                .map(viewer ->
+                                                        CommandSuggestionSupport.suggest(
+                                                                () -> service.onlineNames(
+                                                                        viewer
+                                                                ),
+                                                                builder
+                                                        )
+                                                )
+                                                .orElseGet(builder::buildFuture)
+                                )
+                                .then(Commands.argument(
+                                                        "message",
+                                                        StringArgumentType.greedyString()
+                                                )
+                                                .executes(command ->
+                                                        MessagingCommandSupport.requirePlayer(
+                                                                context,
+                                                                command,
+                                                                descriptor,
+                                                                "private message body redacted",
+                                                                players,
+                                                                sender -> service.send(
+                                                                        sender,
+                                                                        PlayerNameArgument.get(
+                                                                                command,
+                                                                                "player"
+                                                                        ),
+                                                                        StringArgumentType.getString(
+                                                                                command,
+                                                                                "message"
+                                                                        )
+                                                                )
+                                                        )
+                                                )
+                                )
+                );
+
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("tell", "w"),
+                "commands.description.msg",
+                "/msg <player> <message>",
+                root
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "tell",
+                node
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "w",
+                node
+        );
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.msg";
-    }
-
-    @Override
-    public String usage() {
-        return "/msg <player> <message>";
-    }
-
-    @Override
-    public String name() {
-        return "msg";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 2) {
-            invocation.errorKey(
-                    "commands.messaging.msg-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var sender = player(invocation);
-        var target = online(invocation, args[0]);
-        var message = join(args, 1);
-        if (sender.isEmpty() || target.isEmpty() || !validLength(invocation, message)) return 0;
-
-        privateMessages.send(sender.orElseThrow(), target.orElseThrow(), message)
-                .whenComplete((result, failure) -> {
-                    if (failure != null) invocation.errorKey("service.messaging.persistence-failed");
-                    else if (!result.success()) invocation.error(result.message());
-                });
-        return 1;
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }

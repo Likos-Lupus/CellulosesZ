@@ -1,65 +1,64 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.DisplayNameService;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.RichText;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.messaging.application.ChatCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class ListCommand extends AbstractMessagingCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final DisplayNameService displayNames;
-    private final MessageRenderer renderer;
+public final class ListCommand implements CommandContributor {
+
+    private final ChatCommandService service;
+    private final PlayerDirectory players;
 
     public ListCommand(
-            PlatformService platform,
-            UserService users,
-            MessagingConfig config,
-            DisplayNameService displayNames,
-            MessageRenderer renderer
+            ChatCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users, config);
-        this.displayNames = displayNames;
-        this.renderer = renderer;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.messaging.list";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = MessagingCommandSupport.descriptor(
+                "list",
+                "cellulosesz.messaging.list",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("list")
+                .executes(command -> MessagingCommandSupport.async(
+                        context,
+                        command,
+                        descriptor,
+                        "list",
+                        policy -> service.list(
+                                MessagingCommandSupport.player(
+                                        policy,
+                                        players
+                                )
+                        )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.list",
+                "/list",
+                root
+        );
     }
 
     @Override
-    public String name() {
-        return "list";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var players = platform.onlinePlayers().stream()
-                .filter(player -> invocation.resolvePlayer(player.uuid().toString()).online().isPresent())
-                .toList();
-        var list = RichText.empty();
-        for (var index = 0; index < players.size(); index++) {
-            if (index > 0) list = list.append(renderer.renderInline(
-                    invocation.locale(),
-                    "<primary>, "
-            ));
-            list = list.append(displayNames.displayName(players.get(index)));
-        }
-
-        invocation.reply(renderer.render(
-                invocation.locale(),
-                "player.list",
-                Map.of(
-                        "count", players.size(),
-                        "players", list
-                )
-        ));
-        return 1;
+    public String moduleId() {
+        return MessagingCommandSupport.MODULE;
     }
 
 }
