@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.api.teleport;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.List;
@@ -18,33 +17,32 @@ public interface TeleportRequestService {
 
     List<TeleportRequest> pendingFor(UUID target);
 
-    Optional<TeleportRequest> pendingFor(UUID target, UUID requester);
+    List<TeleportRequest> outgoingFor(UUID requester);
 
     Optional<TeleportRequest> pending(UUID requestId);
 
-    Optional<TeleportRequest> newestFor(UUID target);
+    TeleportRequestSelectionResult selectIncoming(
+            UUID target,
+            Optional<UUID> requester,
+            Optional<UUID> requestId
+    );
 
-    /**
-     * Atomically changes a pending request into the consuming state.
-     */
+    TeleportRequestSelectionResult selectOutgoing(
+            UUID requester,
+            Optional<UUID> target,
+            Optional<UUID> requestId
+    );
+
     Optional<TeleportRequest> claim(UUID requestId);
 
-    /**
-     * Returns a consuming request to pending after a failed teleport.
-     */
     boolean release(UUID requestId);
 
-    /**
-     * Removes a request after a successful consume.
-     */
     boolean complete(UUID requestId);
 
     boolean remove(UUID requestId);
 
-    int cancel(UUID requester, @Nullable UUID target);
-
     int clearFor(UUID player);
 
-    int clearExpired();
+    List<TeleportRequest> clearExpired();
 
 }

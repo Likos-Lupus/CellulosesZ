@@ -1,49 +1,100 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 
-public final class TpoCommand extends AbstractTeleportCommand {
+import static java.util.Objects.requireNonNull;
 
-    public TpoCommand(PlatformService platform, TeleportService teleports) {
-        super(platform, teleports);
+public final class TpoCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
+
+    public TpoCommand(
+            TeleportCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.tpo";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "tpo",
+                "cellulosesz.teleport.tpo",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("tpo")
+                .then(Commands.argument("first", PlayerNameArgument.playerName())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        players::onlinePlayerNames, builder
+                                )
+                        )
+                        .executes(command -> TeleportCommandResults.async(
+                                context,
+                                command,
+                                descriptor,
+                                "tpo self",
+                                policy -> service.tp(
+                                        TeleportCommandResults.current(policy, players),
+                                        PlayerNameArgument.get(command, "first"),
+                                        Optional.empty(),
+                                        true,
+                                        true
+                                )
+                        ))
+                        .then(Commands.argument("second", PlayerNameArgument.playerName())
+                                .requires(source -> context.permissions().has(
+                                        source, "cellulosesz.teleport.tpo.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames, builder
+                                        )
+                                )
+                                .executes(command -> TeleportCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "tpo others",
+                                        policy -> service.tp(
+                                                TeleportCommandResults.current(policy, players),
+                                                PlayerNameArgument.get(command, "first"),
+                                                Optional.of(PlayerNameArgument.get(
+                                                        command, "second"
+                                                )),
+                                                true,
+                                                true
+                                        )
+                                ))
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tpo",
+                "/tpo <target> | <player> <target>",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/tpo <target> | /tpo <player> <target>";
-    }
-
-    @Override
-    public String name() {
-        return "tpo";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length == 1) {
-            var self = player(invocation);
-            var target = online(invocation, args[0]);
-            if (self.isEmpty() || target.isEmpty()) return 0;
-            return teleport(invocation, self.orElseThrow(), platform.location(target.orElseThrow()));
-        }
-        if (args.length == 2) {
-            var subject = online(invocation, args[0]);
-            var target = online(invocation, args[1]);
-            if (subject.isEmpty() || target.isEmpty()) return 0;
-            return teleport(invocation, subject.orElseThrow(), platform.location(target.orElseThrow()));
-        }
-        invocation.errorKey("commands.teleport.tp-command.error.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

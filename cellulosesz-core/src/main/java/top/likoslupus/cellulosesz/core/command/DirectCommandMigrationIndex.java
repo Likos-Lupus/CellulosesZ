@@ -11,14 +11,18 @@ import static java.util.Objects.requireNonNull;
 public final class DirectCommandMigrationIndex {
 
     private static final Set<String> ROOTS = Set.of(
-            "afk", "balance", "balancetop", "broadcast", "broadcastworld", "cellulosesz",
-            "compass", "createkit", "customtext", "delhome", "delkit", "delwarp", "depth",
-            "eco", "exp", "feed", "fly", "gamemode", "getpos", "god", "heal", "help",
-            "helpop", "home", "ignore", "info", "kit", "kitreset", "list", "mail", "me",
-            "motd", "msg", "msgtoggle", "near", "nick", "pay", "payconfirmtoggle", "paytoggle",
-            "ping", "playtime", "ptime", "pweather", "r", "realname", "renamehome", "rest",
-            "rtoggle", "rules", "seen", "sell", "sethome", "setwarp", "setworth", "showkit",
-            "socialspy", "speed", "vanish", "warp", "warpinfo", "whois", "worth"
+            "afk", "back", "balance", "balancetop", "ban", "banip", "bottom", "broadcast",
+            "broadcastworld", "burn", "cellulosesz", "compass", "createkit", "customtext", "delhome",
+            "deljail", "delkit", "delwarp", "depth", "eco", "exp", "ext", "feed", "fly", "gamemode",
+            "getpos", "god", "heal", "help", "helpop", "home", "ice", "ignore", "info", "jail",
+            "jailedplayers", "jails", "jump", "kick", "kickall", "kill", "kit", "kitreset", "list", "mail",
+            "me", "motd", "msg", "msgtoggle", "mute", "near", "nick", "pay", "payconfirmtoggle",
+            "paytoggle", "ping", "playtime", "ptime", "pweather", "r", "realname", "renamehome", "rest",
+            "rtoggle", "rules", "seen", "sell", "sethome", "setjail", "settpr", "setwarp", "setworth",
+            "showkit", "socialspy", "speed", "sudo", "suicide", "tempban", "tempbanip", "top", "tp", "tpa",
+            "tpaall", "tpacancel", "tpaccept", "tpahere", "tpall", "tpauto", "tpdeny", "tphere", "tpo",
+            "tpoffline", "tpohere", "tppos", "tpr", "tptoggle", "unban", "unbanip", "vanish", "warp",
+            "warpinfo", "whois", "world", "worth"
     );
 
     private DirectCommandMigrationIndex() {

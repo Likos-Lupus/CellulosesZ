@@ -22,7 +22,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class DefaultHomeCommandService implements HomeCommandService {
 
@@ -57,8 +58,12 @@ public final class DefaultHomeCommandService implements HomeCommandService {
     @Override
     public CompletableFuture<Result> list(UUID playerUuid) {
         return homes.homes(playerUuid).handle((known, failure) -> {
-            if (failure != null) return failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
-            if (known.isEmpty()) return success(GeneratedMessageKeys.COMMANDS_HOME_LIST_EMPTY);
+            if (failure != null) {
+                return failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+            }
+            if (known.isEmpty()) {
+                return success(GeneratedMessageKeys.COMMANDS_HOME_LIST_EMPTY);
+            }
 
             return success(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMANDS_HOME_LIST,
@@ -279,9 +284,9 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                         )));
                     }
 
-                    var options = new TeleportOptions()
-                            .safe(current.safe())
-                            .warmupSeconds(request.bypassWarmup() ? 0 : current.warmupSeconds());
+                    var options = TeleportOptions.defaults()
+                            .withSafe(current.safe())
+                            .withWarmup(request.bypassWarmup() ? 0 : current.warmupSeconds());
 
                     return serverThread.submit(() -> teleports.teleport(
                                     online.orElseThrow(),

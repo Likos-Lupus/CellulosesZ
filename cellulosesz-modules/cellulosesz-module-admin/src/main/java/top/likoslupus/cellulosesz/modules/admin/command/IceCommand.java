@@ -1,78 +1,98 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
-public final class IceCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerStatePlatformService players;
+public final class IceCommand implements CommandContributor {
+
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
 
     public IceCommand(
-            PlatformService platform,
-            PlayerStatePlatformService players
+            PlayerControlCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.players = players;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.ice";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "ice",
+                "cellulosesz.command.ice",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("ice")
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "ice self",
+                        policy -> service.ice(
+                                AdminCommandResults.current(policy, players),
+                                Optional.empty()
+                        )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.ice.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> AdminCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "ice other",
+                                        policy -> service.ice(
+                                                AdminCommandResults.current(
+                                                        policy,
+                                                        players
+                                                ),
+                                                Optional.of(
+                                                        PlayerNameArgument.get(
+                                                                command,
+                                                                "player"
+                                                        )
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.ice",
+                "/ice [player]",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/ice [player]";
-    }
-
-    @Override
-    public String name() {
-        return "ice";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var target = target(invocation);
-        if (target.isEmpty()) return 0;
-        var result = players.freeze(target.orElseThrow());
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.admin.ice.success", Map.of(
-                "player", target.orElseThrow().name(),
-                "ticks", result.value().orElseThrow()
-        ));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.admin.ice.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private Optional<CellPlayer> target(CommandInvocation invocation) {
-        if (invocation.args().length == 0) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) invocation.errorKey("commands.admin.ice.console-target-required");
-            return self;
-        }
-        if (!invocation.hasPermission("cellulosesz.command.ice.others")) {
-            invocation.errorKey("commands.common.no-permission");
-            return Optional.empty();
-        }
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty())
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-        return target;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

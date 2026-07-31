@@ -23,15 +23,12 @@ public record PlayerStateCommandSettings(
 ) {
 
     public PlayerStateCommandSettings {
-        requireState(
-                defaultNearRadius <= 0 || maximumNearRadius < defaultNearRadius,
-                "near radius configuration is invalid"
-        );
+        requireFalse(defaultNearRadius <= 0 || maximumNearRadius < defaultNearRadius, "near radius configuration is invalid");
         requirePositive(maximumNearResults, "maximumNearResults");
         requireFinite(minimumSpeed, "minimumSpeed");
         requireFinite(maximumSpeed, "maximumSpeed");
         requirePositive(minimumSpeed, "minimumSpeed");
-        requireSmallerThan(minimumSpeed, maximumSpeed, "minimumSpeed");
+        requireLessThan(minimumSpeed, maximumSpeed, "minimumSpeed");
         requirePositive(maximumPingLength, "maximumPingLength");
         requirePositive(maximumRealNameResults, "maximumRealNameResults");
         requireNonNegative(autoAfkMillis, "autoAfkMillis");

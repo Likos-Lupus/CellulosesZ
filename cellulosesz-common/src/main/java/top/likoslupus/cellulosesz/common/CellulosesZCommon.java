@@ -9,7 +9,9 @@ import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.common.bootstrap.CommonRuntime;
@@ -18,11 +20,9 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.common.command.CommandTreeRefreshService;
 import top.likoslupus.cellulosesz.common.command.MinecraftServerThreadExecutor;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
-import top.likoslupus.cellulosesz.common.player.MinecraftPlayerAudienceService;
-import top.likoslupus.cellulosesz.common.player.MinecraftPlayerConnectionService;
-import top.likoslupus.cellulosesz.common.player.MinecraftPlayerDirectory;
-import top.likoslupus.cellulosesz.common.player.MinecraftPlayerLocationService;
+import top.likoslupus.cellulosesz.common.player.*;
 import top.likoslupus.cellulosesz.common.playerstate.MinecraftPlayerStateService;
+import top.likoslupus.cellulosesz.common.teleport.MinecraftTeleportOperations;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorldDirectory;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -86,6 +86,14 @@ public final class CellulosesZCommon {
         bootstrap.registerService(
                 PlayerLocationPlatformService.class,
                 new MinecraftPlayerLocationService()
+        );
+        bootstrap.registerService(
+                PlayerNetworkService.class,
+                new MinecraftPlayerNetworkService()
+        );
+        bootstrap.registerService(
+                TeleportOperations.class,
+                new MinecraftTeleportOperations(server)
         );
         bootstrap.registerService(
                 PlayerStatePlatformService.class,

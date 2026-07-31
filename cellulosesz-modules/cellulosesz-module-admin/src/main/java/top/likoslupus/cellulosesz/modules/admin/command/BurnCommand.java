@@ -1,70 +1,92 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class BurnCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlayerStatePlatformService players;
-    private final AdminConfig config;
+public final class BurnCommand implements CommandContributor {
 
-    public BurnCommand(PlayerStatePlatformService players, AdminConfig config) {
-        this.players = players;
-        this.config = config;
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
+    private final int maximum;
+
+    public BurnCommand(
+            PlayerControlCommandService service,
+            PlayerDirectory players,
+            int maximum
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.maximum = maximum;
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.burn";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "burn",
+                "cellulosesz.command.burn",
+                CommandSourceKind.ANY
+        );
+
+        var player = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .then(Commands.argument(
+                                        "seconds",
+                                        IntegerArgumentType.integer(0, maximum)
+                                )
+                                .executes(command -> AdminCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "burn seconds="
+                                                + IntegerArgumentType.getInteger(
+                                                command,
+                                                "seconds"
+                                        ),
+                                        _ -> service.burn(
+                                                PlayerNameArgument.get(
+                                                        command,
+                                                        "player"
+                                                ),
+                                                IntegerArgumentType.getInteger(
+                                                        command,
+                                                        "seconds"
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.burn",
+                "/burn <player> <seconds>",
+                Commands.literal("burn").then(player)
+        );
     }
 
     @Override
-    public String usage() {
-        return "/burn <player> <seconds>";
-    }
-
-    @Override
-    public String name() {
-        return "burn";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 2) return usage(invocation);
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-            return 0;
-        }
-        final int seconds;
-        final int ticks;
-        try {
-            seconds = Integer.parseInt(invocation.args()[1]);
-            if (seconds < 0 || seconds > config.maximumBurnSeconds) throw new NumberFormatException();
-            ticks = Math.multiplyExact(seconds, 20);
-        } catch (NumberFormatException | ArithmeticException failure) {
-            invocation.errorKey("commands.admin.burn.invalid-seconds", Map.of("maximum", config.maximumBurnSeconds));
-            return 0;
-        }
-        var result = players.setFireTicks(target.orElseThrow(), ticks);
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey(seconds == 0 ? "commands.admin.burn.extinguished" : "commands.admin.burn.success", Map.of(
-                "player", target.orElseThrow().name(),
-                "seconds", seconds
-        ));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.admin.burn.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

@@ -1,62 +1,77 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.stream.IntStream;
 
 public final class IpAddresses {
 
     private IpAddresses() {
     }
 
-    public static Optional<String> normalize(String input) {
+    /**
+     * Parses numeric literals only. Host names and IPv6 zone identifiers are rejected before JDK parsing.
+     */
+    public static Optional<InetAddress> parseLiteral(String input) {
         var value = input.trim();
 
         if (value.startsWith("[") && value.endsWith("]")) {
             value = value.substring(1, value.length() - 1);
         }
-        if (!(ipv4Shape(value) || ipv6Shape(value))) return Optional.empty();
-
-        try {
-            var address = InetAddress.getByName(value);
-            if (address instanceof Inet6Address ipv6) {
-                var bytes = ipv6.getAddress();
-                if (ipv4Mapped(bytes)) {
-                    return Optional.of("%d.%d.%d.%d".formatted(
-                            bytes[12] & 0xff, bytes[13] & 0xff, bytes[14] & 0xff, bytes[15] & 0xff
-                    ));
-                }
-                var normalized = ipv6.getHostAddress().toLowerCase(Locale.ROOT);
-                var zone = normalized.indexOf('%');
-                return Optional.of(zone < 0 ? normalized : normalized.substring(0, zone));
-            }
-            // The JDK materializes IPv4-mapped IPv6 literals as Inet4Address.
-            // Shape validation above already prevents DNS names from reaching this branch.
-            return Optional.of(address.getHostAddress().toLowerCase(Locale.ROOT));
-        } catch (UnknownHostException _) {
+        if (value.contains("%") || value.contains("/")) {
+            return Optional.empty();
+        }
+        if (!(ipv4Shape(value) || ipv6Shape(value))) {
+            return Optional.empty();
         }
 
-        return Optional.empty();
+        try {
+            // shape checks above prevent DNS host names
+            var parsed = InetAddress.getByName(value);
+            var bytes = parsed.getAddress();
+
+            if (ipv4Mapped(bytes)) {
+                return Optional.of(InetAddress.getByAddress(
+                        new byte[]{
+                                bytes[12],
+                                bytes[13],
+                                bytes[14],
+                                bytes[15]
+                        }
+                ));
+            }
+
+            return Optional.of(parsed);
+        } catch (UnknownHostException _) {
+            return Optional.empty();
+        }
     }
 
     private static boolean ipv4Shape(String value) {
-        if (!value.matches("[0-9.]+")) return false;
+        if (!value.matches("[0-9.]+")) {
+            return false;
+        }
 
         var parts = value.split("\\.", -1);
-        if (parts.length != 4) return false;
+        if (parts.length != 4) {
+            return false;
+        }
 
         for (var part : parts) {
-            if (part.isEmpty() || part.length() > 3) return false;
+            if (part.isEmpty() || part.length() > 3) {
+                return false;
+            }
 
-            int number;
             try {
-                number = Integer.parseInt(part);
+                var number = Integer.parseInt(part);
+                if (number < 0 || number > 255) {
+                    return false;
+                }
             } catch (NumberFormatException _) {
                 return false;
             }
-            if (number < 0 || number > 255) return false;
         }
 
         return true;
@@ -64,16 +79,32 @@ public final class IpAddresses {
 
     private static boolean ipv6Shape(String value) {
         return value.contains(":")
-                && value.matches("[0-9A-Fa-f:.%]+")
-                && !value.contains("/");
+                && value.matches("[0-9A-Fa-f:.]+")
+                && value.chars().filter(ch -> ch == ':').count() >= 2;
     }
 
     private static boolean ipv4Mapped(byte[] bytes) {
-        if (bytes.length != 16) return false;
-        for (var index = 0; index < 10; index++) {
-            if (bytes[index] != 0) return false;
+        if (bytes.length != 16) {
+            return false;
         }
-        return (bytes[10] & 0xff) == 0xff && (bytes[11] & 0xff) == 0xff;
+
+        return IntStream.range(0, 10).noneMatch(index -> bytes[index] != 0)
+                && ((bytes[10] & 255) == 255
+                && (bytes[11] & 255) == 255);
+    }
+
+    public static String canonical(InetAddress address) {
+        var bytes = address.getAddress();
+        if (ipv4Mapped(bytes)) {
+            return "%d.%d.%d.%d".formatted(
+                    bytes[12] & 255,
+                    bytes[13] & 255,
+                    bytes[14] & 255,
+                    bytes[15] & 255
+            );
+        }
+
+        return address.getHostAddress().toLowerCase(Locale.ROOT);
     }
 
 }

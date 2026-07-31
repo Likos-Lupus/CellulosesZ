@@ -1,135 +1,204 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import org.jspecify.annotations.Nullable;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
-import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.Jail;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 
-public final class JailCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final JailService jails;
-    private final AdminConfig config;
+public final class JailCommand implements CommandContributor {
+
+    private final JailCommandService service;
+    private final PlayerDirectory players;
+    private final Duration maximum;
 
     public JailCommand(
-            PlatformService platform,
-            UserService users,
-            JailService jails,
-            AdminConfig config
+            JailCommandService service,
+            PlayerDirectory players,
+            Duration maximum
     ) {
-        super(platform, users);
-        this.jails = jails;
-        this.config = config;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.maximum = requireNonNull(maximum, "maximum");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("togglejail");
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "jail",
+                "cellulosesz.admin.jail",
+                CommandSourceKind.ANY
+        );
+
+        var player = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                );
+
+        player.then(Commands.literal("off")
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "jail off",
+                        policy -> service.unjail(
+                                PlayerNameArgument.get(
+                                        command,
+                                        "player"
+                                ),
+                                AdminCommandResults.actor(
+                                        policy,
+                                        players
+                                )
+                        )
+                ))
+        );
+
+        var jail = Commands.argument(
+                        "jail",
+                        StringArgumentType.word()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                () -> service.jails()
+                                        .stream()
+                                        .map(Jail::name)
+                                        .toList(),
+                                builder
+                        )
+                )
+                .executes(command -> jail(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty(),
+                        ""
+                ));
+
+        jail.then(Commands.literal("reason")
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> jail(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty(),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                )
+        );
+
+        jail.then(Commands.argument(
+                                "duration",
+                                DurationArgument.duration(maximum)
+                        )
+                        .executes(command -> jail(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(
+                                        DurationArgument.get(
+                                                command,
+                                                "duration"
+                                        )
+                                ),
+                                ""
+                        ))
+                        .then(Commands.argument(
+                                                "reason",
+                                                StringArgumentType.greedyString()
+                                        )
+                                        .executes(command -> jail(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                Optional.of(
+                                                        DurationArgument.get(
+                                                                command,
+                                                                "duration"
+                                                        )
+                                                ),
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "reason"
+                                                )
+                                        ))
+                        )
+        );
+
+        player.then(jail);
+
+        var root = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("togglejail"),
+                "commands.description.jail",
+                "/jail <player> <off|jail> [duration] [reason]",
+                Commands.literal("jail").then(player)
+        );
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "togglejail",
+                root
+        );
     }
 
-    @Override
-    public String permission() {
-        return "cellulosesz.admin.jail";
-    }
-
-    @Override
-    public String usage() {
-        return "/jail <player> <jail|off> [duration] [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "jail";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 2) {
-            invocation.errorKey(
-                    "commands.admin.jail-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var target = online(invocation, args[0]);
-        if (target.isEmpty()) return 0;
-
-        if (args[1].equalsIgnoreCase("off")
-                || args[1].equalsIgnoreCase("release")
-        ) {
-            jails.unjail(
-                    target.get().uuid(),
-                    target.get().name(),
-                    actor(invocation)
-            ).whenComplete((result, failure) -> complete(invocation, result, failure));
-            return 1;
-        }
-
-        @Nullable Long duration = defaultDuration();
-        var reasonStart = 2;
-        if (args.length >= 3) {
-            var parsed = DurationParser.parseMillis(args[2]);
-            if (parsed.isPresent()) {
-                duration = parsed.getAsLong();
-                reasonStart = 3;
-            }
-        }
-
-        if (duration != null
-                && exceedsMaximum(duration)
-                && !invocation.hasPermission("cellulosesz.admin.punishment.unlimited")
-        ) {
-            invocation.errorKey(
-                    "commands.admin.maximum-punishment",
-                    Map.of("seconds", config.maximumPunishmentSeconds)
-            );
-            return 0;
-        }
-
-        jails.jailPlayer(
-                target.get(),
-                args[1],
-                actor(invocation),
-                duration,
-                join(args, reasonStart)
-        ).whenComplete((result, failure) -> complete(invocation, result, failure));
-        return 1;
-    }
-
-    private void complete(
-            CommandInvocation invocation,
-            AdminResult result,
-            Throwable failure
+    private int jail(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Duration> duration,
+            String reason
     ) {
-        if (failure != null) invocation.errorKey("service.admin.persistence-failed");
-        else if (result.success()) invocation.reply(result.message());
-        else invocation.error(result.message());
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "jail duration="
+                        + duration.isPresent()
+                        + " reason-present="
+                        + !reason.isBlank(),
+                policy -> service.jail(
+                        PlayerNameArgument.get(command, "player"),
+                        StringArgumentType.getString(command, "jail"),
+                        AdminCommandResults.actor(policy, players),
+                        duration,
+                        reason
+                )
+        );
     }
 
-    private @Nullable Long defaultDuration() {
-        if (config.defaultJailSeconds <= 0) return null;
-        try {
-            return Math.multiplyExact(config.defaultJailSeconds, 1000L);
-        } catch (ArithmeticException _) {
-            return Long.MAX_VALUE;
-        }
-    }
-
-    private boolean exceedsMaximum(long durationMillis) {
-        if (config.maximumPunishmentSeconds < 0) return false;
-        try {
-            return durationMillis > Math.multiplyExact(config.maximumPunishmentSeconds, 1000L);
-        } catch (ArithmeticException _) {
-            return false;
-        }
+    @Override
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

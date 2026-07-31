@@ -18,22 +18,29 @@ import static org.junit.jupiter.api.Assertions.*;
 final class ArchitecturyCommandBoundaryTest {
 
     private static final Set<String> DIRECT = Set.of(
-            "customtext", "info", "motd", "rules", "home", "sethome", "delhome", "renamehome",
-            "warp", "setwarp", "delwarp", "warpinfo", "kit", "showkit", "createkit", "delkit", "kitreset",
-            "cellulosesz", "help", "broadcast", "broadcastworld", "helpop", "ignore", "list", "mail", "me",
-            "msg", "msgtoggle", "r", "rtoggle", "socialspy", "balance", "balancetop", "eco", "pay",
-            "payconfirmtoggle", "paytoggle", "sell", "setworth", "worth", "afk", "compass", "depth", "exp",
-            "feed", "fly", "gamemode", "getpos", "god", "heal", "near", "nick", "ping", "playtime",
-            "ptime", "pweather", "realname", "rest", "seen", "speed", "vanish", "whois"
+            "afk", "back", "balance", "balancetop", "ban", "banip", "bottom", "broadcast",
+            "broadcastworld", "burn", "cellulosesz", "compass", "createkit", "customtext", "delhome",
+            "deljail", "delkit", "delwarp", "depth", "eco", "exp", "ext", "feed", "fly", "gamemode",
+            "getpos", "god", "heal", "help", "helpop", "home", "ice", "ignore", "info", "jail",
+            "jailedplayers", "jails", "jump", "kick", "kickall", "kill", "kit", "kitreset", "list", "mail",
+            "me", "motd", "msg", "msgtoggle", "mute", "near", "nick", "pay", "payconfirmtoggle",
+            "paytoggle", "ping", "playtime", "ptime", "pweather", "r", "realname", "renamehome", "rest",
+            "rtoggle", "rules", "seen", "sell", "sethome", "setjail", "settpr", "setwarp", "setworth",
+            "showkit", "socialspy", "speed", "sudo", "suicide", "tempban", "tempbanip", "top", "tp", "tpa",
+            "tpaall", "tpacancel", "tpaccept", "tpahere", "tpall", "tpauto", "tpdeny", "tphere", "tpo",
+            "tpoffline", "tpohere", "tppos", "tpr", "tptoggle", "unban", "unbanip", "vanish", "warp",
+            "warpinfo", "whois", "world", "worth"
     );
 
     private static final List<String> COMMON_MODULES = List.of(
-            "text", "home", "warp", "kit", "command", "messaging", "economy", "playerstate"
+            "text", "home", "warp", "kit", "command", "messaging", "economy", "playerstate", "admin", "teleport"
     );
 
     private static final List<String> SEGMENT_2_MODULES = List.of(
             "command", "messaging", "economy", "playerstate"
     );
+
+    private static final List<String> SEGMENT_3_MODULES = List.of("admin", "teleport");
 
     @Test
     void pureAndCommonProjectsContainNoLoaderImports() throws IOException {
@@ -165,7 +172,7 @@ final class ArchitecturyCommandBoundaryTest {
 
     @Test
     void directRootIndexHasExpectedCardinality() throws IOException {
-        assertEquals(62, DIRECT.size());
+        assertEquals(104, DIRECT.size());
         var index = Files.readString(projectRoot().resolve("cellulosesz-core/src/main/java/top/likoslupus/cellulosesz/core/command/DirectCommandMigrationIndex.java"));
         DIRECT.forEach(command -> assertTrue(index.contains("\"" + command + "\""), command));
     }
@@ -241,6 +248,43 @@ final class ArchitecturyCommandBoundaryTest {
         assertTrue(catalog.contains("architectury-plugin = \"3.5.169\""));
         assertTrue(catalog.contains("dev.architectury.loom-no-remap"));
         assertFalse(catalog.contains("architectury-api = \"21."));
+    }
+
+    @Test
+    void segmentThreeModulesUseNarrowPortsAndDirectCommandTrees() throws IOException {
+        var root = projectRoot();
+        for (var domain : SEGMENT_3_MODULES) {
+            var sourceRoot = root.resolve("cellulosesz-modules/cellulosesz-module-%s/src/main/java".formatted(domain));
+            var contributors = 0;
+            for (var source : javaSources(sourceRoot)) {
+                var text = Files.readString(source);
+                assertFalse(text.contains("net.fabricmc."), source.toString());
+                assertFalse(text.contains("net.neoforged."), source.toString());
+                assertFalse(text.contains("top.likoslupus.cellulosesz.fabric."), source.toString());
+                assertFalse(text.contains("import top.likoslupus.cellulosesz.api.platform.PlatformService;"), source.toString());
+                assertFalse(text.contains("require(PlatformService.class)"), source.toString());
+                assertFalse(text.contains("CellCommand"), source.toString());
+                assertFalse(text.contains("CommandInvocation"), source.toString());
+                assertFalse(text.contains("CommandSpec"), source.toString());
+                assertFalse(text.contains("CommandRoute"), source.toString());
+                assertFalse(text.contains("String[] args"), source.toString());
+                assertFalse(text.contains("nativeHandle()"), source.toString());
+                if (text.contains("implements CommandContributor")) contributors++;
+            }
+            assertEquals(domain.equals("admin") ? 20 : 22, contributors, domain);
+        }
+    }
+
+    @Test
+    void segmentThreeCommandNamesAreNormalBusinessNames() throws IOException {
+        var root = projectRoot();
+        for (var domain : SEGMENT_3_MODULES) {
+            for (var source : javaSources(commandSourceRoot(root, domain))) {
+                var name = source.getFileName().toString();
+                List.of("Brigadier", "Registrar", "Direct", "V2", "Legacy")
+                        .forEach(rejected -> assertFalse(name.contains(rejected), name));
+            }
+        }
     }
 
 }

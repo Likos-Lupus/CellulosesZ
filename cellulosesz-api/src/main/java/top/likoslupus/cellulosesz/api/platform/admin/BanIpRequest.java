@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.platform.admin;
 
-import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.admin.Expiration;
 
 import java.net.InetAddress;
 import java.time.Instant;
@@ -14,7 +14,7 @@ public record BanIpRequest(
         BanActor actor,
         String reason,
         Instant createdAt,
-        @Nullable Instant expiresAt
+        Expiration expiration
 ) {
 
     public BanIpRequest {
@@ -24,9 +24,12 @@ public record BanIpRequest(
         requireMaxLength(reason, 512, "reason");
         requireNoControlCharacters(reason, "reason");
         requireNonNull(createdAt, "createdAt");
-        if (expiresAt != null && !expiresAt.isAfter(createdAt)) {
-            throw new IllegalArgumentException("expiresAt must be after createdAt");
-        }
+        requireNonNull(expiration, "expiration");
+        expiration.expiresAt().ifPresent(expiresAt -> {
+            if (!expiresAt.isAfter(createdAt)) {
+                throw new IllegalArgumentException("expiration must be after createdAt");
+            }
+        });
     }
 
 }

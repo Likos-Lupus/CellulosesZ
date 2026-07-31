@@ -1,75 +1,98 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
-public final class ExtCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerStatePlatformService players;
+public final class ExtCommand implements CommandContributor {
+
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
 
     public ExtCommand(
-            PlatformService platform,
-            PlayerStatePlatformService players
+            PlayerControlCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.players = players;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.ext";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "ext",
+                "cellulosesz.command.ext",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("ext")
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "ext self",
+                        policy -> service.extinguish(
+                                AdminCommandResults.current(policy, players),
+                                Optional.empty()
+                        )
+                ))
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerName()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.ext.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> AdminCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "ext other",
+                                        policy -> service.extinguish(
+                                                AdminCommandResults.current(
+                                                        policy,
+                                                        players
+                                                ),
+                                                Optional.of(
+                                                        PlayerNameArgument.get(
+                                                                command,
+                                                                "player"
+                                                        )
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.ext",
+                "/ext [player]",
+                root
+        );
     }
 
     @Override
-    public String usage() {
-        return "/ext [player]";
-    }
-
-    @Override
-    public String name() {
-        return "ext";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var target = target(invocation);
-        if (target.isEmpty()) return 0;
-        var result = players.extinguish(target.orElseThrow());
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.admin.ext.success", Map.of("player", target.orElseThrow().name()));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.admin.ext.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private Optional<CellPlayer> target(CommandInvocation invocation) {
-        if (invocation.args().length == 0) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) invocation.errorKey("commands.admin.ext.console-target-required");
-            return self;
-        }
-        if (!invocation.hasPermission("cellulosesz.command.ext.others")) {
-            invocation.errorKey("commands.common.no-permission");
-            return Optional.empty();
-        }
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty())
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-        return target;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

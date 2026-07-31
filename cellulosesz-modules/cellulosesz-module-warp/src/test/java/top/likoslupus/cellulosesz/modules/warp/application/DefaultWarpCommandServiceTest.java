@@ -9,10 +9,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
-import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
-import top.likoslupus.cellulosesz.api.teleport.TeleportResult;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
@@ -424,12 +421,12 @@ final class DefaultWarpCommandServiceTest {
                     : CompletableFuture.completedFuture(
                             successful
                                     ? TeleportResult.success(target)
-                                    : TeleportResult.failed("service.teleport.failed", target)
+                                    : TeleportResult.failed(top.likoslupus.cellulosesz.api.teleport.TeleportStatus.PLATFORM_FAILURE, "service.teleport.failed")
                     );
         }
 
         @Override
-        public boolean cancelWarmup(UUID uuid, String messageKey) {
+        public boolean cancelWarmup(UUID uuid, TeleportStatus status) {
             return false;
         }
 
@@ -451,6 +448,10 @@ final class DefaultWarpCommandServiceTest {
         @Override
         public Optional<CellLocation> backLocation(UUID uuid) {
             return Optional.empty();
+        }
+
+        @Override
+        public void shutdown() {
         }
 
     }

@@ -1,118 +1,93 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
-import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class SudoCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerCommandDispatchService dispatch;
-    private final PermissionService permissions;
-    private final AdminConfig config;
+public final class SudoCommand implements CommandContributor {
+
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
 
     public SudoCommand(
-            PlatformService platform,
-            PlayerCommandDispatchService dispatch,
-            PermissionService permissions,
-            AdminConfig config
+            PlayerControlCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.dispatch = dispatch;
-        this.permissions = permissions;
-        this.config = config;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.sudo";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "sudo",
+                "cellulosesz.command.sudo",
+                CommandSourceKind.ANY
+        );
+
+        var argument = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .then(Commands.argument(
+                                        "command",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> AdminCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "sudo command-redacted length="
+                                                + StringArgumentType.getString(
+                                                command,
+                                                "command"
+                                        ).length(),
+                                        policy -> service.sudo(
+                                                AdminCommandResults.actor(
+                                                        policy,
+                                                        players
+                                                ),
+                                                PlayerNameArgument.get(
+                                                        command,
+                                                        "player"
+                                                ),
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "command"
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.sudo",
+                "/sudo <player> <command>",
+                Commands.literal("sudo").then(argument)
+        );
     }
 
     @Override
-    public String usage() {
-        return "/sudo <player> <command...>";
-    }
-
-    @Override
-    public String name() {
-        return "sudo";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 2) return usage(invocation);
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-            return 0;
-        }
-        var self = platform.player(invocation);
-        if (self.isPresent() && self.orElseThrow().uuid().equals(target.orElseThrow().uuid())) {
-            invocation.errorKey("commands.admin.sudo.self");
-            return 0;
-        }
-        if (permissions.has(target.orElseThrow().nativeHandle(), "cellulosesz.command.sudo.exempt")) {
-            invocation.errorKey("commands.admin.sudo.exempt", Map.of("player", target.orElseThrow().name()));
-            return 0;
-        }
-        var command = normalize(invocation.args()[1]);
-        if (!valid(command)) {
-            invocation.errorKey("commands.admin.sudo.invalid-command", Map.of("maximum", config.sudoMaximumCommandLength));
-            return 0;
-        }
-        if (command.regionMatches(true, 0, "c:", 0, 2)) {
-            invocation.errorKey("commands.admin.sudo.chat-unavailable");
-            return 0;
-        }
-        var actorId = self.map(player -> player.uuid())
-                .orElse(PlayerCommandDispatchRequest.CONSOLE_ACTOR_ID);
-        var result = dispatch.dispatch(PlayerCommandDispatchRequest.start(
-                target.orElseThrow(),
-                actorId,
-                CommandDispatchOrigin.SUDO,
-                command
-        ));
-        if (!result.successful()) {
-            invocation.platformError(switch (result.status()) {
-                case PERMISSION_DENIED, REJECTED_BY_GUARD -> PlatformOperationStatus.STATE_NOT_ALLOWED;
-                case UNKNOWN_COMMAND, SYNTAX_ERROR -> PlatformOperationStatus.INVALID_ARGUMENT;
-                case NOT_READY, INTERNAL_ERROR -> PlatformOperationStatus.INTERNAL_ERROR;
-                case EXECUTED -> throw new IllegalStateException("Successful dispatch reported as failure");
-            });
-            return 0;
-        }
-        invocation.replyKey("commands.admin.sudo.success", Map.of(
-                "player", target.orElseThrow().name(),
-                "result", result.commandResult()
-        ));
-        return Math.max(1, result.commandResult());
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.admin.sudo.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private static String normalize(String command) {
-        var value = command.strip();
-        return value.startsWith("/") ? value.substring(1) : value;
-    }
-
-    private boolean valid(String command) {
-        if (command.isBlank() || command.length() > config.sudoMaximumCommandLength) return false;
-        for (int index = 0; index < command.length(); index++) {
-            var value = command.charAt(index);
-            if (value == '\r' || value == '\n' || value == '\0' || Character.isISOControl(value)) return false;
-        }
-        return true;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

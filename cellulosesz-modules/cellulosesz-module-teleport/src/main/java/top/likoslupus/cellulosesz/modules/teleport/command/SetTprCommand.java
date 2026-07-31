@@ -1,115 +1,148 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.teleport.application.RandomTeleportCommandService;
 
-import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 
-public final class SetTprCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final RandomTeleportSettingsService settings;
+public final class SetTprCommand implements CommandContributor {
 
-    public SetTprCommand(PlatformService platform, RandomTeleportSettingsService settings) {
-        this.platform = platform;
-        this.settings = settings;
-    }
+    private final RandomTeleportCommandService service;
+    private final PlayerDirectory players;
+    private final WorldDirectory worlds;
 
-    @Override
-    public String permission() {
-        return "cellulosesz.teleport.settpr";
-    }
-
-    @Override
-    public String usage() {
-        return "/settpr <world> <center|minrange|maxrange> [value]";
-    }
-
-    @Override
-    public String name() {
-        return "settpr";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 2 || args.length > 3 || !platform.worlds().contains(args[0])) {
-            invocation.errorKey("commands.teleport.request.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var world = args[0];
-        var action = args[1].toLowerCase(java.util.Locale.ROOT);
-        var current = settings.settings(world);
-        if (args.length == 2 && !action.equals("center")) {
-            replyCurrent(invocation, world, current, "commands.teleport.settpr.current");
-            return 1;
-        }
-
-        java.util.Optional<java.util.concurrent.CompletableFuture<Void>> update;
-        try {
-            if (action.equals("center")) {
-                var player = platform.player(invocation);
-                if (player.isEmpty()) {
-                    invocation.errorKey("commands.teleport.settpr.center-player-only");
-                    return 0;
-                }
-                var location = platform.location(player.orElseThrow());
-                if (!location.world.equals(world)) {
-                    invocation.errorKey("commands.teleport.settpr.wrong-world", Map.of("world", world));
-                    return 0;
-                }
-                update = java.util.Optional.of(settings.setCenter(world, location.x, location.z));
-            } else if (action.equals("minrange")) {
-                update = java.util.Optional.of(settings.setMinimumRadius(world, parseRadius(args)));
-            } else if (action.equals("maxrange")) {
-                update = java.util.Optional.of(settings.setMaximumRadius(world, parseRadius(args)));
-            } else {
-                update = java.util.Optional.empty();
-            }
-        } catch (NumberFormatException exception) {
-            invocation.errorKey("commands.teleport.invalid-integer", Map.of("name", "value", "value", args[2]));
-            return 0;
-        } catch (IllegalArgumentException exception) {
-            invocation.errorKey("commands.teleport.settpr.invalid-range");
-            return 0;
-        }
-        if (update.isEmpty()) {
-            invocation.errorKey("commands.teleport.request.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        update.orElseThrow().whenComplete((unused, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("common.persistence-failed");
-                return;
-            }
-            replyCurrent(invocation, world, settings.settings(world), "commands.teleport.settpr.updated");
-        });
-        return 1;
-    }
-
-    private void replyCurrent(
-            CommandInvocation invocation,
-            String world,
-            top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettings value,
-            String key
+    public SetTprCommand(
+            RandomTeleportCommandService service,
+            PlayerDirectory players,
+            WorldDirectory worlds
     ) {
-        invocation.replyKey(
-                key,
-                Map.of(
-                        "world", world,
-                        "centerX", value.centerX(),
-                        "centerZ", value.centerZ(),
-                        "min", value.minRadius(),
-                        "max", value.maxRadius()
-                )
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.worlds = requireNonNull(worlds, "worlds");
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "settpr",
+                "cellulosesz.teleport.settpr",
+                CommandSourceKind.ANY
+        );
+
+        var center = Commands.literal("center")
+                .executes(command -> TeleportCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "settpr center",
+                        policy -> service.center(
+                                TeleportCommandResults.current(policy, players),
+                                StringArgumentType.getString(command, "world"),
+                                Optional.empty()
+                        )
+                ))
+                .then(Commands.argument("x", DoubleArgumentType.doubleArg())
+                        .then(Commands.argument("z", DoubleArgumentType.doubleArg())
+                                .executes(command -> TeleportCommandResults.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "settpr center coordinates",
+                                        policy -> service.center(
+                                                TeleportCommandResults.current(policy, players),
+                                                StringArgumentType.getString(command, "world"),
+                                                Optional.of(new RandomTeleportCommandService.Coordinates(
+                                                        DoubleArgumentType.getDouble(command, "x"),
+                                                        DoubleArgumentType.getDouble(command, "z")
+                                                ))
+                                        )
+                                ))
+                        )
+                );
+
+        var minimum = Commands.literal("minrange")
+                .executes(command -> TeleportCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "settpr min query",
+                        _ -> service.minimum(
+                                StringArgumentType.getString(command, "world"),
+                                Optional.empty()
+                        )
+                ))
+                .then(Commands.argument("radius", IntegerArgumentType.integer(0))
+                        .executes(command -> TeleportCommandResults.async(
+                                context,
+                                command,
+                                descriptor,
+                                "settpr min set",
+                                _ -> service.minimum(
+                                        StringArgumentType.getString(command, "world"),
+                                        Optional.of(IntegerArgumentType.getInteger(command, "radius"))
+                                )
+                        ))
+                );
+
+        var maximum = Commands.literal("maxrange")
+                .executes(command -> TeleportCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "settpr max query",
+                        _ -> service.maximum(
+                                StringArgumentType.getString(command, "world"),
+                                Optional.empty()
+                        )
+                ))
+                .then(Commands.argument("radius", IntegerArgumentType.integer(1))
+                        .executes(command -> TeleportCommandResults.async(
+                                context,
+                                command,
+                                descriptor,
+                                "settpr max set",
+                                _ -> service.maximum(
+                                        StringArgumentType.getString(command, "world"),
+                                        Optional.of(IntegerArgumentType.getInteger(command, "radius"))
+                                )
+                        ))
+                );
+
+        var root = Commands.literal("settpr")
+                .then(Commands.argument("world", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(worlds::loadedWorldIds, builder)
+                        )
+                        .then(center)
+                        .then(minimum)
+                        .then(maximum)
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.settpr",
+                "/settpr <world> <center|minrange|maxrange> [value]",
+                root
         );
     }
 
-    private int parseRadius(String[] args) {
-        if (args.length != 3) throw new IllegalArgumentException("radius is required");
-        return Integer.parseInt(args[2]);
+    @Override
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

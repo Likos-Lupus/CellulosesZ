@@ -1,61 +1,61 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class BackCommand extends AbstractTeleportCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class BackCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
 
     public BackCommand(
-            PlatformService platform,
-            TeleportService teleports
+            TeleportCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, teleports);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.back";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "back",
+                "cellulosesz.teleport.back",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        var root = Commands.literal("back")
+                .executes(command ->
+                        TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "back",
+                                players,
+                                service::back
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.back",
+                "/back",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "back";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var location = teleports.backLocation(self.get().uuid());
-        if (location.isEmpty()) {
-            invocation.errorKey("commands.teleport.back-command.error.there-no-previous-location-return");
-            return 0;
-        }
-
-        teleports.teleport(self.get(), location.get(), new TeleportOptions().rememberBack(false))
-                .thenAccept(result -> {
-                    if (result.success()) {
-                        invocation.replyKey("commands.teleport.back-command.reply.returned-previous-location");
-                    } else {
-                        invocation.errorKey(
-                                "commands.teleport.back-command.error.return-failed",
-                                Map.of("reason", result.message())
-                        );
-                    }
-                });
-
-        return 1;
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

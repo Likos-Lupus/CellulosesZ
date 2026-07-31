@@ -50,7 +50,7 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 target,
                 date(request.createdAt()),
                 request.actor().name(),
-                nullableDate(request.expiresAt()),
+                nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
         if (!bans.add(entry)) {
@@ -121,7 +121,7 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 address,
                 date(request.createdAt()),
                 request.actor().name(),
-                nullableDate(request.expiresAt()),
+                nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
         if (!bans.add(entry)) {

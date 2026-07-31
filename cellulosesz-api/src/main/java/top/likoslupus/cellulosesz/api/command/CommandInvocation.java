@@ -62,8 +62,9 @@ public interface CommandInvocation {
     default void platformError(PlatformOperationStatus status) {
         var key = switch (status) {
             case INVALID_ARGUMENT -> "commands.common.platform.invalid-argument";
-            case TARGET_NOT_FOUND -> "commands.common.platform.target-not-found";
-            case STATE_NOT_ALLOWED -> "commands.common.platform.state-not-allowed";
+            case TARGET_NOT_FOUND, WORLD_NOT_FOUND -> "commands.common.platform.target-not-found";
+            case STATE_NOT_ALLOWED, WRONG_THREAD, NOT_READY, UNSAFE_DESTINATION ->
+                    "commands.common.platform.state-not-allowed";
             case EXEMPT -> "commands.common.platform.exempt";
             case UNSUPPORTED -> "commands.common.platform.unsupported";
             case CONFLICT -> "commands.common.platform.conflict";

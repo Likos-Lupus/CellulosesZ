@@ -1,128 +1,78 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.teleport.service.TeleportRequestExecutor;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportRequestCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class TpaCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final TeleportRequestExecutor executor;
-    private final UserService users;
-    private final int timeoutSeconds;
-    private final boolean here;
+public final class TpaCommand implements CommandContributor {
+
+    private final TeleportRequestCommandService service;
+    private final PlayerDirectory players;
 
     public TpaCommand(
-            PlatformService platform,
-            TeleportRequestExecutor executor,
-            UserService users,
-            int timeoutSeconds,
-            boolean here
+            TeleportRequestCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.executor = executor;
-        this.users = users;
-        this.timeoutSeconds = timeoutSeconds;
-        this.here = here;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return here ? "cellulosesz.teleport.tpahere" : "cellulosesz.teleport.tpa";
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "tpa",
+                "cellulosesz.teleport.tpa",
+                CommandSourceKind.PLAYER_ONLY
+        );
 
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/" + name() + " <player>";
-    }
-
-    @Override
-    public String name() {
-        return here ? "tpahere" : "tpa";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length != 1) {
-            invocation.errorKey(
-                    "commands.teleport.tpa-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-        var requester = platform.player(invocation);
-        var target = invocation.resolvePlayer(args[0]).online();
-        if (requester.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpa-command.error.command-can-only-used-by-player");
-            return 0;
-        }
-        if (target.isEmpty()) {
-            invocation.errorKey(
-                    "commands.teleport.tpa-command.error.online-player-not-found",
-                    Map.of("player", args[0])
-            );
-            return 0;
-        }
-        if (target.orElseThrow().uuid().equals(requester.orElseThrow().uuid())) {
-            invocation.errorKey("commands.teleport.tpa-command.error.cannot-send-teleport-request-yourself");
-            return 0;
-        }
-        users.load(target.orElseThrow().uuid()).whenComplete((targetUser, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.user.load-failed");
-                return;
-            }
-            if (!targetUser.preferences.teleportRequests
-                    && !invocation.hasPermission("cellulosesz.teleport.tptoggle.bypass")
-            ) {
-                invocation.errorKey(
-                        "commands.teleport.tpa-command.requests-disabled",
-                        Map.of("player", target.orElseThrow().name())
-                );
-                return;
-            }
-            platform.runOnServerThread(() -> {
-                var creation = executor.create(
-                        invocation,
-                        requester.orElseThrow(),
-                        target.orElseThrow(),
-                        here
-                                ? TeleportRequestType.TARGET_TO_REQUESTER
-                                : TeleportRequestType.REQUESTER_TO_TARGET,
-                        timeoutSeconds
-                );
-                if (!creation.created()) {
-                    invocation.errorKey(
-                            "commands.teleport.request.already-pending",
-                            Map.of(
-                                    "request", creation.request().id(),
-                                    "player", target.orElseThrow().name()
-                            )
-                    );
-                    return;
-                }
-                invocation.replyKey(
-                        "commands.teleport.tpa-command.reply.sent-teleport-request-it-expires-seconds",
-                        Map.of(
-                                "player", target.orElseThrow().name(),
-                                "expires_seconds", timeoutSeconds
+        var root = Commands.literal("tpa")
+                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        players::onlinePlayerNames, builder
+                                )
                         )
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tpa request",
+                                players,
+                                actor -> service.create(
+                                        actor,
+                                        PlayerNameArgument.get(command, "player"),
+                                        TeleportRequestType.REQUESTER_TO_TARGET,
+                                        context.permissions().has(
+                                                command.getSource(),
+                                                "cellulosesz.teleport.tpa.bypass"
+                                        )
+                                )
+                        ))
                 );
-            });
-        });
-        return 1;
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tpa",
+                "/tpa <player>",
+                root
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

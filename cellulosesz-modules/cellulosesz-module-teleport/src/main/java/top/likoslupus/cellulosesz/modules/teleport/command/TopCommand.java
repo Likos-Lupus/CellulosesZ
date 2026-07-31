@@ -1,47 +1,61 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-public final class TopCommand extends AbstractTeleportCommand {
+import java.util.List;
+
+import static java.util.Objects.requireNonNull;
+
+public final class TopCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
 
     public TopCommand(
-            PlatformService platform,
-            TeleportService teleports
+            TeleportCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, teleports);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.top";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "top",
+                "cellulosesz.teleport.top",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        var root = Commands.literal("top")
+                .executes(command ->
+                        TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "top",
+                                players,
+                                service::top
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.top",
+                "/top",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "top";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var current = platform.location(self.get());
-        var top = platform.highestLocation(current.world, current.x, current.z);
-        if (top.isEmpty()) {
-            invocation.errorKey("commands.teleport.top-command.error.no-top-position-found");
-            return 0;
-        }
-
-        return teleport(invocation, self.get(), top.get());
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

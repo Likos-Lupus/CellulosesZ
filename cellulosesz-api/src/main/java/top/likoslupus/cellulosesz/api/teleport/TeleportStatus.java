@@ -1,0 +1,17 @@
+package top.likoslupus.cellulosesz.api.teleport;
+
+public enum TeleportStatus {
+
+    SUCCESS,
+    UNSAFE_DESTINATION,
+    CROSS_WORLD_DISABLED,
+    BACK_PERSISTENCE_FAILURE,
+    PLATFORM_FAILURE,
+    ROLLBACK_FAILURE,
+    CANCELLED_MOVE,
+    CANCELLED_DAMAGE,
+    CANCELLED_DEATH,
+    CANCELLED_DISCONNECT,
+    CANCELLED_REPLACED
+
+}

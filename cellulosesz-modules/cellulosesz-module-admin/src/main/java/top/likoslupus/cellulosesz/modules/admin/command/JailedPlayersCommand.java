@@ -1,50 +1,110 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
-public final class JailedPlayersCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final JailService jails;
+public final class JailedPlayersCommand implements CommandContributor {
 
-    public JailedPlayersCommand(
-            PlatformService platform,
-            UserService users,
-            JailService jails
+    private final JailCommandService service;
+
+    public JailedPlayersCommand(JailCommandService service) {
+        this.service = requireNonNull(service, "service");
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "jailedplayers",
+                "cellulosesz.admin.jail.list",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("jailedplayers")
+                .executes(command -> list(
+                        context,
+                        command,
+                        descriptor,
+                        1
+                ))
+                .then(Commands.argument(
+                                        "page",
+                                        IntegerArgumentType.integer(1)
+                                )
+                                .executes(command -> list(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(
+                                                command,
+                                                "page"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.jailedplayers",
+                "/jailedplayers [page]",
+                root
+        );
+    }
+
+    private int list(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int page
     ) {
-        super(platform, users);
-        this.jails = jails;
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "jailedplayers page=" + page,
+                _ -> CompletableFuture.completedFuture(
+                        AdminResult.success(
+                                "service.admin.jailed-list",
+                                Map.of(
+                                        "page",
+                                        page,
+                                        "players",
+                                        service.jailedPlayers()
+                                                .stream()
+                                                .skip((long) (page - 1) * 10)
+                                                .limit(10)
+                                                .map(jailed ->
+                                                        "%s:%s:%s".formatted(
+                                                                jailed.name(),
+                                                                jailed.jail(),
+                                                                jailed.state()
+                                                        )
+                                                )
+                                                .toList()
+                                                .toString()
+                                )
+                        )
+                )
+        );
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.jail.list";
-    }
-
-    @Override
-    public String name() {
-        return "jailedplayers";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var names = jails.jailedPlayers().stream()
-                .map(player -> "%s@%s".formatted(player.name, player.jail))
-                .sorted()
-                .toList();
-        if (names.isEmpty()) {
-            invocation.replyKey("commands.admin.jailed-players-empty");
-        } else {
-            invocation.replyKey(
-                    "commands.admin.jailed-players",
-                    Map.of("players", String.join(", ", names))
-            );
-        }
-        return 1;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

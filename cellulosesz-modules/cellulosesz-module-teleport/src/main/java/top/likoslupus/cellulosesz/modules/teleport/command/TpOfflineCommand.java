@@ -1,81 +1,66 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.OfflineLocationService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class TpOfflineCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final TeleportService teleports;
-    private final OfflineLocationService offlineLocations;
+public final class TpOfflineCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
 
     public TpOfflineCommand(
-            PlatformService platform,
-            TeleportService teleports,
-            OfflineLocationService offlineLocations
+            TeleportCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.teleports = teleports;
-        this.offlineLocations = offlineLocations;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.tpoffline";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "tpoffline",
+                "cellulosesz.teleport.tpoffline",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("tpoffline")
+                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tpoffline",
+                                players,
+                                player -> service.offline(
+                                        player,
+                                        PlayerNameArgument.get(command, "player")
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tpoffline",
+                "/tpoffline <player>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/tpoffline <player>";
-    }
-
-    @Override
-    public String name() {
-        return "tpoffline";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 1) {
-            invocation.errorKey("commands.teleport.request.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var self = platform.player(invocation);
-        var target = invocation.resolvePlayer(invocation.args()[0]);
-        if (self.isEmpty() || target.optionalUuid().isEmpty()) {
-            invocation.errorKey("commands.teleport.request.unknown-player", Map.of("player", invocation.args()[0]));
-            return 0;
-        }
-        if (target.online().isPresent()) {
-            invocation.errorKey("commands.teleport.tpoffline.online", Map.of("player", target.name()));
-            return 0;
-        }
-        var location = offlineLocations.location(target.optionalUuid().orElseThrow());
-        if (location.isEmpty()) {
-            invocation.errorKey("commands.teleport.tpoffline.no-location", Map.of("player", target.name()));
-            return 0;
-        }
-        teleports.teleport(self.orElseThrow(), location.orElseThrow(), new TeleportOptions())
-                .thenAccept(result -> {
-                    if (result.success()) {
-                        invocation.replyKey("commands.teleport.tpoffline.success", Map.of("player", target.name()));
-                    } else {
-                        invocation.errorKey(result.message().key(), result.message().placeholders());
-                    }
-                });
-        return 1;
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

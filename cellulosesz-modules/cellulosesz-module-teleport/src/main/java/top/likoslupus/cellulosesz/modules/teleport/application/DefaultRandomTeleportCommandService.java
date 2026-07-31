@@ -1,0 +1,243 @@
+package top.likoslupus.cellulosesz.modules.teleport.application;
+
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.*;
+
+public final class DefaultRandomTeleportCommandService implements RandomTeleportCommandService {
+
+    private final RandomTeleportSettingsService settings;
+    private final RandomTeleportService random;
+    private final TeleportService teleports;
+    private final PlayerLocationPlatformService locations;
+    private final WorldDirectory worlds;
+    private final ServerThreadExecutor serverThread;
+    private final int warmupSeconds;
+
+    public DefaultRandomTeleportCommandService(
+            RandomTeleportSettingsService settings,
+            RandomTeleportService random,
+            TeleportService teleports,
+            PlayerLocationPlatformService locations,
+            WorldDirectory worlds,
+            ServerThreadExecutor serverThread,
+            int warmupSeconds
+    ) {
+        this.settings = requireNonNull(settings, "settings");
+        this.random = requireNonNull(random, "random");
+        this.teleports = requireNonNull(teleports, "teleports");
+        this.locations = requireNonNull(locations, "locations");
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
+        this.warmupSeconds = requireNonNegative(warmupSeconds, "warmupSeconds");
+    }
+
+    @Override
+    public CompletableFuture<TeleportCommandResult> center(
+            Optional<CellPlayer> actor, String world,
+            Optional<Coordinates> coordinates
+    ) {
+        var resolved = worlds.resolveLoadedWorld(world);
+        if (resolved.isEmpty()) {
+            return completed(TeleportCommandResult.failure(
+                    NOT_FOUND,
+                    "commands.teleport.world-not-found"
+            ));
+        }
+
+        if (coordinates.isPresent()) {
+            return saveCenter(resolved.orElseThrow(), coordinates.orElseThrow());
+        }
+
+        if (actor.isEmpty()) {
+            return completed(TeleportCommandResult.failure(
+                    INVALID_INPUT,
+                    "common.player-only"
+            ));
+        }
+
+        return serverThread
+                .submit(() -> locations.currentLocation(actor.orElseThrow()))
+                .thenCompose(location -> saveCenter(
+                        resolved.orElseThrow(),
+                        new Coordinates(location.x, location.z)
+                ));
+    }
+
+    @Override
+    public CompletableFuture<TeleportCommandResult> minimum(
+            String world,
+            Optional<Integer> radius
+    ) {
+        return radius(world, radius, true);
+    }
+
+    @Override
+    public CompletableFuture<TeleportCommandResult> maximum(
+            String world,
+            Optional<Integer> radius
+    ) {
+        return radius(world, radius, false);
+    }
+
+    @Override
+    public CompletableFuture<TeleportCommandResult> random(CellPlayer player) {
+        return serverThread
+                .submit(() -> {
+                    var location = locations.currentLocation(player);
+                    return new WorldAndResult(
+                            location.world,
+                            random.randomLocation(location.world, settings.settings(location.world))
+                    );
+                })
+                .thenCompose(value -> {
+                    if (!value.result().success() || value.result().location().isEmpty()) {
+                        return completed(TeleportCommandResult.failure(
+                                PLATFORM_FAILURE,
+                                value.result().status() == RandomTeleportStatus.WORLD_NOT_FOUND
+                                        ? "commands.teleport.world-not-found"
+                                        : "commands.teleport.random-no-safe-location"
+                        ));
+                    }
+
+                    return teleports
+                            .teleport(
+                                    player,
+                                    value.result().location().orElseThrow(),
+                                    TeleportOptions.defaults().withWarmup(warmupSeconds)
+                            )
+                            .thenApply(DefaultRandomTeleportCommandService::mapTeleport);
+                });
+    }
+
+    private static TeleportCommandResult mapTeleport(TeleportResult result) {
+        if (result.success()) {
+            return TeleportCommandResult.success(
+                    result.message().key(),
+                    result.message().placeholders()
+            );
+        }
+
+        var status = switch (result.status()) {
+            case UNSAFE_DESTINATION -> UNSAFE_DESTINATION;
+            case CROSS_WORLD_DISABLED -> CROSS_WORLD_DISABLED;
+            case BACK_PERSISTENCE_FAILURE -> BACK_PERSISTENCE_FAILURE;
+            case ROLLBACK_FAILURE -> ROLLBACK_FAILURE;
+            case CANCELLED_MOVE -> CANCELLED_MOVE;
+            case CANCELLED_DAMAGE -> CANCELLED_DAMAGE;
+            case CANCELLED_DEATH -> CANCELLED_DEATH;
+            case CANCELLED_DISCONNECT -> CANCELLED_DISCONNECT;
+            case CANCELLED_REPLACED -> CANCELLED_REPLACED;
+            case PLATFORM_FAILURE -> PLATFORM_FAILURE;
+            case SUCCESS -> throw new IllegalStateException("Successful teleport result reported as failure");
+        };
+
+        return TeleportCommandResult.failure(
+                status,
+                result.message().key(),
+                result.message().placeholders()
+        );
+    }
+
+    private CompletableFuture<TeleportCommandResult> radius(
+            String world,
+            Optional<Integer> radius,
+            boolean minimum
+    ) {
+        var resolved = worlds.resolveLoadedWorld(world);
+        if (resolved.isEmpty()) {
+            return completed(TeleportCommandResult.failure(
+                    NOT_FOUND,
+                    "commands.teleport.world-not-found"
+            ));
+        }
+
+        var current = settings.settings(resolved.orElseThrow());
+        if (radius.isEmpty()) return completed(TeleportCommandResult.success(
+                minimum
+                        ? "commands.teleport.set-tpr-command.reply.minrange"
+                        : "commands.teleport.set-tpr-command.reply.maxrange",
+                Map.of(
+                        "world", resolved.orElseThrow(),
+                        "radius", minimum
+                                ? current.minRadius()
+                                : current.maxRadius()
+                )
+        ));
+
+        var value = (int) radius.orElseThrow();
+        if (value < 0
+                || minimum && value >= current.maxRadius()
+                || !minimum && value <= current.minRadius()
+        ) {
+            return completed(TeleportCommandResult.failure(
+                    INVALID_INPUT,
+                    "commands.teleport.set-tpr-command.error.invalid-range"
+            ));
+        }
+
+        var mutation = minimum
+                ? settings.setMinimumRadius(resolved.orElseThrow(), value)
+                : settings.setMaximumRadius(resolved.orElseThrow(), value);
+        return mutation
+                .thenApply(_ -> TeleportCommandResult.success(
+                        minimum
+                                ? "commands.teleport.set-tpr-command.reply.minrange"
+                                : "commands.teleport.set-tpr-command.reply.maxrange",
+                        Map.of(
+                                "world", resolved.orElseThrow(),
+                                "radius", value
+                        )
+                ))
+                .exceptionally(_ -> TeleportCommandResult.failure(
+                        PERSISTENCE_FAILURE,
+                        "commands.teleport.random-settings-persistence-failed"
+                ));
+    }
+
+    private static CompletableFuture<TeleportCommandResult> completed(TeleportCommandResult value) {
+        return CompletableFuture.completedFuture(value);
+    }
+
+    private CompletableFuture<TeleportCommandResult> saveCenter(
+            String world,
+            Coordinates coordinates
+    ) {
+        return settings
+                .setCenter(
+                        world,
+                        coordinates.x(),
+                        coordinates.z()
+                )
+                .thenApply(_ -> TeleportCommandResult.success(
+                        "commands.teleport.set-tpr-command.reply.center",
+                        Map.of(
+                                "world", world,
+                                "x", coordinates.x(),
+                                "z", coordinates.z()
+                        )
+                ))
+                .exceptionally(_ -> TeleportCommandResult.failure(
+                        PERSISTENCE_FAILURE,
+                        "commands.teleport.random-settings-persistence-failed"
+                ));
+    }
+
+    private record WorldAndResult(
+            String world,
+            RandomTeleportResult result
+    ) {
+
+    }
+
+}

@@ -1,44 +1,94 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.BanService;
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
 
-public final class KickAllCommand implements CellCommand {
+import java.util.List;
 
-    private final BanService bans;
+import static java.util.Objects.requireNonNull;
 
-    public KickAllCommand(BanService bans) {
-        this.bans = bans;
+public final class KickAllCommand implements CommandContributor {
+
+    private final ModerationCommandService service;
+    private final PlayerDirectory players;
+
+    public KickAllCommand(
+            ModerationCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.kickall";
-    }
-
-    @Override
-    public String usage() {
-        return "/kickall [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "kickall";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var result = bans.kickAll(
-                invocation.playerName().orElse("console"),
-                String.join(" ", invocation.args())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "kickall",
+                "cellulosesz.admin.kickall",
+                CommandSourceKind.ANY
         );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+
+        var root = Commands.literal("kickall")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ""
+                ))
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.kickall",
+                "/kickall [reason]",
+                root
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String reason
+    ) {
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "kickall reason-present=" + !reason.isBlank(),
+                policy -> service.kickAll(
+                        AdminCommandResults.actor(policy, players),
+                        reason
+                )
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

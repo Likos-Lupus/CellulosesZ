@@ -1,48 +1,74 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class TpoHereCommand extends AbstractTeleportCommand {
+import static java.util.Objects.requireNonNull;
 
-    public TpoHereCommand(PlatformService platform, TeleportService teleports) {
-        super(platform, teleports);
+public final class TpoHereCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
+
+    public TpoHereCommand(
+            TeleportCommandService service,
+            PlayerDirectory players
+    ) {
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.tpohere";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "tpohere",
+                "cellulosesz.teleport.tpohere",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("tpohere")
+                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        players::onlinePlayerNames, builder
+                                )
+                        )
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tpohere",
+                                players,
+                                actor -> service.here(
+                                        actor,
+                                        PlayerNameArgument.get(command, "player"),
+                                        true,
+                                        true
+                                )
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tpohere",
+                "/tpohere <player>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/tpohere <player>";
-    }
-
-    @Override
-    public String name() {
-        return "tpohere";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 1) {
-            invocation.errorKey("commands.teleport.tp-here-command.error.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var self = player(invocation);
-        var target = online(invocation, invocation.args()[0]);
-        if (self.isEmpty() || target.isEmpty()) return 0;
-        return teleport(invocation, target.orElseThrow(), platform.location(self.orElseThrow()));
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

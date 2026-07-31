@@ -1,66 +1,82 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.playerstate.KillKind;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class KillCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlayerStatePlatformService players;
-    private final PermissionService permissions;
+public final class KillCommand implements CommandContributor {
+
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
 
     public KillCommand(
-            PlayerStatePlatformService players,
-            PermissionService permissions
+            PlayerControlCommandService service,
+            PlayerDirectory players
     ) {
-        this.players = players;
-        this.permissions = permissions;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.kill";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "kill",
+                "cellulosesz.command.kill",
+                CommandSourceKind.ANY
+        );
+
+        var argument = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "kill force=" + context.permissions().has(
+                                command.getSource(),
+                                "cellulosesz.command.kill.force"
+                        ),
+                        _ -> service.kill(
+                                PlayerNameArgument.get(
+                                        command,
+                                        "player"
+                                ),
+                                context.permissions().has(
+                                        command.getSource(),
+                                        "cellulosesz.command.kill.force"
+                                )
+                        )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.kill",
+                "/kill <player>",
+                Commands.literal("kill").then(argument)
+        );
     }
 
     @Override
-    public String usage() {
-        return "/kill <player>";
-    }
-
-    @Override
-    public String name() {
-        return "kill";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 1) return usage(invocation);
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-            return 0;
-        }
-        var force = invocation.hasPermission("cellulosesz.command.kill.force");
-        if (permissions.has(target.orElseThrow().nativeHandle(), "cellulosesz.command.kill.exempt") && !force) {
-            invocation.errorKey("commands.admin.kill.exempt", Map.of("player", target.orElseThrow().name()));
-            return 0;
-        }
-        var result = players.kill(target.orElseThrow(), KillKind.ADMIN, force);
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.admin.kill.success", Map.of("player", target.orElseThrow().name()));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.admin.kill.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

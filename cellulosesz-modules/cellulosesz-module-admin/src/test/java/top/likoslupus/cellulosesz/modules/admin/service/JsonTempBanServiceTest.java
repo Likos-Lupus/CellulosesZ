@@ -3,17 +3,22 @@ package top.likoslupus.cellulosesz.modules.admin.service;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
+import top.likoslupus.cellulosesz.api.admin.AdminActor;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.net.InetAddress;
 import java.nio.file.Path;
+import java.time.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
@@ -25,29 +30,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class JsonTempBanServiceTest {
 
     @Test
-    void expirationAdditionOverflowIsRejectedWithoutSaving() {
+    void expirationAdditionOverflowIsRejectedWithoutSaving() throws Exception {
         var storage = new MemoryStorage();
-        var service = service(storage);
+        var clock = new MutableClock(Instant.MAX.minusSeconds(1));
+        var service = service(storage, clock);
+
         var result = service.tempBanIp(
-                "192.0.2.1",
-                "console",
-                Long.MAX_VALUE,
+                InetAddress.getByAddress(new byte[]{(byte) 192, 0, 2, 1}),
+                AdminActor.console("console"),
+                Duration.ofSeconds(2),
                 "test"
         ).join();
 
         assertEquals(AdminStatus.INVALID_INPUT, result.status());
         assertEquals(0, storage.saves);
-        assertTrue(service.activeIp("192.0.2.1").isEmpty());
     }
 
-    private static JsonTempBanService service(MemoryStorage storage) {
+    private static JsonTempBanService service(MemoryStorage storage, Clock clock) {
         return new JsonTempBanService(
                 storage,
                 Path.of("temp-bans.json"),
-                proxy(PlatformService.class, (method, args) -> defaultValue(method)),
-                proxy(UserService.class, (method, args) -> defaultValue(method)),
+                proxy(PlayerDirectory.class, (method, args) -> defaultValue(method)),
+                proxy(PlayerConnectionService.class, (method, args) -> defaultValue(method)),
+                proxy(PlayerAudienceService.class, (method, args) -> defaultValue(method)),
+                proxy(PlayerNetworkService.class, (method, args) -> Optional.empty()),
                 proxy(MessageRenderer.class, (method, args) -> defaultValue(method)),
-                proxy(LocaleResolver.class, (method, args) -> "en"),
+                directExecutor(),
+                clock,
                 false
         );
     }
@@ -71,7 +80,7 @@ final class JsonTempBanServiceTest {
 
     private static Object defaultValue(Method method) {
         var type = method.getReturnType();
-        if (type == void.class) return Boolean.TRUE;
+        if (type == void.class) return null;
         if (type == boolean.class) return false;
         if (type == int.class) return 0;
         if (type == long.class) return 0L;
@@ -81,20 +90,78 @@ final class JsonTempBanServiceTest {
         if (type == Set.class) return Set.of();
         if (type == Collection.class) return List.of();
         if (type == Map.class) return Map.of();
-        if (type == CompletableFuture.class) return CompletableFuture.completedFuture(Boolean.TRUE);
+        if (type == CompletableFuture.class) return CompletableFuture.completedFuture(null);
         throw new UnsupportedOperationException(method.toString());
+    }
+
+    private static ServerThreadExecutor directExecutor() {
+        return new ServerThreadExecutor() {
+            @Override
+            public boolean isServerThread() {
+                return true;
+            }
+
+            @Override
+            public void execute(Runnable task) {
+                task.run();
+            }
+
+            @Override
+            public <T> CompletableFuture<T> submit(Supplier<T> task) {
+                try {
+                    return CompletableFuture.completedFuture(task.get());
+                } catch (Throwable failure) {
+                    return CompletableFuture.failedFuture(failure);
+                }
+            }
+        };
     }
 
     @Test
     void expiredBanIsRemovedByExplicitPurge() throws Exception {
         var storage = new MemoryStorage();
-        var service = service(storage);
-        assertTrue(service.tempBanIp("192.0.2.2", "console", 1L, "test").join().success());
-        Thread.sleep(5L);
+        var clock = new MutableClock(Instant.parse("2026-07-30T00:00:00Z"));
+        var service = service(storage, clock);
+        var address = InetAddress.getByAddress(new byte[]{(byte) 192, 0, 2, 2});
 
-        assertTrue(service.activeIp("192.0.2.2").isEmpty());
-        assertEquals(1, service.purgeExpired().join());
-        assertTrue(storage.saves >= 2);
+        assertTrue(service.tempBanIp(address, AdminActor.console("console"), Duration.ofSeconds(1), "test")
+                .join()
+                .success());
+        assertTrue(service.activeIp(address).isPresent());
+        clock.advance(Duration.ofSeconds(2));
+
+        assertTrue(service.activeIp(address).isEmpty());
+        assertEquals(1, service.purgeExpired().join().intValue());
+        assertEquals(2, storage.saves);
+    }
+
+    private static final class MutableClock extends Clock {
+
+        private Instant instant;
+
+        private MutableClock(Instant instant) {
+            this.instant = instant;
+        }
+
+        private void advance(Duration duration) {
+            instant = instant.plus(duration);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return instant;
+        }
+
     }
 
     @NullMarked
@@ -104,14 +171,27 @@ final class JsonTempBanServiceTest {
         private int saves;
 
         @Override
-        public <T> CompletableFuture<T> loadOrDefault(Path path, Class<T> type, Supplier<T> defaults) {
-            if (document == null) return CompletableFuture.completedFuture(defaults.get());
-            return CompletableFuture.completedFuture(type.cast(document));
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaults
+        ) {
+            return CompletableFuture.completedFuture(
+                    document == null
+                            ? defaults.get()
+                            : type.cast(document)
+            );
         }
 
         @Override
-        public <T> CompletableFuture<T> createIfMissing(Path path, Class<T> type, Supplier<T> defaults) {
-            if (document == null) document = defaults.get();
+        public <T> CompletableFuture<T> createIfMissing(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaults
+        ) {
+            if (document == null) {
+                document = defaults.get();
+            }
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
@@ -134,7 +214,10 @@ final class JsonTempBanServiceTest {
         }
 
         @Override
-        public <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type) {
+        public <T> CompletableFuture<List<T>> loadDirectory(
+                Path directory,
+                Class<T> type
+        ) {
             return CompletableFuture.completedFuture(List.of());
         }
 

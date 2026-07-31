@@ -57,7 +57,10 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     }
 
     @Override
-    public CompletableFuture<Result> list(int requestedPage, Predicate<String> hasPermission) {
+    public CompletableFuture<Result> list(
+            int requestedPage,
+            Predicate<String> hasPermission
+    ) {
         var current = config;
         return warps.warps()
                 .handle((available, failure) -> {
@@ -349,9 +352,9 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                         )));
                     }
 
-                    var options = new TeleportOptions()
-                            .safe(current.safe())
-                            .warmupSeconds(
+                    var options = TeleportOptions.defaults()
+                            .withSafe(current.safe())
+                            .withWarmup(
                                     request.bypassWarmup()
                                             ? 0
                                             : current.warmupSeconds()

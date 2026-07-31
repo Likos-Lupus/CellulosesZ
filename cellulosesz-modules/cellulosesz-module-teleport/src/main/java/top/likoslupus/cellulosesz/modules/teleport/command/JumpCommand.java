@@ -1,47 +1,65 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
-public final class JumpCommand extends AbstractTeleportCommand {
+import java.util.List;
+
+import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+
+public final class JumpCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
+    private final int maximumDistance;
 
     public JumpCommand(
-            PlatformService platform,
-            TeleportService teleports
+            TeleportCommandService service,
+            PlayerDirectory players,
+            int maximumDistance
     ) {
-        super(platform, teleports);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.maximumDistance = requirePositive(maximumDistance, "maximumDistance");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.jump";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "jump",
+                "cellulosesz.teleport.jump",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        var root = Commands.literal("jump")
+                .executes(command ->
+                        TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "jump",
+                                players,
+                                player -> service.jump(player, maximumDistance)
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.jump",
+                "/jump",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "jump";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var target = platform.targetLocation(self.get(), 120)
-                .flatMap(platform::safeLocation);
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.teleport.jump-command.error.no-valid-teleport-target-found");
-            return 0;
-        }
-
-        return teleport(invocation, self.get(), target.get());
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

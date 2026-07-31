@@ -1,24 +1,53 @@
 package top.likoslupus.cellulosesz.api.admin;
 
-import org.jspecify.annotations.Nullable;
-
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
-public final class JailedPlayer {
+import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
-    public UUID uuid = new UUID(0L, 0L);
-    public String name = "";
-    public String jail = "";
-    public String reason = "";
-    public String actor = "console";
-    public long createdAt;
-    public @Nullable Long expiresAt;
-    public @Nullable CellLocation returnLocation;
+public record JailedPlayer(
+        UUID uuid,
+        String name,
+        String jail,
+        String reason,
+        String actor,
+        Instant createdAt,
+        Expiration expiration,
+        Optional<CellLocation> returnLocation,
+        JailState state
+) {
 
-    public boolean expired(long now) {
-        return expiresAt != null && expiresAt <= now;
+    public JailedPlayer {
+        requireNonNull(uuid, "uuid");
+        name = requireNonBlank(name, "name").trim();
+        jail = requireNonBlank(jail, "jail").trim();
+        reason = requireNonNull(reason, "reason");
+        actor = requireNonBlank(actor, "actor").trim();
+        requireNonNull(createdAt, "createdAt");
+        requireNonNull(expiration, "expiration");
+        returnLocation = requireNonNull(returnLocation, "returnLocation").map(JailedPlayer::copy);
+        requireNonNull(state, "state");
+    }
+
+    private static CellLocation copy(CellLocation value) {
+        return new CellLocation(
+                value.world,
+                value.x, value.y, value.z,
+                value.yaw, value.pitch
+        );
+    }
+
+    @Override
+    public Optional<CellLocation> returnLocation() {
+        return returnLocation.map(JailedPlayer::copy);
+    }
+
+    public boolean expired(Instant now) {
+        return state == JailState.ACTIVE && expiration.expired(now);
     }
 
 }

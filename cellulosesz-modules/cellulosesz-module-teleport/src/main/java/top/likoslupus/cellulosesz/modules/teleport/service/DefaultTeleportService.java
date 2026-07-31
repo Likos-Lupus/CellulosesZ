@@ -1,37 +1,70 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
-import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.teleport.*;
 
+import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicReference;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultTeleportService implements TeleportService {
 
-    private final PlatformService platform;
+    private final TeleportOperations operations;
+    private final PlayerLocationPlatformService locations;
+    private final ServerThreadExecutor serverThread;
     private final Scheduler scheduler;
     private final BackLocationService backLocations;
-    private final SafeLocationFinder safeLocations;
+    private final Clock clock;
     private final Map<UUID, PendingWarmup> warmups = new ConcurrentHashMap<>();
 
     public DefaultTeleportService(
-            PlatformService platform,
+            TeleportOperations operations,
+            PlayerLocationPlatformService locations,
+            ServerThreadExecutor serverThread,
             Scheduler scheduler,
             BackLocationService backLocations,
-            SafeLocationFinder safeLocations
+            Clock clock
     ) {
-        this.platform = platform;
-        this.scheduler = scheduler;
-        this.backLocations = backLocations;
-        this.safeLocations = safeLocations;
+        this.operations = requireNonNull(operations, "operations");
+        this.locations = requireNonNull(locations, "locations");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
+        this.scheduler = requireNonNull(scheduler, "scheduler");
+        this.backLocations = requireNonNull(backLocations, "backLocations");
+        this.clock = requireNonNull(clock, "clock");
+    }
+
+    private static void completeFailure(
+            CompletableFuture<TeleportResult> result,
+            Throwable failure,
+            TeleportStatus status,
+            String key
+    ) {
+        var cause = failure;
+        while (cause instanceof CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        result.complete(
+                TeleportResult.failed(status, key,
+                        Map.of("reason", cause.getClass().getSimpleName()))
+        );
+    }
+
+    private static CellLocation copy(CellLocation value) {
+        return new CellLocation(
+                value.world,
+                value.x, value.y, value.z,
+                value.yaw, value.pitch
+        );
     }
 
     @Override
@@ -40,143 +73,80 @@ public final class DefaultTeleportService implements TeleportService {
             CellLocation target,
             TeleportOptions options
     ) {
-        var future = new CompletableFuture<TeleportResult>();
-        var resolvedOptions = ResolvedOptions.from(options);
-        var origin = platform.location(player);
-        if (!resolvedOptions.allowCrossWorld && !origin.world.equals(target.world)) {
-            future.complete(TeleportResult.failed("service.teleport.cross-world-disabled", target));
-            return future;
-        }
+        requireNonNull(player, "player");
+        requireNonNull(target, "target");
+        requireNonNull(options, "options");
 
-        var destination = resolvedOptions.safe
-                ? safeLocations.safeLocation(target)
-                : Optional.of(target);
-        if (destination.isEmpty()) {
-            future.complete(TeleportResult.failed("service.teleport.unsafe", target));
-            return future;
-        }
+        var result = new CompletableFuture<TeleportResult>();
+        serverThread
+                .submit(() -> prepare(player, target, options))
+                .whenComplete((prepared, failure) -> {
+                    if (failure != null) {
+                        completeFailure(
+                                result,
+                                failure,
+                                TeleportStatus.PLATFORM_FAILURE,
+                                "service.teleport.exception"
+                        );
+                        return;
+                    }
 
-        if (resolvedOptions.warmupSeconds <= 0) {
-            cancelWarmup(player.uuid(), "service.teleport.cancelled-replaced");
-            scheduler.sync(() -> execute(player, destination.get(), resolvedOptions, future));
-            return future;
-        }
+                    if (prepared.failure().isPresent()) {
+                        result.complete(prepared.failure().orElseThrow());
+                        return;
+                    }
 
-        var pendingRef = new AtomicReference<@Nullable PendingWarmup>();
-        Runnable action = () -> {
-            var pending = pendingRef.get();
-            if (pending == null || !warmups.remove(player.uuid(), pending)) return;
-            execute(player, destination.get(), resolvedOptions, future);
-        };
+                    if (options.warmupSeconds() == 0) {
+                        execute(
+                                player,
+                                target,
+                                options,
+                                result
+                        );
+                        return;
+                    }
 
-        var handle = scheduler.syncLater(action, resolvedOptions.warmupSeconds * 20L);
-        var pending = new PendingWarmup(handle, future, destination.get());
-        pendingRef.set(pending);
-        var replaced = warmups.put(player.uuid(), pending);
-        if (replaced != null) {
-            cancelPending(replaced, "service.teleport.cancelled-replaced");
-        }
-        return future;
-    }
+                    scheduleWarmup(
+                            player,
+                            target,
+                            options,
+                            result
+                    );
+                });
 
-    private void execute(
-            CellPlayer player,
-            CellLocation destination,
-            ResolvedOptions options,
-            CompletableFuture<TeleportResult> future
-    ) {
-        if (future.isDone()) return;
-
-        var checkedDestination = options.safe
-                ? safeLocations.safeLocation(destination)
-                : Optional.of(destination);
-        if (checkedDestination.isEmpty()) {
-            future.complete(TeleportResult.failed("service.teleport.unsafe", destination));
-            return;
-        }
-
-        var target = checkedDestination.orElseThrow();
-        var origin = platform.location(player);
-        if (!options.allowCrossWorld && !origin.world.equals(target.world)) {
-            future.complete(TeleportResult.failed("service.teleport.cross-world-disabled", target));
-            return;
-        }
-
-        var previousBack = backLocations.location(player.uuid());
-        var precommit = options.rememberBack
-                ? backLocations.remember(player.uuid(), origin)
-                : CompletableFuture.completedFuture(null);
-
-        precommit.whenComplete((unused, persistenceFailure) -> {
-            if (persistenceFailure != null) {
-                future.complete(TeleportResult.failed(
-                        "service.teleport.back-persistence-failed",
-                        target
-                ));
-                return;
-            }
-            platform.callOnServerThread(() -> platform.teleport(player, target))
-                    .thenCompose(value -> value)
-                    .handle((success, failure) -> new PlatformOutcome(Boolean.TRUE.equals(success), failure))
-                    .thenCompose(outcome -> {
-                        if (outcome.success()) return CompletableFuture.completedFuture(outcome);
-                        return restoreBack(player.uuid(), previousBack, options.rememberBack)
-                                .handle((rollbackUnused, rollbackFailure) -> outcome.withRollbackFailure(rollbackFailure));
-                    })
-                    .whenComplete((outcome, chainFailure) -> {
-                        if (future.isDone()) return;
-                        if (chainFailure != null || outcome.rollbackFailure() != null) {
-                            future.complete(TeleportResult.failed(
-                                    "service.teleport.back-rollback-failed",
-                                    target
-                            ));
-                        } else if (outcome.success()) {
-                            future.complete(TeleportResult.success(target));
-                        } else if (outcome.failure() != null) {
-                            future.complete(TeleportResult.failed(
-                                    "service.teleport.exception",
-                                    Map.of("reason", failureMessage(outcome.failure())),
-                                    target
-                            ));
-                        } else {
-                            future.complete(TeleportResult.failed("service.teleport.failed", target));
-                        }
-                    });
-        });
-    }
-
-    private void cancelPending(PendingWarmup pending, String messageKey) {
-        pending.handle.cancel();
-        pending.future.complete(TeleportResult.failed(messageKey, pending.destination));
-    }
-
-    private CompletableFuture<Void> restoreBack(
-            UUID uuid,
-            Optional<CellLocation> previous,
-            boolean changed
-    ) {
-        if (!changed) return CompletableFuture.completedFuture(null);
-        return previous.isPresent()
-                ? backLocations.remember(uuid, previous.orElseThrow())
-                : backLocations.forget(uuid);
-    }
-
-    private String failureMessage(Throwable failure) {
-        var cause = failure;
-        while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        var message = cause.getMessage();
-        return message == null || message.isBlank() ? cause.getClass().getSimpleName() : message;
+        return result;
     }
 
     @Override
-    public boolean cancelWarmup(UUID uuid, String messageKey) {
-        var pending = warmups.remove(uuid);
-        if (pending == null) return false;
+    public boolean cancelWarmup(UUID uuid, TeleportStatus status) {
+        requireNonNull(status, "status");
+        if (!status.name().startsWith("CANCELLED_")) {
+            throw new IllegalArgumentException("cancellation status required");
+        }
 
-        cancelPending(pending, messageKey);
+        var pending = warmups.remove(uuid);
+        if (pending == null) {
+            return false;
+        }
+
+        cancelPending(pending, status);
         return true;
+    }
+
+    private void cancelPending(PendingWarmup pending, TeleportStatus status) {
+        pending.handle().cancel();
+        pending.future().complete(TeleportResult.failed(status, cancellationKey(status)));
+    }
+
+    private static String cancellationKey(TeleportStatus status) {
+        return switch (status) {
+            case CANCELLED_MOVE -> "service.teleport.cancelled-move";
+            case CANCELLED_DAMAGE -> "service.teleport.cancelled-damage";
+            case CANCELLED_DEATH -> "service.teleport.cancelled-death";
+            case CANCELLED_DISCONNECT -> "service.teleport.cancelled-disconnect";
+            case CANCELLED_REPLACED -> "service.teleport.cancelled-replaced";
+            default -> throw new IllegalArgumentException("not a cancellation status: " + status);
+        };
     }
 
     @Override
@@ -199,45 +169,199 @@ public final class DefaultTeleportService implements TeleportService {
         return backLocations.location(uuid);
     }
 
-    private record PlatformOutcome(
-            boolean success,
-            @Nullable Throwable failure,
-            @Nullable Throwable rollbackFailure
-    ) {
+    @Override
+    public void shutdown() {
+        warmups.forEach((_, pending) ->
+                cancelPending(pending, TeleportStatus.CANCELLED_REPLACED)
+        );
+        warmups.clear();
+    }
 
-        private PlatformOutcome(boolean success, @Nullable Throwable failure) {
-            this(success, failure, null);
+    private void scheduleWarmup(
+            CellPlayer player,
+            CellLocation target,
+            TeleportOptions options,
+            CompletableFuture<TeleportResult> result
+    ) {
+        final long ticks;
+        try {
+            ticks = Math.multiplyExact(options.warmupSeconds(), 20L);
+        } catch (ArithmeticException failure) {
+            result.complete(TeleportResult.failed(
+                    TeleportStatus.PLATFORM_FAILURE,
+                    "service.teleport.invalid-warmup"
+            ));
+            return;
         }
 
-        private PlatformOutcome withRollbackFailure(@Nullable Throwable rollbackFailure) {
-            return new PlatformOutcome(success, failure, rollbackFailure);
+        final PendingWarmup[] holder = new PendingWarmup[1];
+        var handle = scheduler
+                .syncLater(
+                        () -> {
+                            var pending = holder[0];
+                            if (!warmups.remove(player.uuid(), pending) || result.isDone()) {
+                                return;
+                            }
+                            execute(player, target, options, result);
+                        },
+                        ticks
+                );
+
+        var pending = new PendingWarmup(handle, result);
+        holder[0] = pending;
+
+        var replaced = warmups.put(player.uuid(), pending);
+        if (replaced != null) {
+            cancelPending(replaced, TeleportStatus.CANCELLED_REPLACED);
+        }
+    }
+
+    private void execute(
+            CellPlayer player,
+            CellLocation requested,
+            TeleportOptions options,
+            CompletableFuture<TeleportResult> result
+    ) {
+        serverThread
+                .submit(() -> prepare(player, requested, options))
+                .whenComplete((prepared, failure) -> {
+                    if (failure != null) {
+                        completeFailure(
+                                result,
+                                failure,
+                                TeleportStatus.PLATFORM_FAILURE,
+                                "service.teleport.exception"
+                        );
+                        return;
+                    }
+
+                    if (prepared.failure().isPresent()) {
+                        result.complete(prepared.failure().orElseThrow());
+                        return;
+                    }
+
+                    var value = prepared.value().orElseThrow();
+                    var previousBack = backLocations.location(player.uuid());
+                    var precommit = options.rememberBack()
+                            ? backLocations.remember(player.uuid(), value.origin())
+                            : CompletableFuture.completedFuture(null);
+
+                    precommit
+                            .whenComplete((_, persistenceFailure) -> {
+                                if (persistenceFailure != null) {
+                                    result.complete(TeleportResult.failed(
+                                            TeleportStatus.BACK_PERSISTENCE_FAILURE,
+                                            "service.teleport.back-persistence-failed"
+                                    ));
+                                    return;
+                                }
+
+                                serverThread
+                                        .submit(() -> operations.move(player, value.destination()))
+                                        .whenComplete((move, moveFailure) -> {
+                                            if (moveFailure == null && move.successful()) {
+                                                result.complete(TeleportResult.success(value.destination()));
+                                                return;
+                                            }
+
+                                            restoreBack(player.uuid(), previousBack, options.rememberBack())
+                                                    .whenComplete((_, rollbackFailure) -> {
+                                                        if (rollbackFailure != null) {
+                                                            result.complete(TeleportResult.failed(
+                                                                    TeleportStatus.ROLLBACK_FAILURE,
+                                                                    "service.teleport.back-rollback-failed"
+                                                            ));
+                                                        } else if (moveFailure != null) {
+                                                            completeFailure(
+                                                                    result,
+                                                                    moveFailure,
+                                                                    TeleportStatus.PLATFORM_FAILURE,
+                                                                    "service.teleport.exception"
+                                                            );
+                                                        } else {
+                                                            result.complete(TeleportResult.failed(
+                                                                    TeleportStatus.PLATFORM_FAILURE,
+                                                                    "service.teleport.failed"
+                                                            ));
+                                                        }
+                                                    });
+                                        });
+                            });
+                });
+    }
+
+    private PreparedResult prepare(
+            CellPlayer player,
+            CellLocation requested,
+            TeleportOptions options
+    ) {
+        // Accessing the injected clock here makes preparation deterministic under tests and avoids scattered wall clocks.
+        clock.instant();
+        var origin = locations.currentLocation(player);
+
+        if (!options.allowCrossWorld() && !origin.world.equals(requested.world)) {
+            return PreparedResult.failure(TeleportResult.failed(
+                    TeleportStatus.CROSS_WORLD_DISABLED,
+                    "service.teleport.cross-world-disabled"
+            ));
+        }
+
+        if (!options.safe()) {
+            return PreparedResult.success(new Prepared(copy(origin), copy(requested)));
+        }
+
+        var safe = operations.safeLocation(requested);
+        if (!safe.successful() || safe.value().isEmpty()) {
+            return PreparedResult.failure(TeleportResult.failed(
+                    TeleportStatus.UNSAFE_DESTINATION,
+                    "service.teleport.unsafe"
+            ));
+        }
+
+        return PreparedResult.success(new Prepared(
+                copy(origin),
+                copy(safe.value().orElseThrow())
+        ));
+    }
+
+    private CompletableFuture<Void> restoreBack(
+            UUID uuid,
+            Optional<CellLocation> previous,
+            boolean changed
+    ) {
+        return !changed
+                ? CompletableFuture.completedFuture(null)
+                : previous.isPresent()
+                        ? backLocations.remember(uuid, previous.orElseThrow())
+                        : backLocations.forget(uuid);
+    }
+
+    private record Prepared(
+            CellLocation origin,
+            CellLocation destination
+    ) {
+
+    }
+
+    private record PreparedResult(
+            Optional<Prepared> value,
+            Optional<TeleportResult> failure
+    ) {
+
+        static PreparedResult success(Prepared value) {
+            return new PreparedResult(Optional.of(value), Optional.empty());
+        }
+
+        static PreparedResult failure(TeleportResult failure) {
+            return new PreparedResult(Optional.empty(), Optional.of(failure));
         }
 
     }
 
     private record PendingWarmup(
             TaskHandle handle,
-            CompletableFuture<TeleportResult> future,
-            CellLocation destination
+            CompletableFuture<TeleportResult> future
     ) {
-
-    }
-
-    private record ResolvedOptions(
-            boolean safe,
-            boolean rememberBack,
-            boolean allowCrossWorld,
-            int warmupSeconds
-    ) {
-
-        private static ResolvedOptions from(TeleportOptions options) {
-            return new ResolvedOptions(
-                    options.safe(),
-                    options.rememberBack(),
-                    options.allowCrossWorld(),
-                    Math.max(0, options.warmupSeconds())
-            );
-        }
 
     }
 

@@ -1,56 +1,73 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.Jail;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class DelJailCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final JailService jails;
+public final class DelJailCommand implements CommandContributor {
 
-    public DelJailCommand(
-            PlatformService platform,
-            UserService users,
-            JailService jails
-    ) {
-        super(platform, users);
-        this.jails = jails;
+    private final JailCommandService service;
+
+    public DelJailCommand(JailCommandService service) {
+        this.service = requireNonNull(service, "service");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.jail.delete";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "deljail",
+                "cellulosesz.admin.jail.delete",
+                CommandSourceKind.ANY
+        );
+
+        var argument = Commands.argument(
+                        "name",
+                        StringArgumentType.word()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                () -> service.jails()
+                                        .stream()
+                                        .map(Jail::name)
+                                        .toList(),
+                                builder
+                        )
+                )
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "deljail",
+                        _ -> service.delete(
+                                StringArgumentType.getString(
+                                        command,
+                                        "name"
+                                )
+                        )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.deljail",
+                "/deljail <name>",
+                Commands.literal("deljail").then(argument)
+        );
     }
 
     @Override
-    public String usage() {
-        return "/deljail <name>";
-    }
-
-    @Override
-    public String name() {
-        return "deljail";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1) {
-            invocation.errorKey(
-                    "commands.admin.del-jail-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        jails.deleteJail(invocation.args()[0]).whenComplete((result, failure) -> {
-            if (failure != null) invocation.errorKey("service.admin.persistence-failed");
-            else if (result.success()) invocation.reply(result.message());
-            else invocation.error(result.message());
-        });
-        return 1;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

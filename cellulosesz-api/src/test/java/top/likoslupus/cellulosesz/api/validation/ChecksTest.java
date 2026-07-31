@@ -21,7 +21,7 @@ final class ChecksTest {
         assertEquals(3, Checks.requireInRange(3, 3, 7, "count"));
         assertEquals(7L, Checks.requireInRange(7L, 3L, 7L, "count"));
         assertEquals(1.5D, Checks.requireInRange(1.5D, 1.5D, 2.5D, "ratio"));
-        Checks.requireState(true, "ready");
+        Checks.requireTrue(true, "ready");
     }
 
     @Test
@@ -42,7 +42,7 @@ final class ChecksTest {
         assertThrows(IllegalArgumentException.class, () -> Checks.requireNonNegative(Double.NEGATIVE_INFINITY, "ratio"));
         assertThrows(IllegalArgumentException.class, () -> Checks.requirePositive(Double.NaN, "ratio"));
         assertThrows(IllegalArgumentException.class, () -> Checks.requireInRange(Double.POSITIVE_INFINITY, 0.0D, 1.0D, "ratio"));
-        assertThrows(IllegalStateException.class, () -> Checks.requireState(false, "not ready"));
+        assertThrows(IllegalStateException.class, () -> Checks.requireTrue(false, "not ready"));
         assertThrows(IllegalArgumentException.class, () -> Checks.requireMaxLength("abcd", 3, "name"));
         assertThrows(IllegalArgumentException.class, () -> Checks.requireNoControlCharacters("a\nb", "command"));
         assertEquals("plain", Checks.requireNoControlCharacters("plain", "command"));

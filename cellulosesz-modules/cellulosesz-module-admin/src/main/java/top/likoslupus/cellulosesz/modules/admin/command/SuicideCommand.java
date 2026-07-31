@@ -1,57 +1,74 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.KillKind;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class SuicideCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final PlayerStatePlatformService players;
+public final class SuicideCommand implements CommandContributor {
+
+    private final PlayerControlCommandService service;
+    private final PlayerDirectory players;
 
     public SuicideCommand(
-            PlatformService platform,
-            PlayerStatePlatformService players
+            PlayerControlCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.players = players;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.suicide";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "suicide",
+                "cellulosesz.command.suicide",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("suicide")
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "suicide",
+                        policy -> AdminCommandResults.current(
+                                        policy,
+                                        players
+                                )
+                                .map(service::suicide)
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                AdminResult.failure(
+                                                        AdminStatus.INVALID_INPUT,
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.suicide",
+                "/suicide",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "suicide";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 0) {
-            invocation.errorKey("commands.admin.suicide.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var player = platform.player(invocation).orElseThrow();
-        var result = players.kill(player, KillKind.SUICIDE, false);
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.admin.suicide.goodbye");
-        invocation.replyKey("commands.admin.suicide.success", Map.of("player", player.name()));
-        return 1;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

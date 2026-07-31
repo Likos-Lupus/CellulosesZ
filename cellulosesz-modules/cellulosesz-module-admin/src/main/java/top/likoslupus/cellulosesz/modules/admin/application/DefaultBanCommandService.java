@@ -1,0 +1,260 @@
+package top.likoslupus.cellulosesz.modules.admin.application;
+
+import top.likoslupus.cellulosesz.api.admin.*;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
+import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
+
+import java.net.InetAddress;
+import java.time.Duration;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
+
+public final class DefaultBanCommandService implements BanCommandService {
+
+    private final BanService bans;
+    private final TempBanService temporary;
+    private final PlayerResolver resolver;
+    private final PlayerDirectory players;
+    private final PlayerNetworkService networks;
+    private final AddressBookService addresses;
+    private final ServerThreadExecutor serverThread;
+    private final AdminConfig config;
+
+    public DefaultBanCommandService(
+            BanService bans,
+            TempBanService temporary,
+            PlayerResolver resolver,
+            PlayerDirectory players,
+            PlayerNetworkService networks,
+            AddressBookService addresses,
+            ServerThreadExecutor serverThread,
+            AdminConfig config
+    ) {
+        this.bans = requireNonNull(bans, "bans");
+        this.temporary = requireNonNull(temporary, "temporary");
+        this.resolver = requireNonNull(resolver, "resolver");
+        this.players = requireNonNull(players, "players");
+        this.networks = requireNonNull(networks, "networks");
+        this.addresses = requireNonNull(addresses, "addresses");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
+        this.config = requireNonNull(config, "config");
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> ban(
+            String player,
+            AdminActor actor,
+            String reason
+    ) {
+        return resolve(player, actor)
+                .thenCompose(target -> target.isEmpty()
+                        ? notFound(player)
+                        : serverThread
+                                .submit(() -> bans.ban(
+                                        target.orElseThrow().uuid(),
+                                        target.orElseThrow().name(),
+                                        actor,
+                                        reason(reason)
+                                ))
+                );
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> unban(String player, AdminActor actor) {
+        return resolve(player, actor)
+                .thenCompose(target -> {
+                    if (target.isEmpty()) {
+                        return notFound(player);
+                    }
+
+                    var value = target.orElseThrow();
+                    return serverThread
+                            .submit(() -> bans.unban(
+                                    value.uuid(),
+                                    value.name(),
+                                    actor
+                            ))
+                            .thenCompose(permanent ->
+                                    temporary.unban(
+                                                    value.uuid(),
+                                                    value.name(),
+                                                    actor
+                                            )
+                                            .thenApply(temp -> permanent.success() || temp.success() ?
+                                                    AdminResult.success(
+                                                            "service.admin.unban-success",
+                                                            Map.of("player", value.name())
+                                                    ) :
+                                                    permanent
+                                            )
+                            );
+                });
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> banIp(
+            NetworkTargetInput target,
+            AdminActor actor,
+            String reason
+    ) {
+        return address(target, actor)
+                .thenCompose(value -> value.isEmpty()
+                        ? missingAddress(target)
+                        : serverThread
+                                .submit(() -> bans.banIp(
+                                        value.orElseThrow(),
+                                        actor,
+                                        reason(reason)
+                                ))
+                );
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> unbanIp(InetAddress address, AdminActor actor) {
+        return serverThread
+                .submit(() -> bans.unbanIp(address, actor))
+                .thenCompose(permanent -> temporary.unbanIp(address, actor)
+                        .thenApply(temp -> permanent.success() || temp.success() ?
+                                AdminResult.success(
+                                        "service.admin.unban-ip-success",
+                                        Map.of("address", IpAddresses.canonical(address))
+                                ) :
+                                permanent
+                        )
+                );
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> tempBan(
+            String player,
+            AdminActor actor,
+            Duration duration,
+            String reason
+    ) {
+        return resolve(player, actor)
+                .thenCompose(target -> target.isEmpty()
+                        ? notFound(player)
+                        : temporary.tempBan(
+                                target.orElseThrow().uuid(),
+                                target.orElseThrow().name(),
+                                actor,
+                                duration,
+                                reason(reason)
+                        )
+                );
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> tempBanIp(
+            NetworkTargetInput target,
+            AdminActor actor,
+            Duration duration,
+            String reason
+    ) {
+        return address(target, actor)
+                .thenCompose(value -> value.isEmpty()
+                        ? missingAddress(target)
+                        : temporary.tempBanIp(
+                                value.orElseThrow(),
+                                actor,
+                                duration,
+                                reason(reason)
+                        )
+                );
+    }
+
+    private CompletableFuture<Optional<InetAddress>> address(
+            NetworkTargetInput input,
+            AdminActor actor
+    ) {
+        if (input instanceof NetworkTargetInput.Address(InetAddress address)) {
+            return CompletableFuture.completedFuture(Optional.of(address));
+        }
+
+        var name = ((NetworkTargetInput.PlayerName) input).name();
+        return resolver
+                .resolve(
+                        name,
+                        actor.uuid()
+                                .flatMap(players::onlinePlayer)
+                                .orElse(null)
+                ).thenApply(resolved -> {
+                    if (resolved.optionalUuid().isEmpty()) {
+                        return Optional.empty();
+                    }
+
+                    var online = resolved.online()
+                            .flatMap(networks::address);
+                    return online
+                            .or(() -> addresses.address(resolved.optionalUuid().orElseThrow()))
+                            .or(() -> addresses.address(resolved.name()));
+                });
+    }
+
+    private static CompletableFuture<AdminResult> missingAddress(NetworkTargetInput target) {
+        var label = target instanceof NetworkTargetInput.PlayerName(String name)
+                ? name
+                : "address";
+        return CompletableFuture.completedFuture(AdminResult.failure(
+                AdminStatus.NOT_FOUND,
+                "service.admin.address-not-found",
+                Map.of("player", label)
+        ));
+    }
+
+    private CompletableFuture<Optional<Target>> resolve(
+            String input,
+            AdminActor actor
+    ) {
+        return resolver
+                .resolve(
+                        input,
+                        actor.uuid()
+                                .flatMap(players::onlinePlayer)
+                                .orElse(null)
+                )
+                .thenApply(value -> value.optionalUuid().map(
+                        uuid -> new Target(uuid, value.name())
+                ));
+    }
+
+    private static CompletableFuture<AdminResult> notFound(String player) {
+        return CompletableFuture.completedFuture(AdminResult.failure(
+                AdminStatus.NOT_FOUND,
+                "commands.common.player-not-found",
+                Map.of("player", player)
+        ));
+    }
+
+    private String reason(String input) {
+        var value = input.trim();
+
+        if (value.isBlank()) {
+            value = config.defaultReason;
+        }
+        if (value.length() > config.maximumReasonLength
+                || value.chars().anyMatch(Character::isISOControl)
+        ) {
+            throw new IllegalArgumentException("invalid reason");
+        }
+
+        return value;
+    }
+
+    private record Target(
+            UUID uuid,
+            String name
+    ) {
+
+    }
+
+}

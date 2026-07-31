@@ -1,5 +1,8 @@
 package top.likoslupus.cellulosesz.api.admin;
 
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+
+import java.net.InetAddress;
 import java.util.UUID;
 
 public interface BanService {
@@ -7,35 +10,29 @@ public interface BanService {
     AdminResult ban(
             UUID targetId,
             String targetName,
-            String actor,
+            AdminActor actor,
             String reason
     );
 
     AdminResult unban(
             UUID targetId,
             String targetName,
-            String actor
+            AdminActor actor
     );
 
     AdminResult banIp(
-            String target,
-            String actor,
+            InetAddress target,
+            AdminActor actor,
             String reason
     );
 
     AdminResult unbanIp(
-            String target,
-            String actor
+            InetAddress target,
+            AdminActor actor
     );
 
     AdminResult kick(
-            String target,
-            String actor,
-            String reason
-    );
-
-    AdminResult kickAll(
-            String actor,
+            CellPlayer target,
             String reason
     );
 

@@ -1,72 +1,84 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class SetJailCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final JailService jails;
+public final class SetJailCommand implements CommandContributor {
+
+    private final JailCommandService service;
+    private final PlayerDirectory players;
 
     public SetJailCommand(
-            PlatformService platform,
-            UserService users,
-            JailService jails
+            JailCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users);
-        this.jails = jails;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.jail.set";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "setjail",
+                "cellulosesz.admin.jail.set",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var argument = Commands.argument(
+                        "name",
+                        StringArgumentType.word()
+                )
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "setjail",
+                        policy -> AdminCommandResults.current(
+                                        policy,
+                                        players
+                                )
+                                .map(player -> service.set(
+                                        player,
+                                        StringArgumentType.getString(
+                                                command,
+                                                "name"
+                                        )
+                                ))
+                                .orElseGet(() ->
+                                        CompletableFuture.completedFuture(
+                                                AdminResult.failure(
+                                                        AdminStatus.INVALID_INPUT,
+                                                        "common.player-only"
+                                                )
+                                        )
+                                )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.setjail",
+                "/setjail <name>",
+                Commands.literal("setjail").then(argument)
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/setjail <name>";
-    }
-
-    @Override
-    public String name() {
-        return "setjail";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1) {
-            invocation.errorKey(
-                    "commands.admin.set-jail-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var self = platform.player(invocation);
-        if (self.isEmpty()) {
-            invocation.errorKey("commands.admin.set-jail-command.error.command-can-only-used-by-player");
-            return 0;
-        }
-
-        jails.setJail(
-                invocation.args()[0],
-                platform.location(self.get()),
-                actor(invocation)
-        ).whenComplete((result, failure) -> {
-            if (failure != null) invocation.errorKey("service.admin.persistence-failed");
-            else if (result.success()) invocation.reply(result.message());
-            else invocation.error(result.message());
-        });
-        return 1;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

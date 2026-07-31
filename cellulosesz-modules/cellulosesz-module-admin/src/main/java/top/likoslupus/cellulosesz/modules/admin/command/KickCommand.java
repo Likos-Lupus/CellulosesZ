@@ -1,70 +1,106 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.BanService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class KickCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final BanService bans;
+public final class KickCommand implements CommandContributor {
+
+    private final ModerationCommandService service;
+    private final PlayerDirectory players;
 
     public KickCommand(
-            PlatformService platform,
-            UserService users,
-            BanService bans
+            ModerationCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users);
-        this.bans = bans;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.kick";
-    }
-
-    @Override
-    public String usage() {
-        return "/kick <player> [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "kick";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1) {
-            invocation.errorKey(
-                    "commands.admin.kick-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var target = invocation.resolvePlayer(invocation.args()[0]).online();
-        if (target.isEmpty()) {
-            invocation.errorKey(
-                    "commands.admin.abstract-admin-command.error.online-player-not-found",
-                    Map.of("player", invocation.args()[0])
-            );
-            return 0;
-        }
-
-        var result = bans.kick(
-                target.get().name(),
-                actor(invocation),
-                join(invocation.args(), 1)
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "kick",
+                "cellulosesz.admin.kick",
+                CommandSourceKind.ANY
         );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+
+        var target = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ""
+                ))
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.kick",
+                "/kick <player> [reason]",
+                Commands.literal("kick").then(target)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String reason
+    ) {
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "kick reason-present=" + !reason.isBlank(),
+                policy -> service.kick(
+                        PlayerNameArgument.get(command, "player"),
+                        AdminCommandResults.actor(policy, players),
+                        reason
+                )
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

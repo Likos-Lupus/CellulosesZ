@@ -1,128 +1,128 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportPreferenceCommandService;
 
-import java.util.Locale;
-import java.util.Map;
-import java.util.UUID;
+import java.util.List;
+import java.util.Optional;
 
-public final class TpToggleCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final UserService users;
+public final class TpToggleCommand implements CommandContributor {
+
+    private final TeleportPreferenceCommandService service;
+    private final PlayerDirectory players;
 
     public TpToggleCommand(
-            PlatformService platform,
-            UserService users
+            TeleportPreferenceCommandService service,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.users = users;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.tptoggle";
-    }
-
-    @Override
-    public String usage() {
-        return "/tptoggle [player] [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "tptoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-
-        if (args.length > 2) {
-            return usage(invocation);
-        }
-
-        UUID uuid;
-        String name;
-        String mode = "";
-        if (args.length == 0 || (args.length == 1 && isMode(args[0]))) {
-            var self = platform.player(invocation);
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.teleport.tp-toggle-command.error.command-can-only-used-by-player");
-                return 0;
-            }
-
-            uuid = self.get().uuid();
-            name = self.get().name();
-            if (args.length == 1) {
-                mode = args[0];
-            }
-        } else {
-            if (!invocation.hasPermission("cellulosesz.teleport.tptoggle.others")) {
-                invocation.errorKey("commands.teleport.tp-toggle-command.error.others");
-                return 0;
-            }
-
-            var resolved = invocation.resolvePlayer(args[0]);
-            if (resolved.optionalUuid().isEmpty()) {
-                invocation.errorKey(
-                        "commands.teleport.tp-toggle-command.error.player",
-                        Map.of("player", args[0])
-                );
-                return 0;
-            }
-
-            uuid = resolved.optionalUuid().orElseThrow();
-            name = resolved.name();
-            if (args.length == 2) {
-                mode = args[1];
-            }
-        }
-
-        if (!mode.isBlank() && !isMode(mode)) return usage(invocation);
-
-        var requestedMode = mode;
-        users.update(uuid, user -> {
-            var enabled = requestedMode.isBlank()
-                    ? !user.preferences.teleportRequests
-                    : enabled(requestedMode);
-            user.preferences.teleportRequests = enabled;
-            return enabled;
-        }).whenComplete((enabled, failure) -> platform.runOnServerThread(() -> {
-            if (failure != null) invocation.errorKey("service.user.persistence-failed");
-            else invocation.replyKey(
-                    enabled
-                            ? "commands.teleport.tp-toggle-command.enabled"
-                            : "commands.teleport.tp-toggle-command.disabled",
-                    Map.of("player", name)
-            );
-        }));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey(
-                "commands.teleport.tp-toggle-command.error.usage",
-                Map.of("usage", usage())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "tptoggle",
+                "cellulosesz.teleport.tptoggle",
+                CommandSourceKind.ANY
         );
-        return 0;
+
+        var root = Commands.literal("tptoggle")
+                .executes(command -> TeleportCommandResults.player(
+                        context,
+                        command,
+                        descriptor,
+                        "tptoggle self",
+                        players,
+                        player -> service.toggle(
+                                player, Optional.empty(), Optional.empty()
+                        )
+                ))
+                .then(Commands.argument("state", ToggleArgument.toggle())
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tptoggle self set",
+                                players,
+                                player -> service.toggle(
+                                        player,
+                                        Optional.empty(),
+                                        Optional.of(ToggleArgument.get(
+                                                command, "state"
+                                        ).enabled())
+                                )
+                        ))
+                )
+                .then(Commands.argument(
+                                        "player",
+                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.teleport.tptoggle.others"
+                                ))
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                players::onlinePlayerNames, builder
+                                        )
+                                )
+                                .executes(command -> TeleportCommandResults.player(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "tptoggle other",
+                                        players,
+                                        player -> service.toggle(
+                                                player,
+                                                Optional.of(PlayerNameArgument.get(
+                                                        command, "player"
+                                                )),
+                                                Optional.empty()
+                                        )
+                                ))
+                                .then(Commands.argument("state", ToggleArgument.toggle())
+                                        .executes(command -> TeleportCommandResults.player(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                "tptoggle other set",
+                                                players,
+                                                player -> service.toggle(
+                                                        player,
+                                                        Optional.of(PlayerNameArgument.get(
+                                                                command, "player"
+                                                        )),
+                                                        Optional.of(ToggleArgument.get(
+                                                                command, "state"
+                                                        ).enabled())
+                                                )
+                                        ))
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tptoggle",
+                "/tptoggle [on|off|player [on|off]]",
+                root
+        );
     }
 
-    private boolean isMode(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "on", "true", "enable", "off", "false", "disable" -> true;
-            default -> false;
-        };
-    }
-
-    private boolean enabled(String value) {
-        return switch (value.toLowerCase(Locale.ROOT)) {
-            case "on", "true", "enable" -> true;
-            default -> false;
-        };
+    @Override
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

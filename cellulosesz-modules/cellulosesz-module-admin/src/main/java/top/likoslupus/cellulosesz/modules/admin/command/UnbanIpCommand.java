@@ -1,82 +1,74 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.BanService;
-import top.likoslupus.cellulosesz.api.admin.TempBanService;
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
 
-import java.util.Map;
+import java.util.List;
 
-public final class UnbanIpCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final BanService bans;
-    private final TempBanService temporary;
+public final class UnbanIpCommand implements CommandContributor {
+
+    private final BanCommandService service;
+    private final PlayerDirectory players;
 
     public UnbanIpCommand(
-            BanService bans,
-            TempBanService temporary
+            BanCommandService service,
+            PlayerDirectory players
     ) {
-        this.bans = bans;
-        this.temporary = temporary;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.unbanip";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "unbanip",
+                "cellulosesz.admin.unbanip",
+                CommandSourceKind.ANY
+        );
+
+        var argument = Commands.argument(
+                        "address",
+                        NetworkTargetArgument.addressOnly()
+                )
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "unbanip",
+                        policy -> service.unbanIp(
+                                ((NetworkTargetInput.Address)
+                                        NetworkTargetArgument.get(
+                                                command,
+                                                "address"
+                                        )).address(),
+                                AdminCommandResults.actor(
+                                        policy,
+                                        players
+                                )
+                        )
+                ));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.unbanip",
+                "/unbanip <address>",
+                Commands.literal("unbanip").then(argument)
+        );
     }
 
     @Override
-    public String usage() {
-        return "/unbanip <address>";
-    }
-
-    @Override
-    public String name() {
-        return "unbanip";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 1) {
-            invocation.errorKey(
-                    "commands.admin.unban-ip.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var address = IpAddresses.normalize(invocation.args()[0]);
-        if (address.isEmpty()) {
-            invocation.errorKey(
-                    "service.admin.invalid-address",
-                    Map.of("address", invocation.args()[0])
-            );
-            return 0;
-        }
-
-        var actor = invocation.playerName().orElse("console");
-        var value = address.orElseThrow();
-        var permanent = bans.unbanIp(value, actor);
-        temporary.unbanIp(value, actor).whenComplete((temporaryResult, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.admin.persistence-failed");
-            } else if (temporaryResult.status()
-                    == top.likoslupus.cellulosesz.api.admin.AdminStatus.PERSISTENCE_FAILURE) {
-                invocation.error(temporaryResult.message());
-            } else if (permanent.success() || temporaryResult.success()) {
-                invocation.replyKey(
-                        "commands.admin.unban-ip.success",
-                        Map.of("address", value)
-                );
-            } else {
-                invocation.errorKey(
-                        "commands.admin.unban-ip.not-found",
-                        Map.of("address", value)
-                );
-            }
-        });
-        return 1;
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.api.admin;
 
+import java.net.InetAddress;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -9,11 +10,11 @@ public interface AddressBookService {
     CompletableFuture<Void> remember(
             UUID uuid,
             String name,
-            String address
+            InetAddress address
     );
 
-    Optional<String> address(UUID uuid);
+    Optional<InetAddress> address(UUID uuid);
 
-    Optional<String> address(String name);
+    Optional<InetAddress> address(String name);
 
 }

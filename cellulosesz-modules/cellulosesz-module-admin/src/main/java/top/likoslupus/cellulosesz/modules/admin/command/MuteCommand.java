@@ -1,126 +1,179 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.MuteService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
-import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
 
-import java.util.Map;
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
 
-public final class MuteCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final MuteService mutes;
-    private final AdminConfig config;
+public final class MuteCommand implements CommandContributor {
+
+    private final ModerationCommandService service;
+    private final PlayerDirectory players;
+    private final Duration maximum;
 
     public MuteCommand(
-            PlatformService platform,
-            UserService users,
-            MuteService mutes,
-            AdminConfig config
+            ModerationCommandService service,
+            PlayerDirectory players,
+            Duration maximum
     ) {
-        super(platform, users);
-        this.mutes = mutes;
-        this.config = config;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.maximum = requireNonNull(maximum, "maximum");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.mute";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "mute",
+                "cellulosesz.admin.mute",
+                CommandSourceKind.ANY
+        );
+
+        var player = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .executes(command -> mute(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty(),
+                        ""
+                ));
+
+        player.then(Commands.literal("off")
+                .executes(command -> AdminCommandResults.async(
+                        context,
+                        command,
+                        descriptor,
+                        "mute off",
+                        policy -> service.unmute(
+                                PlayerNameArgument.get(
+                                        command,
+                                        "player"
+                                ),
+                                AdminCommandResults.actor(
+                                        policy,
+                                        players
+                                )
+                        )
+                ))
+        );
+
+        player.then(Commands.literal("reason")
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> mute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.empty(),
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                )
+        );
+
+        player.then(Commands.argument(
+                                "duration",
+                                DurationArgument.duration(maximum)
+                        )
+                        .executes(command -> mute(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(
+                                        DurationArgument.get(
+                                                command,
+                                                "duration"
+                                        )
+                                ),
+                                ""
+                        ))
+                        .then(Commands.argument(
+                                                "reason",
+                                                StringArgumentType.greedyString()
+                                        )
+                                        .executes(command -> mute(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                Optional.of(
+                                                        DurationArgument.get(
+                                                                command,
+                                                                "duration"
+                                                        )
+                                                ),
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "reason"
+                                                )
+                                        ))
+                        )
+        );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.mute",
+                "/mute <player> [off|duration|reason <text>]",
+                Commands.literal("mute").then(player)
+        );
     }
 
-    @Override
-    public String usage() {
-        return "/mute <player> [duration|off] [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "mute";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.admin.mute-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var uuid = uuid(invocation, args[0]);
-        if (uuid.isEmpty()) return 0;
-
-        if (args.length >= 2
-                && (args[1].equalsIgnoreCase("off")
-                || args[1].equalsIgnoreCase("remove")
-                || args[1].equalsIgnoreCase("clear"))
-        ) {
-            mutes.unmute(uuid.get(), args[0], actor(invocation))
-                    .whenComplete((result, failure) -> complete(invocation, result, failure));
-            return 1;
-        }
-
-        @org.jspecify.annotations.Nullable Long duration = defaultDuration();
-        var reasonStart = 1;
-        if (args.length >= 2) {
-            var parsed = DurationParser.parseMillis(args[1]);
-            if (parsed.isPresent()) {
-                duration = parsed.getAsLong();
-                reasonStart = 2;
-            }
-        }
-
-        if (duration != null
-                && exceedsMaximum(duration)
-                && !invocation.hasPermission("cellulosesz.admin.mute.unlimited")
-        ) {
-            invocation.errorKey(
-                    "commands.admin.mute-command.error.maximum",
-                    Map.of("seconds", config.maximumMuteSeconds)
-            );
-            return 0;
-        }
-
-        mutes.mute(
-                uuid.get(),
-                args[0],
-                actor(invocation),
-                duration,
-                join(args, reasonStart)
-        ).whenComplete((result, failure) -> complete(invocation, result, failure));
-        return 1;
-    }
-
-    private void complete(
-            CommandInvocation invocation,
-            top.likoslupus.cellulosesz.api.admin.AdminResult result,
-            Throwable failure
+    private int mute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<Duration> duration,
+            String reason
     ) {
-        if (failure != null) invocation.errorKey("service.admin.persistence-failed");
-        else if (result.success()) invocation.reply(result.message());
-        else invocation.error(result.message());
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "mute duration=%s reason-present=%s".formatted(
+                        duration.isPresent(),
+                        !reason.isBlank()
+                ),
+                policy -> service.mute(
+                        PlayerNameArgument.get(command, "player"),
+                        AdminCommandResults.actor(policy, players),
+                        duration,
+                        reason
+                )
+        );
     }
 
-    private @org.jspecify.annotations.Nullable Long defaultDuration() {
-        if (config.defaultMuteSeconds <= 0) return null;
-        try {
-            return Math.multiplyExact(config.defaultMuteSeconds, 1000L);
-        } catch (ArithmeticException exception) {
-            return Long.MAX_VALUE;
-        }
-    }
-
-    private boolean exceedsMaximum(long durationMillis) {
-        if (config.maximumMuteSeconds < 0) return false;
-        try {
-            return durationMillis > Math.multiplyExact(config.maximumMuteSeconds, 1000L);
-        } catch (ArithmeticException exception) {
-            return false;
-        }
+    @Override
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

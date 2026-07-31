@@ -1,21 +1,31 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.teleport.*;
 
-import java.util.*;
+import java.time.Clock;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class DefaultTeleportRequestService implements TeleportRequestService {
 
-    private static final Comparator<TeleportRequest> NEWEST_FIRST = Comparator
+    private static final Comparator<TeleportRequest> OLDEST_FIRST = Comparator
             .comparingLong(TeleportRequest::createdAtMillis)
-            .reversed()
             .thenComparing(TeleportRequest::id);
 
     private final ConcurrentHashMap<UUID, RequestEntry> requestsById = new ConcurrentHashMap<>();
     private final Object mutationLock = new Object();
+    private final Clock clock;
+
+    public DefaultTeleportRequestService(Clock clock) {
+        this.clock = requireNonNull(clock, "clock");
+    }
 
     @Override
     public TeleportRequestCreateResult create(
@@ -24,34 +34,47 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
             TeleportRequestType type,
             int timeoutSeconds
     ) {
-        if (timeoutSeconds <= 0) {
-            throw new IllegalArgumentException("timeoutSeconds must be greater than zero");
+        requireNonNull(requester, "requester");
+        requireNonNull(target, "target");
+        requireNonNull(type, "type");
+        requirePositive(timeoutSeconds, "timeoutSeconds");
+
+        var now = clock.millis();
+        final long expires;
+        try {
+            expires = Math.addExact(
+                    now,
+                    Math.multiplyExact(timeoutSeconds, 1000L)
+            );
+        } catch (ArithmeticException failure) {
+            throw new IllegalArgumentException("request expiration overflows", failure);
         }
-        var now = System.currentTimeMillis();
-        var request = new TeleportRequest(
-                UUID.randomUUID(),
-                requester.uuid(),
-                target.uuid(),
-                type,
-                now,
-                Math.addExact(now, Math.multiplyExact(timeoutSeconds, 1000L))
-        );
+
         synchronized (mutationLock) {
             removeExpiredLocked(now);
-            var existing = requestsById.values().stream()
-                    .filter(entry -> entry.state == RequestState.PENDING)
+            var existing = pendingEntries().stream()
                     .map(entry -> entry.request)
                     .filter(candidate -> candidate.requester().equals(requester.uuid()))
                     .filter(candidate -> candidate.target().equals(target.uuid()))
-                    .filter(candidate -> candidate.type() == type)
-                    .findFirst();
+                    .filter(candidate -> candidate.type() == type).findFirst();
+
             if (existing.isPresent()) {
                 return new TeleportRequestCreateResult(
                         TeleportRequestCreateStatus.ALREADY_PENDING,
                         existing.orElseThrow()
                 );
             }
+
+            var request = new TeleportRequest(
+                    UUID.randomUUID(),
+                    requester.uuid(),
+                    target.uuid(),
+                    type,
+                    now,
+                    expires
+            );
             requestsById.put(request.id(), new RequestEntry(request));
+
             return new TeleportRequestCreateResult(TeleportRequestCreateStatus.CREATED, request);
         }
     }
@@ -59,28 +82,31 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
     @Override
     public List<TeleportRequest> pendingFor(UUID target) {
         synchronized (mutationLock) {
-            removeExpiredLocked(System.currentTimeMillis());
-            return requestsById.values().stream()
-                    .filter(entry -> entry.state == RequestState.PENDING)
+            removeExpiredLocked(clock.millis());
+            return pendingEntries().stream()
                     .map(entry -> entry.request)
                     .filter(request -> request.target().equals(target))
-                    .sorted(NEWEST_FIRST)
+                    .sorted(OLDEST_FIRST)
                     .toList();
         }
     }
 
     @Override
-    public Optional<TeleportRequest> pendingFor(UUID target, UUID requester) {
-        return pendingFor(target).stream()
-                .filter(request -> request.requester().equals(requester))
-                .max(Comparator.comparingLong(TeleportRequest::createdAtMillis)
-                        .thenComparing(TeleportRequest::id));
+    public List<TeleportRequest> outgoingFor(UUID requester) {
+        synchronized (mutationLock) {
+            removeExpiredLocked(clock.millis());
+            return pendingEntries().stream()
+                    .map(entry -> entry.request)
+                    .filter(request -> request.requester().equals(requester))
+                    .sorted(OLDEST_FIRST)
+                    .toList();
+        }
     }
 
     @Override
     public Optional<TeleportRequest> pending(UUID requestId) {
         synchronized (mutationLock) {
-            removeExpiredLocked(System.currentTimeMillis());
+            removeExpiredLocked(clock.millis());
             var entry = requestsById.get(requestId);
             return entry == null || entry.state != RequestState.PENDING
                     ? Optional.empty()
@@ -89,17 +115,49 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
     }
 
     @Override
-    public Optional<TeleportRequest> newestFor(UUID target) {
-        var pending = pendingFor(target);
-        return pending.isEmpty() ? Optional.empty() : Optional.of(pending.getFirst());
+    public TeleportRequestSelectionResult selectIncoming(
+            UUID target,
+            Optional<UUID> requester,
+            Optional<UUID> requestId
+    ) {
+        requireNonNull(target, "target");
+        return select(pendingFor(target).stream()
+                .filter(request -> requester.isEmpty()
+                        || request.requester().equals(requester.orElseThrow())
+                )
+                .filter(request -> requestId.isEmpty()
+                        || request.id().equals(requestId.orElseThrow())
+                ).toList()
+        );
+    }
+
+    @Override
+    public TeleportRequestSelectionResult selectOutgoing(
+            UUID requester,
+            Optional<UUID> target,
+            Optional<UUID> requestId
+    ) {
+        requireNonNull(requester, "requester");
+        return select(outgoingFor(requester).stream()
+                .filter(request -> target.isEmpty()
+                        || request.target().equals(target.orElseThrow())
+                )
+                .filter(request -> requestId.isEmpty()
+                        || request.id().equals(requestId.orElseThrow())
+                ).toList()
+        );
     }
 
     @Override
     public Optional<TeleportRequest> claim(UUID requestId) {
         synchronized (mutationLock) {
-            removeExpiredLocked(System.currentTimeMillis());
+            removeExpiredLocked(clock.millis());
+
             var entry = requestsById.get(requestId);
-            if (entry == null || entry.state != RequestState.PENDING) return Optional.empty();
+            if (entry == null || entry.state != RequestState.PENDING) {
+                return Optional.empty();
+            }
+
             entry.state = RequestState.CONSUMING;
             return Optional.of(entry.request);
         }
@@ -109,11 +167,16 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
     public boolean release(UUID requestId) {
         synchronized (mutationLock) {
             var entry = requestsById.get(requestId);
-            if (entry == null || entry.state != RequestState.CONSUMING) return false;
-            if (entry.request.expired(System.currentTimeMillis())) {
+
+            if (entry == null || entry.state != RequestState.CONSUMING) {
+                return false;
+            }
+
+            if (entry.request.expired(clock.millis())) {
                 requestsById.remove(requestId, entry);
                 return false;
             }
+
             entry.state = RequestState.PENDING;
             return true;
         }
@@ -140,52 +203,56 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
     }
 
     @Override
-    public int cancel(UUID requester, @Nullable UUID target) {
-        synchronized (mutationLock) {
-            removeExpiredLocked(System.currentTimeMillis());
-            int before = requestsById.size();
-            requestsById.entrySet().removeIf(entry -> {
-                var value = entry.getValue();
-                var request = value.request;
-                return value.state == RequestState.PENDING
-                        && request.requester().equals(requester)
-                        && (target == null || request.target().equals(target));
-            });
-            return before - requestsById.size();
-        }
-    }
-
-    @Override
     public int clearFor(UUID player) {
         synchronized (mutationLock) {
-            int before = requestsById.size();
-            requestsById.entrySet().removeIf(entry -> {
-                var request = entry.getValue().request;
-                return request.requester().equals(player) || request.target().equals(player);
-            });
+            var before = requestsById.size();
+            requestsById.entrySet()
+                    .removeIf(entry -> {
+                        var request = entry.getValue().request;
+                        return request.requester().equals(player) || request.target().equals(player);
+                    });
             return before - requestsById.size();
         }
     }
 
     @Override
-    public int clearExpired() {
+    public List<TeleportRequest> clearExpired() {
         synchronized (mutationLock) {
-            return removeExpiredLocked(System.currentTimeMillis());
+            return removeExpiredLocked(clock.millis());
         }
     }
 
-    private int removeExpiredLocked(long now) {
-        var expired = new ArrayList<UUID>();
-        requestsById.forEach((id, entry) -> {
-            if (entry.state == RequestState.PENDING && entry.request.expired(now)) expired.add(id);
-        });
-        expired.forEach(requestsById::remove);
-        return expired.size();
+    private static TeleportRequestSelectionResult select(List<TeleportRequest> matches) {
+        return switch (matches.size()) {
+            case 0 -> new TeleportRequestSelectionResult.None();
+            case 1 -> new TeleportRequestSelectionResult.Selected(matches.getFirst());
+            default -> new TeleportRequestSelectionResult.Ambiguous(matches);
+        };
+    }
+
+    private List<TeleportRequest> removeExpiredLocked(long now) {
+        var expired = requestsById.values().stream()
+                .filter(entry -> entry.state == RequestState.PENDING
+                        && entry.request.expired(now)
+                )
+                .map(entry -> entry.request)
+                .sorted(OLDEST_FIRST)
+                .toList();
+        expired.forEach(request -> requestsById.remove(request.id()));
+        return expired;
+    }
+
+    private List<RequestEntry> pendingEntries() {
+        return requestsById.values().stream()
+                .filter(entry -> entry.state == RequestState.PENDING)
+                .toList();
     }
 
     private enum RequestState {
+
         PENDING,
         CONSUMING
+
     }
 
     private static final class RequestEntry {

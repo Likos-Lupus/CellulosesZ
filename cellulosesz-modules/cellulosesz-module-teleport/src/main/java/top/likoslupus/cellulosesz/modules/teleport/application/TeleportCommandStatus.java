@@ -1,0 +1,24 @@
+package top.likoslupus.cellulosesz.modules.teleport.application;
+
+public enum TeleportCommandStatus {
+
+    SUCCESS,
+    PARTIAL_SUCCESS,
+    NOT_FOUND,
+    BLOCKED,
+    AMBIGUOUS,
+    INVALID_INPUT,
+    PERSISTENCE_FAILURE,
+    PLATFORM_FAILURE,
+    REQUEST_CHANGED,
+    UNSAFE_DESTINATION,
+    CROSS_WORLD_DISABLED,
+    BACK_PERSISTENCE_FAILURE,
+    ROLLBACK_FAILURE,
+    CANCELLED_MOVE,
+    CANCELLED_DAMAGE,
+    CANCELLED_DEATH,
+    CANCELLED_DISCONNECT,
+    CANCELLED_REPLACED
+
+}

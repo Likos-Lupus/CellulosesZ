@@ -9,8 +9,9 @@ import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
 
 public final class RandomTeleportSignHandler implements CellSignHandler {
 
@@ -25,10 +26,10 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
             RandomTeleportSettingsService settings,
             TeleportService teleports
     ) {
-        this.platform = Objects.requireNonNull(platform, "platform");
-        this.randomTeleports = Objects.requireNonNull(randomTeleports, "randomTeleports");
-        this.settings = Objects.requireNonNull(settings, "settings");
-        this.teleports = Objects.requireNonNull(teleports, "teleports");
+        this.platform = requireNonNull(platform, "platform");
+        this.randomTeleports = requireNonNull(randomTeleports, "randomTeleports");
+        this.settings = requireNonNull(settings, "settings");
+        this.teleports = requireNonNull(teleports, "teleports");
     }
 
     @Override
@@ -46,22 +47,35 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
 
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
-        var world = context.line(1).isBlank() ? context.location().world : context.line(1);
+        var world = context.line(1).isBlank()
+                ? context.location().world
+                : context.line(1);
+
         if (!platform.worlds().contains(world)) {
-            return CompletableFuture.completedFuture(SignUseResult.failure("service.sign.random-teleport-world"));
+            return CompletableFuture.completedFuture(SignUseResult.failure(
+                    "service.sign.random-teleport-world"
+            ));
         }
-        var destination = randomTeleports.randomLocation(world, settings.settings(world));
-        if (destination.isEmpty()) {
-            return CompletableFuture.completedFuture(SignUseResult.failure("service.sign.random-teleport-failed"));
+
+        var destination = randomTeleports.randomLocation(
+                world,
+                settings.settings(world)
+        );
+        if (!destination.success() || destination.location().isEmpty()) {
+            return CompletableFuture.completedFuture(SignUseResult.failure(
+                    "service.sign.random-teleport-failed"
+            ));
         }
+
         return teleports.teleport(
                         context.player(),
-                        destination.orElseThrow(),
-                        new TeleportOptions().safe(true).warmupSeconds(0)
+                        destination.location().orElseThrow(),
+                        TeleportOptions.defaults().withSafe(true).withWarmup(0)
                 )
                 .thenApply(result -> result.success()
                         ? SignUseResult.success(result.message())
-                        : SignUseResult.failure(result.message()));
+                        : SignUseResult.failure(result.message())
+                );
     }
 
 }

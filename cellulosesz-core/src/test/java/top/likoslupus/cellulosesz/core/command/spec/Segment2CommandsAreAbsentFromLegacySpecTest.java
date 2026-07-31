@@ -24,7 +24,7 @@ final class Segment2CommandsAreAbsentFromLegacySpecTest {
     @Test
     void migrationIndexContainsTheFullDirectSet() {
         assertEquals(45, ROOTS.size());
-        assertEquals(62, DirectCommandMigrationIndex.roots().size());
+        assertEquals(104, DirectCommandMigrationIndex.roots().size());
         assertTrue(DirectCommandMigrationIndex.roots().containsAll(ROOTS));
     }
 

@@ -1,69 +1,99 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandResult;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
+import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus;
 
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class WorldCommand extends AbstractTeleportCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class WorldCommand implements CommandContributor {
+
+    private final TeleportCommandService service;
+    private final PlayerDirectory players;
+    private final WorldDirectory worlds;
 
     public WorldCommand(
-            PlatformService platform,
-            TeleportService teleports
+            TeleportCommandService service,
+            PlayerDirectory players,
+            WorldDirectory worlds
     ) {
-        super(platform, teleports);
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.worlds = requireNonNull(worlds, "worlds");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.teleport.world";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = TeleportCommandResults.descriptor(
+                "world",
+                "cellulosesz.teleport.world",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("world")
+                .then(Commands.argument("world", StringArgumentType.word())
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        worlds::loadedWorldIds, builder
+                                )
+                        )
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "world",
+                                players,
+                                player -> {
+                                    var input = StringArgumentType.getString(command, "world");
+                                    var resolution = worlds.resolve(input);
+
+                                    if (resolution.worldId().isPresent()) {
+                                        var permission = "cellulosesz.teleport.world."
+                                                + resolution.worldId()
+                                                .orElseThrow()
+                                                .replace(':', '.');
+
+                                        if (!context.permissions().has(
+                                                command.getSource(), permission
+                                        )) {
+                                            return CompletableFuture.completedFuture(
+                                                    TeleportCommandResult.failure(
+                                                            TeleportCommandStatus.BLOCKED,
+                                                            "commands.common.no-permission"
+                                                    )
+                                            );
+                                        }
+                                    }
+
+                                    return service.world(player, input);
+                                }
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.world",
+                "/world <world>",
+                root
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/world <world>";
-    }
-
-    @Override
-    public String name() {
-        return "world";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length == 0) {
-            invocation.replyKey(
-                    "commands.teleport.world-command.reply.available-worlds",
-                    Map.of("worlds", String.join(", ", platform.worlds()))
-            );
-            return 1;
-        }
-
-        if (args.length != 1 || !platform.worlds().contains(args[0])) {
-            invocation.errorKey("commands.teleport.world-command.invalid-world", Map.of("world", args.length == 0
-                    ? ""
-                    : args[0]));
-            return 0;
-        }
-        var permission = "cellulosesz.teleport.world." + args[0].toLowerCase().replace(':', '.');
-        if (!invocation.hasPermission(permission)) {
-            invocation.errorKey("commands.teleport.world-no-permission", Map.of("world", args[0]));
-            return 0;
-        }
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var current = platform.location(self.get());
-        var target = current.withWorld(args[0]);
-        return teleport(invocation, self.get(), target);
+    public String moduleId() {
+        return TeleportCommandResults.MODULE;
     }
 
 }

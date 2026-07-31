@@ -1,287 +1,572 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.admin.AdminStatus;
-import top.likoslupus.cellulosesz.api.admin.BanRecord;
-import top.likoslupus.cellulosesz.api.admin.TempBanService;
+import top.likoslupus.cellulosesz.api.admin.*;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.modules.admin.data.TempBanDocument;
 
+import java.net.InetAddress;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+
+import static java.util.Objects.requireNonNull;
 
 public final class JsonTempBanService implements TempBanService, AsyncInitializable {
 
     private final StorageService storage;
     private final Path path;
-    private final PlatformService platform;
-    private final UserService users;
+    private final PlayerDirectory players;
+    private final PlayerConnectionService connections;
+    private final PlayerAudienceService audience;
+    private final PlayerNetworkService networks;
     private final MessageRenderer renderer;
-    private final LocaleResolver locales;
-    private final boolean kickOnlinePlayers;
-    private TempBanDocument document;
+    private final ServerThreadExecutor serverThread;
+    private final Clock clock;
+    private final boolean disconnectOnline;
+
+    private TempBanDocument document = new TempBanDocument();
     private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonTempBanService(
             StorageService storage,
             Path path,
-            PlatformService platform,
-            UserService users,
+            PlayerDirectory players,
+            PlayerConnectionService connections,
+            PlayerAudienceService audience,
+            PlayerNetworkService networks,
             MessageRenderer renderer,
-            LocaleResolver locales,
-            boolean kickOnlinePlayers
+            ServerThreadExecutor serverThread,
+            Clock clock,
+            boolean disconnectOnline
     ) {
-        this.storage = storage;
-        this.path = path;
-        this.platform = platform;
-        this.users = users;
-        this.renderer = renderer;
-        this.locales = locales;
-        this.kickOnlinePlayers = kickOnlinePlayers;
-        this.document = new TempBanDocument();
+        this.storage = requireNonNull(storage, "storage");
+        this.path = requireNonNull(path, "path");
+        this.players = requireNonNull(players, "players");
+        this.connections = requireNonNull(connections, "connections");
+        this.audience = requireNonNull(audience, "audience");
+        this.networks = requireNonNull(networks, "networks");
+        this.renderer = requireNonNull(renderer, "renderer");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
+        this.clock = requireNonNull(clock, "clock");
+        this.disconnectOnline = disconnectOnline;
     }
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(path, TempBanDocument.class, TempBanDocument::new)
+        return storage.createIfMissing(
+                        path,
+                        TempBanDocument.class,
+                        TempBanDocument::new
+                )
                 .thenApply(loaded -> {
-                    validate(loaded);
+                    snapshot(loaded);
                     return loaded;
                 })
                 .thenAccept(loaded -> {
                     synchronized (this) {
-                        document = loaded;
+                        document = copy(loaded);
                     }
                 });
     }
 
-    private void validate(TempBanDocument candidate) {
-        candidate.records.forEach(record -> {
-            if (record.ip()) {
-                var normalized = IpAddresses.normalize(record.address());
-                if (normalized.isEmpty() || !normalized.orElseThrow().equals(record.address())) {
-                    throw new IllegalStateException("Stored IP ban is not normalized");
-                }
-            }
+    private static List<BanRecord> snapshot(TempBanDocument source) {
+        var result = new ArrayList<BanRecord>();
+
+        source.records.forEach(
+                value -> result.add(fromDocument(value))
+        );
+
+        return List.copyOf(result);
+    }
+
+    private static TempBanDocument copy(TempBanDocument source) {
+        var target = new TempBanDocument();
+
+        source.records.forEach(value -> {
+            var next = new TempBanDocument.Record();
+
+            next.ip = value.ip;
+            next.uuid = value.uuid;
+            next.name = value.name;
+            next.address = value.address;
+            next.reason = value.reason;
+            next.actorUuid = value.actorUuid;
+            next.actorName = value.actorName;
+            next.createdAt = value.createdAt;
+            next.expiresAt = value.expiresAt;
+
+            target.records.add(next);
         });
+
+        return target;
+    }
+
+    private static BanRecord fromDocument(TempBanDocument.Record value) {
+        var actor = new AdminActor(
+                value.actorUuid.isBlank()
+                        ? Optional.empty()
+                        : Optional.of(
+                                UUID.fromString(value.actorUuid)
+                        ),
+                value.actorName
+        );
+
+        var created = Instant.ofEpochMilli(
+                value.createdAt
+        );
+
+        var expiration = Expiration.at(
+                Instant.ofEpochMilli(value.expiresAt)
+        );
+
+        if (value.ip) {
+            var address = IpAddresses.parseLiteral(
+                            value.address
+                    )
+                    .orElseThrow(() ->
+                            new IllegalStateException(
+                                    "Invalid stored IP address"
+                            )
+                    );
+
+            return BanRecord.address(
+                    address,
+                    value.reason,
+                    actor,
+                    created,
+                    expiration
+            );
+        }
+
+        return BanRecord.player(
+                UUID.fromString(value.uuid),
+                value.name,
+                value.reason,
+                actor,
+                created,
+                expiration
+        );
     }
 
     @Override
     public CompletableFuture<AdminResult> tempBan(
-            String target,
-            String actor,
-            long durationMillis,
+            UUID uuid,
+            String name,
+            AdminActor actor,
+            Duration duration,
             String reason
     ) {
-        if (durationMillis <= 0L) return completedInvalidDuration();
-        var uuid = platform.onlinePlayer(target)
-                .map(CellPlayer::uuid)
-                .or(() -> users.findUuidByName(target))
-                .orElse(null);
-        var createdAt = System.currentTimeMillis();
-        final long expiresAt;
+        final Expiration expiration;
+
         try {
-            expiresAt = Math.addExact(createdAt, durationMillis);
-        } catch (ArithmeticException exception) {
-            return completedInvalidDuration();
+            expiration = Expiration.after(
+                    clock.instant(),
+                    duration
+            );
+        } catch (IllegalArgumentException failure) {
+            return invalidDuration();
         }
-        var record = new BanRecord(uuid, target, reason, actor, createdAt, expiresAt, false, null);
+
+        var record = BanRecord.player(
+                uuid,
+                name,
+                reason,
+                actor,
+                clock.instant(),
+                expiration
+        );
+
         return mutate(current -> {
-            current.records.removeIf(existing -> !existing.ip() && same(existing, record));
-            current.records.add(record);
-            return AdminResult.success("service.admin.temp-ban-success", Map.of("player", target));
-        }).thenApply(result -> {
-            if (result.success() && kickOnlinePlayers) kickPlayer(target, reason);
-            return result;
-        });
+            current.records.removeIf(value ->
+                    !value.ip
+                            && (value.uuid.equals(
+                            uuid.toString()
+                    )
+                            || value.name.equalsIgnoreCase(name))
+            );
+
+            current.records.add(toDocument(record));
+
+            return AdminResult.success(
+                    "service.admin.temp-ban-success",
+                    Map.of("player", name)
+            );
+        }).thenCompose(result ->
+                !result.success() || !disconnectOnline
+                        ? completed(result)
+                        : disconnectUser(
+                                uuid,
+                                reason,
+                                result
+                        )
+        );
     }
 
     @Override
     public CompletableFuture<AdminResult> tempBanIp(
-            String target,
-            String actor,
-            long durationMillis,
+            InetAddress address,
+            AdminActor actor,
+            Duration duration,
             String reason
     ) {
-        if (durationMillis <= 0L) return completedInvalidDuration();
-        var normalized = IpAddresses.normalize(target);
-        if (normalized.isEmpty()) {
-            return CompletableFuture.completedFuture(AdminResult.failure(
-                    AdminStatus.INVALID_INPUT,
-                    "service.admin.invalid-address",
-                    Map.of("address", target)
-            ));
-        }
-        var address = normalized.orElseThrow();
-        var createdAt = System.currentTimeMillis();
-        final long expiresAt;
+        final Expiration expiration;
+
         try {
-            expiresAt = Math.addExact(createdAt, durationMillis);
-        } catch (ArithmeticException exception) {
-            return completedInvalidDuration();
+            expiration = Expiration.after(
+                    clock.instant(),
+                    duration
+            );
+        } catch (IllegalArgumentException _) {
+            return invalidDuration();
         }
-        var record = new BanRecord(null, address, reason, actor, createdAt, expiresAt, true, address);
+
+        var record = BanRecord.address(
+                address,
+                reason,
+                actor,
+                clock.instant(),
+                expiration
+        );
+
+        var canonical = IpAddresses.canonical(address);
+
         return mutate(current -> {
-            current.records.removeIf(existing -> existing.ip()
-                    && address.equalsIgnoreCase(existing.address()));
-            current.records.add(record);
-            return AdminResult.success("service.admin.temp-ban-ip-success", Map.of("address", address));
-        }).thenApply(result -> {
-            if (result.success() && kickOnlinePlayers) kickAddress(address, reason);
-            return result;
-        });
+            current.records.removeIf(value ->
+                    value.ip
+                            && value.address.equals(canonical)
+            );
+
+            current.records.add(toDocument(record));
+
+            return AdminResult.success(
+                    "service.admin.temp-ban-ip-success",
+                    Map.of("address", canonical)
+            );
+        }).thenCompose(result ->
+                !result.success() || !disconnectOnline
+                        ? completed(result)
+                        : disconnectAddress(
+                                address,
+                                reason,
+                                result
+                        )
+        );
     }
 
     @Override
-    public CompletableFuture<AdminResult> unban(UUID uuid, String name, String actor) {
-        return mutate(current -> current.records.removeIf(record -> !record.ip()
-                && (uuid.equals(record.uuid()) || record.name().equalsIgnoreCase(name)))
-                ? AdminResult.success("service.admin.temp-unban-success", Map.of("player", name))
-                : AdminResult.failure(AdminStatus.NOT_FOUND,
-                        "service.admin.temp-ban-not-found", Map.of("player", name)));
+    public CompletableFuture<AdminResult> unban(
+            UUID uuid,
+            String name,
+            AdminActor actor
+    ) {
+        return mutate(current ->
+                current.records.removeIf(value ->
+                        !value.ip
+                                && (value.uuid.equals(
+                                uuid.toString()
+                        )
+                                || value.name.equalsIgnoreCase(name))
+                )
+                        ? AdminResult.success(
+                        "service.admin.temp-unban-success",
+                        Map.of("player", name)
+                )
+                        : AdminResult.failure(
+                                AdminStatus.NOT_FOUND,
+                                "service.admin.temp-ban-not-found",
+                                Map.of("player", name)
+                        )
+        );
     }
 
     @Override
-    public CompletableFuture<AdminResult> unbanIp(String address, String actor) {
-        var normalized = IpAddresses.normalize(address);
-        if (normalized.isEmpty()) {
-            return CompletableFuture.completedFuture(AdminResult.failure(
-                    AdminStatus.INVALID_INPUT,
-                    "service.admin.invalid-address",
-                    Map.of("address", address)
-            ));
-        }
-        var value = normalized.orElseThrow();
-        return mutate(current -> current.records.removeIf(record -> record.ip()
-                && value.equalsIgnoreCase(record.address()))
-                ? AdminResult.success("service.admin.temp-unban-ip-success", Map.of("address", value))
-                : AdminResult.failure(AdminStatus.NOT_FOUND,
-                        "service.admin.temp-ban-ip-not-found", Map.of("address", value)));
+    public CompletableFuture<AdminResult> unbanIp(InetAddress address, AdminActor actor) {
+        var canonical = IpAddresses.canonical(address);
+
+        return mutate(current ->
+                current.records.removeIf(value ->
+                        value.ip
+                                && value.address.equals(canonical)
+                )
+                        ? AdminResult.success(
+                        "service.admin.temp-unban-ip-success",
+                        Map.of("address", canonical)
+                )
+                        : AdminResult.failure(
+                                AdminStatus.NOT_FOUND,
+                                "service.admin.temp-ban-ip-not-found",
+                                Map.of("address", canonical)
+                        )
+        );
     }
 
     @Override
     public synchronized Optional<BanRecord> active(UUID uuid, String name) {
-        var now = System.currentTimeMillis();
-        return document.records.stream()
-                .filter(record -> !record.ip() && !record.expired(now))
-                .filter(record -> uuid.equals(record.uuid()) || record.name().equalsIgnoreCase(name))
+        var now = clock.instant();
+
+        return snapshot(document)
+                .stream()
+                .filter(value ->
+                        !value.ip() && !value.expired(now)
+                )
+                .filter(value ->
+                        value.uuid().orElseThrow().equals(uuid)
+                                || value.name()
+                                .equalsIgnoreCase(name)
+                )
                 .findFirst();
     }
 
     @Override
-    public synchronized Optional<BanRecord> activeIp(String address) {
-        var normalized = IpAddresses.normalize(address);
-        if (normalized.isEmpty()) return Optional.empty();
-        var value = normalized.orElseThrow();
-        var now = System.currentTimeMillis();
-        return document.records.stream()
-                .filter(record -> record.ip() && !record.expired(now))
-                .filter(record -> value.equalsIgnoreCase(record.address()))
+    public synchronized Optional<BanRecord> activeIp(InetAddress address) {
+        var canonical = IpAddresses.canonical(address);
+        var now = clock.instant();
+
+        return snapshot(document)
+                .stream()
+                .filter(BanRecord::ip)
+                .filter(value -> !value.expired(now))
+                .filter(value ->
+                        IpAddresses.canonical(
+                                value.address().orElseThrow()
+                        ).equals(canonical)
+                )
                 .findFirst();
     }
 
     @Override
     public CompletableFuture<Integer> purgeExpired() {
         var result = new CompletableFuture<Integer>();
-        enqueue(current -> {
-            var before = current.records.size();
-            current.records.removeIf(record -> record.expired(System.currentTimeMillis()));
-            return new Mutation<>(current, before - current.records.size());
-        }, result);
+
+        enqueue(
+                current -> {
+                    var before = current.records.size();
+                    var now = clock.instant();
+
+                    current.records.removeIf(value ->
+                            fromDocument(value).expired(now)
+                    );
+
+                    return new Mutation<>(
+                            current,
+                            before - current.records.size()
+                    );
+                },
+                result
+        );
+
         return result;
     }
 
-    private void kickAddress(String address, String reason) {
-        platform.runOnServerThread(() -> platform.onlinePlayers().stream()
-                .filter(player -> platform.address(player)
-                        .flatMap(IpAddresses::normalize)
-                        .map(address::equalsIgnoreCase)
-                        .orElse(false))
-                .forEach(player -> platform.kick(
-                        player,
-                        renderer.render(locales.locale(player), "service.admin.temp-ban-kick",
-                                Map.of("reason", reason)).plainText()
-                )));
+    private CompletableFuture<AdminResult> disconnectAddress(
+            InetAddress address,
+            String reason,
+            AdminResult success
+    ) {
+        return serverThread.submit(() -> {
+                    var failed = false;
+                    var canonical = IpAddresses.canonical(address);
+
+                    for (var player : players.onlinePlayers()) {
+                        if (networks.address(player)
+                                .map(IpAddresses::canonical)
+                                .filter(canonical::equals)
+                                .isEmpty()) {
+                            continue;
+                        }
+
+                        if (!connections.disconnect(
+                                player,
+                                kickMessage(player, reason)
+                        ).successful()) {
+                            failed = true;
+                        }
+                    }
+
+                    return !failed;
+                })
+                .thenApply(all ->
+                        all
+                                ? success
+                                : AdminResult.partial(
+                                        "service.admin.temp-ban-ip-success",
+                                        success.message()
+                                                .placeholders()
+                                )
+                )
+                .exceptionally(_ ->
+                        AdminResult.partial(
+                                "service.admin.temp-ban-ip-success",
+                                success.message().placeholders()
+                        )
+                );
     }
 
-    private CompletableFuture<AdminResult> completedInvalidDuration() {
-        return CompletableFuture.completedFuture(AdminResult.failure(
-                AdminStatus.INVALID_INPUT, "service.admin.invalid-duration"));
+    private static CompletableFuture<AdminResult> invalidDuration() {
+        return completed(
+                AdminResult.failure(
+                        AdminStatus.INVALID_INPUT,
+                        "service.admin.invalid-duration"
+                )
+        );
     }
 
-    private CompletableFuture<AdminResult> mutate(Function<TempBanDocument, AdminResult> operation) {
+    private CompletableFuture<AdminResult> mutate(
+            Function<TempBanDocument, AdminResult> operation
+    ) {
         var result = new CompletableFuture<AdminResult>();
-        enqueue(current -> new Mutation<>(current, operation.apply(current)), result);
+
+        enqueue(
+                current -> new Mutation<>(
+                        current,
+                        operation.apply(current)
+                ),
+                result
+        );
+
         return result;
     }
 
-    private boolean same(BanRecord first, BanRecord second) {
-        if (first.uuid() != null && second.uuid() != null) return first.uuid().equals(second.uuid());
-        return first.name().equalsIgnoreCase(second.name());
+    private static TempBanDocument.Record toDocument(BanRecord value) {
+        var target = new TempBanDocument.Record();
+
+        target.ip = value.ip();
+        target.uuid = value.uuid()
+                .map(UUID::toString)
+                .orElse("");
+        target.name = value.name();
+        target.address = value.address()
+                .map(IpAddresses::canonical)
+                .orElse("");
+        target.reason = value.reason();
+        target.actorUuid = value.actor()
+                .uuid()
+                .map(UUID::toString)
+                .orElse("");
+        target.actorName = value.actor().name();
+        target.createdAt = value.createdAt().toEpochMilli();
+        target.expiresAt = value.expiration()
+                .expiresAt()
+                .orElseThrow()
+                .toEpochMilli();
+
+        return target;
     }
 
-    private void kickPlayer(String target, String reason) {
-        platform.runOnServerThread(() -> platform.onlinePlayer(target).ifPresent(player -> platform.kick(
-                player,
-                renderer.render(locales.locale(player), "service.admin.temp-ban-kick",
-                        Map.of("reason", reason)).plainText()
-        )));
+    private static CompletableFuture<AdminResult> completed(AdminResult result) {
+        return CompletableFuture.completedFuture(result);
+    }
+
+    private CompletableFuture<AdminResult> disconnectUser(
+            UUID uuid,
+            String reason,
+            AdminResult success
+    ) {
+        return serverThread.submit(() ->
+                        players.onlinePlayer(uuid)
+                                .map(player ->
+                                        connections.disconnect(
+                                                player,
+                                                kickMessage(player, reason)
+                                        ).successful()
+                                )
+                                .orElse(true)
+                )
+                .thenApply(disconnected ->
+                        disconnected
+                                ? success
+                                : AdminResult.partial(
+                                        "service.admin.temp-ban-success",
+                                        success.message()
+                                                .placeholders()
+                                )
+                )
+                .exceptionally(_ ->
+                        AdminResult.partial(
+                                "service.admin.temp-ban-success",
+                                success.message().placeholders()
+                        )
+                );
     }
 
     private synchronized <T> void enqueue(
             Function<TempBanDocument, Mutation<T>> operation,
             CompletableFuture<T> result
     ) {
-        mutationTail = mutationTail.handle((ignored, failure) -> null)
-                .thenCompose(ignored -> {
+        mutationTail = mutationTail
+                .handle((_, _) -> null)
+                .thenCompose(_ -> {
                     TempBanDocument current;
                     synchronized (this) {
                         current = copy(document);
                     }
+
                     final Mutation<T> mutation;
                     try {
                         mutation = operation.apply(current);
-                    } catch (RuntimeException exception) {
-                        result.completeExceptionally(exception);
+                    } catch (RuntimeException failure) {
+                        result.completeExceptionally(failure);
                         return CompletableFuture.completedFuture(null);
                     }
-                    return storage.save(path, mutation.document()).handle((saved, failure) -> {
-                        if (failure == null) {
-                            synchronized (this) {
-                                document = mutation.document();
-                            }
-                            result.complete(mutation.result());
-                        } else if (mutation.result() instanceof AdminResult) {
-                            @SuppressWarnings("unchecked")
-                            var failureResult = (T) AdminResult.failure(
-                                    AdminStatus.PERSISTENCE_FAILURE, "service.admin.persistence-failed");
-                            result.complete(failureResult);
-                        } else {
-                            result.completeExceptionally(failure);
-                        }
-                        return (Void) null;
-                    });
+
+                    return storage.save(
+                                    path,
+                                    mutation.document()
+                            )
+                            .handle((_, failure) -> {
+                                if (failure == null) {
+                                    synchronized (this) {
+                                        document = mutation.document();
+                                    }
+
+                                    result.complete(mutation.result());
+                                } else if (mutation.result() instanceof AdminResult) {
+                                    @SuppressWarnings("unchecked")
+                                    var value = (T) AdminResult.failure(
+                                            AdminStatus.PERSISTENCE_FAILURE,
+                                            "service.admin.persistence-failed"
+                                    );
+
+                                    result.complete(value);
+                                } else {
+                                    result.completeExceptionally(
+                                            failure
+                                    );
+                                }
+
+                                return (Void) null;
+                            });
                 });
-        mutationTail.whenComplete((ignored, failure) -> {
-            if (failure != null) result.completeExceptionally(failure);
+
+        mutationTail.whenComplete((_, failure) -> {
+            if (failure != null) {
+                result.completeExceptionally(failure);
+            }
         });
     }
 
-    private TempBanDocument copy(TempBanDocument source) {
-        var target = new TempBanDocument();
-        target.records = new ArrayList<>(source.records);
-        return target;
+    private RichText kickMessage(
+            CellPlayer player,
+            String reason
+    ) {
+        return renderer.render(
+                audience.locale(player),
+                "service.admin.temp-ban-kick",
+                Map.of("reason", reason)
+        );
     }
 
     private record Mutation<T>(

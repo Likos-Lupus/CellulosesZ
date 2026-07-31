@@ -1,124 +1,118 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.AddressBookService;
-import top.likoslupus.cellulosesz.api.admin.TempBanService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
-import top.likoslupus.cellulosesz.modules.admin.service.DurationParser;
-import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
 
-import java.util.Map;
-import java.util.Optional;
+import java.time.Duration;
+import java.util.List;
 
-public final class TempBanIpCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final TempBanService bans;
-    private final AddressBookService addresses;
-    private final AdminConfig config;
+public final class TempBanIpCommand implements CommandContributor {
+
+    private final BanCommandService service;
+    private final PlayerDirectory players;
+    private final Duration maximum;
 
     public TempBanIpCommand(
-            PlatformService platform,
-            UserService users,
-            TempBanService bans,
-            AddressBookService addresses,
-            AdminConfig config
+            BanCommandService service,
+            PlayerDirectory players,
+            Duration maximum
     ) {
-        super(platform, users);
-        this.bans = bans;
-        this.addresses = addresses;
-        this.config = config;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
+        this.maximum = requireNonNull(maximum, "maximum");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.tempbanip";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "tempbanip",
+                "cellulosesz.admin.tempbanip",
+                CommandSourceKind.ANY
+        );
+
+        var duration = Commands.argument(
+                        "duration",
+                        DurationArgument.duration(maximum)
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ""
+                ))
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                );
+
+        var target = Commands.argument(
+                        "target",
+                        NetworkTargetArgument.addressOrPlayer()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .then(duration);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.tempbanip",
+                "/tempbanip <address-or-player> <duration> [reason]",
+                Commands.literal("tempbanip").then(target)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String reason
+    ) {
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "tempbanip reason-present=" + !reason.isBlank(),
+                policy -> service.tempBanIp(
+                        NetworkTargetArgument.get(command, "target"),
+                        AdminCommandResults.actor(policy, players),
+                        DurationArgument.get(command, "duration"),
+                        reason
+                )
+        );
     }
 
     @Override
-    public String usage() {
-        return "/tempbanip <address|player> <duration> [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "tempbanip";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-
-        if (args.length < 2) {
-            invocation.errorKey(
-                    "commands.admin.temp-ban-ip.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var duration = DurationParser.parseMillis(args[1]);
-        if (duration.isEmpty()) {
-            invocation.errorKey("commands.admin.temp-ban-command.error.invalid-duration-examples-m-h-d");
-            return 0;
-        }
-
-        if (exceedsMaximum(duration.getAsLong())
-                && !invocation.hasPermission("cellulosesz.admin.punishment.unlimited")
-        ) {
-            invocation.errorKey(
-                    "commands.admin.maximum-punishment",
-                    Map.of("seconds", config.maximumPunishmentSeconds)
-            );
-            return 0;
-        }
-
-        var address = address(args[0]);
-        if (address.isEmpty()) {
-            invocation.errorKey(
-                    "commands.admin.ban-ip.unknown-address",
-                    Map.of("target", args[0])
-            );
-            return 0;
-        }
-
-        bans.tempBanIp(
-                address.orElseThrow(),
-                actor(invocation),
-                duration.getAsLong(),
-                join(args, 2)
-        ).whenComplete((result, failure) -> {
-            if (failure != null) {
-                invocation.errorKey("service.admin.persistence-failed");
-            } else if (result.success()) {
-                invocation.reply(result.message());
-            } else {
-                invocation.error(result.message());
-            }
-        });
-        return 1;
-    }
-
-    private boolean exceedsMaximum(long durationMillis) {
-        if (config.maximumPunishmentSeconds < 0) return false;
-        try {
-            return durationMillis > Math.multiplyExact(config.maximumPunishmentSeconds, 1000L);
-        } catch (ArithmeticException exception) {
-            return false;
-        }
-    }
-
-    private Optional<String> address(String input) {
-        var literal = IpAddresses.normalize(input);
-        if (literal.isPresent()) return literal;
-
-        var online = platform.onlinePlayer(input);
-        if (online.isPresent()) return platform.address(online.orElseThrow());
-
-        return users.findUuidByName(input)
-                .flatMap(addresses::address)
-                .or(() -> addresses.address(input));
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }

@@ -1,86 +1,106 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
-import top.likoslupus.cellulosesz.api.admin.AddressBookService;
-import top.likoslupus.cellulosesz.api.admin.BanService;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
-import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
 
-import java.util.Map;
-import java.util.Optional;
+import java.util.List;
 
-public final class BanIpCommand extends AbstractAdminCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final BanService bans;
-    private final AddressBookService addresses;
+public final class BanIpCommand implements CommandContributor {
+
+    private final BanCommandService service;
+    private final PlayerDirectory players;
 
     public BanIpCommand(
-            PlatformService platform,
-            UserService users,
-            BanService bans,
-            AddressBookService addresses
+            BanCommandService service,
+            PlayerDirectory players
     ) {
-        super(platform, users);
-        this.bans = bans;
-        this.addresses = addresses;
+        this.service = requireNonNull(service, "service");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.admin.banip";
-    }
-
-    @Override
-    public String usage() {
-        return "/banip <address|player> [reason]";
-    }
-
-    @Override
-    public String name() {
-        return "banip";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1) {
-            invocation.errorKey(
-                    "commands.admin.ban-ip.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var address = address(invocation.args()[0]);
-        if (address.isEmpty()) {
-            invocation.errorKey(
-                    "commands.admin.ban-ip.unknown-address",
-                    Map.of("target", invocation.args()[0])
-            );
-            return 0;
-        }
-
-        var result = bans.banIp(
-                address.orElseThrow(),
-                actor(invocation),
-                join(invocation.args(), 1)
+    public void register(CommandRegistrationContext context) {
+        var descriptor = AdminCommandResults.descriptor(
+                "banip",
+                "cellulosesz.admin.banip",
+                CommandSourceKind.ANY
         );
-        if (result.success()) invocation.reply(result.message());
-        else invocation.error(result.message());
-        return result.success() ? 1 : 0;
+
+        var argument = Commands.argument(
+                        "target",
+                        NetworkTargetArgument.addressOrPlayer()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ""
+                ))
+                .then(Commands.argument(
+                                        "reason",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        StringArgumentType.getString(
+                                                command,
+                                                "reason"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.banip",
+                "/banip <address-or-player> [reason]",
+                Commands.literal("banip").then(argument)
+        );
     }
 
-    private Optional<String> address(String input) {
-        var literal = IpAddresses.normalize(input);
-        if (literal.isPresent()) return literal;
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String reason
+    ) {
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "banip reason-present=" + !reason.isBlank(),
+                policy -> service.banIp(
+                        NetworkTargetArgument.get(command, "target"),
+                        AdminCommandResults.actor(policy, players),
+                        reason
+                )
+        );
+    }
 
-        var online = platform.onlinePlayer(input);
-        if (online.isPresent()) return platform.address(online.orElseThrow());
-
-        var resolved = users.findUuidByName(input);
-        return resolved
-                .flatMap(addresses::address)
-                .or(() -> addresses.address(input));
+    @Override
+    public String moduleId() {
+        return AdminCommandResults.MODULE;
     }
 
 }
