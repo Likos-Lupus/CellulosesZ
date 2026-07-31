@@ -63,6 +63,20 @@ public final class Checks {
         return map;
     }
 
+    public static String requireNoControlCharacters(String value, String name) {
+        value = requireArgumentNonNull(value, name);
+        for (int offset = 0; offset < value.length(); ) {
+            int codePoint = value.codePointAt(offset);
+            if (Character.isISOControl(codePoint)) {
+                throw new IllegalArgumentException(
+                        name + " must not contain control character U+%04X".formatted(codePoint)
+                );
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return value;
+    }
+
     public static int requireGreaterThan(
             int value,
             int minimumExclusive,
@@ -107,6 +121,22 @@ public final class Checks {
         return value;
     }
 
+    public static long requireGreaterThan(
+            long value,
+            String name,
+            long other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value <= other) {
+            throw new IllegalArgumentException(
+                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static double requireGreaterThan(
             double value,
             double minimumExclusive,
@@ -131,6 +161,24 @@ public final class Checks {
         return value;
     }
 
+    public static double requireGreaterThan(
+            double value,
+            String name,
+            double other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        requireFinite(value, name);
+        requireFinite(other, otherName);
+        if (value <= other) {
+            throw new IllegalArgumentException(
+                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static BigDecimal requireGreaterThan(
             BigDecimal value,
             BigDecimal minimumExclusive,
@@ -141,6 +189,22 @@ public final class Checks {
         if (value.compareTo(minimumExclusive) <= 0) {
             throw new IllegalArgumentException(
                     name + " must be greater than " + minimumExclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static BigDecimal requireGreaterThan(
+            BigDecimal value,
+            String name,
+            BigDecimal other,
+            String otherName
+    ) {
+        value = requireArgumentNonNull(value, name);
+        other = requireArgumentNonNull(other, otherName);
+        if (value.compareTo(other) <= 0) {
+            throw new IllegalArgumentException(
+                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -160,6 +224,22 @@ public final class Checks {
         return value;
     }
 
+    public static int requireAtLeast(
+            int value,
+            String name,
+            int other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value < other) {
+            throw new IllegalArgumentException(
+                    name + " must be at least " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static long requireAtLeast(
             long value,
             long minimumInclusive,
@@ -169,6 +249,22 @@ public final class Checks {
         if (value < minimumInclusive) {
             throw new IllegalArgumentException(
                     name + " must be at least " + minimumInclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static long requireAtLeast(
+            long value,
+            String name,
+            long other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value < other) {
+            throw new IllegalArgumentException(
+                    name + " must be at least " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -190,6 +286,24 @@ public final class Checks {
         return value;
     }
 
+    public static double requireAtLeast(
+            double value,
+            String name,
+            double other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        requireFinite(value, name);
+        requireFinite(other, otherName);
+        if (value < other) {
+            throw new IllegalArgumentException(
+                    name + " must be at least " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static BigDecimal requireAtLeast(
             BigDecimal value,
             BigDecimal minimumInclusive,
@@ -200,6 +314,22 @@ public final class Checks {
         if (value.compareTo(minimumInclusive) < 0) {
             throw new IllegalArgumentException(
                     name + " must be at least " + minimumInclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static BigDecimal requireAtLeast(
+            BigDecimal value,
+            String name,
+            BigDecimal other,
+            String otherName
+    ) {
+        value = requireArgumentNonNull(value, name);
+        other = requireArgumentNonNull(other, otherName);
+        if (value.compareTo(other) < 0) {
+            throw new IllegalArgumentException(
+                    name + " must be at least " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -219,6 +349,22 @@ public final class Checks {
         return value;
     }
 
+    public static int requireLessThan(
+            int value,
+            String name,
+            int other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value >= other) {
+            throw new IllegalArgumentException(
+                    name + " must be less than " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static long requireLessThan(
             long value,
             long maximumExclusive,
@@ -228,6 +374,22 @@ public final class Checks {
         if (value >= maximumExclusive) {
             throw new IllegalArgumentException(
                     name + " must be less than " + maximumExclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static long requireLessThan(
+            long value,
+            String name,
+            long other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value >= other) {
+            throw new IllegalArgumentException(
+                    name + " must be less than " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -249,6 +411,24 @@ public final class Checks {
         return value;
     }
 
+    public static double requireLessThan(
+            double value,
+            String name,
+            double other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        requireFinite(value, name);
+        requireFinite(other, otherName);
+        if (value >= other) {
+            throw new IllegalArgumentException(
+                    name + " must be less than " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static BigDecimal requireLessThan(
             BigDecimal value,
             BigDecimal maximumExclusive,
@@ -259,6 +439,22 @@ public final class Checks {
         if (value.compareTo(maximumExclusive) >= 0) {
             throw new IllegalArgumentException(
                     name + " must be less than " + maximumExclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static BigDecimal requireLessThan(
+            BigDecimal value,
+            String name,
+            BigDecimal other,
+            String otherName
+    ) {
+        value = requireArgumentNonNull(value, name);
+        other = requireArgumentNonNull(other, otherName);
+        if (value.compareTo(other) >= 0) {
+            throw new IllegalArgumentException(
+                    name + " must be less than " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -278,6 +474,22 @@ public final class Checks {
         return value;
     }
 
+    public static int requireAtMost(
+            int value,
+            String name,
+            int other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value > other) {
+            throw new IllegalArgumentException(
+                    name + " must be at most " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static long requireAtMost(
             long value,
             long maximumInclusive,
@@ -287,6 +499,22 @@ public final class Checks {
         if (value > maximumInclusive) {
             throw new IllegalArgumentException(
                     name + " must be at most " + maximumInclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static long requireAtMost(
+            long value,
+            String name,
+            long other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        if (value > other) {
+            throw new IllegalArgumentException(
+                    name + " must be at most " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -308,6 +536,24 @@ public final class Checks {
         return value;
     }
 
+    public static double requireAtMost(
+            double value,
+            String name,
+            double other,
+            String otherName
+    ) {
+        name = requireName(name);
+        otherName = requireName(otherName);
+        requireFinite(value, name);
+        requireFinite(other, otherName);
+        if (value > other) {
+            throw new IllegalArgumentException(
+                    name + " must be at most " + otherName + " (" + other + "), but was " + value
+            );
+        }
+        return value;
+    }
+
     public static BigDecimal requireAtMost(
             BigDecimal value,
             BigDecimal maximumInclusive,
@@ -318,6 +564,22 @@ public final class Checks {
         if (value.compareTo(maximumInclusive) > 0) {
             throw new IllegalArgumentException(
                     name + " must be at most " + maximumInclusive + ", but was " + value
+            );
+        }
+        return value;
+    }
+
+    public static BigDecimal requireAtMost(
+            BigDecimal value,
+            String name,
+            BigDecimal other,
+            String otherName
+    ) {
+        value = requireArgumentNonNull(value, name);
+        other = requireArgumentNonNull(other, otherName);
+        if (value.compareTo(other) > 0) {
+            throw new IllegalArgumentException(
+                    name + " must be at most " + otherName + " (" + other + "), but was " + value
             );
         }
         return value;
@@ -559,268 +821,6 @@ public final class Checks {
         if (!condition) {
             throw new IllegalStateException(requireNonNull(message, "message must not be null"));
         }
-    }
-
-    public static String requireNoControlCharacters(String value, String name) {
-        value = requireArgumentNonNull(value, name);
-        for (int offset = 0; offset < value.length(); ) {
-            int codePoint = value.codePointAt(offset);
-            if (Character.isISOControl(codePoint)) {
-                throw new IllegalArgumentException(
-                        name + " must not contain control character U+%04X".formatted(codePoint)
-                );
-            }
-            offset += Character.charCount(codePoint);
-        }
-        return value;
-    }
-
-    public static long requireGreaterThan(
-            long value,
-            String name,
-            long other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value <= other) {
-            throw new IllegalArgumentException(
-                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static double requireGreaterThan(
-            double value,
-            String name,
-            double other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        requireFinite(value, name);
-        requireFinite(other, otherName);
-        if (value <= other) {
-            throw new IllegalArgumentException(
-                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static BigDecimal requireGreaterThan(
-            BigDecimal value,
-            String name,
-            BigDecimal other,
-            String otherName
-    ) {
-        value = requireArgumentNonNull(value, name);
-        other = requireArgumentNonNull(other, otherName);
-        if (value.compareTo(other) <= 0) {
-            throw new IllegalArgumentException(
-                    name + " must be greater than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static int requireAtLeast(
-            int value,
-            String name,
-            int other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value < other) {
-            throw new IllegalArgumentException(
-                    name + " must be at least " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static long requireAtLeast(
-            long value,
-            String name,
-            long other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value < other) {
-            throw new IllegalArgumentException(
-                    name + " must be at least " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static double requireAtLeast(
-            double value,
-            String name,
-            double other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        requireFinite(value, name);
-        requireFinite(other, otherName);
-        if (value < other) {
-            throw new IllegalArgumentException(
-                    name + " must be at least " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static BigDecimal requireAtLeast(
-            BigDecimal value,
-            String name,
-            BigDecimal other,
-            String otherName
-    ) {
-        value = requireArgumentNonNull(value, name);
-        other = requireArgumentNonNull(other, otherName);
-        if (value.compareTo(other) < 0) {
-            throw new IllegalArgumentException(
-                    name + " must be at least " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static int requireLessThan(
-            int value,
-            String name,
-            int other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value >= other) {
-            throw new IllegalArgumentException(
-                    name + " must be less than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static long requireLessThan(
-            long value,
-            String name,
-            long other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value >= other) {
-            throw new IllegalArgumentException(
-                    name + " must be less than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static double requireLessThan(
-            double value,
-            String name,
-            double other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        requireFinite(value, name);
-        requireFinite(other, otherName);
-        if (value >= other) {
-            throw new IllegalArgumentException(
-                    name + " must be less than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static BigDecimal requireLessThan(
-            BigDecimal value,
-            String name,
-            BigDecimal other,
-            String otherName
-    ) {
-        value = requireArgumentNonNull(value, name);
-        other = requireArgumentNonNull(other, otherName);
-        if (value.compareTo(other) >= 0) {
-            throw new IllegalArgumentException(
-                    name + " must be less than " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static int requireAtMost(
-            int value,
-            String name,
-            int other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value > other) {
-            throw new IllegalArgumentException(
-                    name + " must be at most " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static long requireAtMost(
-            long value,
-            String name,
-            long other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        if (value > other) {
-            throw new IllegalArgumentException(
-                    name + " must be at most " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static double requireAtMost(
-            double value,
-            String name,
-            double other,
-            String otherName
-    ) {
-        name = requireName(name);
-        otherName = requireName(otherName);
-        requireFinite(value, name);
-        requireFinite(other, otherName);
-        if (value > other) {
-            throw new IllegalArgumentException(
-                    name + " must be at most " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
-    }
-
-    public static BigDecimal requireAtMost(
-            BigDecimal value,
-            String name,
-            BigDecimal other,
-            String otherName
-    ) {
-        value = requireArgumentNonNull(value, name);
-        other = requireArgumentNonNull(other, otherName);
-        if (value.compareTo(other) > 0) {
-            throw new IllegalArgumentException(
-                    name + " must be at most " + otherName + " (" + other + "), but was " + value
-            );
-        }
-        return value;
     }
 
 }
