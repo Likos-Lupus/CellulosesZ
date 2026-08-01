@@ -28,15 +28,34 @@ final class JacksonConfigRegistryTest {
         assertThrows(IllegalArgumentException.class,
                 () -> registry.register("escape", Document.class, "../escape.yml", Document::new));
         assertThrows(IllegalArgumentException.class,
-                () -> registry.register("absolute", Document.class, root.resolve("absolute.yml").toString(), Document::new));
+                () -> registry.register("absolute", Document.class, root.resolve("absolute.yml")
+                        .toString(), Document::new));
     }
 
-    public static final class Document { public String value = ""; }
+    public static final class Document {
+
+        public String value = "";
+
+    }
 
     private static final class NoopLogger implements CellulosesZLogger {
-        @Override public void warn(String message) { }
-        @Override public void error(String message) { }
-        @Override public void error(String message, Throwable throwable) { }
-        @Override public void info(String message) { }
+
+        @Override
+        public void warn(String message) {
+        }
+
+        @Override
+        public void error(String message) {
+        }
+
+        @Override
+        public void error(String message, Throwable throwable) {
+        }
+
+        @Override
+        public void info(String message) {
+        }
+
     }
+
 }

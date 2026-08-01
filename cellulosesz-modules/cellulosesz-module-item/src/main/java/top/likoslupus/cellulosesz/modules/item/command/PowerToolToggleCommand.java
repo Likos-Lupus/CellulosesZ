@@ -1,86 +1,117 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
 
-import java.util.Locale;
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class PowerToolToggleCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class PowerToolToggleCommand implements CommandContributor {
+
     private final ItemAutomationService automation;
-    private final UserService users;
 
-    public PowerToolToggleCommand(
-            PlatformService platform,
-            ItemAutomationService automation,
-            UserService users
+    public PowerToolToggleCommand(ItemAutomationService automation) {
+        this.automation = requireNonNull(automation, "automation");
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "powertooltoggle",
+                "cellulosesz.command.powertooltoggle",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("powertooltoggle")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        null
+                ))
+                .then(Commands.argument(
+                                "state",
+                                ToggleArgument.toggle()
+                        )
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                ToggleArgument.get(
+                                        command,
+                                        "state"
+                                ).enabled()
+                        )));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.powertooltoggle",
+                "/powertooltoggle [on|off]",
+                root
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            @Nullable Boolean requested
     ) {
-        this.platform = platform;
-        this.automation = automation;
-        this.users = users;
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "powertooltoggle",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
+                                )
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var uuid = currentPlayer.uuid();
+
+                    if (automation.powerTools(uuid).isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_STATE,
+                                        "no-bindings"
+                                )
+                        );
+                    }
+
+                    var enabled = requested == null
+                            ? !automation.powerToolsEnabled(uuid)
+                            : requested;
+
+                    return automation.setPowerToolsEnabled(uuid, enabled);
+                }
+        );
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.powertooltoggle";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/powertooltoggle [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "powertooltoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        if (automation.powerTools(player.uuid()).isEmpty()) {
-            invocation.errorKey("commands.item.powertool-toggle.empty");
-            return 0;
-        }
-        final boolean enabled;
-        if (invocation.args().length == 0) enabled = !automation.powerToolsEnabled(player.uuid());
-        else enabled = switch (invocation.args()[0].toLowerCase(Locale.ROOT)) {
-            case "on" -> true;
-            case "off" -> false;
-            default -> {
-                yield !automation.powerToolsEnabled(player.uuid());
-            }
-        };
-        if (invocation.args().length == 1
-                && !invocation.args()[0].equalsIgnoreCase("on")
-                && !invocation.args()[0].equalsIgnoreCase("off")) return usage(invocation);
-        users.updateVoid(player.uuid(), user -> user.preferences.powerToolsEnabled = enabled)
-                .whenComplete((ignored, failure) -> platform.runOnServerThread(() -> {
-                    if (failure != null) invocation.errorKey("commands.item.powertool-toggle.save-failed");
-                    else invocation.replyKey(
-                            enabled
-                                    ? "commands.item.powertool-toggle.enabled"
-                                    : "commands.item.powertool-toggle.disabled"
-                    );
-                }));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.powertool-toggle.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

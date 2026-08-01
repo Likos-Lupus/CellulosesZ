@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.modules.world.config;
 
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+
 public final class WorldConfig {
 
     public int defaultWeatherSeconds = 600;
@@ -66,47 +68,141 @@ public final class WorldConfig {
     }
 
     public void validate() {
-        positive(defaultWeatherSeconds, "defaultWeatherSeconds");
-        positive(defaultRemoveRadius, "defaultRemoveRadius");
-        range(targetDistance, 1, 128, "targetDistance");
-        finiteRange(defaultProjectileSpeed, 0.01D, maximumProjectileSpeed, "defaultProjectileSpeed");
-        finiteRange(maximumProjectileSpeed, 0.01D, 16.0D, "maximumProjectileSpeed");
-        range(projectileLifetimeTicks, 1, 12_000, "projectileLifetimeTicks");
-        range(spawnMobMaximumAmount, 1, 1024, "spawnMobMaximumAmount");
-        range(treeTargetDistance, 1, 128, "treeTargetDistance");
-        range(spawnerMinimumDelayTicks, 1, 1_000_000, "spawnerMinimumDelayTicks");
-        range(spawnerMaximumDelayTicks, spawnerMinimumDelayTicks, 1_000_000, "spawnerMaximumDelayTicks");
-        range(spawnerDefaultDelayTicks, spawnerMinimumDelayTicks, spawnerMaximumDelayTicks, "spawnerDefaultDelayTicks");
-        finiteRange(lightningMaximumDamage, 0.0D, 10_000.0D, "lightningMaximumDamage");
-        range(antiochFuseTicks, 1, 12_000, "antiochFuseTicks");
-        finiteRange(antiochExplosionPower, 0.0D, 32.0D, "antiochExplosionPower");
-        range(antiochMaximumEntities, 1, 16, "antiochMaximumEntities");
-        finiteRange(temporaryMobSpeed, 0.01D, maximumProjectileSpeed, "temporaryMobSpeed");
-        range(temporaryMobLifetimeTicks, 1, 12_000, "temporaryMobLifetimeTicks");
-        finiteRange(temporaryMobExplosionPower, 0.0D, 32.0D, "temporaryMobExplosionPower");
-        range(nukeTntPerTarget, 1, 256, "nukeTntPerTarget");
-        finiteRange(nukeHeight, 0.0D, 256.0D, "nukeHeight");
-        finiteRange(nukeSpread, 0.0D, 128.0D, "nukeSpread");
-        range(nukeFuseTicks, 1, 12_000, "nukeFuseTicks");
-        finiteRange(nukeExplosionPower, 0.0D, 32.0D, "nukeExplosionPower");
-        if (backup == null) throw new IllegalArgumentException("backup must not be null");
+        requirePositive(
+                defaultWeatherSeconds,
+                "defaultWeatherSeconds"
+        );
+        requirePositive(
+                defaultRemoveRadius,
+                "defaultRemoveRadius"
+        );
+        requireInRange(
+                targetDistance,
+                1,
+                128,
+                "targetDistance"
+        );
+        requireInRange(
+                maximumProjectileSpeed,
+                0.01D,
+                16.0D,
+                "maximumProjectileSpeed"
+        );
+        requireInRange(
+                defaultProjectileSpeed,
+                0.01D,
+                maximumProjectileSpeed,
+                "defaultProjectileSpeed"
+        );
+        requireInRange(
+                projectileLifetimeTicks,
+                1,
+                12_000,
+                "projectileLifetimeTicks"
+        );
+        requireInRange(
+                spawnMobMaximumAmount,
+                1,
+                1_024,
+                "spawnMobMaximumAmount"
+        );
+        requireInRange(
+                treeTargetDistance,
+                1,
+                128,
+                "treeTargetDistance"
+        );
+        requireInRange(
+                spawnerMinimumDelayTicks,
+                1,
+                1_000_000,
+                "spawnerMinimumDelayTicks"
+        );
+        requireInRange(
+                spawnerMaximumDelayTicks,
+                spawnerMinimumDelayTicks,
+                1_000_000,
+                "spawnerMaximumDelayTicks"
+        );
+        requireInRange(
+                spawnerDefaultDelayTicks,
+                spawnerMinimumDelayTicks,
+                spawnerMaximumDelayTicks,
+                "spawnerDefaultDelayTicks"
+        );
+        requireInRange(
+                lightningMaximumDamage,
+                0.0D,
+                10_000.0D,
+                "lightningMaximumDamage"
+        );
+        requireInRange(
+                antiochFuseTicks,
+                1,
+                12_000,
+                "antiochFuseTicks"
+        );
+        requireInRange(
+                antiochExplosionPower,
+                0.0D,
+                32.0D,
+                "antiochExplosionPower"
+        );
+        requireInRange(
+                antiochMaximumEntities,
+                1,
+                16,
+                "antiochMaximumEntities"
+        );
+        requireInRange(
+                temporaryMobSpeed,
+                0.01D,
+                maximumProjectileSpeed,
+                "temporaryMobSpeed"
+        );
+        requireInRange(
+                temporaryMobLifetimeTicks,
+                1,
+                12_000,
+                "temporaryMobLifetimeTicks"
+        );
+        requireInRange(
+                temporaryMobExplosionPower,
+                0.0D,
+                32.0D,
+                "temporaryMobExplosionPower"
+        );
+        requireInRange(
+                nukeTntPerTarget,
+                1,
+                256,
+                "nukeTntPerTarget"
+        );
+        requireInRange(
+                nukeHeight,
+                0.0D,
+                256.0D,
+                "nukeHeight"
+        );
+        requireInRange(
+                nukeSpread,
+                0.0D,
+                128.0D,
+                "nukeSpread"
+        );
+        requireInRange(
+                nukeFuseTicks,
+                1,
+                12_000,
+                "nukeFuseTicks"
+        );
+        requireInRange(
+                nukeExplosionPower,
+                0.0D,
+                32.0D,
+                "nukeExplosionPower"
+        );
         backup.validate();
-    }
-
-    private static void positive(int value, String name) {
-        if (value < 1) throw new IllegalArgumentException(name + " must be positive");
-    }
-
-    private static void range(int value, int minimum, int maximum, String name) {
-        if (value < minimum || value > maximum) {
-            throw new IllegalArgumentException(name + " must be between " + minimum + " and " + maximum);
-        }
-    }
-
-    private static void finiteRange(double value, double minimum, double maximum, String name) {
-        if (!Double.isFinite(value) || value < minimum || value > maximum) {
-            throw new IllegalArgumentException(name + " must be finite and between " + minimum + " and " + maximum);
-        }
     }
 
     public static final class Backup {
@@ -124,10 +220,16 @@ public final class WorldConfig {
         }
 
         private void validate() {
-            if (directory == null || directory.isBlank())
-                throw new IllegalArgumentException("backup.directory must not be blank");
-            if (retain < 1 || retain > 10_000)
-                throw new IllegalArgumentException("backup.retain must be between 1 and 10000");
+            directory = requireNonBlank(
+                    directory,
+                    "backup.directory"
+            );
+            requireInRange(
+                    retain,
+                    1,
+                    10_000,
+                    "backup.retain"
+            );
         }
 
     }

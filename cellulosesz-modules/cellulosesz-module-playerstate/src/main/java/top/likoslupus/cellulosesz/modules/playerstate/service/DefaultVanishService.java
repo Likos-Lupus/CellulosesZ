@@ -49,7 +49,7 @@ public final class DefaultVanishService implements VanishService {
     public boolean vanished(UUID uuid) {
         return users
                 .cached(uuid)
-                .map(user -> user.state.vanished)
+                .map(user -> user.state().vanished())
                 .orElse(false);
     }
 
@@ -72,7 +72,7 @@ public final class DefaultVanishService implements VanishService {
                     return users
                             .updateVoid(
                                     player.uuid(),
-                                    user -> user.state.vanished = vanished
+                                    user -> user.withState(user.state().withVanished(vanished))
                             )
                             .thenApply(_ -> AdminResult.success(
                                     vanished

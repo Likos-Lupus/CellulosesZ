@@ -1,65 +1,71 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class BreakCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class BreakCommand implements CommandContributor {
+
     private final WorldPlatformService worlds;
     private final WorldConfig config;
 
     public BreakCommand(
-            PlatformService platform,
             WorldPlatformService worlds,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.worlds = worlds;
-        this.config = config;
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.break";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return "break";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 0) {
-            invocation.errorKey("commands.world.break.usage", Map.of("usage", usage()));
-            return 0;
-        }
-        var result = worlds.breakTarget(
-                platform.player(invocation).orElseThrow(),
-                config.targetDistance,
-                invocation.hasPermission("cellulosesz.command.break.unbreakable")
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "break",
+                "cellulosesz.command.break",
+                CommandSourceKind.PLAYER_ONLY
         );
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.break.success", Map.of(
-                "block", result.value().orElseThrow().blockId(),
-                "drops", result.value().orElseThrow().dropsEnabled()
-        ));
-        return 1;
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.break",
+                "/break",
+                Commands.literal("break")
+                        .executes(command -> WorldCommandSupport.sync(
+                                context,
+                                command,
+                                descriptor,
+                                "break target",
+                                policy -> {
+                                    var player = WorldCommandSupport.current(policy);
+                                    return player
+                                            .<PlatformResult<?>>map(value -> worlds.breakTarget(
+                                                    value,
+                                                    config.targetDistance,
+                                                    policy.hasPermission(
+                                                            "cellulosesz.command.break.unbreakable")
+                                            ))
+                                            .orElseGet(() -> PlatformResult.failure(
+                                                    PlatformOperationStatus.INVALID_SOURCE,
+                                                    "player-only"
+                                            ));
+                                }
+                        ))
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

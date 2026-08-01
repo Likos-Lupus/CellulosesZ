@@ -1,119 +1,151 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.entity.SpawnMobRequest;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Locale;
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
-public final class SpawnMobCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class SpawnMobCommand implements CommandContributor {
+
     private final EntityPlatformService entities;
+    private final PlayerDirectory players;
     private final WorldConfig config;
 
     public SpawnMobCommand(
-            PlatformService platform,
             EntityPlatformService entities,
+            PlayerDirectory players,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.entities = entities;
-        this.config = config;
+        this.entities = requireNonNull(entities, "entities");
+        this.players = requireNonNull(players, "players");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.spawnmob";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "spawnmob",
+                "cellulosesz.command.spawnmob",
+                CommandSourceKind.ANY
+        );
+
+        var amount = Commands.argument(
+                        "amount",
+                        IntegerArgumentType.integer(1, config.spawnMobMaximumAmount)
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        IntegerArgumentType.getInteger(command, "amount"),
+                        Optional.empty()
+                ))
+                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.command.spawnmob.others"
+                        ))
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        ))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                IntegerArgumentType.getInteger(command, "amount"),
+                                Optional.of(PlayerNameArgument.get(command, "player"))
+                        ))
+                );
+
+        var entity = Commands.argument("entity", EntityTypeArgument.livingEntity(entities))
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        entities::livingEntityIds,
+                        builder
+                ))
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        1,
+                        Optional.empty()
+                ))
+                .then(amount);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.spawnmob",
+                "/spawnmob <entity> [amount] [player]",
+                Commands.literal("spawnmob").then(entity)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int amount,
+            Optional<String> targetName
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "spawnmob",
+                policy -> {
+                    var entity = EntityTypeArgument.get(command, "entity");
+                    var permission = "cellulosesz.command.spawnmob.entity."
+                            + entity.replace(':', '.')
+                            .replaceAll("[^a-z0-9_.-]", "_");
+
+                    if (!policy.hasPermission("cellulosesz.command.spawnmob.entity.*")
+                            && !policy.hasPermission(permission)
+                    ) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.PERMISSION_DENIED,
+                                permission
+                        );
+                    }
+
+                    Optional<CellPlayer> anchor = targetName.isPresent()
+                            ? players.onlinePlayer(targetName.orElseThrow())
+                            : policy.currentPlayer();
+                    return anchor
+                            .<PlatformResult<?>>map(player -> entities.spawnMob(
+                                    new SpawnMobRequest(entity, amount, player)
+                            ))
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                                    "target-player-required"
+                            ));
+                }
+        );
     }
 
     @Override
-    public String usage() {
-        return "/spawnmob <entity> [amount] [player]";
-    }
-
-    @Override
-    public String name() {
-        return "spawnmob";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1 || invocation.args().length > 3) return usage(invocation);
-        var entity = normalize(invocation.args()[0]);
-        if (!entities.validLivingEntity(entity)) {
-            invocation.errorKey("commands.world.spawnmob.invalid-entity", Map.of("entity", invocation.args()[0]));
-            return 0;
-        }
-        if (!entityPermission(invocation, entity)) {
-            invocation.errorKey("commands.common.no-permission");
-            return 0;
-        }
-        var amount = 1;
-        if (invocation.args().length >= 2) {
-            try {
-                amount = Integer.parseInt(invocation.args()[1]);
-                if (amount < 1 || amount > config.spawnMobMaximumAmount) throw new NumberFormatException();
-            } catch (NumberFormatException failure) {
-                invocation.errorKey("commands.world.spawnmob.invalid-amount", Map.of("maximum", config.spawnMobMaximumAmount));
-                return 0;
-            }
-        }
-        var anchor = anchor(invocation);
-        if (anchor.isEmpty()) return 0;
-        var result = entities.spawnMob(new SpawnMobRequest(entity, amount, anchor.orElseThrow()));
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        var value = result.value().orElseThrow();
-        invocation.replyKey(value.spawned() == value.requested()
-                ? "commands.world.spawnmob.success"
-                : "commands.world.spawnmob.partial", Map.of(
-                "entity", value.entityId(),
-                "requested", value.requested(),
-                "spawned", value.spawned(),
-                "player", anchor.orElseThrow().name()
-        ));
-        return value.spawned();
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.spawnmob.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private static String normalize(String value) {
-        var id = value.strip().toLowerCase(Locale.ROOT);
-        return id.contains(":") ? id : "minecraft:" + id;
-    }
-
-    private static boolean entityPermission(CommandInvocation invocation, String entity) {
-        var node = entity.replace(':', '.').replaceAll("[^a-z0-9_.-]", "_");
-        return invocation.hasPermission("cellulosesz.command.spawnmob.entity.*")
-                || invocation.hasPermission("cellulosesz.command.spawnmob.entity." + node);
-    }
-
-    private Optional<CellPlayer> anchor(CommandInvocation invocation) {
-        if (invocation.args().length == 3) {
-            if (!invocation.hasPermission("cellulosesz.command.spawnmob.others")) {
-                invocation.errorKey("commands.common.no-permission");
-                return Optional.empty();
-            }
-            var target = invocation.resolvePlayer(invocation.args()[2]).online();
-            if (target.isEmpty())
-                invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[2]));
-            return target;
-        }
-        var self = platform.player(invocation);
-        if (self.isEmpty()) invocation.errorKey("commands.world.spawnmob.console-target-required");
-        return self;
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

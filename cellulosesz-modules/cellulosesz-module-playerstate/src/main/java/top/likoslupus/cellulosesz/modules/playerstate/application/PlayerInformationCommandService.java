@@ -321,8 +321,8 @@ public final class PlayerInformationCommandService {
                             .load(resolved.optionalUuid().orElseThrow())
                             .thenCompose(user -> finish(playtimeResult(
                                     resolved.name(),
-                                    user.timestamps.playTimeMillis,
-                                    user.timestamps.activeSessionStartedAt,
+                                    user.timestamps().playTimeMillis(),
+                                    user.timestamps().activeSessionStartedAt(),
                                     System.currentTimeMillis()
                             )))
                             .exceptionally(_ -> PlayerStateCommandResult.failure(
@@ -404,7 +404,7 @@ public final class PlayerInformationCommandService {
                     }
 
                     return users.load(uuid).thenCompose(user -> {
-                                if (user.timestamps.lastQuit <= 0L) {
+                                if (user.timestamps().lastQuit() <= 0L) {
                                     return finish(PlayerStateCommandResult.success(
                                             "commands.playerstate.seen-never",
                                             Map.of("player", resolved.name())
@@ -415,10 +415,11 @@ public final class PlayerInformationCommandService {
                                         "commands.playerstate.seen-offline",
                                         Map.of(
                                                 "player", resolved.name(),
-                                                "timestamp", Instant.ofEpochMilli(user.timestamps.lastQuit).toString(),
-                                                "ago", duration(
-                                                        Math.max(0L, System.currentTimeMillis() - user.timestamps.lastQuit)
-                                                )
+                                                "timestamp", Instant.ofEpochMilli(user.timestamps().lastQuit()).toString(),
+                                                "ago", duration(Math.max(
+                                                        0L,
+                                                        System.currentTimeMillis() - user.timestamps().lastQuit()
+                                                ))
                                         )
                                 ));
                             })
@@ -456,8 +457,8 @@ public final class PlayerInformationCommandService {
 
                     return users.load(uuid).thenCompose(user -> {
                                 var total = saturatedPlaytime(
-                                        user.timestamps.playTimeMillis,
-                                        user.timestamps.activeSessionStartedAt,
+                                        user.timestamps().playTimeMillis(),
+                                        user.timestamps().activeSessionStartedAt(),
                                         System.currentTimeMillis()
                                 );
 
@@ -467,16 +468,16 @@ public final class PlayerInformationCommandService {
                                                 Map.entry("player", resolved.name()),
                                                 Map.entry("uuid", showUuid ? uuid.toString() : "-"),
                                                 Map.entry("online", resolved.online().isPresent()),
-                                                Map.entry("afk", user.state.afk),
-                                                Map.entry("firstJoin", instantOrUnknown(user.timestamps.firstJoin)),
-                                                Map.entry("lastJoin", instantOrUnknown(user.timestamps.lastJoin)),
-                                                Map.entry("lastQuit", instantOrUnknown(user.timestamps.lastQuit)),
+                                                Map.entry("afk", user.state().afk()),
+                                                Map.entry("firstJoin", instantOrUnknown(user.timestamps().firstJoin())),
+                                                Map.entry("lastJoin", instantOrUnknown(user.timestamps().lastJoin())),
+                                                Map.entry("lastQuit", instantOrUnknown(user.timestamps().lastQuit())),
                                                 Map.entry("playtime", duration(total)),
                                                 Map.entry(
                                                         "nickname",
-                                                        user.state.nickname == null
+                                                        user.state().nickname() == null
                                                                 ? "-"
-                                                                : user.state.nickname
+                                                                : user.state().nickname()
                                                 )
                                         )
                                 ));

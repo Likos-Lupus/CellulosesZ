@@ -2,26 +2,112 @@ package top.likoslupus.cellulosesz.api.user;
 
 import org.jspecify.annotations.Nullable;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
-public final class CellUser {
+import static java.util.Objects.requireNonNull;
 
-    public UUID uuid;
-    public @Nullable String lastKnownName;
-    public UserTimestamps timestamps = new UserTimestamps();
-    public UserState state = new UserState();
-    public UserPreferences preferences = new UserPreferences();
-    public UserRelations relations = new UserRelations();
-    public Map<String, Long> cooldowns = new LinkedHashMap<>();
+public record CellUser(
+        UUID uuid,
+        @Nullable String lastKnownName,
+        UserTimestamps timestamps,
+        UserState state,
+        UserPreferences preferences,
+        UserRelations relations,
+        Map<String, Long> cooldowns
+) {
 
-    public CellUser() {
-        this.uuid = new UUID(0L, 0L);
+    public CellUser {
+        requireNonNull(uuid, "uuid");
+        requireNonNull(timestamps, "timestamps");
+        requireNonNull(state, "state");
+        requireNonNull(preferences, "preferences");
+        requireNonNull(relations, "relations");
+        cooldowns = Map.copyOf(requireNonNull(cooldowns, "cooldowns"));
     }
 
-    public CellUser(UUID uuid) {
-        this.uuid = uuid;
+    public static CellUser create(UUID uuid) {
+        return new CellUser(
+                uuid,
+                null,
+                UserTimestamps.defaults(),
+                UserState.defaults(),
+                UserPreferences.defaults(),
+                UserRelations.defaults(),
+                Map.of()
+        );
+    }
+
+    public CellUser withLastKnownName(@Nullable String value) {
+        return new CellUser(
+                uuid,
+                value,
+                timestamps,
+                state,
+                preferences,
+                relations,
+                cooldowns
+        );
+    }
+
+    public CellUser withTimestamps(UserTimestamps value) {
+        return new CellUser(
+                uuid,
+                lastKnownName,
+                value,
+                state,
+                preferences,
+                relations,
+                cooldowns
+        );
+    }
+
+    public CellUser withState(UserState value) {
+        return new CellUser(
+                uuid,
+                lastKnownName,
+                timestamps,
+                value,
+                preferences,
+                relations,
+                cooldowns
+        );
+    }
+
+    public CellUser withPreferences(UserPreferences value) {
+        return new CellUser(
+                uuid,
+                lastKnownName,
+                timestamps,
+                state,
+                value,
+                relations,
+                cooldowns
+        );
+    }
+
+    public CellUser withRelations(UserRelations value) {
+        return new CellUser(
+                uuid,
+                lastKnownName,
+                timestamps,
+                state,
+                preferences,
+                value,
+                cooldowns
+        );
+    }
+
+    public CellUser withCooldowns(Map<String, Long> value) {
+        return new CellUser(
+                uuid,
+                lastKnownName,
+                timestamps,
+                state,
+                preferences,
+                relations,
+                value
+        );
     }
 
 }

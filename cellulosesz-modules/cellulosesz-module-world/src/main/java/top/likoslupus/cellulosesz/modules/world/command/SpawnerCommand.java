@@ -1,117 +1,133 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.SpawnerRequest;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Locale;
-import java.util.Map;
+import java.util.List;
 
-public final class SpawnerCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class SpawnerCommand implements CommandContributor {
+
     private final WorldPlatformService worlds;
     private final EntityPlatformService entities;
     private final WorldConfig config;
 
     public SpawnerCommand(
-            PlatformService platform,
             WorldPlatformService worlds,
             EntityPlatformService entities,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.worlds = worlds;
-        this.entities = entities;
-        this.config = config;
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.entities = requireNonNull(entities, "entities");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.spawner";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/spawner <entity> [delayTicks]";
-    }
-
-    @Override
-    public String name() {
-        return "spawner";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1 || invocation.args().length > 2) return usage(invocation);
-        var entity = normalize(invocation.args()[0]);
-        if (!entities.validLivingEntity(entity)) {
-            invocation.errorKey("commands.world.spawner.invalid-entity", Map.of("entity", invocation.args()[0]));
-            return 0;
-        }
-        if (!entityPermission(invocation, entity)) {
-            invocation.errorKey("commands.common.no-permission");
-            return 0;
-        }
-        var delay = config.spawnerDefaultDelayTicks;
-        if (invocation.args().length == 2) {
-            if (!invocation.hasPermission("cellulosesz.command.spawner.delay")) {
-                invocation.errorKey("commands.common.no-permission");
-                return 0;
-            }
-            try {
-                delay = Integer.parseInt(invocation.args()[1]);
-                if (delay < config.spawnerMinimumDelayTicks || delay > config.spawnerMaximumDelayTicks) {
-                    throw new NumberFormatException();
-                }
-            } catch (NumberFormatException failure) {
-                invocation.errorKey("commands.world.spawner.invalid-delay", Map.of(
-                        "minimum", config.spawnerMinimumDelayTicks,
-                        "maximum", config.spawnerMaximumDelayTicks
-                ));
-                return 0;
-            }
-        }
-        var result = worlds.configureSpawner(
-                platform.player(invocation).orElseThrow(),
-                config.targetDistance,
-                new SpawnerRequest(entity, delay)
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "spawner",
+                "cellulosesz.command.spawner",
+                CommandSourceKind.PLAYER_ONLY
         );
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.spawner.success", Map.of(
-                "entity", result.value().orElseThrow().entityId(),
-                "delay", result.value().orElseThrow().delayTicks()
-        ));
-        return 1;
+        var entity = Commands.argument("entity", EntityTypeArgument.livingEntity(entities))
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        entities::livingEntityIds,
+                        builder
+                ))
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        config.spawnerDefaultDelayTicks
+                ))
+                .then(Commands.argument(
+                                        "delayTicks",
+                                        IntegerArgumentType.integer(
+                                                config.spawnerMinimumDelayTicks,
+                                                config.spawnerMaximumDelayTicks
+                                        )
+                                )
+                                .requires(source -> context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.spawner.delay"
+                                ))
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(command, "delayTicks")
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.spawner",
+                "/spawner <entity> [delayTicks]",
+                Commands.literal("spawner").then(entity)
+        );
     }
 
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.spawner.usage", Map.of("usage", usage()));
-        return 0;
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int delay
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "spawner",
+                policy -> {
+                    var entity = EntityTypeArgument.get(command, "entity");
+                    var permission = "cellulosesz.command.spawner.entity."
+                            + entity.replace(':', '.')
+                            .replaceAll("[^a-z0-9_.-]", "_");
+
+                    if (!policy.hasPermission("cellulosesz.command.spawner.entity.*")
+                            && !policy.hasPermission(permission)
+                    ) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.PERMISSION_DENIED,
+                                permission
+                        );
+                    }
+
+                    var player = WorldCommandSupport.current(policy);
+                    return player
+                            .<PlatformResult<?>>map(value -> worlds.configureSpawner(
+                                    value,
+                                    config.targetDistance,
+                                    new SpawnerRequest(entity, delay)
+                            ))
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
+        );
     }
 
-    private static String normalize(String value) {
-        var id = value.strip().toLowerCase(Locale.ROOT);
-        return id.contains(":") ? id : "minecraft:" + id;
-    }
-
-    private static boolean entityPermission(CommandInvocation invocation, String entity) {
-        var node = entity.replace(':', '.').replaceAll("[^a-z0-9_.-]", "_");
-        return invocation.hasPermission("cellulosesz.command.spawner.entity.*")
-                || invocation.hasPermission("cellulosesz.command.spawner.entity." + node);
+    @Override
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

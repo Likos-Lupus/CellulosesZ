@@ -1,25 +1,28 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 
 import java.util.Locale;
-import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
+
+import static java.util.Objects.requireNonNull;
 
 public final class WeatherSignHandler implements SynchronousSignHandler {
 
-    private static final Set<String> TYPES = Set.of("clear", "rain", "thunder");
-    private final PlatformService platform;
+    private final WorldDirectory worldDirectory;
     private final WorldService worlds;
 
-    public WeatherSignHandler(PlatformService platform, WorldService worlds) {
-        this.platform = Objects.requireNonNull(platform, "platform");
-        this.worlds = Objects.requireNonNull(worlds, "worlds");
+    public WeatherSignHandler(
+            WorldDirectory worldDirectory,
+            WorldService worlds
+    ) {
+        this.worldDirectory = requireNonNull(worldDirectory, "worldDirectory");
+        this.worlds = requireNonNull(worlds, "worlds");
     }
 
     @Override
@@ -29,28 +32,57 @@ public final class WeatherSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult validate(SignUseContext context) {
-        if (!TYPES.contains(context.line(1).toLowerCase(Locale.ROOT))) {
+        if (type(context).isEmpty()) {
             return SignUseResult.failure("service.sign.weather-format");
         }
+
         if (!context.line(2).isBlank()
-                && SignHandlerSupport.count(context.line(2), 1, 86400).isEmpty()) {
+                && SignHandlerSupport.count(context.line(2), 1, 86_400).isEmpty()
+        ) {
             return SignUseResult.failure("service.sign.weather-format");
         }
-        if (!context.line(3).isBlank() && !platform.worlds().contains(context.line(3))) {
+
+        if (!context.line(3).isBlank()
+                && worldDirectory.resolveLoadedWorld(context.line(3)).isEmpty()
+        ) {
             return SignUseResult.failure("service.sign.weather-world");
         }
+
         return SignUseResult.success("service.sign.valid");
+    }
+
+    private Optional<WeatherType> type(SignUseContext context) {
+        try {
+            return Optional.of(WeatherType.valueOf(context.line(1).toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException exception) {
+            return Optional.empty();
+        }
     }
 
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
-        var value = context.line(1).toUpperCase(Locale.ROOT);
-        if (!TYPES.contains(context.line(1).toLowerCase(Locale.ROOT))) {
+        var type = type(context);
+        if (type.isEmpty()) {
             return SignUseResult.failure("service.sign.weather-format");
         }
-        var seconds = SignHandlerSupport.count(context.line(2), 1, 86400).orElse(300);
-        var world = context.line(3).isBlank() ? context.location().world : context.line(3);
-        return SignHandlerSupport.admin(worlds.setWeather(world, WeatherType.valueOf(value), seconds));
+
+        var seconds = SignHandlerSupport
+                .count(context.line(2), 1, 86_400)
+                .orElse(300);
+        var requestedWorld = context.line(3).isBlank()
+                ? context.location().world
+                : context.line(3);
+        var world = worldDirectory.resolveLoadedWorld(requestedWorld);
+
+        if (world.isEmpty()) {
+            return SignUseResult.failure("service.sign.weather-world");
+        }
+
+        return SignHandlerSupport.admin(worlds.setWeather(
+                world.orElseThrow(),
+                type.orElseThrow(),
+                seconds
+        ));
     }
 
 }

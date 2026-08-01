@@ -979,3 +979,12 @@
 "service.world.time-set": "<primary>已将世界 <secondary><world><primary> 的时间设置为 <secondary><time><primary>。"
 "service.world.weather-failed": "<red>设置世界 <secondary><world><red> 的天气失败。"
 "service.world.weather-set": "<primary>已将世界 <secondary><world><primary> 的天气设置为 <secondary><weather><primary>。"
+
+"commands.item.player-not-online": "<red>玩家 <secondary><player><red> 不在线。"
+"commands.item.operation.success": "<primary><command> 已完成。"
+"commands.item.operation.failed": "<red><command> 失败（<status>）：<secondary><detail>"
+"commands.world.player-only": "<red>此命令只能由玩家使用。"
+"commands.world.operation.success": "<primary><command> 已完成（<secondary><status><primary>）：<secondary><detail>"
+"commands.world.operation.failed": "<red><command> 失败（<secondary><status><red>）：<secondary><detail>"
+"service.world.world-required": "<red>控制台必须指定已加载的世界。"
+"service.world.remove-partial": "<yellow>已移除 <secondary><removed><yellow> 个实体，<secondary><failed><yellow> 个失败。"

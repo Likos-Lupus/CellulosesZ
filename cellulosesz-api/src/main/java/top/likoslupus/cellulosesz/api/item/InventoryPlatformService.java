@@ -8,6 +8,25 @@ import java.util.concurrent.CompletableFuture;
 
 public interface InventoryPlatformService {
 
+    PlatformResult<Void> openInventory(CellPlayer viewer, CellPlayer target);
+
+    PlatformResult<Void> openEnderChest(CellPlayer viewer, CellPlayer target);
+
+    PlatformResult<List<InventoryItemSnapshot>> inventorySnapshot(CellPlayer player);
+
+    PlatformResult<Boolean> plainSnapshot(InventoryItemSnapshot snapshot);
+
+    PlatformResult<InventoryMutation> prepareExchange(
+            CellPlayer player,
+            List<InventoryItemRequest> removals,
+            List<InventoryItemRequest> additions
+    );
+
+    PlatformResult<InventoryGrant> prepareGrant(
+            CellPlayer player,
+            List<? extends InventoryItemSnapshot> snapshots
+    );
+
     PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player);
 
     /**

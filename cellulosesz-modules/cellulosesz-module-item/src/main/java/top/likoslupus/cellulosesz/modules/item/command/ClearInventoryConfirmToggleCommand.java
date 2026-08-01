@@ -1,78 +1,138 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
 
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class ClearInventoryConfirmToggleCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class ClearInventoryConfirmToggleCommand implements CommandContributor {
+
     private final UserService users;
     private final ConfirmationService confirmations;
 
     public ClearInventoryConfirmToggleCommand(
-            PlatformService platform,
             UserService users,
             ConfirmationService confirmations
     ) {
-        this.platform = platform;
-        this.users = users;
-        this.confirmations = confirmations;
+        this.users = requireNonNull(users, "users");
+        this.confirmations = requireNonNull(
+                confirmations,
+                "confirmations"
+        );
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.clearinventoryconfirmtoggle";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "clearinventoryconfirmtoggle",
+                "cellulosesz.command.clearinventoryconfirmtoggle",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("clearinventoryconfirmtoggle")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        null
+                ))
+                .then(Commands.argument(
+                                        "state",
+                                        ToggleArgument.toggle()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        ToggleArgument.get(
+                                                command,
+                                                "state"
+                                        ).enabled()
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.clearinventoryconfirmtoggle",
+                "/clearinventoryconfirmtoggle [on|off]",
+                root
+        );
     }
 
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            @Nullable Boolean requested
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "clearinventory confirmation",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
 
-    @Override
-    public String usage() {
-        return "/clearinventoryconfirmtoggle [on|off]";
-    }
-
-    @Override
-    public String name() {
-        return "clearinventoryconfirmtoggle";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        var current = users.cached(player.uuid()).map(user -> user.preferences.confirmInventoryClears).orElse(true);
-        final boolean enabled;
-        if (invocation.args().length == 0) enabled = !current;
-        else if (invocation.args()[0].equalsIgnoreCase("on")) enabled = true;
-        else if (invocation.args()[0].equalsIgnoreCase("off")) enabled = false;
-        else return usage(invocation);
-
-        users.updateVoid(player.uuid(), user -> user.preferences.confirmInventoryClears = enabled)
-                .whenComplete((ignored, failure) -> platform.runOnServerThread(() -> {
-                    if (failure != null) {
-                        invocation.errorKey("commands.item.clearinventory-confirm.save-failed");
-                        return;
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
+                                )
+                        );
                     }
-                    confirmations.clear(player.uuid(), "clearinventory");
-                    invocation.replyKey(enabled
-                            ? "commands.item.clearinventory-confirm.enabled"
-                            : "commands.item.clearinventory-confirm.disabled");
-                }));
-        return 1;
+
+                    var currentPlayer = player.orElseThrow();
+                    var current = users.cached(currentPlayer.uuid())
+                            .map(user -> user.preferences().confirmInventoryClears())
+                            .orElse(true);
+                    var enabled = requested == null
+                            ? !current
+                            : requested;
+
+                    return users
+                            .updateVoid(
+                                    currentPlayer.uuid(),
+                                    user -> user.withPreferences(
+                                            user.preferences().withConfirmInventoryClears(enabled)
+                                    )
+                            )
+                            .thenApply(_ -> {
+                                confirmations.clear(
+                                        currentPlayer.uuid(),
+                                        "clearinventory"
+                                );
+                                return PlatformResult.success();
+                            })
+                            .exceptionally(_ ->
+                                    PlatformResult.failure(
+                                            PlatformOperationStatus.STORAGE_FAILURE,
+                                            "user-save-failed"
+                                    )
+                            );
+                }
+        );
     }
 
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.clearinventory-confirm.usage", Map.of("usage", usage()));
-        return 0;
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

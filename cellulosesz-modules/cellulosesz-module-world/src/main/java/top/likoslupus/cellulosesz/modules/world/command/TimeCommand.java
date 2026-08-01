@@ -1,81 +1,108 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.LoadedWorldArgument;
+import top.likoslupus.cellulosesz.modules.world.command.argument.TimeValueArgument;
 
-import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 
-public final class TimeCommand extends AbstractWorldCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final WorldService worlds;
+public final class TimeCommand implements CommandContributor {
+
+    private final WorldService service;
+    private final WorldDirectory worlds;
+    private final PlayerLocationPlatformService locations;
 
     public TimeCommand(
-            PlatformService platform,
-            WorldConfig config,
-            WorldService worlds
+            WorldService service,
+            WorldDirectory worlds,
+            PlayerLocationPlatformService locations
     ) {
-        super(platform, config);
-        this.worlds = worlds;
+        this.service = requireNonNull(service, "service");
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.locations = requireNonNull(locations, "locations");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.world.time";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "time",
+                "cellulosesz.world.time",
+                CommandSourceKind.ANY
+        );
+        var time = Commands.argument("time", TimeValueArgument.timeValue())
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument("world", LoadedWorldArgument.loadedWorld(worlds))
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                worlds::loadedWorldIds,
+                                builder
+                        ))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(LoadedWorldArgument.get(command, "world"))
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.time",
+                "/time <day|noon|night|midnight|ticks> [world]",
+                Commands.literal("time").then(time)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<String> explicitWorld
+    ) {
+        return WorldCommandSupport.admin(
+                registration,
+                command,
+                descriptor,
+                "time",
+                policy -> WorldCommandSupport.world(
+                                policy,
+                                worlds,
+                                locations,
+                                explicitWorld
+                        )
+                        .map(world -> service.setTime(
+                                world,
+                                TimeValueArgument.get(command, "time")
+                        ))
+                        .orElseGet(() -> AdminResult.failure(
+                                "service.world.world-required"
+                        ))
+        );
     }
 
     @Override
-    public String usage() {
-        return "/time <day|noon|night|midnight|ticks> [world]";
-    }
-
-    @Override
-    public String name() {
-        return "time";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.world.time-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var time = switch (args[0].toLowerCase()) {
-            case "day" -> 1000L;
-            case "noon" -> 6000L;
-            case "night" -> 13000L;
-            case "midnight" -> 18000L;
-            default -> parse(args[0]);
-        };
-        if (time < 0L) {
-            invocation.errorKey(
-                    "commands.world.time-command.error.invalid-time-format",
-                    Map.of("input", args[0])
-            );
-            return 0;
-        }
-
-        var result = worlds.setTime(world(invocation, 1), time);
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
-    }
-
-    private long parse(String value) {
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException _) {
-            return -1L;
-        }
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

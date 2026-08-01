@@ -1,22 +1,25 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
+import top.likoslupus.cellulosesz.api.item.RepairScope;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
+
+import static java.util.Objects.requireNonNull;
 
 public final class RepairSignHandler implements SynchronousSignHandler {
 
     private static final Set<String> MODES = Set.of("", "hand", "all");
-    private final PlatformService platform;
 
-    public RepairSignHandler(PlatformService platform) {
-        this.platform = Objects.requireNonNull(platform, "platform");
+    private final ItemPlatformService items;
+
+    public RepairSignHandler(ItemPlatformService items) {
+        this.items = requireNonNull(items, "items");
     }
 
     @Override
@@ -33,9 +36,18 @@ public final class RepairSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
-        var count = platform.repairItems(context.player(), context.line(1).equalsIgnoreCase("all"));
-        return count > 0
-                ? SignUseResult.success("service.sign.repair-success", Map.of("count", count))
+        var scope = context.line(1).equalsIgnoreCase("all")
+                ? RepairScope.ALL
+                : RepairScope.HAND;
+        var result = items.repair(context.player(), scope);
+        var count = result.value().orElse(0);
+
+        return result.successful() && count > 0
+                ?
+                SignUseResult.success(
+                        "service.sign.repair-success",
+                        Map.of("count", count)
+                )
                 : SignUseResult.failure("service.sign.repair-nothing");
     }
 

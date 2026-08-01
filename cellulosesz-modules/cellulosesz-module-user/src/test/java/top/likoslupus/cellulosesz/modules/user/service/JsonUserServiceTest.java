@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 
@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,16 +28,28 @@ final class JsonUserServiceTest {
         );
         var uuid = UUID.randomUUID();
 
-        service.updateVoid(uuid, user -> user.preferences.confirmInventoryClears = false).join();
-        service.updateVoid(uuid, user -> user.preferences.payments = false).join();
+        service
+                .updateVoid(
+                        uuid,
+                        user -> user.withPreferences(user
+                                .preferences()
+                                .withConfirmInventoryClears(false))
+                )
+                .join();
+        service
+                .updateVoid(
+                        uuid,
+                        user -> user.withPreferences(user.preferences().withPayments(false))
+                )
+                .join();
 
         var snapshot = service.cached(uuid).orElseThrow();
-        assertFalse(snapshot.preferences.confirmInventoryClears);
-        assertFalse(snapshot.preferences.payments);
-        assertTrue(snapshot.preferences.privateMessages);
-        assertTrue(snapshot.preferences.teleportRequests);
-        assertTrue(snapshot.preferences.confirmLargePayments);
-        assertTrue(snapshot.preferences.powerToolsEnabled);
+        assertFalse(snapshot.preferences().confirmInventoryClears());
+        assertFalse(snapshot.preferences().payments());
+        assertTrue(snapshot.preferences().privateMessages());
+        assertTrue(snapshot.preferences().teleportRequests());
+        assertTrue(snapshot.preferences().confirmLargePayments());
+        assertTrue(snapshot.preferences().powerToolsEnabled());
     }
 
 
@@ -71,20 +84,26 @@ final class JsonUserServiceTest {
                 new NoopLogger()
         );
         var uuid = UUID.randomUUID();
-        service.updateVoid(uuid, user -> user.preferences.payments = false).join();
+
+        service
+                .updateVoid(
+                        uuid,
+                        user -> user.withPreferences(user.preferences().withPayments(false))
+                )
+                .join();
         storage.failSaves = true;
 
         assertThrows(
                 Exception.class,
                 () -> service.updateVoid(
                         uuid,
-                        user -> user.preferences.privateMessages = false
+                        user -> user.withPreferences(user.preferences().withPrivateMessages(false))
                 ).join()
         );
 
         var cached = service.cached(uuid).orElseThrow();
-        assertFalse(cached.preferences.payments);
-        assertTrue(cached.preferences.privateMessages);
+        assertFalse(cached.preferences().payments());
+        assertTrue(cached.preferences().privateMessages());
     }
 
     @Test
@@ -96,14 +115,28 @@ final class JsonUserServiceTest {
                 new NoopLogger()
         );
         var uuid = UUID.randomUUID();
-        var user = service.load(uuid).join();
-        user.timestamps.playTimeMillis = Long.MAX_VALUE;
-        user.timestamps.activeSessionStartedAt = System.currentTimeMillis() - 1_000L;
+        var startedAt = System.currentTimeMillis() - 1_000L;
 
-        service.markQuit(new FakePlayer(uuid));
+        service.updateVoid(
+                uuid,
+                user -> user.withTimestamps(
+                        user.timestamps()
+                                .withPlayTimeMillis(Long.MAX_VALUE)
+                                .withActiveSessionStartedAt(startedAt)
+                )
+        ).join();
 
-        assertEquals(Long.MAX_VALUE, user.timestamps.playTimeMillis);
-        assertNull(user.timestamps.activeSessionStartedAt);
+        service
+                .markQuit(new CellPlayer(
+                        uuid,
+                        "player",
+                        new Object()
+                ))
+                .join();
+
+        var snapshot = service.cached(uuid).orElseThrow();
+        assertEquals(Long.MAX_VALUE, snapshot.timestamps().playTimeMillis());
+        assertNull(snapshot.timestamps().activeSessionStartedAt());
     }
 
     @NullMarked
@@ -121,7 +154,9 @@ final class JsonUserServiceTest {
                 Supplier<T> defaults
         ) {
             var value = values.get(path);
-            return CompletableFuture.completedFuture(value == null ? defaults.get() : type.cast(value));
+            return CompletableFuture.completedFuture(value == null
+                    ? defaults.get()
+                    : type.cast(value));
         }
 
         @Override
@@ -131,12 +166,18 @@ final class JsonUserServiceTest {
                 Supplier<T> defaults
         ) {
             createCalls.incrementAndGet();
-            return createGate.thenApply(_ -> type.cast(values.computeIfAbsent(path, ignored -> defaults.get())));
+            return createGate.thenApply(_ -> type.cast(values.computeIfAbsent(
+                    path,
+                    _ -> defaults.get()
+            )));
         }
 
         @Override
         public <T> CompletableFuture<Void> save(Path path, T value) {
-            if (failSaves) return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            if (failSaves) {
+                return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            }
+
             values.put(path, value);
             return CompletableFuture.completedFuture(null);
         }
@@ -158,20 +199,6 @@ final class JsonUserServiceTest {
 
     }
 
-    public static final class FakePlayer {
-
-        private final UUID uuid;
-
-        public FakePlayer(UUID uuid) {
-            this.uuid = uuid;
-        }
-
-        public UUID getUUID() {
-            return uuid;
-        }
-
-    }
-
     @NullMarked
     private static final class MemoryNames implements NameCacheService {
 
@@ -184,8 +211,7 @@ final class JsonUserServiceTest {
 
         @Override
         public Optional<UUID> findUuid(String name) {
-            return names.entrySet()
-                    .stream()
+            return names.entrySet().stream()
                     .filter(e -> e.getValue().equalsIgnoreCase(name))
                     .map(Map.Entry::getKey)
                     .findFirst();

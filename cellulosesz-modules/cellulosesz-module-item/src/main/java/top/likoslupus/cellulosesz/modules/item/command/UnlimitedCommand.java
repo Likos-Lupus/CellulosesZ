@@ -1,119 +1,205 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 
-import java.util.Map;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
-public final class UnlimitedCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class UnlimitedCommand implements CommandContributor {
+
+    private final ItemAutomationService automation;
+    private final ItemService items;
 
     public UnlimitedCommand(
-            PlatformService platform,
-            ItemService items,
             ItemAutomationService automation,
-            ItemConfig config
+            ItemService items
     ) {
-        super(platform, items, automation, config);
+        this.automation = requireNonNull(automation, "automation");
+        this.items = requireNonNull(items, "items");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.unlimited";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/unlimited [on|off|list|clear]";
-    }
-
-    @Override
-    public String name() {
-        return "unlimited";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var args = invocation.args();
-        if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
-            var configured = automation.unlimitedItems(self.get().uuid());
-            if (configured.isEmpty()) {
-                invocation.replyKey("commands.item.unlimited-list-empty");
-            } else {
-                invocation.replyKey(
-                        "commands.item.unlimited-list",
-                        Map.of("items", String.join(", ", configured))
-                );
-            }
-            return 1;
-        }
-
-        if (args.length == 1 && args[0].equalsIgnoreCase("clear")) {
-            automation.unlimitedItems(self.get().uuid())
-                    .forEach(itemId -> automation.setUnlimited(
-                            self.get().uuid(),
-                            itemId,
-                            false
-                    ));
-            invocation.replyKey("commands.item.unlimited-command.reply.cleared-all-unlimited-items");
-            return 1;
-        }
-
-        if (args.length > 1) {
-            invocation.errorKey(
-                    "commands.item.unlimited-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var held = items.heldItemId(self.get());
-        if (held.isEmpty()) {
-            invocation.errorKey("commands.item.unlimited-command.error.hold-item-first");
-            return 0;
-        }
-
-        var enabled = args.length == 0
-                ? !automation.unlimited(self.get().uuid(), held.get())
-                : args[0].equalsIgnoreCase("on")
-                        || args[0].equalsIgnoreCase("enable")
-                        || args[0].equalsIgnoreCase("true");
-        if (args.length == 1 && !(
-                enabled || args[0].equalsIgnoreCase("off")
-                        || args[0].equalsIgnoreCase("disable")
-                        || args[0].equalsIgnoreCase("false")
-        )) {
-            invocation.errorKey(
-                    "commands.item.unlimited-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        automation.setUnlimited(
-                self.get().uuid(),
-                held.get(),
-                enabled
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "unlimited",
+                "cellulosesz.item.unlimited",
+                CommandSourceKind.PLAYER_ONLY
         );
-        automation.maintainUnlimited(self.get());
-        invocation.replyKey(
-                enabled
-                        ? "commands.item.unlimited-command.enabled"
-                        : "commands.item.unlimited-command.disabled",
-                Map.of("item", held.get())
+
+        var root = Commands.literal("unlimited")
+                .executes(command -> held(
+                        context,
+                        command,
+                        descriptor,
+                        null
+                ))
+                .then(Commands.literal("on")
+                        .executes(command -> held(
+                                context,
+                                command,
+                                descriptor,
+                                true
+                        )))
+                .then(Commands.literal("off")
+                        .executes(command -> held(
+                                context,
+                                command,
+                                descriptor,
+                                false
+                        )))
+                .then(Commands.literal("list")
+                        .executes(command -> list(
+                                context,
+                                command,
+                                descriptor
+                        )))
+                .then(Commands.literal("clear")
+                        .executes(command -> clear(
+                                context,
+                                command,
+                                descriptor
+                        )));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.unlimited",
+                "/unlimited [on|off|list|clear]",
+                root
         );
-        return 1;
+    }
+
+    private int held(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            @Nullable Boolean requested
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "unlimited",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
+                                )
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var held = items.heldItemId(currentPlayer);
+
+                    if (held.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_STATE,
+                                        "empty-hand"
+                                )
+                        );
+                    }
+
+                    var item = held.orElseThrow();
+                    var enabled = requested == null ?
+                            !automation.unlimited(
+                                    currentPlayer.uuid(),
+                                    item
+                            ) :
+                            requested;
+
+                    return automation
+                            .setUnlimited(
+                                    currentPlayer.uuid(),
+                                    item,
+                                    enabled
+                            )
+                            .thenApply(result -> {
+                                if (result.successful() && enabled) {
+                                    automation.maintainUnlimited(currentPlayer);
+                                }
+
+                                return result;
+                            });
+                }
+        );
+    }
+
+    private int list(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "unlimited list",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .<PlatformResult<?>>map(value ->
+                                    PlatformResult.success(
+                                            automation.unlimitedItems(
+                                                    value.uuid()
+                                            )
+                                    )
+                            )
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
+        );
+    }
+
+    private int clear(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "unlimited clear",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .map(value -> automation.clearUnlimited(value.uuid()))
+                            .orElseGet(() -> CompletableFuture.completedFuture(
+                                    PlatformResult.failure(
+                                            PlatformOperationStatus.INVALID_SOURCE,
+                                            "player-only"
+                                    )
+                            ));
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

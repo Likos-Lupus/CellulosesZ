@@ -1,83 +1,123 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.entity.TntBurstRequest;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class AntiochCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class AntiochCommand implements CommandContributor {
+
+    private final PlayerTargetingService targeting;
     private final EntityPlatformService entities;
     private final WorldConfig config;
 
     public AntiochCommand(
-            PlatformService platform,
+            PlayerTargetingService targeting,
             EntityPlatformService entities,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.entities = entities;
-        this.config = config;
+        this.targeting = requireNonNull(targeting, "targeting");
+        this.entities = requireNonNull(entities, "entities");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.antioch";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "antioch",
+                "cellulosesz.command.antioch",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        var root = Commands.literal("antioch")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ""
+                ))
+                .then(Commands.argument("message", StringArgumentType.greedyString())
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                StringArgumentType.getString(command, "message")
+                        )));
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.antioch",
+                "/antioch [message...]",
+                root
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String message
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "antioch message-present=" + !message.isBlank(),
+                policy -> {
+                    if (!config.destructiveCommandsEnabled) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.STATE_NOT_ALLOWED,
+                                "destructive-commands-disabled"
+                        );
+                    }
+
+                    var player = WorldCommandSupport.current(policy);
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var target = targeting.targetLocation(
+                            player.orElseThrow(),
+                            config.targetDistance
+                    );
+
+                    return target.successful() && target.value().isPresent()
+                            ?
+                            entities.spawnTnt(new TntBurstRequest(
+                                    target.value().orElseThrow(),
+                                    Math.min(1, config.antiochMaximumEntities),
+                                    config.antiochFuseTicks,
+                                    config.antiochExplosionPower,
+                                    config.explosionBlockDamage,
+                                    0.0D,
+                                    0.0D
+                            ))
+                            : target;
+                }
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/antioch [message]";
-    }
-
-    @Override
-    public String name() {
-        return "antioch";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        if (!config.destructiveCommandsEnabled) {
-            invocation.errorKey("commands.world.destructive-disabled");
-            return 0;
-        }
-        var player = platform.player(invocation).orElseThrow();
-        var target = platform.targetLocation(player, config.targetDistance);
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.world.antioch.no-target");
-            return 0;
-        }
-        var amount = Math.min(1, config.antiochMaximumEntities);
-        var result = entities.spawnTnt(new TntBurstRequest(
-                target.orElseThrow(), amount, config.antiochFuseTicks,
-                config.antiochExplosionPower, config.explosionBlockDamage, 0.0D, 0.0D
-        ));
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.antioch.success", Map.of(
-                "count", result.value().orElseThrow().spawned(),
-                "message", invocation.args().length == 1 ? invocation.args()[0] : ""
-        ));
-        return result.value().orElseThrow().spawned();
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.antioch.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

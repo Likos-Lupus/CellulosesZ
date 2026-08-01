@@ -1,111 +1,127 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.item.ItemStackDetails;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
-import java.util.Comparator;
-import java.util.Map;
+import java.util.List;
 
-public final class ItemDbCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class ItemDbCommand implements CommandContributor {
+
     private final InventoryPlatformService inventory;
     private final ItemService items;
-    private final ItemConfig config;
 
     public ItemDbCommand(
-            PlatformService platform,
             InventoryPlatformService inventory,
-            ItemService items,
-            ItemConfig config
+            ItemService items
     ) {
-        this.platform = platform;
-        this.inventory = inventory;
-        this.items = items;
-        this.config = config;
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.items = requireNonNull(items, "items");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.itemdb";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "itemdb",
+                "cellulosesz.command.itemdb",
+                CommandSourceKind.ANY
+        );
+
+        var root = Commands.literal("itemdb")
+                .executes(command -> held(
+                        context,
+                        command,
+                        descriptor
+                ))
+                .then(Commands.argument(
+                                        "item",
+                                        ItemIdArgument.itemId(items)
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                items::names,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> lookup(
+                                        context,
+                                        command,
+                                        descriptor
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.itemdb",
+                "/itemdb [item]",
+                root
+        );
+    }
+
+    private int held(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "itemdb held",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .<PlatformResult<?>>map(inventory::heldItemDetails)
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "item-required"
+                            ));
+                }
+        );
+    }
+
+    private int lookup(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "itemdb item",
+                _ -> {
+                    var item = ItemIdArgument.get(command, "item");
+                    var parsed = items.parse(item);
+
+                    return parsed.isPresent()
+                            ? PlatformResult.success(parsed.orElseThrow().copy())
+                            : PlatformResult.failure(
+                                    PlatformOperationStatus.NOT_FOUND,
+                                    "unknown-item"
+                            );
+                }
+        );
     }
 
     @Override
-    public String usage() {
-        return "/itemdb [item]";
-    }
-
-    @Override
-    public String name() {
-        return "itemdb";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        final ItemStackDetails details;
-        if (invocation.args().length == 0) {
-            if (!invocation.player()) {
-                invocation.errorKey("commands.item.itemdb.console-item-required");
-                return 0;
-            }
-            var result = inventory.heldItemDetails(platform.player(invocation).orElseThrow());
-            if (!result.successful() || result.value().isEmpty()) {
-                invocation.errorKey("commands.item.itemdb.empty-hand");
-                return 0;
-            }
-            details = result.value().orElseThrow();
-        } else {
-            var parsed = items.parse(invocation.args()[0]);
-            if (parsed.isEmpty() || !items.valid(parsed.orElseThrow())) {
-                invocation.errorKey("commands.item.itemdb.unknown", Map.of("item", invocation.args()[0]));
-                return 0;
-            }
-            var descriptor = parsed.orElseThrow();
-            details = new ItemStackDetails(
-                    descriptor.item,
-                    descriptor.item,
-                    descriptor.count,
-                    Math.max(1, items.maxStackSize(descriptor)),
-                    false,
-                    false,
-                    0,
-                    0
-            );
-        }
-        var aliases = config.aliases.entrySet().stream()
-                .filter(entry -> normalize(entry.getValue()).equals(normalize(details.itemId())))
-                .map(Map.Entry::getKey)
-                .sorted(Comparator.naturalOrder())
-                .limit(config.maximumDisplayedAliases)
-                .toList();
-        invocation.replyKey("commands.item.itemdb.result", Map.of(
-                "id", details.itemId(),
-                "name", details.displayName(),
-                "maximum", details.maximumCount(),
-                "count", details.count(),
-                "components", details.nonDefaultComponents(),
-                "aliases", aliases.isEmpty() ? "-" : String.join(", ", aliases),
-                "durability", details.damageable()
-                        ? details.remainingDurability() + "/" + details.maximumDurability()
-                        : "-"
-        ));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.itemdb.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private static String normalize(String value) {
-        var result = value.strip().toLowerCase(java.util.Locale.ROOT);
-        return result.contains(":") ? result : "minecraft:" + result;
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

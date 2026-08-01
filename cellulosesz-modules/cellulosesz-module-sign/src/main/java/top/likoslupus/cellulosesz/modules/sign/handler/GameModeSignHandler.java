@@ -1,22 +1,23 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.Optional;
+
+import static java.util.Objects.requireNonNull;
 
 public final class GameModeSignHandler implements SynchronousSignHandler {
 
-    private static final Set<String> MODES = Set.of("survival", "creative", "adventure", "spectator");
-    private final PlatformService platform;
+    private final PlayerStatePlatformService playerState;
 
-    public GameModeSignHandler(PlatformService platform) {
-        this.platform = Objects.requireNonNull(platform, "platform");
+    public GameModeSignHandler(PlayerStatePlatformService playerState) {
+        this.playerState = requireNonNull(playerState, "playerState");
     }
 
     @Override
@@ -26,15 +27,35 @@ public final class GameModeSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult validate(SignUseContext context) {
-        return MODES.contains(context.line(1).toLowerCase(Locale.ROOT))
+        return mode(context).isPresent()
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure("service.sign.gamemode-format");
     }
 
+    private Optional<GameModeKind> mode(SignUseContext context) {
+        try {
+            return Optional.of(GameModeKind.valueOf(context.line(1).toUpperCase(Locale.ROOT)));
+        } catch (IllegalArgumentException _) {
+            return Optional.empty();
+        }
+    }
+
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
-        return platform.setGameMode(context.player(), context.line(1))
-                ? SignUseResult.success("service.sign.gamemode-success", Map.of("mode", context.line(1)))
+        var mode = mode(context);
+        if (mode.isEmpty()) {
+            return SignUseResult.failure("service.sign.gamemode-format");
+        }
+
+        return playerState.setGameMode(
+                context.player(),
+                mode.orElseThrow()
+        ).successful()
+                ?
+                SignUseResult.success(
+                        "service.sign.gamemode-success",
+                        Map.of("mode", mode.orElseThrow().name().toLowerCase(Locale.ROOT))
+                )
                 : SignUseResult.failure("service.sign.gamemode-failed");
     }
 

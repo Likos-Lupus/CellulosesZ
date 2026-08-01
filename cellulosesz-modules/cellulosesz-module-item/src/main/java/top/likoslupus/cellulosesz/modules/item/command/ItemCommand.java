@@ -1,76 +1,87 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
 
-import java.util.Map;
+import java.util.List;
 
-public final class ItemCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class ItemCommand implements CommandContributor {
+
+    private final ItemCommandService service;
+    private final ItemService items;
 
     public ItemCommand(
-            PlatformService platform,
-            ItemService items,
-            ItemAutomationService automation,
-            ItemConfig config
+            ItemCommandService service,
+            ItemService items
     ) {
-        super(platform, items, automation, config);
+        this.service = requireNonNull(service, "service");
+        this.items = requireNonNull(items, "items");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.spawn";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/item <id> [count] [components]";
-    }
-
-    @Override
-    public String name() {
-        return "item";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var descriptor = items.parse(join(invocation.args(), 0));
-        if (descriptor.isEmpty()) {
-            invocation.errorKey(
-                    "commands.item.item-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        if (!allowSpawn(invocation, descriptor.get(), "cellulosesz.item.spawn")) {
-            return 0;
-        }
-
-        if (!items.give(self.get(), descriptor.get())) {
-            invocation.errorKey("commands.item.item-command.error.failed-give-item");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.item.item-command.reply.received",
-                Map.of(
-                        "item", descriptor.get().count,
-                        "count", descriptor.get().normalizedItem()
-                )
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "item",
+                "cellulosesz.item.spawn",
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var root = Commands.literal("item")
+                .then(Commands.argument(
+                                        "item",
+                                        ItemDescriptorArgument.itemDescriptor(items)
+                                )
+                                .executes(command -> ItemCommandSupport.sync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "item grant",
+                                        policy -> {
+                                            var player = ItemCommandSupport.current(policy);
+
+                                            if (player.isEmpty()) {
+                                                return PlatformResult.failure(
+                                                        PlatformOperationStatus.INVALID_SOURCE,
+                                                        "player-only"
+                                                );
+                                            }
+
+                                            return service.grant(
+                                                    player.orElseThrow(),
+                                                    ItemDescriptorArgument.get(command, "item"),
+                                                    policy.hasPermission(
+                                                            "cellulosesz.item.spawn.blacklist"
+                                                    ),
+                                                    policy.hasPermission(
+                                                            "cellulosesz.item.spawn.oversized"
+                                                    )
+                                            );
+                                        }
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.item",
+                "/item <item-descriptor>",
+                root
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

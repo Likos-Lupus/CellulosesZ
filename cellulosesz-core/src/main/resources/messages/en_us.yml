@@ -979,3 +979,12 @@
 "service.world.time-set": "<primary>Set the time in <secondary><world><primary> to <secondary><time><primary>."
 "service.world.weather-failed": "<red>Failed to set the weather in <secondary><world><red>."
 "service.world.weather-set": "<primary>Set the weather in <secondary><world><primary> to <secondary><weather><primary>."
+
+"commands.item.player-not-online": "<red>Player <secondary><player><red> is not online."
+"commands.item.operation.success": "<primary><command> completed."
+"commands.item.operation.failed": "<red><command> failed (<status>): <secondary><detail>"
+"commands.world.player-only": "<red>This command can only be used by a player."
+"commands.world.operation.success": "<primary><command> completed (<secondary><status><primary>): <secondary><detail>"
+"commands.world.operation.failed": "<red><command> failed (<secondary><status><red>): <secondary><detail>"
+"service.world.world-required": "<red>Console must specify a loaded world."
+"service.world.remove-partial": "<yellow>Removed <secondary><removed><yellow> entities; <secondary><failed><yellow> failed."

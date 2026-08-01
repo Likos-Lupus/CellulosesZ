@@ -395,12 +395,12 @@ public final class PlayerStateModule implements CellulosesZModule {
                                             .require(PlayerStatePlatformService.class);
 
                                     if (requireNonNull(settings, "settings").persistFlyGod()) {
-                                        statePlatform.setFlying(player, user.state.flying);
-                                        statePlatform.setInvulnerable(player, user.state.god);
+                                        statePlatform.setFlying(player, user.state().flying());
+                                        statePlatform.setInvulnerable(player, user.state().god());
                                     }
 
                                     if (requireNonNull(settings, "settings").persistVanish()
-                                            && user.state.vanished
+                                            && user.state().vanished()
                                     ) {
                                         requireNonNull(vanish, "vanish")
                                                 .setVanished(player, true);

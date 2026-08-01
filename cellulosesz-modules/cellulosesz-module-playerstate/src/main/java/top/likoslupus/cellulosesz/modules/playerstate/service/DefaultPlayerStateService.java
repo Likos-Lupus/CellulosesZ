@@ -86,10 +86,9 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         return users
                 .updateVoid(
                         uuid,
-                        user -> {
-                            user.state.afk = afk;
-                            user.timestamps.lastActivityAt = now;
-                        }
+                        user -> user
+                                .withState(user.state().withAfk(afk))
+                                .withTimestamps(user.timestamps().withLastActivityAt(now))
                 )
                 .thenApply(_ -> {
                     activity(uuid, now);
@@ -107,7 +106,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     public boolean afk(UUID uuid) {
         return users
                 .cached(uuid)
-                .map(user -> user.state.afk)
+                .map(user -> user.state().afk())
                 .orElse(false);
     }
 
@@ -121,7 +120,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     public long lastActivity(UUID uuid) {
         return lastActivityMillis
                 .getOrDefault(uuid, users.cached(uuid)
-                        .map(user -> user.timestamps.lastActivityAt)
+                        .map(user -> user.timestamps().lastActivityAt())
                         .orElse(0L));
     }
 
@@ -138,8 +137,8 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         return users
                 .load(uuid)
                 .thenApply(user -> personalWorldState(
-                        user.state.personalTime,
-                        user.state.personalWeather
+                        user.state().personalTime(),
+                        user.state().personalWeather()
                 ));
     }
 
@@ -148,8 +147,8 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         return users
                 .cached(uuid)
                 .map(user -> personalWorldState(
-                        user.state.personalTime,
-                        user.state.personalWeather
+                        user.state().personalTime(),
+                        user.state().personalWeather()
                 ));
     }
 
@@ -170,7 +169,9 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             return users
                                     .updateVoid(
                                             player.uuid(),
-                                            user -> user.state.personalTime = persistedTime(setting)
+                                            user -> user.withState(
+                                                    user.state().withPersonalTime(persistedTime(setting))
+                                            )
                                     )
                                     .thenApply(_ -> timeSuccess(player, setting))
                                     .exceptionallyCompose(_ -> serverThread
@@ -206,7 +207,9 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             return users
                                     .updateVoid(
                                             player.uuid(),
-                                            user -> user.state.personalWeather = persistedWeather(setting)
+                                            user -> user.withState(
+                                                    user.state().withPersonalWeather(persistedWeather(setting))
+                                            )
                                     )
                                     .thenApply(_ -> weatherSuccess(player, setting))
                                     .exceptionallyCompose(_ -> serverThread
@@ -266,7 +269,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         return users
                 .updateVoid(
                         uuid,
-                        user -> user.state.nickname = stored.orElse(null)
+                        user -> user.withState(user.state().withNickname(stored.orElse(null)))
                 )
                 .thenCompose(_ -> serverThread
                         .submit(() -> {
@@ -285,7 +288,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     public Optional<String> nick(UUID uuid) {
         return users
                 .cached(uuid)
-                .flatMap(user -> Optional.ofNullable(user.state.nickname));
+                .flatMap(user -> Optional.ofNullable(user.state().nickname()));
     }
 
     private static @Nullable Long persistedTime(PersonalTimeSetting setting) {
@@ -376,13 +379,11 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                 return users
                                         .updateVoid(
                                                 player.uuid(),
-                                                user -> {
-                                                    if (flying) {
-                                                        user.state.flying = enabled;
-                                                    } else {
-                                                        user.state.god = enabled;
-                                                    }
-                                                }
+                                                user -> user.withState(
+                                                        flying
+                                                                ? user.state().withFlying(enabled)
+                                                                : user.state().withGod(enabled)
+                                                )
                                         ).thenApply(_ -> AdminResult.success(
                                                 flying ?
                                                         (enabled

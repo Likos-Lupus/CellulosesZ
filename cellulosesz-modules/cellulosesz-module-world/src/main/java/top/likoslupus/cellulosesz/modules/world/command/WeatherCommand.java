@@ -1,93 +1,124 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.LoadedWorldArgument;
+import top.likoslupus.cellulosesz.modules.world.command.argument.WeatherTypeArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
 
-public final class WeatherCommand extends AbstractWorldCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final WorldService worlds;
+public final class WeatherCommand implements CommandContributor {
+
+    private final WorldService service;
+    private final WorldDirectory worlds;
+    private final PlayerLocationPlatformService locations;
+    private final WorldConfig config;
 
     public WeatherCommand(
-            PlatformService platform,
-            WorldConfig config,
-            WorldService worlds
+            WorldService service,
+            WorldDirectory worlds,
+            PlayerLocationPlatformService locations,
+            WorldConfig config
     ) {
-        super(platform, config);
-        this.worlds = worlds;
+        this.service = requireNonNull(service, "service");
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.locations = requireNonNull(locations, "locations");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.world.weather";
-    }
-
-    @Override
-    public String usage() {
-        return "/weather <clear|rain|thunder> [seconds] [world]";
-    }
-
-    @Override
-    public String name() {
-        return "weather";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.world.weather-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var type = weatherType(args[0]);
-        if (type.isEmpty()) {
-            invocation.errorKey(
-                    "commands.world.weather-command.error.unknown-weather-type",
-                    Map.of("weather", args[0])
-            );
-            return 0;
-        }
-
-        var seconds = args.length >= 2
-                ? parse(args[1], config.defaultWeatherSeconds)
-                : config.defaultWeatherSeconds;
-        var result = worlds.setWeather(
-                world(invocation, 2),
-                type.orElseThrow(),
-                seconds
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "weather",
+                "cellulosesz.world.weather",
+                CommandSourceKind.ANY
         );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        var type = Commands.argument("type", WeatherTypeArgument.weatherType())
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        config.defaultWeatherSeconds,
+                        Optional.empty()
+                ))
+                .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 1_000_000))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                IntegerArgumentType.getInteger(command, "seconds"),
+                                Optional.empty()
+                        ))
+                        .then(Commands.argument("world", LoadedWorldArgument.loadedWorld(worlds))
+                                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                        worlds::loadedWorldIds,
+                                        builder
+                                ))
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(command, "seconds"),
+                                        Optional.of(LoadedWorldArgument.get(command, "world"))
+                                ))
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.weather",
+                "/weather <clear|rain|thunder> [seconds] [world]",
+                Commands.literal("weather").then(type)
+        );
     }
 
-    private Optional<WeatherType> weatherType(String value) {
-        return switch (value.toLowerCase()) {
-            case "clear", "sun" -> Optional.of(WeatherType.CLEAR);
-            case "rain", "storm" -> Optional.of(WeatherType.RAIN);
-            case "thunder" -> Optional.of(WeatherType.THUNDER);
-            default -> Optional.empty();
-        };
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int seconds,
+            Optional<String> explicitWorld
+    ) {
+        WeatherType type = WeatherTypeArgument.get(command, "type");
+        return WorldCommandSupport.admin(
+                registration,
+                command,
+                descriptor,
+                "weather",
+                policy -> WorldCommandSupport.world(
+                                policy,
+                                worlds,
+                                locations,
+                                explicitWorld
+                        )
+                        .map(world -> service.setWeather(world, type, seconds))
+                        .orElseGet(() -> AdminResult.failure(
+                                "service.world.world-required"
+                        ))
+        );
     }
 
-    private int parse(String value, int fallback) {
-        try {
-            return Math.max(1, Integer.parseInt(value));
-        } catch (NumberFormatException _) {
-            return fallback;
-        }
+    @Override
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

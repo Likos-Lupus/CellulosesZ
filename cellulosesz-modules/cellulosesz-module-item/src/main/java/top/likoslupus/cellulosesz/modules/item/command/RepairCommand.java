@@ -1,76 +1,102 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.item.RepairScope;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class RepairCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
 
-    public RepairCommand(
-            PlatformService platform,
-            ItemService items,
-            ItemAutomationService automation,
-            ItemConfig config
-    ) {
-        super(platform, items, automation, config);
+public final class RepairCommand implements CommandContributor {
+
+    private final ItemCommandService service;
+
+    public RepairCommand(ItemCommandService service) {
+        this.service = requireNonNull(service, "service");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.repair";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/repair [hand|all]";
-    }
-
-    @Override
-    public String name() {
-        return "repair";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var args = invocation.args();
-        var all = args.length == 1 && args[0].equalsIgnoreCase("all");
-        if (args.length > 1 || (args.length == 1 && !all && !args[0].equalsIgnoreCase("hand"))) {
-            invocation.errorKey(
-                    "commands.item.repair-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        if (all && (!config.repairAllEnabled || !invocation.hasPermission("cellulosesz.item.repair.all"))) {
-            invocation.errorKey("commands.item.repair-command.error.do-not-permission-repair-all-items");
-            return 0;
-        }
-
-        var repaired = platform.repairItems(self.get(), all);
-        if (repaired <= 0) {
-            invocation.errorKey("commands.item.repair-command.error.there-no-repairable-items");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.item.repair-command.reply.repaired-item-s",
-                Map.of("count", repaired)
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "repair",
+                "cellulosesz.item.repair",
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var root = Commands.literal("repair")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        RepairScope.HAND
+                ))
+                .then(Commands.literal("hand")
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                RepairScope.HAND
+                        ))
+                )
+                .then(Commands.literal("all")
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.item.repair.all"
+                        ))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                RepairScope.ALL
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.repair",
+                "/repair [hand|all]",
+                root
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            RepairScope scope
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "repair " + scope.name().toLowerCase(),
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .<PlatformResult<?>>map(value -> service.repair(value, scope))
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

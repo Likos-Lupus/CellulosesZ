@@ -57,10 +57,7 @@ public final class CellulosesZCommand implements CommandContributor {
                             policy.reply(
                                     LocalizedMessage.of(
                                             "cellulosesz.version",
-                                            Map.of(
-                                                    "version",
-                                                    runtime.version()
-                                            )
+                                            Map.of("version", runtime.version())
                                     )
                             );
 
@@ -83,10 +80,7 @@ public final class CellulosesZCommand implements CommandContributor {
                                     policy.reply(
                                             LocalizedMessage.of(
                                                     "cellulosesz.version",
-                                                    Map.of(
-                                                            "version",
-                                                            runtime.version()
-                                                    )
+                                                    Map.of("version", runtime.version())
                                             )
                                     );
 
@@ -109,9 +103,7 @@ public final class CellulosesZCommand implements CommandContributor {
                                             "cellulosesz.command.reload"
                                     )) {
                                         policy.error(
-                                                LocalizedMessage.of(
-                                                        "common.no-permission"
-                                                )
+                                                LocalizedMessage.of("common.no-permission")
                                         );
 
                                         return CompletableFuture.completedFuture(
@@ -185,13 +177,9 @@ public final class CellulosesZCommand implements CommandContributor {
                                                             LocalizedMessage.of(
                                                                     "cellulosesz.module-row",
                                                                     Map.of(
-                                                                            "id",
-                                                                            info.id(),
-                                                                            "enabled",
-                                                                            info.enabled(),
-                                                                            "phase",
-                                                                            info.phase()
-                                                                                    .name()
+                                                                            "id", info.id(),
+                                                                            "enabled", info.enabled(),
+                                                                            "phase", info.phase().name()
                                                                     )
                                                             )
                                                     )
@@ -231,17 +219,9 @@ public final class CellulosesZCommand implements CommandContributor {
                                             LocalizedMessage.of(
                                                     "commands.command.cellulosesz.debug",
                                                     Map.of(
-                                                            "version",
-                                                            runtime.version(),
-                                                            "modules",
-                                                            runtime.modules()
-                                                                    .size(),
-                                                            "direct",
-                                                            catalog.directCommands()
-                                                                    .size(),
-                                                            "legacy",
-                                                            catalog.legacyCommands()
-                                                                    .size()
+                                                            "version", runtime.version(),
+                                                            "modules", runtime.modules().size(),
+                                                            "commands", catalog.commands().size()
                                                     )
                                             )
                                     );

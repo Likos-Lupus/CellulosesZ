@@ -20,6 +20,10 @@ final class CommandRootLeaseManagerTest {
     private final CommandRootLeaseManager leases = new CommandRootLeaseManager(logger, CommandRootLeaseManagerTest::remove);
     private final CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
 
+    private static CommandRootLeaseManager.LabelKind semantic() {
+        return CommandRootLeaseManager.LabelKind.SEMANTIC_ROOT;
+    }
+
     @Test
     void directCanonicalConflictFailsFast() {
         leases.capture(dispatcher);
@@ -27,7 +31,6 @@ final class CommandRootLeaseManagerTest {
                 "info",
                 "info",
                 "text",
-                direct(),
                 canonical(),
                 literal("info")
         );
@@ -37,15 +40,10 @@ final class CommandRootLeaseManagerTest {
                         "info",
                         "motd",
                         "text",
-                        direct(),
                         canonical(),
                         literal("info")
                 )
         );
-    }
-
-    private static CommandRootLeaseManager.RegistrationMode direct() {
-        return CommandRootLeaseManager.RegistrationMode.DIRECT;
     }
 
     private static CommandRootLeaseManager.LabelKind canonical() {
@@ -65,7 +63,6 @@ final class CommandRootLeaseManagerTest {
                 "rules",
                 "info",
                 "config",
-                direct(),
                 literal("rules")
         ));
         assertTrue(logger.warnings.stream()
@@ -81,7 +78,6 @@ final class CommandRootLeaseManagerTest {
                 "kill",
                 "kill",
                 "admin",
-                direct(),
                 canonical(),
                 literal("kill")
         );
@@ -92,7 +88,6 @@ final class CommandRootLeaseManagerTest {
                 "kit",
                 "kit",
                 "kit",
-                direct(),
                 canonical(),
                 literal("kit")
         );
@@ -120,61 +115,12 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void directWinsAgainstLegacyAndSemanticConflictsFail() {
-        leases.capture(dispatcher);
-        var direct = leases.claimCanonical(
-                "home",
-                "home",
-                "home",
-                direct(),
-                canonical(),
-                literal("home")
-        );
-        assertSame(
-                direct,
-                leases.claimCanonical(
-                        "home",
-                        "home",
-                        "legacy",
-                        legacy(),
-                        canonical(),
-                        literal("home")
-                )
-        );
-
-        leases.claimCanonical(
-                "homes",
-                "home",
-                "home",
-                direct(),
-                semantic(),
-                literal("homes")
-        );
-        assertFalse(leases.claimAlias(
-                "homes",
-                "warp",
-                "config",
-                direct(),
-                literal("homes")
-        ));
-    }
-
-    private static CommandRootLeaseManager.RegistrationMode legacy() {
-        return CommandRootLeaseManager.RegistrationMode.LEGACY;
-    }
-
-    private static CommandRootLeaseManager.LabelKind semantic() {
-        return CommandRootLeaseManager.LabelKind.SEMANTIC_ROOT;
-    }
-
-    @Test
     void failedBuildRollsBackWholePreviousTree() {
         leases.capture(dispatcher);
         var previous = leases.claimCanonical(
                 "home",
                 "home",
                 "home",
-                direct(),
                 canonical(),
                 literal("home").then(literal("old"))
         );
@@ -187,7 +133,6 @@ final class CommandRootLeaseManagerTest {
                                 "home",
                                 "home",
                                 "home",
-                                direct(),
                                 canonical(),
                                 literal("home").then(literal("new"))
                         );
@@ -195,7 +140,6 @@ final class CommandRootLeaseManagerTest {
                                 "home",
                                 "warp",
                                 "warp",
-                                direct(),
                                 canonical(),
                                 literal("home")
                         );
@@ -213,7 +157,6 @@ final class CommandRootLeaseManagerTest {
                 "kit",
                 "kit",
                 "kit",
-                direct(),
                 canonical(),
                 literal("kit")
         );
@@ -230,7 +173,6 @@ final class CommandRootLeaseManagerTest {
                                 "kit",
                                 "kit",
                                 "kit",
-                                direct(),
                                 canonical(),
                                 literal("kit")
                         );

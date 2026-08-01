@@ -17,22 +17,28 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.*;
 import java.util.function.BooleanSupplier;
 import java.util.stream.IntStream;
+import org.jspecify.annotations.Nullable;
+
+import static java.util.Objects.requireNonNull;
 
 /**
- * Fabric-to-core event adapter. Minecraft/Fabric objects are converted at this boundary so feature modules only depend
- * on the platform-neutral DTOs in cellulosesz-api.
+ * Fabric-to-core event adapter. Minecraft/Fabric objects are converted at this boundary so feature
+ * modules only depend on the platform-neutral DTOs in cellulosesz-api.
  */
 public final class FabricPlatformEventBridge {
 
@@ -40,37 +46,54 @@ public final class FabricPlatformEventBridge {
     private static @Nullable FabricPlatformEventBridge active;
 
     private final EventRegistry events;
-    private final PlatformService platform;
+    private final PlayerLocationPlatformService locations;
+    private final TeleportOperations teleports;
+    private final PlayerStatePlatformService playerStates;
     private final PlayerCommandDispatchService commandDispatch;
     private final Map<UUID, PlayerSnapshot> snapshots = new HashMap<>();
 
     public FabricPlatformEventBridge(
             EventRegistry events,
-            PlatformService platform,
+            PlayerLocationPlatformService locations,
+            TeleportOperations teleports,
+            PlayerStatePlatformService playerStates,
             PlayerCommandDispatchService commandDispatch
     ) {
-        this.events = events;
-        this.platform = platform;
-        this.commandDispatch = commandDispatch;
+        this.events = requireNonNull(events, "events");
+        this.locations = requireNonNull(locations, "locations");
+        this.teleports = requireNonNull(teleports, "teleports");
+        this.playerStates = requireNonNull(playerStates, "playerStates");
+        this.commandDispatch = requireNonNull(commandDispatch, "commandDispatch");
     }
 
     public static boolean allowCommand(ServerPlayer nativePlayer, String command) {
         var bridge = active;
-        if (bridge == null) return true;
+        if (bridge == null) {
+            return true;
+        }
 
         return bridge.command(nativePlayer, command);
     }
 
     private boolean command(ServerPlayer nativePlayer, String command) {
         var wrapped = wrap(nativePlayer);
-        if (wrapped.isEmpty()) return true;
+        if (wrapped.isEmpty()) {
+            return true;
+        }
 
-        var normalized = command.startsWith("/") ? command : "/" + command;
+        var normalized = command.startsWith("/")
+                ? command
+                : "/" + command;
         var event = new PlayerCommandPreprocessEvent(wrapped.get(), normalized);
         events.fire(event);
-        if (event.cancelled()) return false;
 
-        if (event.command().equals(normalized)) return true;
+        if (event.cancelled()) {
+            return false;
+        }
+
+        if (event.command().equals(normalized)) {
+            return true;
+        }
 
         commandDispatch.dispatch(PlayerCommandDispatchRequest.start(
                 wrapped.orElseThrow(),
@@ -82,23 +105,29 @@ public final class FabricPlatformEventBridge {
     }
 
     private Optional<CellPlayer> wrap(ServerPlayer player) {
-        return platform.player(player);
+        return Optional.of(MinecraftPlayers.wrap(player));
     }
 
     private static String stripSlash(String command) {
-        return command.startsWith("/") ? command.substring(1) : command;
+        return command.startsWith("/")
+                ? command.substring(1)
+                : command;
     }
 
     public static boolean allowPickup(ServerPlayer nativePlayer, ItemEntity entity) {
         var bridge = active;
-        if (bridge == null) return true;
+        if (bridge == null) {
+            return true;
+        }
 
         return bridge.pickup(nativePlayer, entity);
     }
 
     private boolean pickup(ServerPlayer nativePlayer, ItemEntity entity) {
         var stack = entity.getItem();
-        if (stack.isEmpty()) return true;
+        if (stack.isEmpty()) {
+            return true;
+        }
 
         return wrap(nativePlayer)
                 .map(player -> events.fireCancellable(new PlayerPickupEvent(
@@ -111,9 +140,12 @@ public final class FabricPlatformEventBridge {
 
     public static boolean allowFish(ServerPlayer nativePlayer, ItemStack usedItem) {
         var bridge = active;
-        if (bridge == null) return true;
+        if (bridge == null) {
+            return true;
+        }
 
-        return bridge.wrap(nativePlayer)
+        return bridge
+                .wrap(nativePlayer)
                 .map(player -> bridge.events.fireCancellable(new PlayerFishEvent(
                         player,
                         PlayerFishEvent.Action.REEL_IN,
@@ -125,6 +157,7 @@ public final class FabricPlatformEventBridge {
     public static boolean withoutSignBreakCheck(BooleanSupplier operation) {
         var depth = SIGN_BREAK_BYPASS_DEPTH.get();
         SIGN_BREAK_BYPASS_DEPTH.set(depth + 1);
+
         try {
             return operation.getAsBoolean();
         } finally {
@@ -143,7 +176,9 @@ public final class FabricPlatformEventBridge {
             String[] lines
     ) {
         var bridge = active;
-        if (bridge == null) return true;
+        if (bridge == null) {
+            return true;
+        }
 
         return bridge.signUpdate(nativePlayer, position, front, lines);
     }
@@ -155,33 +190,47 @@ public final class FabricPlatformEventBridge {
             String[] lines
     ) {
         var wrapped = wrap(nativePlayer);
-        if (wrapped.isEmpty()) return true;
+        if (wrapped.isEmpty()) {
+            return true;
+        }
 
         var blockEntity = nativePlayer.level().getBlockEntity(position);
-        if (!(blockEntity instanceof SignBlockEntity sign)) return true;
+        if (!(blockEntity instanceof SignBlockEntity sign)) {
+            return true;
+        }
 
         var previous = signLines(sign, front);
         var next = List.copyOf(Arrays.asList(lines));
         var location = location(nativePlayer, position);
+
         if (previous.stream().allMatch(String::isBlank)) {
             var event = new SignCreateEvent(wrapped.get(), location, front, next);
             var allowed = events.fireCancellable(event);
-            if (allowed) copySignLines(event.lines(), lines);
+            if (allowed) {
+                copySignLines(event.lines(), lines);
+            }
+
             return allowed;
         }
 
         var event = new SignEditEvent(wrapped.get(), location, front, previous, next);
         var allowed = events.fireCancellable(event);
-        if (allowed) copySignLines(event.lines(), lines);
+
+        if (allowed) {
+            copySignLines(event.lines(), lines);
+        }
+
         return allowed;
     }
 
     private List<String> signLines(SignBlockEntity sign, boolean front) {
-        return Arrays.stream((
-                        front
-                                ? sign.getFrontText()
-                                : sign.getBackText()
-                ).getMessages(false))
+        return Arrays.stream(
+                        (
+                                front
+                                        ? sign.getFrontText()
+                                        : sign.getBackText()
+                        ).getMessages(false)
+                )
                 .map(Component::getString)
                 .toList();
     }
@@ -220,7 +269,9 @@ public final class FabricPlatformEventBridge {
         );
 
         ServerLivingEntityEvents.ALLOW_DAMAGE.register((entity, source, amount) -> {
-            if (!(entity instanceof ServerPlayer nativePlayer)) return true;
+            if (!(entity instanceof ServerPlayer nativePlayer)) {
+                return true;
+            }
 
             return wrap(nativePlayer)
                     .map(player ->
@@ -235,12 +286,14 @@ public final class FabricPlatformEventBridge {
         });
 
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, source) -> {
-            if (!(entity instanceof ServerPlayer nativePlayer)) return;
+            if (!(entity instanceof ServerPlayer nativePlayer)) {
+                return;
+            }
 
             wrap(nativePlayer).ifPresent(player ->
                     events.fire(new PlayerDeathEvent(
                             player,
-                            platform.location(player),
+                            locations.currentLocation(player),
                             source.toString()
                     ))
             );
@@ -248,16 +301,23 @@ public final class FabricPlatformEventBridge {
 
         ServerPlayerEvents.AFTER_RESPAWN.register((_, nativePlayer, alive) ->
                 wrap(nativePlayer).ifPresent(player -> {
-                    var event = new PlayerRespawnEvent(player, platform.location(player), alive);
+                    var event = new PlayerRespawnEvent(
+                            player,
+                            locations.currentLocation(player),
+                            alive
+                    );
                     events.fire(event);
-                    if (!sameLocation(event.location(), platform.location(player))) {
-                        platform.teleport(player, event.location());
+                    if (!sameLocation(event.location(), locations.currentLocation(player))) {
+                        teleports.move(player, event.location());
                     }
                 })
         );
 
         EntitySleepEvents.START_SLEEPING.register((entity, position) -> {
-            if (!(entity instanceof ServerPlayer nativePlayer)) return;
+            if (!(entity instanceof ServerPlayer nativePlayer)) {
+                return;
+            }
+
             wrap(nativePlayer).ifPresent(player -> {
                 var event = new PlayerSleepEvent(
                         player,
@@ -265,12 +325,17 @@ public final class FabricPlatformEventBridge {
                         PlayerSleepEvent.Action.START
                 );
                 events.fire(event);
-                if (event.cancelled()) nativePlayer.stopSleeping();
+                if (event.cancelled()) {
+                    nativePlayer.stopSleeping();
+                }
             });
         });
 
         EntitySleepEvents.STOP_SLEEPING.register((entity, position) -> {
-            if (!(entity instanceof ServerPlayer nativePlayer)) return;
+            if (!(entity instanceof ServerPlayer nativePlayer)) {
+                return;
+            }
+
             wrap(nativePlayer).ifPresent(player ->
                     events.fire(new PlayerSleepEvent(
                             player,
@@ -290,8 +355,14 @@ public final class FabricPlatformEventBridge {
                         var targetPlayer = target instanceof ServerPlayer
                                 ? Optional.of(target.getUUID())
                                 : Optional.<UUID>empty();
-                        var type = BuiltInRegistries.ENTITY_TYPE.getKey(target.getType()).toString();
-                        var allowed = events.fireCancellable(new PlayerAttackEvent(player, targetPlayer, type));
+                        var type = BuiltInRegistries.ENTITY_TYPE
+                                .getKey(target.getType())
+                                .toString();
+                        var allowed = events.fireCancellable(new PlayerAttackEvent(
+                                player,
+                                targetPlayer,
+                                type
+                        ));
 
                         return allowed
                                 ? InteractionResult.PASS
@@ -301,13 +372,19 @@ public final class FabricPlatformEventBridge {
         });
 
         UseItemCallback.EVENT.register((nativePlayer, level, hand) -> {
-            if (level.isClientSide() || !(nativePlayer instanceof ServerPlayer serverPlayer)) {
+            if (level.isClientSide()
+                    || !(nativePlayer instanceof ServerPlayer serverPlayer)
+            ) {
                 return InteractionResult.PASS;
             }
 
             var stack = serverPlayer.getItemInHand(hand);
-            if (!BuiltInRegistries.ITEM.getKey(stack.getItem()).toString().equals("minecraft:fishing_rod")
-                    || serverPlayer.fishing != null) {
+            if (!BuiltInRegistries.ITEM
+                    .getKey(stack.getItem())
+                    .toString()
+                    .equals("minecraft:fishing_rod")
+                    || serverPlayer.fishing != null
+            ) {
                 return InteractionResult.PASS;
             }
 
@@ -324,10 +401,20 @@ public final class FabricPlatformEventBridge {
                     .orElse(InteractionResult.PASS);
         });
 
-        PlayerBlockBreakEvents.BEFORE.register((_, nativePlayer, position, _, blockEntity) -> {
-            if (SIGN_BREAK_BYPASS_DEPTH.get() > 0) return true;
+        PlayerBlockBreakEvents.BEFORE.register((
+                _,
+                nativePlayer,
+                position,
+                _,
+                blockEntity
+        ) -> {
+            if (SIGN_BREAK_BYPASS_DEPTH.get() > 0) {
+                return true;
+            }
+
             if (!(nativePlayer instanceof ServerPlayer serverPlayer)
-                    || !(blockEntity instanceof SignBlockEntity sign)) {
+                    || !(blockEntity instanceof SignBlockEntity sign)
+            ) {
                 return true;
             }
 
@@ -364,7 +451,7 @@ public final class FabricPlatformEventBridge {
 
     private PlayerSnapshot snapshot(ServerPlayer nativePlayer, CellPlayer player) {
         return new PlayerSnapshot(
-                platform.location(player),
+                locations.currentLocation(player),
                 nativePlayer.gameMode.getGameModeForPlayer().getName(),
                 nativePlayer.containerMenu.containerId,
                 nativePlayer.containerMenu.getClass().getSimpleName()
@@ -377,23 +464,30 @@ public final class FabricPlatformEventBridge {
 
     public void tick(MinecraftServer server) {
         var online = new HashSet<UUID>();
-        server.getPlayerList().getPlayers().forEach(nativePlayer -> {
-            var wrapped = wrap(nativePlayer);
-            if (wrapped.isEmpty()) return;
+        server.getPlayerList().getPlayers()
+                .forEach(nativePlayer -> {
+                    var wrapped = wrap(nativePlayer);
+                    if (wrapped.isEmpty()) {
+                        return;
+                    }
 
-            var player = wrapped.get();
-            online.add(player.uuid());
+                    var player = wrapped.get();
+                    online.add(player.uuid());
 
-            var current = snapshot(nativePlayer, player);
-            var previous = snapshots.put(player.uuid(), current);
-            if (previous == null) return;
+                    var current = snapshot(nativePlayer, player);
+                    var previous = snapshots.put(player.uuid(), current);
+                    if (previous == null) {
+                        return;
+                    }
 
-            processMovement(player, previous, current);
-            processWorldChange(player, previous, current);
-            processGameMode(player, previous, current);
-            processInventoryClose(player, previous, current);
-        });
-        snapshots.keySet().removeIf(uuid -> !online.contains(uuid));
+                    processMovement(player, previous, current);
+                    processWorldChange(player, previous, current);
+                    processGameMode(player, previous, current);
+                    processInventoryClose(player, previous, current);
+                });
+
+        snapshots.keySet()
+                .removeIf(uuid -> !online.contains(uuid));
     }
 
     private void processMovement(
@@ -401,7 +495,9 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (sameLocation(previous.location, current.location)) return;
+        if (sameLocation(previous.location, current.location)) {
+            return;
+        }
 
         var event = new PlayerMoveEvent(player, previous.location, current.location);
         events.fire(event);
@@ -410,10 +506,10 @@ public final class FabricPlatformEventBridge {
             var destination = sameLocation(event.to(), current.location)
                     ? previous.location
                     : event.to();
-            platform.teleport(player, destination);
+            teleports.move(player, destination);
             snapshots.put(player.uuid(), current.withLocation(destination));
         } else if (!sameLocation(event.to(), current.location)) {
-            platform.teleport(player, event.to());
+            teleports.move(player, event.to());
             snapshots.put(player.uuid(), current.withLocation(event.to()));
         }
     }
@@ -423,7 +519,9 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (previous.location.world.equals(current.location.world)) return;
+        if (previous.location.world.equals(current.location.world)) {
+            return;
+        }
 
         events.fire(new PlayerWorldChangeEvent(
                 player,
@@ -437,13 +535,21 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (previous.gameMode.equals(current.gameMode)) return;
+        if (previous.gameMode.equals(current.gameMode)) {
+            return;
+        }
 
         var event = new PlayerGameModeChangeEvent(player, previous.gameMode, current.gameMode);
         events.fire(event);
         if (event.cancelled()) {
-            platform.setGameMode(player, previous.gameMode);
-            snapshots.put(player.uuid(), current.withGameMode(previous.gameMode));
+            playerStates.setGameMode(
+                    player,
+                    GameModeKind.valueOf(previous.gameMode.toUpperCase(Locale.ROOT))
+            );
+            snapshots.put(
+                    player.uuid(),
+                    current.withGameMode(previous.gameMode)
+            );
         }
     }
 
@@ -452,13 +558,19 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (previous.containerId == 0 || previous.containerId == current.containerId) return;
+        if (previous.containerId == 0
+                || previous.containerId == current.containerId
+        ) {
+            return;
+        }
 
         events.fire(new InventoryCloseEvent(player, previous.inventoryType));
     }
 
     public void close() {
-        if (active == this) active = null;
+        if (active == this) {
+            active = null;
+        }
         snapshots.clear();
         SIGN_BREAK_BYPASS_DEPTH.remove();
     }

@@ -1,38 +1,34 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.player.DisplayNameService;
-import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
+import top.likoslupus.cellulosesz.api.player.*;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 public final class DefaultPlayerResolver implements PlayerResolver {
 
     private static final String SEE_VANISHED = "cellulosesz.playerstate.vanish.see";
 
-    private final PlatformService platform;
+    private final PlayerDirectory players;
     private final UserService users;
     private final NameCacheService names;
     private final PermissionService permissions;
     private final DisplayNameService displayNames;
 
     public DefaultPlayerResolver(
-            PlatformService platform,
+            PlayerDirectory players,
             UserService users,
             NameCacheService names,
             PermissionService permissions,
             DisplayNameService displayNames
     ) {
-        this.platform = platform;
+        this.players = players;
         this.users = users;
         this.names = names;
         this.permissions = permissions;
@@ -41,60 +37,85 @@ public final class DefaultPlayerResolver implements PlayerResolver {
 
     @Override
     public ResolvedPlayer resolveKnown(String input, @Nullable CellPlayer viewer) {
-        if (input.isBlank()) return unknown(input);
+        if (input.isBlank()) {
+            return unknown(input);
+        }
 
-        var online = platform.onlinePlayer(input);
-        if (online.isPresent()) return visible(wrapOnline(online.get()), viewer);
+        var online = players.onlinePlayer(input);
+        if (online.isPresent()) {
+            return visible(wrapOnline(online.get()), viewer);
+        }
 
-        var displayMatches = platform.onlinePlayers().stream()
+        var displayMatches = players.onlinePlayers().stream()
                 .filter(player -> displayNames.plainDisplayName(player).equalsIgnoreCase(input))
                 .toList();
-        if (displayMatches.size() == 1) return visible(wrapOnline(displayMatches.getFirst()), viewer);
-        if (displayMatches.size() > 1) return unknown(input);
+
+        if (displayMatches.size() == 1) {
+            return visible(wrapOnline(displayMatches.getFirst()), viewer);
+        }
+
+        if (displayMatches.size() > 1) {
+            return unknown(input);
+        }
 
         try {
             return resolveKnown(UUID.fromString(input), viewer);
         } catch (IllegalArgumentException _) {
             var uuid = names.findUuid(input);
-            if (uuid.isPresent()) return resolveKnown(uuid.get(), viewer);
+            if (uuid.isPresent()) {
+                return resolveKnown(uuid.get(), viewer);
+            }
 
             var cachedMatches = users.cachedUsers().stream()
-                    .filter(user -> user.lastKnownName != null)
-                    .filter(user -> displayNames.displayName(user.uuid, user.lastKnownName)
-                            .plainText().equalsIgnoreCase(input)
+                    .filter(user -> user.lastKnownName() != null)
+                    .filter(user -> displayNames
+                            .displayName(user.uuid(), user.lastKnownName())
+                            .plainText()
+                            .equalsIgnoreCase(input)
                     )
                     .toList();
             return cachedMatches.size() == 1
-                    ? resolveKnown(cachedMatches.getFirst().uuid, viewer)
+                    ? resolveKnown(cachedMatches.getFirst().uuid(), viewer)
                     : unknown(input);
         }
     }
 
     @Override
     public ResolvedPlayer resolveKnown(UUID uuid, @Nullable CellPlayer viewer) {
-        var online = platform.onlinePlayers().stream()
+        var online = players.onlinePlayers().stream()
                 .filter(player -> player.uuid().equals(uuid))
                 .findFirst();
-        if (online.isPresent()) return visible(wrapOnline(online.get()), viewer);
+
+        if (online.isPresent()) {
+            return visible(wrapOnline(online.get()), viewer);
+        }
 
         var cached = users.cached(uuid);
         var name = names.findName(uuid)
                 .or(() ->
-                        cached.flatMap(user -> Optional.ofNullable(user.lastKnownName))
+                        cached
+                                .flatMap(user -> Optional.ofNullable(user.lastKnownName()))
                                 .filter(value -> !value.isBlank())
                 );
-        if (name.isEmpty()) return unknown(uuid.toString());
+
+        if (name.isEmpty()) {
+            return unknown(uuid.toString());
+        }
 
         var vanished = cached
-                .map(user -> user.state.vanished)
+                .map(user -> user.state().vanished())
                 .orElse(false);
-        return visible(new ResolvedPlayer(
-                ResolvedPlayerState.OFFLINE,
-                uuid,
-                name.get(),
-                null,
-                vanished
-        ), viewer);
+
+        return visible(
+                new ResolvedPlayer(
+                        ResolvedPlayerState.OFFLINE,
+                        uuid,
+                        name.get(),
+                        null,
+                        vanished
+                ),
+                viewer
+        );
     }
 
     @Override
@@ -104,20 +125,27 @@ public final class DefaultPlayerResolver implements PlayerResolver {
             return CompletableFuture.completedFuture(known);
         }
 
-        return users.load(known.uuid()).thenApply(user ->
-                visible(new ResolvedPlayer(
-                        ResolvedPlayerState.OFFLINE,
-                        user.uuid,
-                        user.lastKnownName == null ? known.name() : user.lastKnownName,
-                        null,
-                        user.state.vanished
-                ), viewer)
-        );
+        return users
+                .load(known.uuid())
+                .thenApply(user ->
+                        visible(
+                                new ResolvedPlayer(
+                                        ResolvedPlayerState.OFFLINE,
+                                        user.uuid(),
+                                        user.lastKnownName() == null
+                                                ? known.name()
+                                                : user.lastKnownName(),
+                                        null,
+                                        user.state().vanished()
+                                ),
+                                viewer
+                        )
+                );
     }
 
     private ResolvedPlayer wrapOnline(CellPlayer player) {
         var vanished = users.cached(player.uuid())
-                .map(user -> user.state.vanished)
+                .map(user -> user.state().vanished())
                 .orElse(false);
         return new ResolvedPlayer(
                 ResolvedPlayerState.ONLINE,
@@ -129,10 +157,16 @@ public final class DefaultPlayerResolver implements PlayerResolver {
     }
 
     private ResolvedPlayer visible(ResolvedPlayer resolved, @Nullable CellPlayer viewer) {
-        if (!resolved.vanished() || viewer == null) return resolved;
+        if (!resolved.vanished() || viewer == null) {
+            return resolved;
+        }
+
         if (viewer.uuid().equals(resolved.uuid())
                 || permissions.has(viewer.nativeHandle(), SEE_VANISHED)
-        ) return resolved;
+        ) {
+            return resolved;
+        }
+
         return unknown(resolved.name());
     }
 

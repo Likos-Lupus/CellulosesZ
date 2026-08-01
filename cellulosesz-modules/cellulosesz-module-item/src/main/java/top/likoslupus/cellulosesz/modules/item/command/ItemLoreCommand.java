@@ -1,97 +1,143 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
-public final class ItemLoreCommand implements CellCommand {
+public final class ItemLoreCommand implements CommandContributor {
 
-    private final PlatformService platform;
+    private static final int MAXIMUM_LINE_LENGTH = 256;
+    private static final int MAXIMUM_TOTAL_LENGTH = 2048;
+
+    private final ItemCommandService service;
     private final ItemConfig config;
 
     public ItemLoreCommand(
-            PlatformService platform,
+            ItemCommandService service,
             ItemConfig config
     ) {
-        this.platform = requireNonNull(platform, "platform");
+        this.service = requireNonNull(service, "service");
         this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.lore";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/itemlore <clear|text separated by \\n>";
-    }
-
-    @Override
-    public String name() {
-        return "itemlore";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var player = platform.player(invocation);
-
-        if (player.isEmpty()) {
-            invocation.errorKey("commands.item.player-only");
-            return 0;
-        }
-
-        var args = invocation.args();
-
-        if (args.length != 1 || args[0].isBlank()) {
-            invocation.errorKey(
-                    "commands.item.itemlore.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var lines = args[0].equalsIgnoreCase("clear")
-                ? List.<String>of()
-                : Arrays.stream(args[0].split("\\\\n", -1))
-                        .map(String::trim)
-                        .toList();
-
-        if (lines.size() > config.maxLoreLines
-                || lines.stream().anyMatch(String::isBlank)
-        ) {
-            invocation.errorKey(
-                    "commands.item.itemlore.invalid",
-                    Map.of("maximum", config.maxLoreLines)
-            );
-            return 0;
-        }
-
-        if (!platform.setHeldItemLore(player.get(), lines)) {
-            invocation.errorKey("commands.item.held-item-required");
-            return 0;
-        }
-
-        invocation.replyKey(
-                lines.isEmpty()
-                        ? "commands.item.itemlore.cleared"
-                        : "commands.item.itemlore.set",
-                Map.of("lines", lines.size())
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "itemlore",
+                "cellulosesz.item.lore",
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var root = Commands.literal("itemlore")
+                .then(Commands.literal("clear")
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                List.of()
+                        ))
+                )
+                .then(Commands.argument(
+                                        "text",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        parse(StringArgumentType.getString(
+                                                command,
+                                                "text"
+                                        ))
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.itemlore",
+                "/itemlore <clear|text...>",
+                root
+        );
+    }
+
+    private List<RichText> parse(String text) {
+        text = Checks.requireMaxLength(
+                text,
+                MAXIMUM_TOTAL_LENGTH,
+                "lore"
+        );
+
+        Checks.requireNoControlCharacters(
+                text.replace("\\n", ""),
+                "lore"
+        );
+
+        var lines = Arrays.stream(text.split("\\\\n", -1))
+                .limit(config.maxLoreLines + 1L)
+                .toList();
+
+        if (lines.size() > config.maxLoreLines) {
+            throw new IllegalArgumentException(
+                    "lore line count exceeds configured maximum"
+            );
+        }
+
+        return lines.stream()
+                .map(line -> RichText.plain(
+                        Checks.requireMaxLength(
+                                line,
+                                MAXIMUM_LINE_LENGTH,
+                                "lore line"
+                        )
+                ))
+                .toList();
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            List<RichText> lore
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "itemlore lines=" + lore.size(),
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .<PlatformResult<?>>map(value -> service.setLore(value, lore))
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

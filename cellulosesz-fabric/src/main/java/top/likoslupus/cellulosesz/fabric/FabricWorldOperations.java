@@ -4,6 +4,7 @@ import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -17,6 +18,8 @@ import net.minecraft.world.phys.HitResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
+import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.fabric.mixin.BaseSpawnerAccessor;
@@ -26,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
+import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
@@ -46,16 +50,21 @@ public final class FabricWorldOperations implements WorldPlatformService {
             Map.entry(TreeType.DARK_OAK, "minecraft:dark_oak")
     );
 
-    private final FabricPlatformService platform;
+    private final FabricServerAccess access;
+    private final SignPlatformService signs;
 
-    public FabricWorldOperations(FabricPlatformService platform) {
-        this.platform = requireNonNull(platform, "platform");
+    public FabricWorldOperations(
+            FabricServerAccess access,
+            SignPlatformService signs
+    ) {
+        this.access = requireNonNull(access, "access");
+        this.signs = requireNonNull(signs, "signs");
     }
 
     @Override
     public PlatformResult<ServerDiagnosticsSnapshot> diagnostics() {
         return onServerThread(() -> {
-            var server = platform.requireServer();
+            var server = access.requireServer();
             var runtime = Runtime.getRuntime();
             var allocated = runtime.totalMemory();
             var free = runtime.freeMemory();
@@ -69,16 +78,20 @@ public final class FabricWorldOperations implements WorldPlatformService {
                     ? 20.0D
                     : Math.min(20.0D, 1000.0D / averageMillis.orElseThrow());
             var worlds = new ArrayList<WorldDiagnostics>();
-            server.getAllLevels().forEach(level -> {
-                var entities = 0;
-                for (var ignored : level.getAllEntities()) entities++;
-                worlds.add(new WorldDiagnostics(
-                        level.dimension().identifier().toString(),
-                        level.getChunkSource().getLoadedChunksCount(),
-                        entities,
-                        OptionalInt.empty()
-                ));
-            });
+
+            server.getAllLevels()
+                    .forEach(level -> {
+                        var entities = 0;
+                        for (var _ : level.getAllEntities()) entities++;
+
+                        worlds.add(new WorldDiagnostics(
+                                level.dimension().identifier().toString(),
+                                level.getChunkSource().getLoadedChunksCount(),
+                                entities,
+                                OptionalInt.empty()
+                        ));
+                    });
+
             return PlatformResult.success(new ServerDiagnosticsSnapshot(
                     Math.max(0L, ManagementFactory.getRuntimeMXBean().getUptime()),
                     used,
@@ -94,30 +107,59 @@ public final class FabricWorldOperations implements WorldPlatformService {
 
     @Override
     public PlatformResult<BlockBreakResult> breakTarget(
-            CellPlayer player, int maximumDistance, boolean allowUnbreakable) {
-        if (maximumDistance < 1)
-            return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Distance must be positive");
+            CellPlayer player,
+            int maximumDistance,
+            boolean allowUnbreakable
+    ) {
+        if (maximumDistance < 1) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Distance must be positive"
+            );
+        }
+
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
-            if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "No block is targeted");
+            if (!(hit instanceof BlockHitResult blockHit)
+                    || hit.getType() != HitResult.Type.BLOCK
+            ) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "No block is targeted"
+                );
             }
+
             var level = nativePlayer.level();
             var position = blockHit.getBlockPos();
             var state = level.getBlockState(position);
-            if (state.isAir()) return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "Target is air");
-            if (state.getDestroySpeed(level, position) < 0.0F && !allowUnbreakable) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Target is unbreakable");
+            if (state.isAir()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "Target is air"
+                );
             }
+
+            if (state.getDestroySpeed(level, position) < 0.0F && !allowUnbreakable) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Target is unbreakable"
+                );
+            }
+
             var unbreakable = state.getDestroySpeed(level, position) < 0.0F;
             if (unbreakable) {
                 var blockEntity = level.getBlockEntity(position);
                 if (!PlayerBlockBreakEvents.BEFORE.invoker()
-                        .beforeBlockBreak(level, nativePlayer, position, state, blockEntity)) {
-                    return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Block break was cancelled");
+                        .beforeBlockBreak(level, nativePlayer, position, state, blockEntity)
+                ) {
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Block break was cancelled"
+                    );
                 }
             }
+
             var id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
             // The normal game-mode path invokes Fabric's block-break hooks itself. Only the explicit
             // unbreakable bypass performs the event check above before using the level mutation API.
@@ -126,27 +168,53 @@ public final class FabricWorldOperations implements WorldPlatformService {
                     : nativePlayer.gameMode.destroyBlock(position);
             return broken
                     ? PlatformResult.success(new BlockBreakResult(id, true))
-                    : PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Block could not be broken");
+                    : PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Block could not be broken"
+                    );
         });
     }
 
     @Override
     public PlatformResult<SignTarget> targetSign(CellPlayer player, int maximumDistance) {
-        if (maximumDistance < 1)
-            return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Distance must be positive");
+        if (maximumDistance < 1) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Distance must be positive"
+            );
+        }
+
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
-            if (!(hit instanceof BlockHitResult blockHit) || hit.getType() != HitResult.Type.BLOCK) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "No sign is targeted");
+            if (!(hit instanceof BlockHitResult blockHit)
+                    || hit.getType() != HitResult.Type.BLOCK
+            ) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "No sign is targeted"
+                );
             }
+
             var blockEntity = nativePlayer.level().getBlockEntity(blockHit.getBlockPos());
             if (!(blockEntity instanceof SignBlockEntity sign)) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "Target is not a sign");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "Target is not a sign"
+                );
             }
+
             var front = sign.isFacingFrontText(nativePlayer);
-            var messages = (front ? sign.getFrontText() : sign.getBackText()).getMessages(false);
-            var lines = java.util.Arrays.stream(messages).map(component -> component.getString()).toList();
+            var messages = (
+                    front
+                            ? sign.getFrontText()
+                            : sign.getBackText()
+            ).getMessages(false);
+            var lines = java.util.Arrays
+                    .stream(messages)
+                    .map(Component::getString)
+                    .toList();
+
             return PlatformResult.success(new SignTarget(
                     location(nativePlayer.level(), blockHit.getBlockPos()),
                     front,
@@ -158,86 +226,185 @@ public final class FabricWorldOperations implements WorldPlatformService {
 
     @Override
     public PlatformResult<SignTarget> replaceSignText(
-            CellPlayer player, SignTextMutation mutation, boolean allowWaxed) {
+            CellPlayer player,
+            SignTextMutation mutation,
+            boolean allowWaxed
+    ) {
         requireNonNull(mutation, "mutation");
         return onServerThread(() -> {
             var target = mutation.target();
             if (target.waxed() && !allowWaxed) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Sign is waxed");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Sign is waxed"
+                );
             }
-            var changed = platform.replaceSignText(
+
+            var changed = signs.compareAndReplace(new SignWriteRequest(
                     player,
                     target.location(),
                     target.front(),
                     target.lines(),
-                    mutation.replacementLines()
-            );
-            if (!changed) return PlatformResult.failure(PlatformOperationStatus.CONFLICT, "Sign changed before commit");
+                    mutation.replacementLines(),
+                    allowWaxed
+            ));
+
+            if (!changed.successful()) {
+                return PlatformResult.failure(
+                        changed.status(),
+                        changed.detail()
+                );
+            }
+
+            var snapshot = changed.value().orElseThrow();
             return PlatformResult.success(new SignTarget(
-                    target.location(), target.front(), mutation.replacementLines(), target.waxed()
+                    snapshot.location(),
+                    snapshot.front(),
+                    snapshot.lines(),
+                    snapshot.waxed()
             ));
         });
     }
 
     @Override
     public PlatformResult<SpawnerResult> configureSpawner(
-            CellPlayer player, int maximumDistance, SpawnerRequest request) {
+            CellPlayer player,
+            int maximumDistance,
+            SpawnerRequest request
+    ) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
             var location = ResourceLocation.tryParse(normalize(request.entityId()));
-            if (location == null)
-                return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Entity id is invalid");
-            var type = BuiltInRegistries.ENTITY_TYPE.getOptional(location).orElse(null);
-            if (type == null || !type.canSummon() || type == EntityType.PLAYER) {
-                return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Entity cannot be spawned");
+            if (location == null) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Entity id is invalid"
+                );
             }
-            var nativePlayer = platform.nativePlayer(player);
+
+            var type = BuiltInRegistries.ENTITY_TYPE
+                    .getOptional(location)
+                    .orElse(null);
+            if (type == null
+                    || !type.canSummon()
+                    || type == EntityType.PLAYER
+            ) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Entity cannot be spawned"
+                );
+            }
+
+            var nativePlayer = access.player(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "No spawner is targeted");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "No spawner is targeted"
+                );
             }
+
             var blockEntity = nativePlayer.level().getBlockEntity(blockHit.getBlockPos());
             if (!(blockEntity instanceof SpawnerBlockEntity spawner)) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "Target is not a spawner");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "Target is not a spawner"
+                );
             }
+
             spawner.getSpawner().setEntityId(type, nativePlayer.level().getRandom());
             ((BaseSpawnerAccessor) spawner.getSpawner()).cellulosesz$setSpawnDelay(request.delayTicks());
             spawner.setChanged();
+
             var state = nativePlayer.level().getBlockState(blockHit.getBlockPos());
-            nativePlayer.level().sendBlockUpdated(blockHit.getBlockPos(), state, state, 3);
-            return PlatformResult.success(new SpawnerResult(location.toString(), request.delayTicks()));
+            nativePlayer.level().sendBlockUpdated(
+                    blockHit.getBlockPos(),
+                    state,
+                    state,
+                    3
+            );
+
+            return PlatformResult.success(new SpawnerResult(
+                    location.toString(),
+                    request.delayTicks()
+            ));
         });
     }
 
     @Override
-    public PlatformResult<TreeGenerationResult> generateTree(CellPlayer player, int maximumDistance, TreeType type) {
+    public PlatformResult<TreeGenerationResult> generateTree(
+            CellPlayer player,
+            int maximumDistance,
+            TreeType type
+    ) {
         requireNonNull(type, "type");
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "No generation position is targeted");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "No generation position is targeted"
+                );
             }
+
             var position = blockHit.getBlockPos().relative(blockHit.getDirection());
             var level = nativePlayer.level();
-            if (!level.getWorldBorder().isWithinBounds(position) || !level.hasChunkAt(position)) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Generation position is unavailable");
+            if (!level.getWorldBorder().isWithinBounds(position)
+                    || !level.hasChunkAt(position)
+            ) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Generation position is unavailable"
+                );
             }
+
             if (!level.getBlockState(position).canBeReplaced()) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Generation position is obstructed");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Generation position is obstructed"
+                );
             }
+
             var id = ResourceLocation.tryParse(TREE_FEATURES.get(type));
-            if (id == null)
-                return PlatformResult.failure(PlatformOperationStatus.UNSUPPORTED, "Tree type is unsupported");
+            if (id == null) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.UNSUPPORTED,
+                        "Tree type is unsupported"
+                );
+            }
+
             var key = ResourceKey.create(Registries.CONFIGURED_FEATURE, id);
-            var feature = level.registryAccess().lookupOrThrow(Registries.CONFIGURED_FEATURE).get(key).orElse(null);
-            if (feature == null)
-                return PlatformResult.failure(PlatformOperationStatus.UNSUPPORTED, "Configured feature is unavailable");
+            var feature = level
+                    .registryAccess()
+                    .lookupOrThrow(Registries.CONFIGURED_FEATURE)
+                    .get(key)
+                    .orElse(null);
+            if (feature == null) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.UNSUPPORTED,
+                        "Configured feature is unavailable"
+                );
+            }
+
             var placed = feature.value()
-                    .place(level, level.getChunkSource().getGenerator(), level.getRandom(), position);
+                    .place(
+                            level,
+                            level.getChunkSource().getGenerator(),
+                            level.getRandom(),
+                            position
+                    );
+
             return placed
-                    ? PlatformResult.success(new TreeGenerationResult(type, location(level, position)))
-                    : PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Feature placement failed without changing terrain");
+                    ?
+                    PlatformResult.success(new TreeGenerationResult(
+                            type,
+                            location(level, position)
+                    ))
+                    : PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Feature placement failed without changing terrain"
+                    );
         });
     }
 
@@ -245,16 +412,26 @@ public final class FabricWorldOperations implements WorldPlatformService {
     public PlatformResult<Void> setThunder(String worldId, ThunderRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = platform.serverLevel(worldId);
-            if (level.isEmpty())
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "World was not found");
+            var level = access.level(worldId);
+            if (level.isEmpty()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "World was not found"
+                );
+            }
+
             var target = level.orElseThrow();
             target.setWeatherParameters(
-                    request.enabled() ? 0 : request.durationTicks(),
-                    request.enabled() ? request.durationTicks() : 0,
+                    request.enabled()
+                            ? 0
+                            : request.durationTicks(),
+                    request.enabled()
+                            ? request.durationTicks()
+                            : 0,
                     target.isRaining(),
                     request.enabled()
             );
+
             return PlatformResult.success();
         });
     }
@@ -263,52 +440,95 @@ public final class FabricWorldOperations implements WorldPlatformService {
     public PlatformResult<Void> strikeLightning(LightningRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = platform.serverLevel(request.location().world);
-            if (level.isEmpty())
-                return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "World was not found");
-            var targetLevel = level.orElseThrow();
-            var bolt = EntityType.LIGHTNING_BOLT.create(targetLevel, net.minecraft.world.entity.EntitySpawnReason.COMMAND);
-            if (bolt == null)
-                return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "Lightning entity creation failed");
-            bolt.moveTo(request.location().x, request.location().y, request.location().z);
-            bolt.setVisualOnly(request.visualOnly());
-            if (!targetLevel.addFreshEntity(bolt)) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Lightning could not be spawned");
+            var level = access.level(request.location().world);
+            if (level.isEmpty()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.TARGET_NOT_FOUND,
+                        "World was not found"
+                );
             }
+
+            var targetLevel = level.orElseThrow();
+            var bolt = EntityType.LIGHTNING_BOLT.create(
+                    targetLevel,
+                    net.minecraft.world.entity.EntitySpawnReason.COMMAND
+            );
+
+            if (bolt == null) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        "Lightning entity creation failed"
+                );
+            }
+
+            bolt.moveTo(
+                    request.location().x,
+                    request.location().y,
+                    request.location().z
+            );
+            bolt.setVisualOnly(request.visualOnly());
+
+            if (!targetLevel.addFreshEntity(bolt)) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Lightning could not be spawned"
+                );
+            }
+
             if (request.additionalDamage() > 0.0D) {
                 var box = new AABB(
-                        request.location().x - 1.5D, request.location().y - 1.0D, request.location().z - 1.5D,
-                        request.location().x + 1.5D, request.location().y + 4.0D, request.location().z + 1.5D
+                        request.location().x - 1.5D,
+                        request.location().y - 1.0D,
+                        request.location().z - 1.5D,
+                        request.location().x + 1.5D,
+                        request.location().y + 4.0D,
+                        request.location().z + 1.5D
                 );
-                targetLevel.getEntitiesOfClass(LivingEntity.class, box).forEach(entity ->
-                        entity.hurtServer(targetLevel, entity.damageSources()
-                                .lightningBolt(), (float) request.additionalDamage())
-                );
+
+                targetLevel.getEntitiesOfClass(LivingEntity.class, box)
+                        .forEach(entity ->
+                                entity.hurtServer(
+                                        targetLevel,
+                                        entity.damageSources().lightningBolt(),
+                                        (float) request.additionalDamage()
+                                )
+                        );
             }
+
             return PlatformResult.success();
         });
     }
 
     private static String normalize(String id) {
         var value = id.strip().toLowerCase(java.util.Locale.ROOT);
-        return value.contains(":") ? value : "minecraft:" + value;
+        return value.contains(":")
+                ? value
+                : "minecraft:" + value;
     }
 
     private static CellLocation location(ServerLevel level, BlockPos position) {
         return new CellLocation(
                 level.dimension().identifier().toString(),
-                position.getX(), position.getY(), position.getZ(), 0.0F, 0.0F
+                position.getX(), position.getY(), position.getZ(),
+                0.0F, 0.0F
         );
     }
 
-    private <T> PlatformResult<T> onServerThread(java.util.function.Supplier<PlatformResult<T>> operation) {
-        if (!platform.requireServer().isSameThread()) {
-            return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Operation requires the server thread");
+    private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
+        if (!access.serverThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    "Operation requires the server thread"
+            );
         }
+
         try {
             return operation.get();
         } catch (RuntimeException failure) {
-            return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, failure.getClass().getSimpleName());
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INTERNAL_ERROR,
+                    failure.getClass().getSimpleName()
+            );
         }
     }
 

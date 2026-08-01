@@ -8,27 +8,16 @@ import java.util.List;
 
 public final class DefaultCommandCatalog implements CommandCatalog {
 
-    private volatile List<CommandCatalogEntry> direct = List.of();
-    private volatile List<CommandCatalogEntry> legacy = List.of();
+    private volatile List<CommandCatalogEntry> entries = List.of();
 
     @Override
-    public Collection<CommandCatalogEntry> directCommands() {
-        return direct;
+    public Collection<CommandCatalogEntry> commands() {
+        return entries;
     }
 
     @Override
-    public Collection<CommandCatalogEntry> legacyCommands() {
-        return legacy;
-    }
-
-    @Override
-    public void replaceDirect(Collection<CommandCatalogEntry> entries) {
-        direct = List.copyOf(entries);
-    }
-
-    @Override
-    public void replaceLegacy(Collection<CommandCatalogEntry> entries) {
-        legacy = List.copyOf(entries);
+    public void replace(Collection<CommandCatalogEntry> entries) {
+        this.entries = List.copyOf(entries);
     }
 
 }

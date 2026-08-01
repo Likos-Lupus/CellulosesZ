@@ -3,16 +3,20 @@ package top.likoslupus.cellulosesz.modules.teleport.application;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.NOT_FOUND;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.PERSISTENCE_FAILURE;
 
-public final class DefaultTeleportPreferenceCommandService implements TeleportPreferenceCommandService {
+import static java.util.Objects.requireNonNull;
+
+public final class DefaultTeleportPreferenceCommandService
+        implements TeleportPreferenceCommandService {
 
     private final UserService users;
     private final PlayerResolver resolver;
@@ -31,16 +35,25 @@ public final class DefaultTeleportPreferenceCommandService implements TeleportPr
             Optional<Boolean> requested
     ) {
         return users
-                .update(player.uuid(), user -> {
-                    var next = requested.orElse(!user.preferences.teleportAutoAccept);
-                    user.preferences.teleportAutoAccept = next;
-                    return next;
-                })
+                .update(
+                        player.uuid(),
+                        user -> {
+                            var next = requested.orElse(!user.preferences().teleportAutoAccept());
+                            return UserUpdate.of(
+                                    user.withPreferences(user
+                                            .preferences()
+                                            .withTeleportAutoAccept(next)),
+                                    next
+                            );
+                        }
+                )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-auto-command.reply.changed",
                         Map.of(
                                 "state",
-                                enabled ? "on" : "off"
+                                enabled
+                                        ? "on"
+                                        : "off"
                         )
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
@@ -61,13 +74,14 @@ public final class DefaultTeleportPreferenceCommandService implements TeleportPr
 
         return resolver
                 .resolve(target.orElseThrow(), actor)
-                .thenCompose(resolved -> resolved.optionalUuid().isEmpty() ?
+                .thenCompose(resolved -> resolved.optionalUuid().isEmpty()
+                        ?
                         CompletableFuture.completedFuture(TeleportCommandResult.failure(
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
                                 Map.of("player", target.orElseThrow())
-                        )) :
-                        update(
+                        ))
+                        : update(
                                 resolved.optionalUuid().orElseThrow(),
                                 resolved.name(),
                                 requested
@@ -76,21 +90,30 @@ public final class DefaultTeleportPreferenceCommandService implements TeleportPr
     }
 
     private CompletableFuture<TeleportCommandResult> update(
-            java.util.UUID uuid,
+            UUID uuid,
             String name,
             Optional<Boolean> requested
     ) {
         return users
-                .update(uuid, user -> {
-                    var next = requested.orElse(!user.preferences.teleportRequests);
-                    user.preferences.teleportRequests = next;
-                    return next;
-                })
+                .update(
+                        uuid,
+                        user -> {
+                            var next = requested.orElse(!user.preferences().teleportRequests());
+                            return UserUpdate.of(
+                                    user.withPreferences(user
+                                            .preferences()
+                                            .withTeleportRequests(next)),
+                                    next
+                            );
+                        }
+                )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-toggle-command.reply.changed",
                         Map.of(
                                 "player", name,
-                                "state", enabled ? "on" : "off"
+                                "state", enabled
+                                        ? "on"
+                                        : "off"
                         )
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(

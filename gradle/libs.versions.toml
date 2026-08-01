@@ -8,6 +8,8 @@ loom = "1.17-SNAPSHOT"
 architectury-api = "20.0.9"
 architectury-plugin = "3.5.169"
 shadow = "9.6.1"
+spotless = "8.9.0"
+palantir-java-format = "2.96.0"
 
 jackson = "3.2.0"
 jspecify = "1.0.0"
@@ -37,3 +39,4 @@ junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "jun
 architectury-plugin = { id = "architectury-plugin", version.ref = "architectury-plugin" }
 architectury-loom-no-remap = { id = "dev.architectury.loom-no-remap", version.ref = "loom" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }

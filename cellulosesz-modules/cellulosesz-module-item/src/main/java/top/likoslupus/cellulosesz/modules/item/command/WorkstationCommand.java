@@ -1,76 +1,83 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.item.WorkstationKind;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.item.application.WorkstationCommandService;
 
 import java.util.List;
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
-public final class WorkstationCommand implements CellCommand {
+public final class WorkstationCommand implements CommandContributor {
 
-    private final PlatformService platform;
-    private final String name;
+    private final WorkstationCommandService service;
+    private final String root;
     private final List<String> aliases;
-    private final String workstation;
+    private final WorkstationKind kind;
 
     public WorkstationCommand(
-            PlatformService platform,
-            String name,
+            WorkstationCommandService service,
+            String root,
             List<String> aliases,
-            String workstation
+            WorkstationKind kind
     ) {
-        this.platform = requireNonNull(platform, "platform");
-        this.name = requireNonNull(name, "name");
-        this.aliases = List.copyOf(requireNonNull(aliases, "aliases"));
-        this.workstation = requireNonNull(workstation, "workstation");
+        this.service = requireNonNull(service, "service");
+        this.root = requireNonNull(root, "root");
+        this.aliases = List.copyOf(aliases);
+        this.kind = requireNonNull(kind, "kind");
     }
 
     @Override
-    public List<String> aliases() {
-        return aliases;
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.item.workstation." + workstation;
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String name() {
-        return name;
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var player = platform.player(invocation);
-
-        if (player.isEmpty()) {
-            invocation.errorKey("commands.item.player-only");
-            return 0;
-        }
-
-        if (!platform.openWorkstation(player.get(), workstation)) {
-            invocation.errorKey(
-                    "commands.item.workstation.failed",
-                    Map.of("workstation", workstation)
-            );
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.item.workstation.opened",
-                Map.of("workstation", workstation)
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                root,
+                "cellulosesz.item.workstation." + kind.permissionSegment(),
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var command = Commands.literal(root)
+                .executes(commandContext -> ItemCommandSupport.sync(
+                        context,
+                        commandContext,
+                        descriptor,
+                        "open workstation",
+                        policy -> {
+                            var player = ItemCommandSupport.current(policy);
+
+                            return player
+                                    .<PlatformResult<?>>map(value -> service.open(value, kind))
+                                    .orElseGet(() -> PlatformResult.failure(
+                                            PlatformOperationStatus.INVALID_SOURCE,
+                                            "player-only"
+                                    ));
+                        }
+                ));
+
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                aliases,
+                "commands.description." + root,
+                "/" + root,
+                command
+        );
+
+        aliases.forEach(alias -> context.registerAlias(
+                moduleId(),
+                descriptor,
+                alias,
+                node
+        ));
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

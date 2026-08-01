@@ -1,71 +1,91 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.entity.TemporaryMobRequest;
 import top.likoslupus.cellulosesz.api.entity.TemporaryMobType;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class BeezookaCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class BeezookaCommand implements CommandContributor {
+
     private final EntityPlatformService entities;
     private final WorldConfig config;
 
     public BeezookaCommand(
-            PlatformService platform,
             EntityPlatformService entities,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.entities = entities;
-        this.config = config;
+        this.entities = requireNonNull(entities, "entities");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.beezooka";
+    public void register(CommandRegistrationContext context) {
+        register(
+                context,
+                "beezooka",
+                "cellulosesz.command.beezooka",
+                TemporaryMobType.BEE
+        );
+    }
+
+    private void register(
+            CommandRegistrationContext context,
+            String root,
+            String permission,
+            TemporaryMobType type
+    ) {
+        var descriptor = WorldCommandSupport.descriptor(
+                root,
+                permission,
+                CommandSourceKind.PLAYER_ONLY
+        );
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description." + root,
+                "/" + root,
+                Commands.literal(root)
+                        .executes(command -> WorldCommandSupport.sync(
+                                context,
+                                command,
+                                descriptor,
+                                root,
+                                policy -> {
+                                    var player = WorldCommandSupport.current(policy);
+                                    return player
+                                            .<PlatformResult<?>>map(value -> entities.launchTemporaryMob(
+                                                    new TemporaryMobRequest(
+                                                            value,
+                                                            type,
+                                                            config.temporaryMobSpeed,
+                                                            config.temporaryMobLifetimeTicks,
+                                                            config.temporaryMobExplosionPower,
+                                                            false
+                                                    )
+                                            ))
+                                            .orElseGet(() -> PlatformResult.failure(
+                                                    PlatformOperationStatus.INVALID_SOURCE,
+                                                    "player-only"
+                                            ));
+                                }
+                        ))
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/beezooka";
-    }
-
-    @Override
-    public String name() {
-        return "beezooka";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 0) return usage(invocation);
-        var result = entities.launchTemporaryMob(new TemporaryMobRequest(
-                platform.player(invocation).orElseThrow(), TemporaryMobType.BEE,
-                config.temporaryMobSpeed, config.temporaryMobLifetimeTicks,
-                config.temporaryMobExplosionPower, config.explosionBlockDamage
-        ));
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.beezooka.success");
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.beezooka.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

@@ -1,102 +1,162 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.LightningRequest;
+import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class LightningCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class LightningCommand implements CommandContributor {
+
     private final WorldPlatformService worlds;
+    private final PlayerTargetingService targeting;
+    private final PlayerDirectory players;
+    private final PlayerLocationPlatformService locations;
     private final WorldConfig config;
 
     public LightningCommand(
-            PlatformService platform,
             WorldPlatformService worlds,
+            PlayerTargetingService targeting,
+            PlayerDirectory players,
+            PlayerLocationPlatformService locations,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.worlds = worlds;
-        this.config = config;
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.targeting = requireNonNull(targeting, "targeting");
+        this.players = requireNonNull(players, "players");
+        this.locations = requireNonNull(locations, "locations");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.lightning";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "lightning",
+                "cellulosesz.command.lightning",
+                CommandSourceKind.ANY
+        );
+        var target = Commands.argument("player", PlayerNameArgument.playerName())
+                .requires(source -> context.permissions().has(
+                        source,
+                        "cellulosesz.command.lightning.others"
+                ))
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        players::onlinePlayerNames,
+                        builder
+                ))
+                .executes(command -> target(
+                        context,
+                        command,
+                        descriptor,
+                        0.0D
+                ))
+                .then(Commands.argument(
+                                        "damage",
+                                        DoubleArgumentType.doubleArg(0.0D, config.lightningMaximumDamage)
+                                )
+                                .executes(command -> target(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        DoubleArgumentType.getDouble(command, "damage")
+                                ))
+                );
+        var root = Commands.literal("lightning")
+                .executes(command -> sight(context, command, descriptor))
+                .then(target);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.lightning",
+                "/lightning [player] [damage]",
+                root
+        );
     }
 
-    @Override
-    public String usage() {
-        return "/lightning [player] [damage]";
-    }
+    private int sight(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "lightning sight",
+                policy -> {
+                    var player = WorldCommandSupport.current(policy);
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
 
-    @Override
-    public String name() {
-        return "lightning";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 2) return usage(invocation);
-        final CellLocation location;
-        var self = platform.player(invocation);
-        if (invocation.args().length == 0) {
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.world.lightning.console-target-required");
-                return 0;
-            }
-            var target = platform.targetLocation(self.orElseThrow(), config.targetDistance);
-            if (target.isEmpty()) {
-                invocation.errorKey("commands.world.lightning.no-target");
-                return 0;
-            }
-            location = target.orElseThrow();
-        } else {
-            if (!invocation.hasPermission("cellulosesz.command.lightning.others")) {
-                invocation.errorKey("commands.common.no-permission");
-                return 0;
-            }
-            var target = invocation.resolvePlayer(invocation.args()[0]).online();
-            if (target.isEmpty()) {
-                invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[0]));
-                return 0;
-            }
-            location = platform.location(target.orElseThrow());
-        }
-        var damage = 0.0D;
-        if (invocation.args().length == 2) {
-            try {
-                damage = Double.parseDouble(invocation.args()[1]);
-                if (!Double.isFinite(damage) || damage < 0.0D || damage > config.lightningMaximumDamage) {
-                    throw new NumberFormatException();
+                    var target = targeting.targetLocation(
+                            player.orElseThrow(),
+                            config.targetDistance
+                    );
+                    return target.successful() && target.value().isPresent()
+                            ?
+                            worlds.strikeLightning(new LightningRequest(
+                                    target.value().orElseThrow(),
+                                    false,
+                                    0.0D
+                            ))
+                            : target;
                 }
-            } catch (NumberFormatException failure) {
-                invocation.errorKey("commands.world.lightning.invalid-damage", Map.of("maximum", config.lightningMaximumDamage));
-                return 0;
-            }
-        }
-        var result = worlds.strikeLightning(new LightningRequest(location, false, damage));
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.lightning.success", Map.of(
-                "world", location.world,
-                "damage", damage,
-                "visual", false
-        ));
-        return 1;
+        );
     }
 
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.lightning.usage", Map.of("usage", usage()));
-        return 0;
+    private int target(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            double damage
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "lightning player",
+                _ -> players.onlinePlayer(PlayerNameArgument.get(
+                                command,
+                                "player"
+                        ))
+                        .<PlatformResult<?>>map(player -> worlds.strikeLightning(new LightningRequest(
+                                locations.currentLocation(player),
+                                false,
+                                damage
+                        )))
+                        .orElseGet(() -> PlatformResult.failure(
+                                PlatformOperationStatus.TARGET_NOT_FOUND,
+                                "player-not-online"
+                        ))
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

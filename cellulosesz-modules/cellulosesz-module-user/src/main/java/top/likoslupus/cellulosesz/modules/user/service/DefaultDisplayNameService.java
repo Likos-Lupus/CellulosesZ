@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.DisplayNamePlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.RichText;
@@ -16,13 +16,15 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
+import org.jspecify.annotations.Nullable;
 
 public final class DefaultDisplayNameService implements DisplayNameService {
 
     private static final Pattern LEGACY = Pattern.compile("(?i)[&§](?:#[0-9a-f]{6}|[0-9a-fk-or])");
     private static final Pattern TAGS = Pattern.compile("<[^>]+>");
 
-    private final PlatformService platform;
+    private final DisplayNamePlatformService platform;
+    private final PlayerDirectory players;
     private final UserService users;
     private final PermissionService permissions;
     private final MessageRenderer renderer;
@@ -30,7 +32,8 @@ public final class DefaultDisplayNameService implements DisplayNameService {
     private final UserConfig config;
 
     public DefaultDisplayNameService(
-            PlatformService platform,
+            DisplayNamePlatformService platform,
+            PlayerDirectory players,
             UserService users,
             PermissionService permissions,
             MessageRenderer renderer,
@@ -38,6 +41,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
             UserConfig config
     ) {
         this.platform = platform;
+        this.players = players;
         this.users = users;
         this.permissions = permissions;
         this.renderer = renderer;
@@ -52,9 +56,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
 
     @Override
     public RichText displayName(UUID uuid, String fallbackName) {
-        var online = platform.onlinePlayers().stream()
-                .filter(player -> player.uuid().equals(uuid))
-                .findFirst();
+        var online = players.onlinePlayer(uuid);
         return online
                 .map(player -> displayName(uuid, fallbackName, player))
                 .orElseGet(() -> displayName(uuid, fallbackName, null));
@@ -96,11 +98,12 @@ public final class DefaultDisplayNameService implements DisplayNameService {
     @Override
     public void refresh(CellPlayer player) {
         platform.setDisplayName(player, displayName(player));
+        platform.refreshPlayerInfo(player);
     }
 
     @Override
     public void refreshAll() {
-        platform.onlinePlayers().forEach(this::refresh);
+        players.onlinePlayers().forEach(this::refresh);
     }
 
     private RichText displayName(
@@ -109,7 +112,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
             @Nullable CellPlayer online
     ) {
         var nickname = users.cached(uuid)
-                .flatMap(user -> Optional.ofNullable(user.state.nickname))
+                .flatMap(user -> Optional.ofNullable(user.state().nickname()))
                 .filter(value -> !value.isBlank());
         if (nickname.isEmpty()) {
             return RichText.plain(fallbackName);
@@ -126,7 +129,9 @@ public final class DefaultDisplayNameService implements DisplayNameService {
     }
 
     private String stripFormatting(String value) {
-        return TAGS.matcher(LEGACY.matcher(value).replaceAll("")).replaceAll("");
+        return TAGS
+                .matcher(LEGACY.matcher(value).replaceAll(""))
+                .replaceAll("");
     }
 
 }

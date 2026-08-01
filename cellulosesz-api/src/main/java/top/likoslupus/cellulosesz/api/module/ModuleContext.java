@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.api.module;
 
-import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
@@ -21,8 +20,6 @@ public interface ModuleContext {
     ConfigRegistry configs();
 
     EventRegistry events();
-
-    CommandRegistry commands();
 
     Scheduler scheduler();
 

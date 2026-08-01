@@ -2,7 +2,11 @@ package top.likoslupus.cellulosesz.api.entity;
 
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 
+import java.util.Set;
+
 public interface EntityPlatformService {
+
+    Set<String> livingEntityIds();
 
     boolean validLivingEntity(String entityId);
 

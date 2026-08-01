@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
@@ -10,7 +9,6 @@ import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
-import top.likoslupus.cellulosesz.core.command.ModuleScopedCommandRegistry;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,7 +25,6 @@ public final class DefaultModuleContext implements ModuleContext {
     private final ModuleScopedServiceRegistry services;
     private final ConfigRegistry configs;
     private final EventRegistry events;
-    private final CommandRegistry commands;
     private final Scheduler scheduler;
     private final CellulosesZLogger logger;
     private final Predicate<String> enabledPredicate;
@@ -39,7 +36,6 @@ public final class DefaultModuleContext implements ModuleContext {
             ServiceRegistry services,
             ConfigRegistry configs,
             EventRegistry events,
-            CommandRegistry commands,
             Scheduler scheduler,
             CellulosesZLogger logger,
             Predicate<String> enabledPredicate
@@ -49,7 +45,6 @@ public final class DefaultModuleContext implements ModuleContext {
         this.services = new ModuleScopedServiceRegistry(moduleId, services);
         this.configs = configs;
         this.events = events;
-        this.commands = new ModuleScopedCommandRegistry(moduleId, commands);
         this.scheduler = scheduler;
         this.logger = logger;
         this.enabledPredicate = enabledPredicate;
@@ -78,11 +73,6 @@ public final class DefaultModuleContext implements ModuleContext {
     @Override
     public EventRegistry events() {
         return events;
-    }
-
-    @Override
-    public CommandRegistry commands() {
-        return commands;
     }
 
     @Override
@@ -116,6 +106,7 @@ public final class DefaultModuleContext implements ModuleContext {
     synchronized List<Registration> registrationsInReverseOrder() {
         var result = new ArrayList<>(services.registrationsInReverseOrder());
         var tracked = new ArrayList<>(trackedRegistrations);
+
         Collections.reverse(tracked);
         result.addAll(0, tracked);
         return List.copyOf(result);

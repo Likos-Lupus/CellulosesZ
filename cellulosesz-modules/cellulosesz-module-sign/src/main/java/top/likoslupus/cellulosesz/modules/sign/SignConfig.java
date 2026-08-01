@@ -2,6 +2,10 @@ package top.likoslupus.cellulosesz.modules.sign;
 
 import java.util.Locale;
 
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+
+import static java.util.Objects.requireNonNull;
+
 public final class SignConfig {
 
     public boolean enabled = true;
@@ -11,16 +15,32 @@ public final class SignConfig {
     public Signs signs = new Signs();
 
     public void validate() {
-        if (editTargetDistance < 1 || editTargetDistance > 128) {
-            throw new IllegalArgumentException("editTargetDistance must be between 1 and 128");
-        }
-        if (editMaximumLineLength < 1 || editMaximumLineLength > 4096) {
-            throw new IllegalArgumentException("editMaximumLineLength must be between 1 and 4096");
-        }
-        if (interaction == null || interaction.cooldownTicks < 0 || interaction.cooldownTicks > 1200) {
-            throw new IllegalArgumentException("interaction.cooldownTicks must be between 0 and 1200");
-        }
-        if (signs == null) throw new IllegalArgumentException("signs must not be null");
+        requireInRange(
+                editTargetDistance,
+                1,
+                128,
+                "editTargetDistance"
+        );
+        requireInRange(
+                editMaximumLineLength,
+                1,
+                4_096,
+                "editMaximumLineLength"
+        );
+        requireNonNull(
+                interaction,
+                "interaction"
+        );
+        requireInRange(
+                interaction.cooldownTicks,
+                0,
+                1_200,
+                "interaction.cooldownTicks"
+        );
+        requireNonNull(
+                signs,
+                "signs"
+        );
     }
 
     public static final class Interaction {

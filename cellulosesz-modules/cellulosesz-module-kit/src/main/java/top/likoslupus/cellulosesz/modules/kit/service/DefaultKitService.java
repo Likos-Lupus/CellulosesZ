@@ -1,18 +1,20 @@
 package top.likoslupus.cellulosesz.modules.kit.service;
 
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitClaimResult;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 
 import java.math.BigDecimal;
@@ -32,7 +34,8 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
 
     private final StorageService storage;
     private final UserService users;
-    private final PlatformService platform;
+    private final InventoryPlatformService inventory;
+    private final ServerThreadExecutor serverThread;
     private final Optional<EconomyService> economy;
     private final KitConfig config;
     private final Path kitsDirectory;
@@ -43,14 +46,16 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
     public DefaultKitService(
             StorageService storage,
             UserService users,
-            PlatformService platform,
+            InventoryPlatformService inventory,
+            ServerThreadExecutor serverThread,
             Optional<EconomyService> economy,
             KitConfig config,
             Path kitsDirectory
     ) {
         this.storage = requireNonNull(storage, "storage");
         this.users = requireNonNull(users, "users");
-        this.platform = requireNonNull(platform, "platform");
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
         this.economy = requireNonNull(economy, "economy");
         this.config = requireNonNull(config, "config");
         this.kitsDirectory = requireNonNull(kitsDirectory, "kitsDirectory");
@@ -197,9 +202,11 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
                                             ? KitClaimResult.failure(paymentResult.orElseThrow().message())
                                             : KitClaimResult.failure("service.kit.rollback-failed"));
                         }
-                        return platform.callOnServerThread(() -> {
-                            var prepared = platform.prepareInventoryGrant(player, kit.items);
-                            return prepared.isPresent() && prepared.orElseThrow().commit();
+                        return serverThread.submit(() -> {
+                            var prepared = inventory.prepareGrant(player, kit.items);
+                            return prepared.successful()
+                                    && prepared.value().isPresent()
+                                    && prepared.value().orElseThrow().commit();
                         }).thenCompose(granted -> {
                             if (granted) {
                                 return CompletableFuture.completedFuture(KitClaimResult.success(
@@ -222,29 +229,48 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
     }
 
     @SuppressWarnings("WrapperTypeMayBePrimitive")
-    private CooldownReservation reserveCooldown(
+    private UserUpdate<CooldownReservation> reserveCooldown(
             CellUser user,
             String cooldownKey,
             long cooldownSeconds
     ) {
         var now = System.currentTimeMillis();
-        var hadPrevious = user.cooldowns.containsKey(cooldownKey);
-        var previous = user.cooldowns.getOrDefault(cooldownKey, 0L);
+        var hadPrevious = user.cooldowns().containsKey(cooldownKey);
+        var previous = user.cooldowns().getOrDefault(cooldownKey, 0L);
+
         if (cooldownSeconds < 0L && hadPrevious) {
-            return CooldownReservation.rejected(KitClaimResult.failure("service.kit.once"));
-        }
-        if (cooldownSeconds >= 0L && previous > now) {
-            var seconds = Math.max(1L, (previous - now + 999L) / 1000L);
-            return CooldownReservation.rejected(
-                    KitClaimResult.failure("service.kit.cooldown", Map.of("seconds", seconds))
+            return UserUpdate.of(
+                    user,
+                    CooldownReservation.rejected(KitClaimResult.failure("service.kit.once"))
             );
         }
-        if (cooldownSeconds == 0L) {
-            return CooldownReservation.accepted(false, hadPrevious, previous, previous);
+
+        if (cooldownSeconds >= 0L && previous > now) {
+            var seconds = Math.max(1L, (previous - now + 999L) / 1000L);
+            return UserUpdate.of(
+                    user,
+                    CooldownReservation.rejected(
+                            KitClaimResult.failure("service.kit.cooldown", Map.of("seconds", seconds))
+                    )
+            );
         }
+
+        if (cooldownSeconds == 0L) {
+            return UserUpdate.of(
+                    user,
+                    CooldownReservation.accepted(false, hadPrevious, previous, previous)
+            );
+        }
+
         var reserved = nextClaimTime(now, cooldownSeconds);
-        user.cooldowns.put(cooldownKey, reserved);
-        return CooldownReservation.accepted(true, hadPrevious, previous, reserved);
+        var cooldowns = new LinkedHashMap<>(user.cooldowns());
+
+        cooldowns.put(cooldownKey, reserved);
+
+        return UserUpdate.of(
+                user.withCooldowns(cooldowns),
+                CooldownReservation.accepted(true, hadPrevious, previous, reserved)
+        );
     }
 
     private CompletableFuture<Boolean> rollbackCooldown(
@@ -252,15 +278,31 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
             String cooldownKey,
             CooldownReservation reservation
     ) {
-        if (!reservation.changed()) return CompletableFuture.completedFuture(true);
-        return users.update(uuid, user -> {
-            if (user.cooldowns.getOrDefault(cooldownKey, Long.MIN_VALUE) != reservation.reserved()) {
-                return false;
-            }
-            if (reservation.hadPrevious()) user.cooldowns.put(cooldownKey, reservation.previous());
-            else user.cooldowns.remove(cooldownKey);
-            return true;
-        }).exceptionally(_ -> false);
+        if (!reservation.changed()) {
+            return CompletableFuture.completedFuture(true);
+        }
+
+        return users
+                .update(
+                        uuid,
+                        user -> {
+                            if (user.cooldowns().getOrDefault(cooldownKey, Long.MIN_VALUE)
+                                    != reservation.reserved()
+                            ) {
+                                return UserUpdate.of(user, false);
+                            }
+
+                            var cooldowns = new LinkedHashMap<>(user.cooldowns());
+                            if (reservation.hadPrevious()) {
+                                cooldowns.put(cooldownKey, reservation.previous());
+                            } else {
+                                cooldowns.remove(cooldownKey);
+                            }
+
+                            return UserUpdate.of(user.withCooldowns(cooldowns), true);
+                        }
+                )
+                .exceptionally(_ -> false);
     }
 
     private CompletableFuture<Boolean> compensateFailedClaim(
@@ -272,6 +314,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
     ) {
         var cooldownRollback = rollbackCooldown(uuid, cooldownKey, reservation);
         CompletableFuture<Boolean> paymentRollback;
+
         if (charged) {
             paymentRollback = economy.orElseThrow().deposit(
                             uuid,
@@ -283,6 +326,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
         } else {
             paymentRollback = CompletableFuture.completedFuture(true);
         }
+
         return cooldownRollback.thenCombine(
                 paymentRollback,
                 (first, second) -> first && second
@@ -290,7 +334,10 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
     }
 
     private long nextClaimTime(long now, long cooldownSeconds) {
-        if (cooldownSeconds < 0L) return Long.MAX_VALUE;
+        if (cooldownSeconds < 0L) {
+            return Long.MAX_VALUE;
+        }
+
         try {
             return Math.addExact(now, Math.multiplyExact(cooldownSeconds, 1000L));
         } catch (ArithmeticException exception) {
@@ -300,10 +347,11 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
 
     @Override
     public CompletableFuture<Void> resetCooldown(UUID uuid, String kitId) {
-        return users.update(uuid, user -> {
-            user.cooldowns.remove(cooldownKey(kitId));
-            return true;
-        }).thenApply(_ -> (Void) null);
+        return users.updateVoid(uuid, user -> {
+            var cooldowns = new LinkedHashMap<>(user.cooldowns());
+            cooldowns.remove(cooldownKey(kitId));
+            return user.withCooldowns(cooldowns);
+        });
     }
 
     private KitDefinition validatedCopy(KitDefinition source) {
@@ -321,7 +369,8 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
             var tail = previous == null
                     ? CompletableFuture.<Void>completedFuture(null)
                     : previous;
-            var next = tail.handle((_, _) -> null)
+            var next = tail
+                    .handle((_, _) -> null)
                     .thenCompose(ignored -> {
                         try {
                             return operation.get();
@@ -330,11 +379,16 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
                         }
                     })
                     .handle((value, failure) -> {
-                        if (failure == null) result.complete(value);
-                        else result.completeExceptionally(unwrapCompletionFailure(failure));
+                        if (failure == null) {
+                            result.complete(value);
+                        } else {
+                            result.completeExceptionally(unwrapCompletionFailure(failure));
+                        }
+
                         return (Void) null;
                     });
-            next.whenComplete((ignored, _) -> definitionTails.remove(key, next));
+
+            next.whenComplete((_, _) -> definitionTails.remove(key, next));
             return next;
         });
         return result;
@@ -345,6 +399,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
         if (!KIT_ID.matcher(normalizedId).matches()) {
             throw new IllegalArgumentException("Invalid kit id: " + id);
         }
+
         return kitsDirectory.resolve(normalizedId + ".yml");
     }
 
@@ -381,11 +436,13 @@ public final class DefaultKitService implements KitService, AsyncInitializable {
         if (kit.items.isEmpty()) {
             throw new IllegalArgumentException("Kit must contain at least one item");
         }
+
         var slots = new HashSet<Integer>();
         kit.items.forEach(item -> {
             requireNonNull(item, "kit item");
-            if (item.slot < 0 || !slots.add(item.slot))
+            if (item.slot < 0 || !slots.add(item.slot)) {
                 throw new IllegalArgumentException("Invalid or duplicate kit slot");
+            }
             item.stack = item.validatedStack();
         });
     }

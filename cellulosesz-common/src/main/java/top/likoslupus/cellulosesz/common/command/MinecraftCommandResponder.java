@@ -4,31 +4,31 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.text.*;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 
 import static java.util.Objects.requireNonNull;
 
 public final class MinecraftCommandResponder {
 
-    private final PlatformService platform;
+    private final PlayerDirectory players;
+    private final PlayerAudienceService audiences;
     private final MessageRenderer renderer;
     private final LocaleResolver locales;
     private final ServerThreadExecutor serverThread;
     private final CellulosesZLogger logger;
 
     public MinecraftCommandResponder(
-            PlatformService platform,
+            PlayerDirectory players,
+            PlayerAudienceService audiences,
             MessageRenderer renderer,
             LocaleResolver locales,
             ServerThreadExecutor serverThread,
             CellulosesZLogger logger
     ) {
-        this.platform = requireNonNull(platform, "platform");
+        this.players = requireNonNull(players, "players");
+        this.audiences = requireNonNull(audiences, "audiences");
         this.renderer = requireNonNull(renderer, "renderer");
         this.locales = requireNonNull(locales, "locales");
         this.serverThread = requireNonNull(serverThread, "serverThread");
@@ -60,7 +60,9 @@ public final class MinecraftCommandResponder {
         try {
             serverThread.execute(task);
         } catch (IllegalStateException expectedShutdown) {
-            logger.debug("Dropping command response because the server is unavailable: " + expectedShutdown.getMessage());
+            logger.debug("Dropping command response because the server is unavailable: "
+                    + expectedShutdown.getMessage()
+            );
         } catch (RuntimeException failure) {
             logger.error("Failed to schedule command response", failure);
         }
@@ -72,6 +74,19 @@ public final class MinecraftCommandResponder {
             boolean error
     ) {
         try {
+            if (source.getEntity() instanceof ServerPlayer player) {
+                var audience = players.onlinePlayer(player.getUUID());
+                if (audience.isEmpty()) {
+                    logger.debug("Dropping command response for disconnected player "
+                            + player.getUUID()
+                    );
+                    return;
+                }
+
+                audiences.send(audience.orElseThrow(), message);
+                return;
+            }
+
             var component = MinecraftTextAdapter.toComponent(message, logger);
             if (error) {
                 source.sendFailure(component);
@@ -79,21 +94,13 @@ public final class MinecraftCommandResponder {
                 source.sendSuccess(() -> component, false);
             }
         } catch (RuntimeException failure) {
-            if (source.getEntity() instanceof ServerPlayer player
-                    && player.hasDisconnected()
-            ) {
-                logger.debug("Dropping command response for disconnected player " + player.getUUID());
-            } else {
-                logger.error("Failed to send command response", failure);
-            }
+            logger.error("Failed to send command response", failure);
         }
     }
 
     private String locale(CommandSourceStack source) {
-        if (source.getEntity() instanceof ServerPlayer player
-                && !player.hasDisconnected()
-        ) {
-            return platform.player(player)
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return players.onlinePlayer(player.getUUID())
                     .map(locales::locale)
                     .orElseGet(locales::consoleLocale);
         }
@@ -113,7 +120,11 @@ public final class MinecraftCommandResponder {
             RichText message,
             boolean error
     ) {
-        schedule(() -> sendNow(source, requireNonNull(message, "message"), error));
+        schedule(() -> sendNow(
+                source,
+                requireNonNull(message, "message"),
+                error
+        ));
     }
 
     public void error(CommandSourceStack source, RichText message) {

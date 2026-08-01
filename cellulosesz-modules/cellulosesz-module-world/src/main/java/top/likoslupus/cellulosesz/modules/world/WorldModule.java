@@ -1,17 +1,16 @@
 package top.likoslupus.cellulosesz.modules.world;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.world.BackupService;
-import top.likoslupus.cellulosesz.api.world.EntityRemoveService;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
-import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
+import top.likoslupus.cellulosesz.api.world.*;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.modules.world.command.*;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultBackupService;
@@ -19,6 +18,7 @@ import top.likoslupus.cellulosesz.modules.world.service.DefaultEntityRemoveServi
 import top.likoslupus.cellulosesz.modules.world.service.DefaultWorldService;
 
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -38,47 +38,191 @@ public final class WorldModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register("module.world", WorldConfig.class, "modules/world.yml", WorldConfig::new);
+        config = context.configs().register(
+                "module.world",
+                WorldConfig.class,
+                "modules/world.yml",
+                WorldConfig::new
+        );
         requireNonNull(config, "WorldConfig has not been initialized").validate();
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
-        worlds = new DefaultWorldService(platform);
-        remover = new DefaultEntityRemoveService(platform);
-        backups = new DefaultBackupService(platform, context.dataDirectory()
-                .getParent(), requireNonNull(config, "WorldConfig has not been initialized"));
-        context.services().register(WorldService.class, worlds);
-        context.services().register(EntityRemoveService.class, remover);
-        context.services().register(BackupService.class, backups);
-        context.services().register(DefaultBackupService.class, backups);
+        var current = requireNonNull(config, "WorldConfig has not been initialized");
+        worlds = new DefaultWorldService(
+                context.services().require(WorldStatePlatformService.class)
+        );
+        remover = new DefaultEntityRemoveService(
+                context.services().require(EntityRemovalPlatformService.class)
+        );
+        backups = new DefaultBackupService(
+                context.services().require(BackupPlatformService.class),
+                context.dataDirectory().getParent(),
+                current
+        );
+
+        context.services().register(WorldService.class, requireNonNull(worlds));
+        context.services().register(EntityRemoveService.class, requireNonNull(remover));
+        context.services().register(BackupService.class, requireNonNull(backups));
+        context.services().register(DefaultBackupService.class, requireNonNull(backups));
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
-        context.commands().register(new TimeCommand(platform, config, worlds));
-        context.commands().register(new WeatherCommand(platform, config, worlds));
-        context.commands().register(new RemoveCommand(platform, config, remover));
-        context.commands().register(new BackupCommand(backups));
-
+        var registry = context.services().require(CommandRegistry.class);
+        var directory = context.services().require(WorldDirectory.class);
+        var locations = context.services().require(PlayerLocationPlatformService.class);
+        var players = context.services().require(PlayerDirectory.class);
         var worldOperations = context.services().require(WorldPlatformService.class);
         var entityOperations = context.services().require(EntityPlatformService.class);
-        var loadedConfig = requireNonNull(config, "WorldConfig has not been initialized");
-        context.commands().register(new BreakCommand(platform, worldOperations, loadedConfig));
-        context.commands().register(new GcCommand(worldOperations));
-        context.commands().register(new TreeCommand(platform, worldOperations, loadedConfig));
-        context.commands().register(new BigTreeCommand(platform, worldOperations, loadedConfig));
-        context.commands().register(new ThunderCommand(platform, worldOperations, loadedConfig));
-        context.commands().register(new LightningCommand(platform, worldOperations, loadedConfig));
-        context.commands().register(new FireballCommand(platform, entityOperations, loadedConfig));
-        context.commands().register(new SpawnerCommand(platform, worldOperations, entityOperations, loadedConfig));
-        context.commands().register(new SpawnMobCommand(platform, entityOperations, loadedConfig));
-        context.commands().register(new AntiochCommand(platform, entityOperations, loadedConfig));
-        context.commands().register(new BeezookaCommand(platform, entityOperations, loadedConfig));
-        context.commands().register(new KittyCannonCommand(platform, entityOperations, loadedConfig));
-        context.commands().register(new NukeCommand(platform, entityOperations, loadedConfig));
+        var targeting = context.services().require(PlayerTargetingService.class);
+        var removals = context.services().require(EntityRemovalPlatformService.class);
+        var current = requireNonNull(config, "WorldConfig has not been initialized");
+
+        track(
+                context,
+                registry,
+                "time-command",
+                new TimeCommand(
+                        requireNonNull(worlds),
+                        directory,
+                        locations
+                )
+        );
+        track(
+                context,
+                registry,
+                "weather-command",
+                new WeatherCommand(
+                        requireNonNull(worlds),
+                        directory,
+                        locations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "remove-command",
+                new RemoveCommand(removals, current)
+        );
+        track(
+                context,
+                registry,
+                "backup-command",
+                new BackupCommand(requireNonNull(backups))
+        );
+        track(
+                context,
+                registry,
+                "gc-command",
+                new GcCommand(worldOperations)
+        );
+        track(
+                context,
+                registry,
+                "break-command",
+                new BreakCommand(worldOperations, current)
+        );
+        track(
+                context,
+                registry,
+                "tree-command",
+                new TreeCommand(worldOperations, current)
+        );
+        track(
+                context,
+                registry,
+                "bigtree-command",
+                new BigTreeCommand(worldOperations, current)
+        );
+        track(
+                context,
+                registry,
+                "thunder-command",
+                new ThunderCommand(
+                        worldOperations,
+                        locations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "lightning-command",
+                new LightningCommand(
+                        worldOperations,
+                        targeting,
+                        players,
+                        locations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "fireball-command",
+                new FireballCommand(entityOperations, current)
+        );
+        track(
+                context,
+                registry,
+                "spawner-command",
+                new SpawnerCommand(
+                        worldOperations,
+                        entityOperations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "spawnmob-command",
+                new SpawnMobCommand(
+                        entityOperations,
+                        players,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "antioch-command",
+                new AntiochCommand(
+                        targeting,
+                        entityOperations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "beezooka-command",
+                new BeezookaCommand(entityOperations, current)
+        );
+        track(
+                context,
+                registry,
+                "kittycannon-command",
+                new KittyCannonCommand(
+                        entityOperations,
+                        current
+                )
+        );
+        track(
+                context,
+                registry,
+                "nuke-command",
+                new NukeCommand(
+                        entityOperations,
+                        players,
+                        locations,
+                        current
+                )
+        );
+
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
     }
 
@@ -86,14 +230,102 @@ public final class WorldModule implements CellulosesZModule {
     public void onReload(ModuleContext context) {
         var candidate = context.configs().require("module.world", WorldConfig.class);
         candidate.validate();
+
         var current = requireNonNull(config, "WorldConfig has not been initialized");
         current.copyFrom(candidate);
+
         requireNonNull(backups, "BackupService has not been initialized").configure(current);
     }
 
+    @Override
+    public void onServerStopping(ModuleContext context) {
+        context.services().require(EntityPlatformService.class).clearTrackedEntities();
+    }
+
+    private static void track(
+            ModuleContext context,
+            CommandRegistry registry,
+            String id,
+            CommandContributor contributor
+    ) {
+        context.track(registry.register(id, contributor));
+    }
+
     private static void registerCommandPermissions(PermissionCatalog catalog) {
-        Map.ofEntries(Map.entry("cellulosesz.command.break.unbreakable", "Break normally unbreakable blocks"), Map.entry("cellulosesz.command.lightning.others", "Strike lightning at another player"), Map.entry("cellulosesz.command.spawnmob.others", "Spawn mobs near another player"), Map.entry("cellulosesz.command.spawnmob.entity.*", "Spawn all permitted living entity types"), Map.entry("cellulosesz.command.spawner.delay", "Change a spawner delay"), Map.entry("cellulosesz.command.spawner.entity.*", "Configure all permitted spawner entity types"), Map.entry("cellulosesz.command.fireball.projectile.fireball", "Launch a standard fireball"), Map.entry("cellulosesz.command.fireball.projectile.small", "Launch a small fireball"), Map.entry("cellulosesz.command.fireball.projectile.large", "Launch a large fireball"), Map.entry("cellulosesz.command.fireball.projectile.arrow", "Launch an arrow"), Map.entry("cellulosesz.command.fireball.projectile.skull", "Launch a wither skull"), Map.entry("cellulosesz.command.fireball.projectile.egg", "Launch an egg"), Map.entry("cellulosesz.command.fireball.projectile.snowball", "Launch a snowball"), Map.entry("cellulosesz.command.fireball.projectile.expbottle", "Launch an experience bottle"), Map.entry("cellulosesz.command.fireball.projectile.dragon", "Launch dragon fire"), Map.entry("cellulosesz.command.fireball.projectile.splashpotion", "Launch a splash potion"), Map.entry("cellulosesz.command.fireball.projectile.lingeringpotion", "Launch a lingering potion"), Map.entry("cellulosesz.command.fireball.projectile.trident", "Launch a trident"))
-                .forEach(catalog::register);
+        Map.ofEntries(
+                Map.entry(
+                        "cellulosesz.command.break.unbreakable",
+                        "Break normally unbreakable blocks"
+                ),
+                Map.entry(
+                        "cellulosesz.command.lightning.others",
+                        "Strike lightning at another player"
+                ),
+                Map.entry(
+                        "cellulosesz.command.spawnmob.others",
+                        "Spawn mobs near another player"
+                ),
+                Map.entry(
+                        "cellulosesz.command.spawnmob.entity.*",
+                        "Spawn all permitted living entity types"
+                ),
+                Map.entry(
+                        "cellulosesz.command.spawner.delay",
+                        "Change a spawner delay"
+                ),
+                Map.entry(
+                        "cellulosesz.command.spawner.entity.*",
+                        "Configure all permitted spawner entity types"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.fireball",
+                        "Launch a standard fireball"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.small",
+                        "Launch a small fireball"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.large",
+                        "Launch a large fireball"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.arrow",
+                        "Launch an arrow"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.skull",
+                        "Launch a wither skull"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.egg",
+                        "Launch an egg"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.snowball",
+                        "Launch a snowball"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.expbottle",
+                        "Launch an experience bottle"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.dragon",
+                        "Launch dragon fire"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.splashpotion",
+                        "Launch a splash potion"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.lingeringpotion",
+                        "Launch a lingering potion"
+                ),
+                Map.entry(
+                        "cellulosesz.command.fireball.projectile.trident",
+                        "Launch a trident"
+                )
+        ).forEach(catalog::register);
     }
 
 }

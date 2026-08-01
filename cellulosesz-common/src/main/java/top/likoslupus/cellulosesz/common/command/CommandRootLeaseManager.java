@@ -4,11 +4,11 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.validation.Checks;
 
 import java.util.*;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -77,7 +77,6 @@ public final class CommandRootLeaseManager {
             String label,
             String canonical,
             String owner,
-            RegistrationMode mode,
             LabelKind kind,
             LiteralArgumentBuilder<CommandSourceStack> builder
     ) {
@@ -85,17 +84,14 @@ public final class CommandRootLeaseManager {
         var existing = leases.get(normalized);
 
         if (existing != null) {
-            if (mode == RegistrationMode.LEGACY && existing.mode() == RegistrationMode.DIRECT) {
-                logger.warn("Skipping legacy root /%s because direct command /%s owns it".formatted(normalized, existing.canonical()));
-                return existing.node();
-            }
-            throw new IllegalStateException("CellulosesZ command root conflict for /%s: %s (%s) vs %s (%s)".formatted(
-                    normalized,
-                    existing.canonical(),
-                    existing.owner(),
-                    canonical,
-                    owner
-            ));
+            throw new IllegalStateException(
+                    "CellulosesZ command root conflict for /%s: %s (%s) vs %s (%s)".formatted(
+                            normalized,
+                            existing.canonical(),
+                            existing.owner(),
+                            canonical,
+                            owner
+                    ));
         }
 
         var root = requireDispatcher().getRoot();
@@ -122,7 +118,6 @@ public final class CommandRootLeaseManager {
                         normalized,
                         normalize(canonical),
                         Checks.requireNonBlank(owner, "owner"),
-                        mode,
                         kind,
                         node,
                         generation
@@ -136,14 +131,18 @@ public final class CommandRootLeaseManager {
             String label,
             String canonical,
             String owner,
-            RegistrationMode mode,
             LiteralArgumentBuilder<CommandSourceStack> builder
     ) {
         var normalized = normalize(label);
         if (leases.containsKey(normalized)
                 || requireDispatcher().getRoot().getChild(normalized) != null
         ) {
-            logger.warn("Skipping configured command alias /%s for /%s because the label is already owned".formatted(normalized, canonical));
+            logger.warn(
+                    "Skipping configured command alias /%s for /%s because the label is already owned".formatted(
+                            normalized,
+                            canonical
+                    )
+            );
             return false;
         }
         var node = requireDispatcher().register(requireNonNull(builder, "builder"));
@@ -153,7 +152,6 @@ public final class CommandRootLeaseManager {
                         normalized,
                         normalize(canonical),
                         Checks.requireNonBlank(owner, "owner"),
-                        mode,
                         LabelKind.CONFIG_ALIAS,
                         node,
                         generation
@@ -188,7 +186,11 @@ public final class CommandRootLeaseManager {
             var original = originalRoots.get(lease.label());
 
             if (current != null && current != original) {
-                logger.warn("Cannot restore CellulosesZ command root /%s because another owner replaced it during rebuild".formatted(lease.label()));
+                logger.warn(
+                        "Cannot restore CellulosesZ command root /%s because another owner replaced it during rebuild".formatted(
+                                lease.label()
+                        )
+                );
                 return;
             }
 
@@ -200,13 +202,6 @@ public final class CommandRootLeaseManager {
         });
 
         generation++;
-    }
-
-    public enum RegistrationMode {
-
-        DIRECT,
-        LEGACY
-
     }
 
     public enum LabelKind {
@@ -222,7 +217,6 @@ public final class CommandRootLeaseManager {
             String label,
             String canonical,
             String owner,
-            RegistrationMode mode,
             LabelKind kind,
             CommandNode<CommandSourceStack> node,
             long generation

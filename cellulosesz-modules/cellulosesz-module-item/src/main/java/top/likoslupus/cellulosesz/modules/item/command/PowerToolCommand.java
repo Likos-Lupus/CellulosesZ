@@ -1,195 +1,339 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 
 import java.util.List;
-import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
-public final class PowerToolCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class PowerToolCommand implements CommandContributor {
+
+    private final ItemAutomationService automation;
+    private final ItemService items;
 
     public PowerToolCommand(
-            PlatformService platform,
-            ItemService items,
             ItemAutomationService automation,
-            ItemConfig config
+            ItemService items
     ) {
-        super(platform, items, automation, config);
+        this.automation = requireNonNull(automation, "automation");
+        this.items = requireNonNull(items, "items");
     }
 
     @Override
-    public List<String> aliases() {
-        return List.of("pt");
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "powertool",
+                "cellulosesz.item.powertool",
+                CommandSourceKind.PLAYER_ONLY
+        );
 
-    @Override
-    public String permission() {
-        return "cellulosesz.item.powertool";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/powertool <command|a:command|r:command|c:message|l:|d:|toggle|list|clearall>";
-    }
-
-    @Override
-    public String name() {
-        return "powertool";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var args = invocation.args();
-
-        if (args.length == 1 && args[0].equalsIgnoreCase("toggle")) {
-            var enabled = !automation.powerToolsEnabled(self.get().uuid());
-            automation.setPowerToolsEnabled(self.get().uuid(), enabled);
-            invocation.replyKey(enabled
-                    ? "commands.item.power-tool-command.enabled"
-                    : "commands.item.power-tool-command.disabled");
-            return 1;
-        }
-
-        if (args.length == 1 && args[0].equalsIgnoreCase("list")) {
-            var configured = automation.powerTools(self.get().uuid());
-            if (configured.isEmpty()) {
-                invocation.replyKey("commands.item.power-tool-command.reply.there-no-powertool-bindings");
-            } else {
-                invocation.replyKey(
-                        "commands.item.power-tool-command.reply.powertool",
-                        Map.of(
-                                "status",
-                                configured.entrySet().stream()
-                                        .map(entry ->
-                                                "%s -> %s".formatted(
-                                                        entry.getKey(),
-                                                        String.join(" | ", entry.getValue())
+        var root = Commands.literal("powertool")
+                .then(Commands.literal("clear")
+                        .executes(command -> held(
+                                context,
+                                command,
+                                descriptor,
+                                automation::clearPowerTool,
+                                "clear"
+                        )))
+                .then(Commands.literal("clearall")
+                        .executes(command -> all(
+                                context,
+                                command,
+                                descriptor,
+                                automation::clearAllPowerTools,
+                                "clearall"
+                        )))
+                .then(Commands.literal("list")
+                        .executes(command -> list(
+                                context,
+                                command,
+                                descriptor
+                        )))
+                .then(Commands.literal("toggle")
+                        .executes(command -> toggle(
+                                context,
+                                command,
+                                descriptor
+                        )))
+                .then(Commands.literal("add")
+                        .then(Commands.argument(
+                                        "command",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> held(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        (uuid, item) -> automation.addPowerTool(
+                                                uuid,
+                                                item,
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "command"
                                                 )
-                                        )
-                                        .sorted()
-                                        .reduce("%s; %s"::formatted)
-                                        .orElse("")
-                        )
-                );
-            }
-            return 1;
-        }
+                                        ),
+                                        "add"
+                                ))))
+                .then(Commands.literal("remove")
+                        .then(Commands.argument(
+                                        "command",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> heldBoolean(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        (uuid, item) -> automation.removePowerTool(
+                                                uuid,
+                                                item,
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "command"
+                                                )
+                                        ),
+                                        "remove"
+                                ))))
+                .then(Commands.literal("command")
+                        .then(Commands.argument(
+                                        "command",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> held(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        (uuid, item) -> automation.setPowerTool(
+                                                uuid,
+                                                item,
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "command"
+                                                )
+                                        ),
+                                        "command"
+                                ))))
+                .then(Commands.literal("chat")
+                        .then(Commands.argument(
+                                        "message",
+                                        StringArgumentType.greedyString()
+                                )
+                                .executes(command -> held(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        (uuid, item) -> automation.setPowerTool(
+                                                uuid,
+                                                item,
+                                                "c:" + StringArgumentType.getString(
+                                                        command,
+                                                        "message"
+                                                )
+                                        ),
+                                        "chat"
+                                ))));
 
-        if (args.length == 1 && args[0].equalsIgnoreCase("clearall")) {
-            automation.powerTools(self.get().uuid()).keySet()
-                    .forEach(itemId ->
-                            automation.clearPowerTool(self.get().uuid(), itemId)
-                    );
-            invocation.replyKey("commands.item.power-tool-command.reply.cleared-all-powertool-bindings");
-            return 1;
-        }
-
-        var held = items.heldItemId(self.get());
-        if (held.isEmpty()) {
-            invocation.errorKey("commands.item.power-tool-command.error.hold-item-first");
-            return 0;
-        }
-
-        var input = join(args, 0).trim();
-        if (input.indexOf('\n') >= 0 || input.indexOf('\r') >= 0) {
-            invocation.errorKey("commands.item.power-tool-command.error.line-break");
-            return 0;
-        }
-
-        if (input.isEmpty()
-                || input.equalsIgnoreCase("clear")
-                || input.equalsIgnoreCase("d:")
-        ) {
-            automation.clearPowerTool(self.get().uuid(), held.get());
-            invocation.replyKey(
-                    "commands.item.power-tool-command.reply.cleared-powertool-binding",
-                    Map.of("item", held.get())
-            );
-            return 1;
-        }
-
-        if (input.equalsIgnoreCase("l:")) {
-            var commands = automation.powerTool(self.get().uuid(), held.get());
-            invocation.replyKey(
-                    "commands.item.power-tool-command.held-list",
-                    Map.of(
-                            "item", held.get(),
-                            "commands", commands.isEmpty() ? "-" : String.join(" | ", commands)
-                    )
-            );
-            return 1;
-        }
-
-        if (input.regionMatches(true, 0, "a:", 0, 2)) {
-            var command = input.substring(2).trim();
-            if (command.isEmpty()) return usageError(invocation);
-
-            automation.addPowerTool(self.get().uuid(), held.get(), command);
-            return configured(invocation, held.get(), command);
-        }
-
-        if (input.regionMatches(true, 0, "r:", 0, 2)) {
-            var command = input.substring(2).trim();
-            if (!automation.removePowerTool(self.get().uuid(), held.get(), command)) {
-                invocation.errorKey("commands.item.power-tool-command.error.not-found");
-                return 0;
-            }
-
-            invocation.replyKey(
-                    "commands.item.power-tool-command.removed",
-                    Map.of("command", command)
-            );
-            return 1;
-        }
-
-        if (input.regionMatches(true, 0, "c:", 0, 2)) {
-            var message = input.substring(2).trim();
-            if (message.isEmpty()) return usageError(invocation);
-
-            automation.setPowerTool(self.get().uuid(), held.get(), "c:" + message);
-            return configured(invocation, held.get(), "c:" + message);
-        }
-
-        var command = input.replaceFirst("^/+", "").trim();
-        if (command.isBlank()) return usageError(invocation);
-
-        automation.setPowerTool(self.get().uuid(), held.get(), command);
-        return configured(invocation, held.get(), command);
-    }
-
-    private int usageError(CommandInvocation invocation) {
-        invocation.errorKey(
-                "commands.item.power-tool-command.error.usage",
-                Map.of("usage", usage())
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("pt"),
+                "commands.description.powertool",
+                "/powertool <clear|clearall|list|toggle|add|remove|command|chat>",
+                root
         );
-        return 0;
+
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "pt",
+                node
+        );
     }
 
-    private int configured(
-            CommandInvocation invocation,
-            String item,
-            String command
+    private int list(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
     ) {
-        invocation.replyKey(
-                "commands.item.power-tool-command.reply.bound",
-                Map.of(
-                        "item", item,
-                        "command", command
-                )
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "powertool list",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player
+                            .<PlatformResult<?>>map(value ->
+                                    PlatformResult.success(
+                                            automation.powerTools(value.uuid())
+                                    )
+                            )
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
         );
-        return 1;
+    }
+
+    private int toggle(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return all(
+                context,
+                command,
+                descriptor,
+                uuid -> automation.setPowerToolsEnabled(
+                        uuid,
+                        !automation.powerToolsEnabled(uuid)
+                ),
+                "toggle"
+        );
+    }
+
+    private int all(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<UUID, CompletableFuture<PlatformResult<Void>>> operation,
+            String audit
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "powertool " + audit,
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player.map(value -> operation.apply(value.uuid()))
+                            .orElseGet(() -> CompletableFuture.completedFuture(
+                                    PlatformResult.failure(
+                                            PlatformOperationStatus.INVALID_SOURCE,
+                                            "player-only"
+                                    )
+                            ));
+                }
+        );
+    }
+
+    private int held(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            BiFunction<
+                    UUID,
+                    String,
+                    CompletableFuture<PlatformResult<Void>>
+                    > operation,
+            String audit
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "powertool " + audit,
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
+                                )
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var held = items.heldItemId(currentPlayer);
+
+                    if (held.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_STATE,
+                                        "empty-hand"
+                                )
+                        );
+                    }
+
+                    return operation.apply(
+                            currentPlayer.uuid(),
+                            held.orElseThrow()
+                    );
+                }
+        );
+    }
+
+    private int heldBoolean(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            BiFunction<
+                    UUID,
+                    String,
+                    CompletableFuture<PlatformResult<Boolean>>
+                    > operation,
+            String audit
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "powertool " + audit,
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
+                                )
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var held = items.heldItemId(currentPlayer);
+
+                    if (held.isEmpty()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_STATE,
+                                        "empty-hand"
+                                )
+                        );
+                    }
+
+                    return operation.apply(
+                            currentPlayer.uuid(),
+                            held.orElseThrow()
+                    );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

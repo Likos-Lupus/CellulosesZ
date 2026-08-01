@@ -1,18 +1,20 @@
 package top.likoslupus.cellulosesz.api.user;
 
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 public interface UserService {
 
     CompletableFuture<CellUser> load(UUID uuid);
 
-    CompletableFuture<CellUser> loadFromPlayer(Object player);
+    CompletableFuture<CellUser> loadFromPlayer(CellPlayer player);
 
     Optional<CellUser> cached(UUID uuid);
 
@@ -24,23 +26,21 @@ public interface UserService {
 
     Collection<UUID> knownUuids();
 
-    /**
-     * Applies a mutation that has no return value without using a null sentinel.
-     */
-    default CompletableFuture<Void> updateVoid(UUID uuid, Consumer<CellUser> mutation) {
-        return update(uuid, user -> {
-            mutation.accept(user);
-            return Boolean.TRUE;
-        }).thenAccept(_ -> {
+    default CompletableFuture<Void> updateVoid(
+            UUID uuid,
+            UnaryOperator<CellUser> mutation
+    ) {
+        return update(
+                uuid,
+                user -> UserUpdate.replacing(mutation.apply(user))
+        ).thenAccept(_ -> {
         });
     }
 
-    /**
-     * Applies a mutation to a defensive user copy, persists it, then atomically publishes it.
-     */
-    <T> CompletableFuture<T> update(UUID uuid, Function<CellUser, T> mutation);
-
-    void markDirty(UUID uuid);
+    <T> CompletableFuture<T> update(
+            UUID uuid,
+            Function<CellUser, UserUpdate<T>> mutation
+    );
 
     CompletableFuture<Void> save(UUID uuid);
 

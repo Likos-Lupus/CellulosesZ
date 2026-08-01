@@ -2,24 +2,25 @@ package top.likoslupus.cellulosesz.modules.item;
 
 import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.service.CommandSuggestionRegistry;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
-import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.command.service.*;
+import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
+import top.likoslupus.cellulosesz.modules.item.application.WorkstationCommandService;
 import top.likoslupus.cellulosesz.modules.item.command.*;
 import top.likoslupus.cellulosesz.modules.item.service.DefaultItemAutomationService;
 import top.likoslupus.cellulosesz.modules.item.service.DefaultItemService;
 
+import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 
@@ -50,13 +51,15 @@ public final class ItemModule implements CellulosesZModule {
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
+        var itemPlatform = context.services().require(ItemPlatformService.class);
         var users = context.services().require(UserService.class);
         var loadedConfig = requireNonNull(config, "ItemConfig has not been initialized");
-        var itemService = new DefaultItemService(platform, loadedConfig);
+        var itemService = new DefaultItemService(itemPlatform, loadedConfig);
         var automationService = new DefaultItemAutomationService(
-                platform,
+                itemPlatform,
+                context.services().require(PlayerChatDispatchService.class),
                 users,
                 itemService,
                 context.services().require(PlayerCommandDispatchService.class),
@@ -74,103 +77,277 @@ public final class ItemModule implements CellulosesZModule {
 
     @Override
     public void registerCommands(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
+        var registry = context.services().require(CommandRegistry.class);
+        var itemPlatform = context.services().require(ItemPlatformService.class);
+        var inventory = context.services().require(InventoryPlatformService.class);
+        var workstations = context.services().require(WorkstationPlatformService.class);
+        var players = context.services().require(PlayerDirectory.class);
+        var recipes = context.services().require(RecipePlatformService.class);
+        var users = context.services().require(UserService.class);
+        var confirmations = context.services().require(ConfirmationService.class);
+        var permissions = context.services().require(PermissionService.class);
         var loadedItems = requireNonNull(items, "ItemService has not been initialized");
         var loadedAutomation = requireNonNull(automation, "ItemAutomationService has not been initialized");
         var loadedConfig = requireNonNull(config, "ItemConfig has not been initialized");
 
-        context.commands().register(new ItemCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new GiveCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new EnchantCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new RepairCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new InvSeeCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new EnderChestCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new PowerToolCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new UnlimitedCommand(platform, loadedItems, loadedAutomation, loadedConfig));
-        context.commands().register(new ItemNameCommand(platform));
-        context.commands().register(new ItemLoreCommand(platform, loadedConfig));
-        context.commands().register(new PotionCommand(platform));
-        context.commands().register(new FireworkCommand(platform));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "anvil",
-                List.of(),
-                "anvil"
-        ));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "cartographytable",
-                List.of("cartography"),
-                "cartography"
-        ));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "grindstone",
-                List.of(),
-                "grindstone"
-        ));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "loom",
-                List.of(),
-                "loom"
-        ));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "smithingtable",
-                List.of("smithing"),
-                "smithing"
-        ));
-        context.commands().register(new WorkstationCommand(
-                platform,
-                "workbench",
-                List.of("craft", "wb"),
-                "workbench"
-        ));
-        context.commands().register(new WorkstationCommand(platform, "disposal", List.of("trash"), "disposal"));
-        context.commands().register(new WorkstationCommand(platform, "stonecutter", List.of(), "stonecutter"));
+        var itemCommands = new ItemCommandService(loadedItems, itemPlatform);
+        var inventoryCommands = new InventoryCommandService(inventory);
+        var workstationCommands = new WorkstationCommandService(workstations);
 
-        var inventory = context.services().require(InventoryPlatformService.class);
-        var recipes = context.services().require(RecipePlatformService.class);
-        var users = context.services().require(UserService.class);
-        context.commands().register(new MoreCommand(platform, inventory, loadedItems, loadedConfig));
-        context.commands().register(new HatCommand(platform, inventory));
-        context.commands().register(new PowerToolListCommand(platform, loadedAutomation));
-        context.commands().register(new PowerToolToggleCommand(platform, loadedAutomation, users));
-        context.commands().register(new ItemDbCommand(platform, inventory, loadedItems, loadedConfig));
-        context.commands().register(new BookCommand(platform, inventory));
-        context.commands().register(new SkullCommand(platform, inventory));
-        context.commands().register(new ClearInventoryCommand(
-                platform, inventory, loadedItems, users,
-                context.services().require(ConfirmationService.class),
-                context.services().require(PermissionService.class), loadedConfig
-        ));
-        context.commands().register(new ClearInventoryConfirmToggleCommand(
-                platform, users, context.services().require(ConfirmationService.class)
-        ));
-        context.commands().register(new CondenseCommand(platform, loadedItems, recipes, loadedConfig));
-        context.commands().register(new RecipeCommand(loadedItems, recipes, loadedConfig));
+        track(
+                context, registry,
+                "item-command",
+                new ItemCommand(itemCommands, loadedItems)
+        );
+        track(
+                context, registry,
+                "give-command",
+                new GiveCommand(itemCommands, loadedItems, players)
+        );
+        track(
+                context, registry,
+                "enchant-command",
+                new EnchantCommand(itemCommands)
+        );
+        track(
+                context, registry,
+                "repair-command",
+                new RepairCommand(itemCommands)
+        );
+        track(
+                context, registry,
+                "invsee-command",
+                new InvSeeCommand(inventoryCommands, players)
+        );
+        track(
+                context, registry,
+                "enderchest-command",
+                new EnderChestCommand(inventoryCommands, players)
+        );
+        track(
+                context, registry,
+                "powertool-command",
+                new PowerToolCommand(loadedAutomation, loadedItems)
+        );
+        track(
+                context, registry,
+                "unlimited-command",
+                new UnlimitedCommand(loadedAutomation, loadedItems)
+        );
+        track(
+                context, registry,
+                "itemname-command",
+                new ItemNameCommand(itemCommands)
+        );
+        track(
+                context, registry,
+                "itemlore-command",
+                new ItemLoreCommand(itemCommands, loadedConfig)
+        );
+        track(
+                context, registry,
+                "potion-command",
+                new PotionCommand(itemCommands)
+        );
+        track(
+                context, registry,
+                "firework-command",
+                new FireworkCommand(itemCommands)
+        );
+        trackWorkstations(context, registry, workstationCommands);
+        track(
+                context, registry,
+                "more-command",
+                new MoreCommand(inventoryCommands, inventory, loadedConfig)
+        );
+        track(
+                context, registry,
+                "hat-command",
+                new HatCommand(inventoryCommands)
+        );
+        track(
+                context, registry,
+                "powertoollist-command",
+                new PowerToolListCommand(loadedAutomation)
+        );
+        track(
+                context, registry,
+                "powertooltoggle-command",
+                new PowerToolToggleCommand(loadedAutomation))
+        ;
+        track(
+                context, registry,
+                "itemdb-command",
+                new ItemDbCommand(inventory, loadedItems)
+        );
+        track(
+                context, registry,
+                "book-command",
+                new BookCommand(inventoryCommands, inventory)
+        );
+        track(
+                context, registry,
+                "skull-command",
+                new SkullCommand(inventoryCommands, inventory, players)
+        );
+        track(
+                context, registry,
+                "clearinventory-command",
+                new ClearInventoryCommand(
+                        inventory,
+                        loadedItems,
+                        users,
+                        confirmations,
+                        permissions,
+                        players,
+                        loadedConfig,
+                        Clock.systemUTC()
+                )
+        );
+        track(
+                context, registry,
+                "clearinventoryconfirmtoggle-command",
+                new ClearInventoryConfirmToggleCommand(users, confirmations)
+        );
+        track(
+                context, registry,
+                "condense-command",
+                new CondenseCommand(loadedItems, inventory, recipes, loadedConfig)
+        );
+        track(
+                context, registry,
+                "recipe-command",
+                new RecipeCommand(loadedItems, recipes, loadedConfig)
+        );
+
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
-
         var suggestions = context.services().require(CommandSuggestionRegistry.class);
-        List.of("item", "give", "worth", "sell", "setworth")
-                .forEach(command ->
-                        suggestions.register(
-                                command,
-                                "item",
-                                ignored -> loadedItems.names()
-                        )
-                );
+        List.of(
+                        "item",
+                        "give",
+                        "worth",
+                        "sell",
+                        "setworth"
+                )
+                .forEach(command -> suggestions.register(
+                        command,
+                        "item",
+                        _ -> loadedItems.names()
+                ));
     }
 
     @Override
     public void onReload(ModuleContext context) {
         var current = requireNonNull(config, "ItemConfig has not been initialized");
         var candidate = context.configs().require("module.item", ItemConfig.class);
+
         candidate.validate();
         current.copyFrom(candidate);
-        ((DefaultItemService) requireNonNull(items, "ItemService has not been initialized")).configure(current);
-        ((DefaultItemAutomationService) requireNonNull(automation, "ItemAutomationService has not been initialized")).configure(current);
+
+        ((DefaultItemService) requireNonNull(
+                items,
+                "ItemService has not been initialized"
+        )).configure(current);
+        ((DefaultItemAutomationService) requireNonNull(
+                automation,
+                "ItemAutomationService has not been initialized"
+        )).configure(current);
+    }
+
+    private static void track(
+            ModuleContext context,
+            CommandRegistry registry,
+            String id,
+            CommandContributor contributor
+    ) {
+        context.track(registry.register(id, contributor));
+    }
+
+    private static void trackWorkstations(
+            ModuleContext context,
+            CommandRegistry registry,
+            WorkstationCommandService service
+    ) {
+        track(
+                context, registry,
+                "anvil-command",
+                workstation(
+                        service,
+                        "anvil",
+                        List.of(),
+                        WorkstationKind.ANVIL
+                )
+        );
+        track(
+                context, registry,
+                "cartographytable-command",
+                workstation(
+                        service,
+                        "cartographytable",
+                        List.of("cartography"),
+                        WorkstationKind.CARTOGRAPHY
+                )
+        );
+        track(
+                context, registry,
+                "disposal-command",
+                workstation(
+                        service,
+                        "disposal",
+                        List.of("trash"),
+                        WorkstationKind.DISPOSAL
+                )
+        );
+        track(
+                context, registry,
+                "grindstone-command",
+                workstation(
+                        service,
+                        "grindstone",
+                        List.of(),
+                        WorkstationKind.GRINDSTONE
+                )
+        );
+        track(
+                context, registry,
+                "loom-command",
+                workstation(
+                        service,
+                        "loom",
+                        List.of(),
+                        WorkstationKind.LOOM
+                )
+        );
+        track(
+                context, registry,
+                "smithingtable-command",
+                workstation(
+                        service,
+                        "smithingtable",
+                        List.of("smithing"),
+                        WorkstationKind.SMITHING
+                )
+        );
+        track(
+                context, registry,
+                "stonecutter-command",
+                workstation(
+                        service,
+                        "stonecutter",
+                        List.of(),
+                        WorkstationKind.STONECUTTER
+                )
+        );
+        track(
+                context, registry,
+                "workbench-command",
+                workstation(
+                        service,
+                        "workbench",
+                        List.of("craft", "wb"),
+                        WorkstationKind.WORKBENCH
+                )
+        );
     }
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {
@@ -191,6 +368,15 @@ public final class ItemModule implements CellulosesZModule {
                 Map.entry("cellulosesz.command.skull.others", "Give or modify a head for another player"),
                 Map.entry("cellulosesz.command.skull.spawn.others", "Create a player head for another player")
         ).forEach(catalog::register);
+    }
+
+    private static WorkstationCommand workstation(
+            WorkstationCommandService service,
+            String root,
+            List<String> aliases,
+            WorkstationKind kind
+    ) {
+        return new WorkstationCommand(service, root, aliases, kind);
     }
 
 }

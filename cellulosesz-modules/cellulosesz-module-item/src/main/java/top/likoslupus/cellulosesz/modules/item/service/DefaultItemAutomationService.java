@@ -1,56 +1,63 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
 import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
+import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.api.validation.Checks;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public final class DefaultItemAutomationService implements ItemAutomationService {
 
-    private final PlatformService platform;
+    private final ItemPlatformService itemPlatform;
+    private final PlayerChatDispatchService chat;
     private final UserService users;
     private final ItemService items;
     private final PlayerCommandDispatchService dispatch;
     private volatile ItemConfig config;
 
     public DefaultItemAutomationService(
-            PlatformService platform,
+            ItemPlatformService itemPlatform,
+            PlayerChatDispatchService chat,
             UserService users,
             ItemService items,
             PlayerCommandDispatchService dispatch,
             ItemConfig config
     ) {
-        this.platform = platform;
-        this.users = users;
-        this.items = items;
+        this.itemPlatform = requireNonNull(itemPlatform, "itemPlatform");
+        this.chat = requireNonNull(chat, "chat");
+        this.users = requireNonNull(users, "users");
+        this.items = requireNonNull(items, "items");
         this.dispatch = requireNonNull(dispatch, "dispatch");
         configure(config);
     }
 
     public void configure(ItemConfig config) {
         this.config = requireNonNull(config, "config");
-        if (config.unlimitedMinimum < 1) {
-            throw new IllegalArgumentException("unlimitedMinimum must be positive");
-        }
+        requirePositive(config.unlimitedMinimum, "unlimitedMinimum");
     }
 
     @Override
     public List<String> powerTool(UUID uuid, String itemId) {
         return users.cached(uuid)
-                .map(user -> List.copyOf(
-                        user.state.powerToolCommands.getOrDefault(
-                                normalize(itemId),
-                                List.of()
-                        )
+                .map(user -> user.state().powerToolCommands().getOrDefault(
+                        normalize(itemId),
+                        List.of()
                 ))
                 .orElseGet(List::of);
     }
@@ -58,202 +65,268 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     @Override
     public Map<String, List<String>> powerTools(UUID uuid) {
         return users.cached(uuid)
-                .map(user -> {
-                    var copy = new LinkedHashMap<String, List<String>>();
-                    user.state.powerToolCommands
-                            .forEach((item, commands) ->
-                                    copy.put(item, List.copyOf(commands))
-                            );
-                    return Map.copyOf(copy);
-                })
+                .map(user -> user.state().powerToolCommands())
                 .orElseGet(Map::of);
     }
 
     @Override
-    public void setPowerTool(
+    public CompletableFuture<PlatformResult<Void>> setPowerTool(
             UUID uuid,
             String itemId,
             String command
     ) {
-        users.cached(uuid).ifPresent(user -> {
-            user.state.powerToolCommands.put(
-                    normalize(itemId),
-                    new ArrayList<>(List.of(normalizeCommand(command)))
-            );
-            users.markDirty(uuid);
+        var item = normalize(itemId);
+        var value = normalizeCommand(command);
+        return updateTools(
+                uuid,
+                tools -> tools.put(item, List.of(value))
+        );
+    }
+
+    @Override
+    public CompletableFuture<PlatformResult<Void>> addPowerTool(
+            UUID uuid,
+            String itemId,
+            String command
+    ) {
+        var item = normalize(itemId);
+        var value = normalizeCommand(command);
+
+        return updateTools(uuid, tools -> {
+            var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
+            if (!commands.contains(value)) {
+                commands.add(value);
+            }
+            tools.put(item, List.copyOf(commands));
         });
     }
 
     @Override
-    public void addPowerTool(
+    public CompletableFuture<PlatformResult<Boolean>> removePowerTool(
             UUID uuid,
             String itemId,
             String command
     ) {
-        users.cached(uuid).ifPresent(user -> {
-            var normalized = normalizeCommand(command);
-            var commands = user.state.powerToolCommands.computeIfAbsent(
-                    normalize(itemId),
-                    _ -> new ArrayList<>()
-            );
-            if (!commands.contains(normalized)) commands.add(normalized);
-            users.markDirty(uuid);
-        });
-    }
+        var item = normalize(itemId);
+        var value = normalizeCommand(command);
 
-    @Override
-    public boolean removePowerTool(
-            UUID uuid,
-            String itemId,
-            String command
-    ) {
-        return users.cached(uuid)
-                .map(user -> {
-                    var commands = user.state.powerToolCommands.get(normalize(itemId));
-                    if (commands == null) return false;
+        return users
+                .update(uuid, user -> {
+                    var tools = mutableTools(user.state().powerToolCommands());
+                    var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
+                    var removed = commands.remove(value);
 
-                    var removed = commands.remove(normalizeCommand(command));
-                    if (commands.isEmpty()) user.state.powerToolCommands.remove(normalize(itemId));
-                    if (removed) users.markDirty(uuid);
-                    return removed;
+                    if (commands.isEmpty()) {
+                        tools.remove(item);
+                    } else {
+                        tools.put(item, List.copyOf(commands));
+                    }
+
+                    var updated = user.withState(user.state().withPowerToolCommands(tools));
+                    return UserUpdate.of(updated, PlatformResult.success(removed));
                 })
-                .orElse(false);
+                .exceptionally(_ -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        "user-save-failed"
+                ));
     }
 
     @Override
-    public void clearPowerTool(UUID uuid, String itemId) {
-        users.cached(uuid).ifPresent(user -> {
-            user.state.powerToolCommands.remove(normalize(itemId));
-            users.markDirty(uuid);
-        });
+    public CompletableFuture<PlatformResult<Void>> clearPowerTool(UUID uuid, String itemId) {
+        var item = normalize(itemId);
+        return updateTools(uuid, tools -> tools.remove(item));
+    }
+
+    @Override
+    public CompletableFuture<PlatformResult<Void>> clearAllPowerTools(UUID uuid) {
+        return updateTools(uuid, Map::clear);
+    }
+
+    private CompletableFuture<PlatformResult<Void>> updateTools(
+            UUID uuid,
+            Consumer<Map<String, List<String>>> mutation
+    ) {
+        return users.updateVoid(
+                        uuid,
+                        user -> {
+                            var tools = mutableTools(user.state().powerToolCommands());
+                            mutation.accept(tools);
+                            return user.withState(user.state().withPowerToolCommands(tools));
+                        }
+                )
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(_ -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        "user-save-failed"
+                ));
+    }
+
+    private static Map<String, List<String>> mutableTools(Map<String, List<String>> source) {
+        var result = new LinkedHashMap<String, List<String>>();
+        source.forEach((item, commands) ->
+                result.put(item, List.copyOf(commands))
+        );
+        return result;
     }
 
     @Override
     public boolean executePowerTool(CellPlayer player, String clickedPlayerName) {
-        if (!config.powerToolsEnabled || !powerToolsEnabled(player.uuid())) return false;
+        if (!config.powerToolsEnabled || !powerToolsEnabled(player.uuid())) {
+            return false;
+        }
 
-        {
-            var held = items.heldItemId(player);
-            if (held.isEmpty()) return false;
+        var held = items.heldItemId(player);
+        if (held.isEmpty()) {
+            return false;
+        }
 
-            var commands = powerTool(player.uuid(), held.get());
-            if (commands.isEmpty()) return false;
+        var commands = powerTool(player.uuid(), held.orElseThrow());
+        if (commands.isEmpty()) {
+            return false;
+        }
 
-            var targetedClick = !clickedPlayerName.isBlank();
-            var used = false;
-            for (var configured : commands) {
-                var targetsPlayer = configured.contains("{player}");
-                if (targetsPlayer != targetedClick) continue;
+        var targetedClick = !clickedPlayerName.isBlank();
+        var used = false;
+        for (var configured : commands) {
+            var targetsPlayer = configured.contains("{player}");
+            if (targetsPlayer != targetedClick) {
+                continue;
+            }
 
-                var value = configured.replace("{player}", clickedPlayerName).trim();
-                if (containsLineBreak(value)) continue;
-
-                if (value.startsWith("c:")) {
-                    var message = value.substring(2).trim();
-                    if (message.isBlank()) continue;
-                    platform.sendChatMessage(player, message);
-                } else {
-                    if (value.isBlank()) continue;
+            var value = configured.replace("{player}", clickedPlayerName).trim();
+            if (!value.startsWith("c:")) {
+                if (!value.isBlank()) {
                     dispatch.dispatch(PlayerCommandDispatchRequest.start(
                             player,
                             player.uuid(),
                             CommandDispatchOrigin.POWER_TOOL,
                             value
                     ));
+                    used = true;
                 }
-                used = true;
+            } else {
+                var message = value.substring(2).trim();
+                if (!message.isBlank()) {
+                    used |= chat.dispatch(player, message).successful();
+                }
             }
-
-            return used;
         }
+
+        return used;
     }
 
     @Override
     public boolean powerToolsEnabled(UUID uuid) {
         return users.cached(uuid)
-                .map(user ->
-                        user.preferences.powerToolsEnabled
-                )
+                .map(user -> user.preferences().powerToolsEnabled())
                 .orElse(true);
     }
 
     @Override
-    public void setPowerToolsEnabled(UUID uuid, boolean enabled) {
-        users.cached(uuid).ifPresent(user -> {
-            user.preferences.powerToolsEnabled = enabled;
-            users.markDirty(uuid);
-        });
+    public CompletableFuture<PlatformResult<Void>> setPowerToolsEnabled(UUID uuid, boolean enabled) {
+        return users
+                .updateVoid(
+                        uuid,
+                        user -> user.withPreferences(
+                                user.preferences().withPowerToolsEnabled(enabled)
+                        )
+                )
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(_ -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        "user-save-failed"
+                ));
     }
 
     @Override
     public boolean unlimited(UUID uuid, String itemId) {
         return users.cached(uuid)
-                .map(user ->
-                        user.state.unlimitedItems.contains(normalize(itemId))
-                )
+                .map(user -> user.state().unlimitedItems().contains(normalize(itemId)))
                 .orElse(false);
     }
 
     @Override
     public Set<String> unlimitedItems(UUID uuid) {
         return users.cached(uuid)
-                .map(user ->
-                        Set.copyOf(user.state.unlimitedItems)
-                )
+                .map(user -> user.state().unlimitedItems())
                 .orElseGet(Set::of);
     }
 
     @Override
-    public void setUnlimited(
+    public CompletableFuture<PlatformResult<Void>> setUnlimited(
             UUID uuid,
             String itemId,
             boolean enabled
     ) {
-        users.cached(uuid).ifPresent(user -> {
-            if (enabled) {
-                user.state.unlimitedItems.add(normalize(itemId));
-            } else {
-                user.state.unlimitedItems.remove(normalize(itemId));
-            }
-            users.markDirty(uuid);
-        });
+        var item = normalize(itemId);
+        return users
+                .updateVoid(
+                        uuid,
+                        user -> {
+                            var values = new LinkedHashSet<>(user.state().unlimitedItems());
+
+                            if (enabled) {
+                                values.add(item);
+                            } else {
+                                values.remove(item);
+                            }
+
+                            return user.withState(user.state().withUnlimitedItems(values));
+                        }
+                )
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(_ -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        "user-save-failed"
+                ));
+    }
+
+    @Override
+    public CompletableFuture<PlatformResult<Void>> clearUnlimited(UUID uuid) {
+        return users
+                .updateVoid(
+                        uuid,
+                        user -> user.withState(user.state().withUnlimitedItems(Set.of()))
+                )
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(_ -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        "user-save-failed"
+                ));
     }
 
     @Override
     public void maintainUnlimited(CellPlayer player, String itemId) {
-        if (!unlimited(player.uuid(), itemId)) return;
-        platform.maintainItemCount(
-                player,
-                normalize(itemId),
-                Math.max(1, config.unlimitedMinimum)
-        );
+        if (unlimited(player.uuid(), itemId)) {
+            itemPlatform.maintainCount(
+                    player,
+                    normalize(itemId),
+                    config.unlimitedMinimum
+            );
+        }
     }
 
-    private String normalize(String value) {
-        var normalized = value.trim().toLowerCase(Locale.ROOT);
+    private static String normalize(String value) {
+        var normalized = requireNonBlank(value, "itemId").trim().toLowerCase(Locale.ROOT);
         return normalized.indexOf(':') < 0
-                ? "minecraft:%s".formatted(normalized)
+                ? "minecraft:" + normalized
                 : normalized;
     }
 
     private String normalizeCommand(String command) {
-        var normalized = command.trim();
-        if (containsLineBreak(normalized)) {
-            throw new IllegalArgumentException("PowerTool commands must not contain line breaks");
-        }
+        var normalized = requireNonBlank(command, "command").trim();
+        normalized = Checks.requireMaxLength(normalized, 512, "command");
+        requireNoControlCharacters(normalized, "command");
 
         if (normalized.startsWith("c:")) {
-            return "c:" + normalized.substring(2).trim();
+            return "c:" + requireNonBlank(normalized.substring(2).trim(), "message");
         }
 
         while (normalized.startsWith("/")) {
             normalized = normalized.substring(1);
         }
-        return normalized;
-    }
 
-    private boolean containsLineBreak(String value) {
-        return value.indexOf('\n') >= 0 || value.indexOf('\r') >= 0;
+        return requireNonBlank(normalized, "command");
     }
 
 }

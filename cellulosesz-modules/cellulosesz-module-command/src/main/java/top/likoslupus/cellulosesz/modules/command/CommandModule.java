@@ -1,17 +1,20 @@
 package top.likoslupus.cellulosesz.modules.command;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
-import top.likoslupus.cellulosesz.core.command.DefaultCommandRegistry;
 import top.likoslupus.cellulosesz.modules.command.middleware.*;
+
+import org.jspecify.annotations.Nullable;
+
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -39,9 +42,14 @@ public final class CommandModule implements CellulosesZModule {
     @Override
     public void registerServices(ModuleContext context) {
         var current = requireNonNull(config, "CommandConfig has not been initialized");
-        context.services().require(DefaultCommandRegistry.class).disabledCommands(current.disabledCommands);
+        context.services()
+                .require(CommandAvailabilityService.class)
+                .replaceDisabledCommands(current.disabledCommands);
 
-        var middlewares = context.services().require(CommandMiddlewareRegistry.class);
+        var middlewares = context.services().require(
+                CommandMiddlewareRegistry.class
+        );
+
         middlewares.addMiddleware(new SourceKindCommandMiddleware());
         middlewares.addMiddleware(new ModuleEnabledCommandMiddleware(context));
         middlewares.addMiddleware(new PermissionCommandMiddleware());
@@ -70,15 +78,20 @@ public final class CommandModule implements CellulosesZModule {
 
     @Override
     public void onReload(ModuleContext context) {
-        config = validate(context.configs().require("module.command", CommandConfig.class));
-        context.services().require(DefaultCommandRegistry.class)
-                .disabledCommands(requireNonNull(config, "config").disabledCommands);
+        config = validate(context.configs().require(
+                "module.command",
+                CommandConfig.class
+        ));
+        context.services()
+                .require(CommandAvailabilityService.class)
+                .replaceDisabledCommands(requireNonNull(config, "config").disabledCommands);
     }
 
     private static CommandConfig validate(CommandConfig config) {
-        if (config.helpPageSize <= 0) {
-            throw new IllegalArgumentException("module.command.helpPageSize must be positive");
-        }
+        requirePositive(
+                config.helpPageSize,
+                "module.command.helpPageSize"
+        );
         return config;
     }
 

@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.service;
 
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.world.BackupPlatformService;
 import top.likoslupus.cellulosesz.api.world.BackupService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
@@ -11,17 +11,20 @@ import java.util.Comparator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+
 import static java.util.Objects.requireNonNull;
 
 public final class DefaultBackupService implements BackupService {
 
-    private final PlatformService platform;
+    private final BackupPlatformService platform;
     private final Path dataRoot;
     private final AtomicBoolean running = new AtomicBoolean();
     private volatile BackupSnapshot config;
 
     public DefaultBackupService(
-            PlatformService platform,
+            BackupPlatformService platform,
             Path dataRoot,
             WorldConfig config
     ) {
@@ -33,13 +36,15 @@ public final class DefaultBackupService implements BackupService {
     public void configure(WorldConfig config) {
         var source = requireNonNull(config, "config");
         var backup = requireNonNull(source.backup, "backup");
-        var directory = requireNonNull(backup.directory, "backup.directory").trim();
-        if (directory.isBlank()) throw new IllegalArgumentException("backup.directory must not be blank");
-        if (backup.retain < 1) throw new IllegalArgumentException("backup.retain must be positive");
+        var directory = requireNonBlank(backup.directory, "backup.directory").trim();
+        var retain = requireInRange(backup.retain, 1, 10_000, "backup.retain");
         var resolved = dataRoot.resolve(directory).normalize();
-        if (!resolved.startsWith(dataRoot))
+
+        if (!resolved.startsWith(dataRoot)) {
             throw new IllegalArgumentException("backup.directory escapes data directory");
-        this.config = new BackupSnapshot(backup.enabled, directory, backup.retain);
+        }
+
+        this.config = new BackupSnapshot(backup.enabled, directory, retain);
     }
 
     @Override
@@ -48,16 +53,23 @@ public final class DefaultBackupService implements BackupService {
         if (!current.enabled()) {
             return CompletableFuture.failedFuture(new IllegalStateException("Backups are disabled"));
         }
+
         if (!running.compareAndSet(false, true)) {
-            return CompletableFuture.failedFuture(new IllegalStateException("A backup is already running"));
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "A backup is already running"
+            ));
         }
-        var directory = dataRoot.resolve(current.directory()).normalize();
-        return platform.backup(directory)
-                .thenApply(created -> {
+
+        var directory = dataRoot
+                .resolve(current.directory())
+                .normalize();
+        return platform
+                .create(directory)
+                .thenApply(result -> {
                     prune(directory, current.retain());
-                    return created;
+                    return result.archive();
                 })
-                .whenComplete((ignored, failure) -> running.set(false));
+                .whenComplete((_, _) -> running.set(false));
     }
 
     @Override
@@ -67,10 +79,14 @@ public final class DefaultBackupService implements BackupService {
 
     private static void prune(Path directory, int retain) {
         try (var files = Files.list(directory)) {
-            var backups = files.filter(path -> path.getFileName().toString().endsWith(".zip"))
+            var backups = files
+                    .filter(path -> path.getFileName().toString().endsWith(".zip"))
                     .sorted(Comparator.comparingLong(DefaultBackupService::modified).reversed())
                     .toList();
-            for (var index = retain; index < backups.size(); index++) Files.delete(backups.get(index));
+
+            for (var index = retain; index < backups.size(); index++) {
+                Files.delete(backups.get(index));
+            }
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to prune old backups", exception);
         }
@@ -91,9 +107,8 @@ public final class DefaultBackupService implements BackupService {
     ) {
 
         private BackupSnapshot {
-            requireNonNull(directory, "directory");
-            if (directory.isBlank()) throw new IllegalArgumentException("directory must not be blank");
-            if (retain < 1) throw new IllegalArgumentException("retain must be positive");
+            directory = requireNonBlank(directory, "directory");
+            requireInRange(retain, 1, 10_000, "retain");
         }
 
     }

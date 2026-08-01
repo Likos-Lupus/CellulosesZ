@@ -1,107 +1,157 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class MoreCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class MoreCommand implements CommandContributor {
+
+    private final InventoryCommandService service;
     private final InventoryPlatformService inventory;
-    private final ItemService items;
     private final ItemConfig config;
 
     public MoreCommand(
-            PlatformService platform,
+            InventoryCommandService service,
             InventoryPlatformService inventory,
-            ItemService items,
             ItemConfig config
     ) {
-        this.platform = platform;
-        this.inventory = inventory;
-        this.items = items;
-        this.config = config;
+        this.service = requireNonNull(service, "service");
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.more";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "more",
+                "cellulosesz.command.more",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("more")
+                .executes(command -> executeDefault(
+                        context,
+                        command,
+                        descriptor
+                ))
+                .then(Commands.argument(
+                                        "amount",
+                                        IntegerArgumentType.integer(
+                                                1,
+                                                config.maximumOversizedStack
+                                        )
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(
+                                                command,
+                                                "amount"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.more",
+                "/more [amount]",
+                root
+        );
+    }
+
+    private int executeDefault(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "more default",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var held = inventory.heldItemDetails(currentPlayer);
+
+                    if (!held.successful() || held.value().isEmpty()) {
+                        return held;
+                    }
+
+                    var details = held.value().orElseThrow();
+
+                    return service.more(
+                            currentPlayer,
+                            details.maximumCount(),
+                            details.maximumCount()
+                    );
+                }
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int amount
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "more amount=" + amount,
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var maximum = policy.hasPermission("cellulosesz.command.more.oversized")
+                            && config.allowOversizedStacks
+                            ? config.maximumOversizedStack
+                            : 64;
+
+                    return service.more(
+                            player.orElseThrow(),
+                            amount,
+                            maximum
+                    );
+                }
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/more [amount]";
-    }
-
-    @Override
-    public String name() {
-        return "more";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        var details = inventory.heldItemDetails(player);
-        if (!details.successful() || details.value().isEmpty()) {
-            invocation.errorKey("commands.item.more.empty-hand");
-            return 0;
-        }
-        var held = details.value().orElseThrow();
-        var descriptor = items.parse(held.itemId());
-        if (descriptor.isPresent() && items.blacklisted(descriptor.orElseThrow())) {
-            invocation.errorKey("commands.item.more.blacklisted", Map.of("item", held.itemId()));
-            return 0;
-        }
-        final int target;
-        try {
-            if (invocation.args().length == 0) target = held.maximumCount();
-            else {
-                var increase = Integer.parseInt(invocation.args()[0]);
-                if (increase <= 0) return usage(invocation);
-                target = Math.addExact(held.count(), increase);
-            }
-        } catch (NumberFormatException | ArithmeticException failure) {
-            invocation.errorKey("commands.item.more.invalid-amount");
-            return 0;
-        }
-        var oversized = target > held.maximumCount();
-        if (oversized && (!config.allowOversizedStacks || !invocation.hasPermission("cellulosesz.command.more.oversized"))) {
-            invocation.errorKey("commands.item.more.maximum", Map.of("maximum", held.maximumCount()));
-            return 0;
-        }
-        var permitted = oversized ? config.maximumOversizedStack : held.maximumCount();
-        if (target > permitted) {
-            invocation.errorKey("commands.item.more.maximum", Map.of("maximum", permitted));
-            return 0;
-        }
-        var result = inventory.setHeldCount(player, target, permitted);
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.item.more.success", Map.of(
-                "item", result.value().orElseThrow().itemId(),
-                "previous", result.value().orElseThrow().previousCount(),
-                "current", result.value().orElseThrow().currentCount()
-        ));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.more.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -63,13 +64,13 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
         return users
                 .load(target.uuid())
                 .thenCompose(targetUser -> {
-                    if (targetUser.relations.ignored.contains(sender.uuid())) {
+                    if (targetUser.relations().ignored().contains(sender.uuid())) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "service.messaging.ignored"
                         ));
                     }
 
-                    if (!targetUser.preferences.privateMessages) {
+                    if (!targetUser.preferences().privateMessages()) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "service.messaging.private-messages-disabled"
                         ));
@@ -93,17 +94,21 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     private CompletableFuture<Boolean> updateReplyTargets(UUID sender, UUID target) {
         return users
                 .update(sender, user -> {
-                    var previous = user.preferences.outgoingReplyTarget;
-                    user.preferences.outgoingReplyTarget = target;
-                    return previous;
+                    var previous = user.preferences().outgoingReplyTarget();
+                    return UserUpdate.of(
+                            user.withPreferences(user.preferences().withOutgoingReplyTarget(target)),
+                            previous
+                    );
                 })
                 .thenCompose(previousOutgoing ->
                         users.update(
                                         target,
                                         user -> {
-                                            var previous = user.preferences.incomingReplyTarget;
-                                            user.preferences.incomingReplyTarget = sender;
-                                            return previous;
+                                            var previous = user.preferences().incomingReplyTarget();
+                                            return UserUpdate.of(
+                                                    user.withPreferences(user.preferences().withIncomingReplyTarget(sender)),
+                                                    previous
+                                            );
                                         }
                                 )
                                 .handle((previousIncoming, failure) ->
@@ -120,13 +125,17 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                     }
 
                     return users
-                            .updateVoid(sender, user -> {
-                                if (target.equals(user.preferences.outgoingReplyTarget)) {
-                                    user.preferences.outgoingReplyTarget = update.previousOutgoing();
-                                }
-                            })
+                            .updateVoid(sender, user ->
+                                    target.equals(user.preferences().outgoingReplyTarget()) ?
+                                            user.withPreferences(user.preferences().withOutgoingReplyTarget(
+                                                    update.previousOutgoing()
+                                            ))
+                                            : user
+                            )
                             .handle((_, rollbackFailure) -> {
-                                if (rollbackFailure != null) update.failure().addSuppressed(rollbackFailure);
+                                if (rollbackFailure != null) {
+                                    update.failure().addSuppressed(rollbackFailure);
+                                }
                                 return false;
                             });
                 });
@@ -196,12 +205,12 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
         return users
                 .load(uuid)
                 .thenApply(user -> {
-                    var preferred = user.preferences.replyToLastRecipient
-                            ? user.preferences.outgoingReplyTarget
-                            : user.preferences.incomingReplyTarget;
-                    var fallback = user.preferences.replyToLastRecipient
-                            ? user.preferences.incomingReplyTarget
-                            : user.preferences.outgoingReplyTarget;
+                    var preferred = user.preferences().replyToLastRecipient()
+                            ? user.preferences().outgoingReplyTarget()
+                            : user.preferences().incomingReplyTarget();
+                    var fallback = user.preferences().replyToLastRecipient()
+                            ? user.preferences().incomingReplyTarget()
+                            : user.preferences().outgoingReplyTarget();
 
                     return Optional.ofNullable(preferred != null
                             ? preferred
@@ -213,7 +222,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     public CompletableFuture<Void> setLastReplyTarget(UUID uuid, UUID target) {
         return users.updateVoid(
                 uuid,
-                user -> user.preferences.incomingReplyTarget = target
+                user -> user.withPreferences(user.preferences().withIncomingReplyTarget(target))
         );
     }
 
@@ -221,7 +230,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     public CompletableFuture<Boolean> ignored(UUID viewer, UUID target) {
         return users
                 .load(viewer)
-                .thenApply(user -> user.relations.ignored.contains(target));
+                .thenApply(user -> user.relations().ignored().contains(target));
     }
 
     @Override
@@ -233,11 +242,13 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
         return users.updateVoid(
                 viewer,
                 user -> {
+                    var updated = new LinkedHashSet<>(user.relations().ignored());
                     if (ignored) {
-                        user.relations.ignored.add(target);
+                        updated.add(target);
                     } else {
-                        user.relations.ignored.remove(target);
+                        updated.remove(target);
                     }
+                    return user.withRelations(user.relations().withIgnored(updated));
                 }
         );
     }
@@ -246,14 +257,14 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     public CompletableFuture<Boolean> socialSpy(UUID uuid) {
         return users
                 .load(uuid)
-                .thenApply(user -> user.preferences.socialSpy);
+                .thenApply(user -> user.preferences().socialSpy());
     }
 
     @Override
     public CompletableFuture<Void> setSocialSpy(UUID uuid, boolean enabled) {
         return users.updateVoid(
                 uuid,
-                user -> user.preferences.socialSpy = enabled
+                user -> user.withPreferences(user.preferences().withSocialSpy(enabled))
         );
     }
 

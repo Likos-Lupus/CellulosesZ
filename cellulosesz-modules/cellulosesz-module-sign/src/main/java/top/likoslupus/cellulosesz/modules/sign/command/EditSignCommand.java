@@ -1,64 +1,55 @@
 package top.likoslupus.cellulosesz.modules.sign.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.sign.SignService;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.world.SignTarget;
-import top.likoslupus.cellulosesz.api.world.SignTextMutation;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.sign.*;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandExecutions;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.sign.SignConfig;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
-public final class EditSignCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
-    private final WorldPlatformService worlds;
+public final class EditSignCommand implements CommandContributor {
+
+    private final SignPlatformService platform;
     private final SignService signs;
+    private final ServerThreadExecutor serverThread;
     private final SignConfig config;
     private final Map<UUID, Clipboard> clipboards = new ConcurrentHashMap<>();
 
     public EditSignCommand(
-            PlatformService platform,
-            WorldPlatformService worlds,
+            SignPlatformService platform,
             SignService signs,
+            ServerThreadExecutor serverThread,
             SignConfig config
     ) {
-        this.platform = platform;
-        this.worlds = worlds;
-        this.signs = signs;
-        this.config = config;
+        this.platform = requireNonNull(platform, "platform");
+        this.signs = requireNonNull(signs, "signs");
+        this.serverThread = requireNonNull(serverThread, "serverThread");
+        this.config = requireNonNull(config, "config");
     }
 
-    private static void sendResult(CommandInvocation invocation, SignUseResult result) {
-        if (result.success()) invocation.replyKey("commands.sign.editsign.success");
-        else result.optionalMessage().ifPresent(message -> invocation.errorKey(message.key(), message.placeholders()));
-    }
-
-    private static int line(CommandInvocation invocation, String raw) {
-        try {
-            var line = Integer.parseInt(raw);
-            if (line >= 1 && line <= 4) return line - 1;
-        } catch (NumberFormatException ignored) {
-            // handled below
-        }
-        invocation.errorKey("commands.sign.editsign.invalid-line");
-        return -1;
-    }
-
-    private static boolean formatAllowed(CommandInvocation invocation, String text) {
-        if (text.indexOf('§') >= 0 && !invocation.hasPermission("cellulosesz.command.editsign.color")) return false;
-        if (text.matches("(?s).*<#[0-9a-fA-F]{6}>.*") && !invocation.hasPermission("cellulosesz.command.editsign.rgb"))
-            return false;
-        return (!text.contains("<") && !text.contains(">"))
-                || invocation.hasPermission("cellulosesz.command.editsign.format");
+    private static boolean disallowedControl(int codePoint) {
+        return codePoint == 0
+                || codePoint == '\r'
+                || codePoint == '\n'
+                || Character.isISOControl(codePoint);
     }
 
     private static String side(boolean front) {
@@ -66,143 +57,354 @@ public final class EditSignCommand implements CellCommand {
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.editsign";
+    public String moduleId() {
+        return SignCommandSupport.MODULE;
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
+    public void register(CommandRegistrationContext context) {
+        var descriptor = SignCommandSupport.descriptor();
+        var root = Commands.literal("editsign")
+                .then(Commands.literal("copy")
+                        .executes(command -> executeSync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> copy(policy, target(policy))
+                        )))
+                .then(Commands.literal("paste")
+                        .executes(command -> executeAsync(
+                                context,
+                                command,
+                                descriptor,
+                                policy -> paste(policy, target(policy))
+                        )))
+                .then(Commands.literal("clear")
+                        .then(Commands.argument("line", IntegerArgumentType.integer(1, 4))
+                                .executes(command -> executeAsync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        policy -> clear(
+                                                policy,
+                                                target(policy),
+                                                IntegerArgumentType.getInteger(command, "line") - 1
+                                        )
+                                ))))
+                .then(Commands.literal("set")
+                        .then(Commands.argument("line", IntegerArgumentType.integer(1, 4))
+                                .then(Commands.argument("text", StringArgumentType.greedyString())
+                                        .executes(command -> executeAsync(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                policy -> set(
+                                                        policy,
+                                                        target(policy),
+                                                        IntegerArgumentType.getInteger(command, "line") - 1,
+                                                        StringArgumentType.getString(command, "text")
+                                                )
+                                        )))));
 
-    @Override
-    public String usage() {
-        return "/editsign <set <line> <text>|clear <line>|copy|paste>";
-    }
-
-    @Override
-    public String name() {
-        return "editsign";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        var targetResult = worlds.targetSign(player, config.editTargetDistance);
-        if (!targetResult.successful() || targetResult.value().isEmpty()) {
-            invocation.errorKey("commands.sign.editsign.no-sign");
-            return 0;
-        }
-        var target = targetResult.value().orElseThrow();
-        return switch (invocation.args()[0].toLowerCase()) {
-            case "copy" -> copy(invocation, target);
-            case "paste" -> paste(invocation, target);
-            case "clear" -> clear(invocation, target);
-            case "set" -> set(invocation, target);
-            default -> usage(invocation);
-        };
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.editsign",
+                "/editsign <set <line:1..4> <text...>|clear <line:1..4>|copy|paste>",
+                root
+        );
     }
 
     public void clearClipboard(UUID playerUuid) {
-        clipboards.remove(playerUuid);
+        clipboards.remove(requireNonNull(playerUuid, "playerUuid"));
     }
 
-    private int copy(CommandInvocation invocation, SignTarget target) {
-        if (invocation.args().length != 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        clipboards.put(player.uuid(), new Clipboard(target.front(), target.lines()));
-        invocation.replyKey("commands.sign.editsign.copied", Map.of("side", side(target.front())));
-        return 1;
-    }
-
-    private int paste(CommandInvocation invocation, SignTarget target) {
-        if (invocation.args().length != 1) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        var clipboard = clipboards.get(player.uuid());
-        if (clipboard == null) {
-            invocation.errorKey("commands.sign.editsign.clipboard-empty");
-            return 0;
-        }
-        return mutate(invocation, target, clipboard.lines());
-    }
-
-    private int clear(CommandInvocation invocation, SignTarget target) {
-        if (invocation.args().length != 2) return usage(invocation);
-        var line = line(invocation, invocation.args()[1]);
-        if (line < 0) return 0;
-        var replacement = new ArrayList<>(target.lines());
-        replacement.set(line, "");
-        return mutate(invocation, target, replacement);
-    }
-
-    private int set(CommandInvocation invocation, SignTarget target) {
-        if (invocation.args().length != 3) return usage(invocation);
-        var line = line(invocation, invocation.args()[1]);
-        if (line < 0) return 0;
-        var text = invocation.args()[2];
-        if (text.length() > config.editMaximumLineLength || text.chars()
-                .anyMatch(value -> value == 0 || value == '\r' || value == '\n')) {
-            invocation.errorKey("commands.sign.editsign.invalid-text", Map.of("maximum", config.editMaximumLineLength));
-            return 0;
-        }
-        if (!formatAllowed(invocation, text)) {
-            invocation.errorKey("commands.sign.editsign.format-denied");
-            return 0;
-        }
-        var replacement = new ArrayList<>(target.lines());
-        replacement.set(line, text);
-        return mutate(invocation, target, replacement);
-    }
-
-    private int mutate(CommandInvocation invocation, SignTarget target, List<String> requested) {
-        var player = platform.player(invocation).orElseThrow();
-        var allowWaxed = invocation.hasPermission("cellulosesz.command.editsign.waxed");
-        if (target.waxed() && !allowWaxed) {
-            invocation.errorKey("commands.sign.editsign.waxed");
-            return 0;
-        }
-        var replacement = signs.formattedLines(List.copyOf(requested));
-        var execution = signs.edit(player, target.location(), target.front(), target.lines(), replacement);
-        if (!execution.handled()) {
-            var result = worlds.replaceSignText(player, new SignTextMutation(target, replacement), allowWaxed);
-            if (!result.successful()) {
-                invocation.platformError(result.status());
-                return 0;
-            }
-            invocation.replyKey("commands.sign.editsign.success", Map.of("side", side(target.front())));
-            return 1;
-        }
-        execution.preparation().whenComplete((commit, preparationFailure) -> platform.runOnServerThread(() -> {
-            if (preparationFailure != null) {
-                invocation.errorKey("commands.sign.editsign.failed", Map.of("reason", "preparation"));
-                return;
-            }
-            var applied = worlds.replaceSignText(player, new SignTextMutation(target, replacement), allowWaxed)
-                    .successful();
-            commit.complete(applied).whenComplete((result, completionFailure) -> platform.runOnServerThread(() -> {
-                if (completionFailure != null || !applied) {
-                    invocation.errorKey("commands.sign.editsign.failed", Map.of("reason", "commit"));
-                    return;
-                }
-                sendResult(invocation, result);
-            }));
-        }));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.sign.editsign.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private record Clipboard(
-            boolean front,
-            List<String> lines
+    private int executeSync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    PlatformResult<?>
+                    > operation
     ) {
+        return CommandExecutions.sync(
+                registration,
+                command,
+                descriptor,
+                "edit sign",
+                policy -> SignCommandSupport.respond(policy, operation.apply(policy))
+        );
+    }
+
+    private int executeAsync(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    CompletableFuture<PlatformResult<?>>
+                    > operation
+    ) {
+        return CommandExecutions.async(
+                registration,
+                command,
+                descriptor,
+                "edit sign",
+                operation,
+                SignCommandSupport::respond
+        );
+    }
+
+    private PlatformResult<SignSnapshot> target(MinecraftCommandPolicyContext policy) {
+        var player = policy.currentPlayer();
+        if (player.isEmpty()) {
+            return PlatformResult.failure(PlatformOperationStatus.INVALID_SOURCE, "player-only");
+        }
+
+        return platform.target(player.orElseThrow(), config.editTargetDistance);
+    }
+
+    private PlatformResult<?> copy(
+            MinecraftCommandPolicyContext policy,
+            PlatformResult<SignSnapshot> targetResult
+    ) {
+        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+            return targetResult;
+        }
+
+        var player = policy.currentPlayer().orElseThrow();
+        var target = targetResult.value().orElseThrow();
+
+        clipboards.put(player.uuid(), new Clipboard(target.lines()));
+        policy.reply(LocalizedMessage.of(
+                "commands.sign.editsign.copied",
+                Map.of("side", side(target.front()))
+        ));
+
+        return PlatformResult.success(target);
+    }
+
+    private CompletableFuture<PlatformResult<?>> paste(
+            MinecraftCommandPolicyContext policy,
+            PlatformResult<SignSnapshot> targetResult
+    ) {
+        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+            return CompletableFuture.completedFuture(targetResult);
+        }
+
+        var player = policy.currentPlayer().orElseThrow();
+        var clipboard = clipboards.get(player.uuid());
+
+        if (clipboard == null) {
+            return CompletableFuture.completedFuture(PlatformResult.failure(
+                    PlatformOperationStatus.NOT_FOUND,
+                    "clipboard-empty"
+            ));
+        }
+
+        return mutate(policy, targetResult.value().orElseThrow(), clipboard.lines());
+    }
+
+    private CompletableFuture<PlatformResult<?>> clear(
+            MinecraftCommandPolicyContext policy,
+            PlatformResult<SignSnapshot> targetResult,
+            int line
+    ) {
+        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+            return CompletableFuture.completedFuture(targetResult);
+        }
+
+        var target = targetResult.value().orElseThrow();
+        var replacement = new ArrayList<>(target.lines());
+
+        replacement.set(line, "");
+        return mutate(policy, target, replacement);
+    }
+
+    private CompletableFuture<PlatformResult<?>> set(
+            MinecraftCommandPolicyContext policy,
+            PlatformResult<SignSnapshot> targetResult,
+            int line,
+            String text
+    ) {
+        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+            return CompletableFuture.completedFuture(targetResult);
+        }
+
+        var textFailure = validateText(policy, text);
+        if (textFailure.isPresent()) {
+            return CompletableFuture.completedFuture(textFailure.orElseThrow());
+        }
+
+        var target = targetResult.value().orElseThrow();
+        var replacement = new ArrayList<>(target.lines());
+
+        replacement.set(line, text);
+        return mutate(policy, target, replacement);
+    }
+
+    private Optional<PlatformResult<?>> validateText(
+            MinecraftCommandPolicyContext policy,
+            String text
+    ) {
+        if (text.codePointCount(0, text.length()) > config.editMaximumLineLength) {
+            return Optional.of(PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_INPUT,
+                    "line-too-long"
+            ));
+        }
+
+        if (text.codePoints().anyMatch(EditSignCommand::disallowedControl)) {
+            return Optional.of(PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_INPUT,
+                    "control-character"
+            ));
+        }
+
+        if (text.indexOf('§') >= 0
+                && !policy.hasPermission("cellulosesz.command.editsign.color")
+        ) {
+            return Optional.of(PlatformResult.failure(
+                    PlatformOperationStatus.PERMISSION_DENIED,
+                    "color-denied"
+            ));
+        }
+
+        if (text.matches("(?s).*<#[0-9a-fA-F]{6}>.*")
+                && !policy.hasPermission("cellulosesz.command.editsign.rgb")
+        ) {
+            return Optional.of(PlatformResult.failure(
+                    PlatformOperationStatus.PERMISSION_DENIED,
+                    "rgb-denied"
+            ));
+        }
+
+        if ((text.contains("<") || text.contains(">"))
+                && !policy.hasPermission("cellulosesz.command.editsign.format")
+        ) {
+            return Optional.of(PlatformResult.failure(
+                    PlatformOperationStatus.PERMISSION_DENIED,
+                    "format-denied"
+            ));
+        }
+        return Optional.empty();
+    }
+
+    private CompletableFuture<PlatformResult<?>> mutate(
+            MinecraftCommandPolicyContext policy,
+            SignSnapshot target,
+            List<String> requested
+    ) {
+        var player = policy.currentPlayer().orElseThrow();
+        var allowWaxed = policy.hasPermission("cellulosesz.command.editsign.waxed");
+
+        if (target.waxed() && !allowWaxed) {
+            return CompletableFuture.completedFuture(PlatformResult.failure(
+                    PlatformOperationStatus.PERMISSION_DENIED,
+                    "waxed"
+            ));
+        }
+
+        var replacement = signs.formattedLines(List.copyOf(requested));
+        var execution = signs.edit(
+                player,
+                target.location(),
+                target.front(),
+                target.lines(),
+                replacement
+        );
+
+        if (!execution.handled()) {
+            return serverThread
+                    .submit(() -> platform.compareAndReplace(new SignWriteRequest(
+                            player,
+                            target.location(),
+                            target.front(),
+                            target.lines(),
+                            replacement,
+                            allowWaxed
+                    )));
+        }
+
+        return execution.preparation()
+                .thenCompose(commit -> serverThread
+                        .submit(() ->
+                                platform.compareAndReplace(new SignWriteRequest(
+                                        player,
+                                        target.location(),
+                                        target.front(),
+                                        target.lines(),
+                                        replacement,
+                                        allowWaxed
+                                ))
+                        )
+                        .thenCompose(write -> {
+                            if (!write.successful()) {
+                                return commit
+                                        .complete(false)
+                                        .thenApply(_ -> write);
+                            }
+
+                            return commit
+                                    .complete(true)
+                                    .thenCompose(result -> {
+                                        if (result.success()) {
+                                            return CompletableFuture.completedFuture(write);
+                                        }
+
+                                        return serverThread
+                                                .submit(() -> rollback(
+                                                        player,
+                                                        target,
+                                                        replacement,
+                                                        allowWaxed,
+                                                        result
+                                                ));
+                                    });
+                        })
+                );
+    }
+
+    private PlatformResult<?> rollback(
+            CellPlayer player,
+            SignSnapshot target,
+            List<String> replacement,
+            boolean allowWaxed,
+            SignUseResult result
+    ) {
+        var rollback = platform.compareAndReplace(new SignWriteRequest(
+                player,
+                target.location(),
+                target.front(),
+                replacement,
+                target.lines(),
+                allowWaxed
+        ));
+
+        if (!rollback.successful()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.CONFLICT,
+                    "persistence-and-rollback-failed"
+            );
+        }
+
+        return PlatformResult.failure(
+                PlatformOperationStatus.STORAGE_FAILURE,
+                result.optionalMessage()
+                        .map(LocalizedMessage::key)
+                        .orElse("persistence-failed")
+        );
+    }
+
+    private record Clipboard(List<String> lines) {
 
         private Clipboard {
             lines = List.copyOf(lines);
+            if (lines.size() != 4) {
+                throw new IllegalArgumentException("lines must contain exactly four entries");
+            }
         }
 
     }

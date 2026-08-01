@@ -1,77 +1,112 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
+import net.minecraft.commands.Commands;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
 
-import java.util.Map;
+import java.util.List;
 
-public final class GiveCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
+
+public final class GiveCommand implements CommandContributor {
+
+    private final ItemCommandService service;
+    private final ItemService items;
+    private final PlayerDirectory players;
 
     public GiveCommand(
-            PlatformService platform,
+            ItemCommandService service,
             ItemService items,
-            ItemAutomationService automation,
-            ItemConfig config
+            PlayerDirectory players
     ) {
-        super(platform, items, automation, config);
+        this.service = requireNonNull(service, "service");
+        this.items = requireNonNull(items, "items");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.give";
-    }
-
-    @Override
-    public String usage() {
-        return "/give <player> <id> [count] [components]";
-    }
-
-    @Override
-    public String name() {
-        return "give";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 2) {
-            invocation.errorKey(
-                    "commands.item.give-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var target = target(invocation, args[0]);
-        if (target.isEmpty()) return 0;
-
-        var descriptor = items.parse(join(args, 1));
-        if (descriptor.isEmpty()) {
-            invocation.errorKey("commands.item.give-command.error.invalid-item-description");
-            return 0;
-        }
-
-        if (!allowSpawn(invocation, descriptor.get(), "cellulosesz.item.give")) {
-            return 0;
-        }
-
-        if (!items.give(target.get(), descriptor.get())) {
-            invocation.errorKey("commands.item.give-command.error.failed-give-item");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.item.give-command.reply.gave",
-                Map.of(
-                        "player", target.get().name(),
-                        "item", descriptor.get().count,
-                        "count", descriptor.get().normalizedItem()
-                )
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "give",
+                "cellulosesz.item.give",
+                CommandSourceKind.ANY
         );
-        return 1;
+
+        var target = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((ignored, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .then(Commands.argument(
+                                        "item",
+                                        ItemDescriptorArgument.itemDescriptor(items)
+                                )
+                                .executes(command -> ItemCommandSupport.sync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "give item",
+                                        policy -> {
+                                            var player = ItemCommandSupport.target(
+                                                    policy,
+                                                    players,
+                                                    PlayerNameArgument.get(
+                                                            command,
+                                                            "player"
+                                                    )
+                                            );
+
+                                            if (player.isEmpty()) {
+                                                return PlatformResult.failure(
+                                                        PlatformOperationStatus.NOT_FOUND,
+                                                        "player-offline"
+                                                );
+                                            }
+
+                                            return service.grant(
+                                                    player.orElseThrow(),
+                                                    ItemDescriptorArgument.get(
+                                                            command,
+                                                            "item"
+                                                    ),
+                                                    policy.hasPermission(
+                                                            "cellulosesz.item.give.blacklist"
+                                                    ),
+                                                    policy.hasPermission(
+                                                            "cellulosesz.item.give.oversized"
+                                                    )
+                                            );
+                                        }
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.give",
+                "/give <player> <item-descriptor>",
+                Commands.literal("give").then(target)
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

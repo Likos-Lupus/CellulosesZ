@@ -1,87 +1,121 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
+import top.likoslupus.cellulosesz.modules.item.command.argument.EnchantmentArgument;
 
-import java.util.Map;
+import java.util.List;
 
-public final class EnchantCommand extends AbstractItemCommand {
+import static java.util.Objects.requireNonNull;
 
-    public EnchantCommand(
-            PlatformService platform,
-            ItemService items,
-            ItemAutomationService automation,
-            ItemConfig config
-    ) {
-        super(platform, items, automation, config);
+public final class EnchantCommand implements CommandContributor {
+
+    private final ItemCommandService service;
+
+    public EnchantCommand(ItemCommandService service) {
+        this.service = requireNonNull(service, "service");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.item.enchant";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/enchant <enchantment> [level]";
-    }
-
-    @Override
-    public String name() {
-        return "enchant";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var self = player(invocation);
-        if (self.isEmpty()) return 0;
-
-        var args = invocation.args();
-        if (args.length < 1 || args.length > 2) {
-            invocation.errorKey(
-                    "commands.item.enchant-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var level = 1;
-        if (args.length == 2) {
-            try {
-                level = Integer.parseInt(args[1]);
-            } catch (NumberFormatException _) {
-                invocation.errorKey("commands.item.enchant-command.error.enchantment-level-must-integer");
-                return 0;
-            }
-        }
-
-        if (level <= 0 || (!config.allowUnsafeEnchantments && level > 255)) {
-            invocation.errorKey("commands.item.enchant-command.error.enchantment-level-outside-allowed-range");
-            return 0;
-        }
-
-        if (!platform.enchantHeldItem(self.get(), args[0], level)) {
-            invocation.errorKey("commands.item.enchant-command.error.enchanting-failed-check-held-item-enchantment-id");
-            return 0;
-        }
-
-        invocation.replyKey(
-                "commands.item.enchant-command.reply.applied-enchantment",
-                Map.of(
-                        "enchantment", args[0],
-                        "level", level
-                )
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "enchant",
+                "cellulosesz.item.enchant",
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var enchantment = Commands.argument(
+                        "enchantment",
+                        EnchantmentArgument.enchantment(
+                                service.platform()::enchantmentIds
+                        )
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                service.platform()::enchantmentIds,
+                                builder
+                        )
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        1
+                ))
+                .then(Commands.argument(
+                                        "level",
+                                        IntegerArgumentType.integer(1, 255)
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        IntegerArgumentType.getInteger(
+                                                command,
+                                                "level"
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.enchant",
+                "/enchant <enchantment> [level]",
+                Commands.literal("enchant").then(enchantment)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int level
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "enchant",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var unsafe = level > 5
+                            && policy.hasPermission(
+                            "cellulosesz.item.enchant.unsafe"
+                    );
+
+                    return service.enchant(
+                            player.orElseThrow(),
+                            EnchantmentArgument.get(command, "enchantment"),
+                            level,
+                            unsafe
+                    );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

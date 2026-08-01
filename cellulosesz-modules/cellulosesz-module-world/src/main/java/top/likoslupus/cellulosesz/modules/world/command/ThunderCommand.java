@@ -1,88 +1,106 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.ThunderRequest;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class ThunderCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class ThunderCommand implements CommandContributor {
+
     private final WorldPlatformService worlds;
+    private final PlayerLocationPlatformService locations;
     private final WorldConfig config;
 
     public ThunderCommand(
-            PlatformService platform,
             WorldPlatformService worlds,
+            PlayerLocationPlatformService locations,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.worlds = worlds;
-        this.config = config;
+        this.worlds = requireNonNull(worlds, "worlds");
+        this.locations = requireNonNull(locations, "locations");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.thunder";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "thunder",
+                "cellulosesz.command.thunder",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        var enabled = Commands.argument("enabled", BoolArgumentType.bool())
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        config.defaultWeatherSeconds
+                ))
+                .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 107_374_182))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                IntegerArgumentType.getInteger(command, "seconds")
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.thunder",
+                "/thunder <true|false> [seconds]",
+                Commands.literal("thunder").then(enabled)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int seconds
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "thunder",
+                policy -> {
+                    var player = WorldCommandSupport.current(policy);
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var ticks = Math.multiplyExact(seconds, 20);
+                    return worlds.setThunder(
+                            locations.currentLocation(player.orElseThrow()).world,
+                            new ThunderRequest(BoolArgumentType.getBool(command, "enabled"), ticks)
+                    );
+                }
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/thunder <true|false> [seconds]";
-    }
-
-    @Override
-    public String name() {
-        return "thunder";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length < 1 || invocation.args().length > 2) return usage(invocation);
-        final boolean enabled;
-        if (invocation.args()[0].equalsIgnoreCase("true")) enabled = true;
-        else if (invocation.args()[0].equalsIgnoreCase("false")) enabled = false;
-        else return usage(invocation);
-        final int seconds;
-        final int ticks;
-        try {
-            seconds = invocation.args().length == 2
-                    ? Integer.parseInt(invocation.args()[1])
-                    : config.defaultWeatherSeconds;
-            if (seconds < 1) throw new NumberFormatException();
-            ticks = Math.multiplyExact(seconds, 20);
-        } catch (NumberFormatException | ArithmeticException failure) {
-            invocation.errorKey("commands.world.thunder.invalid-duration");
-            return 0;
-        }
-        var player = platform.player(invocation).orElseThrow();
-        var world = platform.location(player).world;
-        var result = worlds.setThunder(world, new ThunderRequest(enabled, ticks));
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.thunder.success", Map.of(
-                "world", world,
-                "enabled", enabled,
-                "seconds", seconds
-        ));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.thunder.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

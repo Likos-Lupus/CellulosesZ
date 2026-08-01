@@ -161,6 +161,14 @@ public final class Checks {
         return value;
     }
 
+    public static float requireFinite(float value, String name) {
+        name = requireName(name);
+        if (!Float.isFinite(value)) {
+            throw new IllegalArgumentException(name + " must be finite, but was " + value);
+        }
+        return value;
+    }
+
     public static double requireGreaterThan(
             double value,
             String name,
@@ -814,7 +822,9 @@ public final class Checks {
     }
 
     public static void requireFalse(boolean condition, String message) {
-        requireTrue(!condition, message);
+        if (condition) {
+            throw new IllegalStateException(requireNonNull(message, "message must not be null"));
+        }
     }
 
     public static void requireTrue(boolean condition, String message) {

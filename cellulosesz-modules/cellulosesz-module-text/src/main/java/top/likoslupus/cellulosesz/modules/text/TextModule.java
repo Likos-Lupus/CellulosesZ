@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.modules.text;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
@@ -18,6 +18,7 @@ import top.likoslupus.cellulosesz.modules.text.config.TextConfig;
 import top.likoslupus.cellulosesz.modules.text.service.ConfigTextService;
 
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -36,14 +37,20 @@ public final class TextModule implements CellulosesZModule {
     @Override
     public void registerConfigs(ModuleContext context) {
         config = context.configs().register(
-                "module.text", TextConfig.class, "modules/text.yml", TextConfig::new
+                "module.text",
+                TextConfig.class,
+                "modules/text.yml",
+                TextConfig::new
         );
     }
 
     @Override
     @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
-        texts = new ConfigTextService(requireNonNull(config, "TextConfig has not been initialized"));
+        texts = new ConfigTextService(requireNonNull(
+                config,
+                "TextConfig has not been initialized"
+        ));
         context.services().register(TextService.class, texts);
         context.services().register(ConfigTextService.class, texts);
         context.services().register(TextCommandService.class, new DefaultTextCommandService(texts));
@@ -51,23 +58,27 @@ public final class TextModule implements CellulosesZModule {
 
     @Override
     public void registerEvents(ModuleContext context) {
-        var platform = context.services().require(PlatformService.class);
+        var audience = context.services().require(PlayerAudienceService.class);
+        var locales = context.services().require(LocaleResolver.class);
         var renderer = context.services().require(MessageRenderer.class);
 
-        context.events().listen(PlayerJoinEvent.class, event -> {
-            var current = requireNonNull(config, "TextConfig has not been initialized");
-            if (!current.showMotdOnJoin) return;
+        context.events().listen(
+                PlayerJoinEvent.class,
+                event -> {
+                    var current = requireNonNull(config, "TextConfig has not been initialized");
+                    if (!current.showMotdOnJoin) return;
 
-            var service = requireNonNull(texts, "TextService has not been initialized");
-            service.motd().forEach(line -> platform.sendMessage(
-                    event.player(),
-                    renderer.render(
-                            platform.locale(event.player()),
-                            GeneratedMessageKeys.COMMANDS_TEXT_LINE,
-                            Map.of("line", line)
-                    )
-            ));
-        });
+                    var service = requireNonNull(texts, "TextService has not been initialized");
+                    service.motd().forEach(line -> audience.send(
+                            event.player(),
+                            renderer.render(
+                                    locales.locale(event.player()),
+                                    GeneratedMessageKeys.COMMANDS_TEXT_LINE,
+                                    Map.of("line", line)
+                            )
+                    ));
+                }
+        );
     }
 
     @Override

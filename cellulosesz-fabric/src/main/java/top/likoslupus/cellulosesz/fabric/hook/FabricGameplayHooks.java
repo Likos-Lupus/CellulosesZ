@@ -13,13 +13,16 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.phys.BlockHitResult;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.sign.SignService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.*;
 import java.util.concurrent.CompletionException;
@@ -29,19 +32,25 @@ import java.util.concurrent.ExecutionException;
 public final class FabricGameplayHooks {
 
     private final ServiceRegistry services;
-    private final PlatformService platform;
+    private final ItemPlatformService items;
+    private final ServerThreadExecutor serverThread;
+    private final PlayerAudienceService audience;
     private final MessageRenderer renderer;
     private final LocaleResolver locales;
     private final Map<UUID, Set<String>> pendingUnlimited = new ConcurrentHashMap<>();
 
     public FabricGameplayHooks(
             ServiceRegistry services,
-            PlatformService platform,
+            ItemPlatformService items,
+            ServerThreadExecutor serverThread,
+            PlayerAudienceService audience,
             MessageRenderer renderer,
             LocaleResolver locales
     ) {
         this.services = services;
-        this.platform = platform;
+        this.items = items;
+        this.serverThread = serverThread;
+        this.audience = audience;
         this.renderer = renderer;
         this.locales = locales;
     }
@@ -49,17 +58,39 @@ public final class FabricGameplayHooks {
     public void register() {
         UseBlockCallback.EVENT.register(this::useBlock);
         UseItemCallback.EVENT.register(this::useItem);
-        AttackBlockCallback.EVENT.register((player, level, hand, _, _) -> {
-            if (level.isClientSide()
-                    || hand != InteractionHand.MAIN_HAND
-                    || !(player instanceof ServerPlayer serverPlayer)) return InteractionResult.PASS;
-            return usePowerTool(serverPlayer, "");
-        });
-        AttackEntityCallback.EVENT.register((player, level, hand, target, _) -> {
+
+        AttackBlockCallback.EVENT.register((
+                player,
+                level,
+                hand,
+                _,
+                _
+        ) -> {
             if (level.isClientSide()
                     || hand != InteractionHand.MAIN_HAND
                     || !(player instanceof ServerPlayer serverPlayer)
-                    || !(target instanceof ServerPlayer targetPlayer)) return InteractionResult.PASS;
+            ) {
+                return InteractionResult.PASS;
+            }
+
+            return usePowerTool(serverPlayer, "");
+        });
+
+        AttackEntityCallback.EVENT.register((
+                player,
+                level,
+                hand,
+                target,
+                _
+        ) -> {
+            if (level.isClientSide()
+                    || hand != InteractionHand.MAIN_HAND
+                    || !(player instanceof ServerPlayer serverPlayer)
+                    || !(target instanceof ServerPlayer targetPlayer)
+            ) {
+                return InteractionResult.PASS;
+            }
+
             return usePowerTool(serverPlayer, targetPlayer.getGameProfile().name());
         });
     }
@@ -73,7 +104,9 @@ public final class FabricGameplayHooks {
         if (level.isClientSide()
                 || hand != InteractionHand.MAIN_HAND
                 || !(player instanceof ServerPlayer serverPlayer)
-        ) return InteractionResult.PASS;
+        ) {
+            return InteractionResult.PASS;
+        }
 
         queueUnlimited(serverPlayer);
         return useSign(serverPlayer, level, hit);
@@ -87,35 +120,43 @@ public final class FabricGameplayHooks {
         if (!level.isClientSide()
                 && hand == InteractionHand.MAIN_HAND
                 && player instanceof ServerPlayer serverPlayer
-        ) queueUnlimited(serverPlayer);
+        ) {
+            queueUnlimited(serverPlayer);
+        }
+
         return InteractionResult.PASS;
     }
 
     private InteractionResult usePowerTool(ServerPlayer player, String clickedPlayerName) {
         var automation = services.optional(ItemAutomationService.class);
-        if (automation.isEmpty()) return InteractionResult.PASS;
+        if (automation.isEmpty()) {
+            return InteractionResult.PASS;
+        }
 
-        var wrapped = platform.player(player);
-        return wrapped
-                .filter(cellPlayer ->
-                        automation.get().executePowerTool(cellPlayer, clickedPlayerName)
-                )
-                .<InteractionResult>map(_ -> InteractionResult.SUCCESS)
-                .orElse(InteractionResult.PASS);
+        var wrapped = MinecraftPlayers.wrap(player);
+        return automation.get().executePowerTool(wrapped, clickedPlayerName)
+                ? InteractionResult.SUCCESS
+                : InteractionResult.PASS;
     }
 
     private void queueUnlimited(ServerPlayer nativePlayer) {
         var automation = services.optional(ItemAutomationService.class);
-        if (automation.isEmpty()) return;
+        if (automation.isEmpty()) {
+            return;
+        }
 
-        var wrapped = platform.player(nativePlayer);
-        if (wrapped.isEmpty()) return;
+        var wrapped = MinecraftPlayers.wrap(nativePlayer);
+        var heldItem = items.heldItemId(wrapped);
 
-        platform.heldItemId(wrapped.get())
-                .filter(itemId -> automation.get().unlimited(wrapped.get().uuid(), itemId))
+        if (!heldItem.successful()) {
+            return;
+        }
+
+        heldItem.value()
+                .filter(itemId -> automation.get().unlimited(wrapped.uuid(), itemId))
                 .ifPresent(itemId -> pendingUnlimited
                         .computeIfAbsent(
-                                wrapped.get().uuid(),
+                                wrapped.uuid(),
                                 _ -> ConcurrentHashMap.newKeySet()
                         )
                         .add(itemId)
@@ -128,14 +169,16 @@ public final class FabricGameplayHooks {
             BlockHitResult hit
     ) {
         var signs = services.optional(SignService.class);
-        if (signs.isEmpty()) return InteractionResult.PASS;
+        if (signs.isEmpty()) {
+            return InteractionResult.PASS;
+        }
 
         var blockEntity = level.getBlockEntity(hit.getBlockPos());
-        if (!(blockEntity instanceof SignBlockEntity sign)) return InteractionResult.PASS;
+        if (!(blockEntity instanceof SignBlockEntity sign)) {
+            return InteractionResult.PASS;
+        }
 
-        var wrapped = platform.player(player);
-        if (wrapped.isEmpty()) return InteractionResult.PASS;
-
+        var wrapped = MinecraftPlayers.wrap(player);
         var location = new CellLocation(
                 level.dimension().identifier().toString(),
                 hit.getBlockPos().getX() + 0.5D,
@@ -146,45 +189,51 @@ public final class FabricGameplayHooks {
         );
         var front = sign.isFacingFrontText(player);
         var signLines = lines(
-                (front
-                        ? sign.getFrontText()
-                        : sign.getBackText()
+                (
+                        front
+                                ? sign.getFrontText()
+                                : sign.getBackText()
                 ).getMessages(false)
         );
         var execution = signs.get().use(
-                wrapped.get(),
+                wrapped,
                 location,
                 front,
                 signLines,
                 player.isShiftKeyDown()
         );
-        if (!execution.handled()) return InteractionResult.PASS;
+        if (!execution.handled()) {
+            return InteractionResult.PASS;
+        }
 
-        execution.result().whenComplete((result, failure) ->
-                platform.runOnServerThread(() -> {
-                    if (failure != null) {
-                        platform.sendMessage(
-                                wrapped.get(),
-                                renderer.render(
-                                        locales.locale(wrapped.get()),
-                                        "service.sign.execution-failed",
-                                        Map.of("reason", safeReason(failure))
-                                )
-                        );
-                        return;
-                    }
-                    result.optionalMessage().ifPresent(message ->
-                            platform.sendMessage(
-                                    wrapped.get(),
-                                    renderer.render(
-                                            locales.locale(wrapped.get()),
-                                            message.key(),
-                                            message.placeholders()
+        execution.result()
+                .whenComplete((result, failure) ->
+                        serverThread.execute(() -> {
+                            if (failure != null) {
+                                audience.send(
+                                        wrapped,
+                                        renderer.render(
+                                                locales.locale(wrapped),
+                                                "service.sign.execution-failed",
+                                                Map.of("reason", safeReason(failure))
+                                        )
+                                );
+                                return;
+                            }
+
+                            result.optionalMessage().ifPresent(message ->
+                                    audience.send(
+                                            wrapped,
+                                            renderer.render(
+                                                    locales.locale(wrapped),
+                                                    message.key(),
+                                                    message.placeholders()
+                                            )
                                     )
-                            )
-                    );
-                })
-        );
+                            );
+                        })
+                );
+
         return InteractionResult.SUCCESS;
     }
 
@@ -209,22 +258,24 @@ public final class FabricGameplayHooks {
     }
 
     public void tick(MinecraftServer server) {
-        if (pendingUnlimited.isEmpty()) return;
+        if (pendingUnlimited.isEmpty()) {
+            return;
+        }
 
         var pending = new LinkedHashMap<>(pendingUnlimited);
         pendingUnlimited.clear();
         services.optional(ItemAutomationService.class)
-                .ifPresent(automation ->
-                        pending.forEach((uuid, itemIds) -> {
+                .ifPresent(automation -> pending
+                        .forEach((uuid, itemIds) -> {
                             var nativePlayer = server.getPlayerList().getPlayer(uuid);
-                            if (nativePlayer == null) return;
+                            if (nativePlayer == null) {
+                                return;
+                            }
 
-                            platform.player(nativePlayer)
-                                    .ifPresent(player ->
-                                            itemIds.forEach(itemId ->
-                                                    automation.maintainUnlimited(player, itemId)
-                                            )
-                                    );
+                            var player = MinecraftPlayers.wrap(nativePlayer);
+                            itemIds.forEach(itemId ->
+                                    automation.maintainUnlimited(player, itemId)
+                            );
                         })
                 );
     }

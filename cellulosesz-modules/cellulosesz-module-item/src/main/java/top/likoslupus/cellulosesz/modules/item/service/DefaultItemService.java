@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
+import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.item.RawItemComponent;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.core.config.JacksonCodecs;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
@@ -14,19 +14,20 @@ import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class DefaultItemService implements ItemService {
 
     private static final Pattern ID_PATTERN = Pattern.compile("^[a-z0-9_.-]+:[a-z0-9_./-]+$");
     private static final Pattern INTEGER_PATTERN = Pattern.compile("^[0-9]+$");
-    private final PlatformService platform;
+    private final ItemPlatformService platform;
     private volatile ItemConfig config;
     private volatile Map<String, String> aliases = Map.of();
     private volatile Map<String, ItemDescriptor> customItems = Map.of();
     private volatile Set<String> blacklist = Set.of();
 
     public DefaultItemService(
-            PlatformService platform,
+            ItemPlatformService platform,
             ItemConfig config
     ) {
         this.platform = requireNonNull(platform, "platform");
@@ -35,46 +36,50 @@ public final class DefaultItemService implements ItemService {
 
     public void configure(ItemConfig config) {
         requireNonNull(config, "config");
-        if (config.maxCommandCount < 1) {
-            throw new IllegalArgumentException("maxCommandCount must be positive");
-        }
-        if (config.maxLoreLines < 1) {
-            throw new IllegalArgumentException("maxLoreLines must be positive");
-        }
+        requirePositive(config.maxCommandCount, "maxCommandCount");
+        requirePositive(config.maxLoreLines, "maxLoreLines");
 
         var aliasCopy = new LinkedHashMap<String, String>();
-        requireNonNull(config.aliases, "aliases").forEach((alias, item) -> {
-            var key = key(alias);
-            var normalized = normalizeId(item);
+        requireNonNull(config.aliases, "aliases")
+                .forEach((alias, item) -> {
+                    var key = key(alias);
+                    var normalized = normalizeId(item);
 
-            if (key.isBlank() || !ID_PATTERN.matcher(normalized).matches()) {
-                throw new IllegalArgumentException("Invalid item alias: " + alias);
-            }
-            if (aliasCopy.put(key, normalized) != null)
-                throw new IllegalArgumentException("Duplicate item alias: " + alias);
-        });
+                    if (key.isBlank() || !ID_PATTERN.matcher(normalized).matches()) {
+                        throw new IllegalArgumentException("Invalid item alias: " + alias);
+                    }
+
+                    if (aliasCopy.put(key, normalized) != null) {
+                        throw new IllegalArgumentException("Duplicate item alias: " + alias);
+                    }
+                });
 
         var customCopy = new LinkedHashMap<String, ItemDescriptor>();
-        requireNonNull(config.customItems, "customItems").forEach((name, item) -> {
-            var key = key(name);
-            requireNonNull(item, "custom item");
-            var copy = item.copy();
-            if (key.isBlank() || !validDescriptorShape(copy)) {
-                throw new IllegalArgumentException("Invalid custom item: " + name);
-            }
-            if (customCopy.put(key, copy) != null) {
-                throw new IllegalArgumentException("Duplicate custom item: " + name);
-            }
-        });
+        requireNonNull(config.customItems, "customItems")
+                .forEach((name, item) -> {
+                    var key = key(name);
+                    requireNonNull(item, "custom item");
+
+                    var copy = item.copy();
+                    if (key.isBlank() || !validDescriptorShape(copy)) {
+                        throw new IllegalArgumentException("Invalid custom item: " + name);
+                    }
+
+                    if (customCopy.put(key, copy) != null) {
+                        throw new IllegalArgumentException("Duplicate custom item: " + name);
+                    }
+                });
 
         var blacklistCopy = new LinkedHashSet<String>();
-        requireNonNull(config.blacklist, "blacklist").forEach(item -> {
-            var normalized = normalizeId(item);
-            if (!ID_PATTERN.matcher(normalized).matches()) {
-                throw new IllegalArgumentException("Invalid blacklisted item: " + item);
-            }
-            blacklistCopy.add(normalized);
-        });
+        requireNonNull(config.blacklist, "blacklist")
+                .forEach(item -> {
+                    var normalized = normalizeId(item);
+                    if (!ID_PATTERN.matcher(normalized).matches()) {
+                        throw new IllegalArgumentException("Invalid blacklisted item: " + item);
+                    }
+
+                    blacklistCopy.add(normalized);
+                });
 
         this.config = config;
         this.aliases = Map.copyOf(aliasCopy);
@@ -88,16 +93,22 @@ public final class DefaultItemService implements ItemService {
 
     private static String normalizeId(String value) {
         var normalized = key(value);
-        return normalized.indexOf(':') < 0 ? "minecraft:" + normalized : normalized;
+        return normalized.indexOf(':') < 0
+                ? "minecraft:" + normalized
+                : normalized;
     }
 
     private boolean validDescriptorShape(ItemDescriptor item) {
-        if (item.count <= 0 || item.count > Math.max(1, config.maxCommandCount)) {
+        if (item.count <= 0
+                || item.count > Math.max(1, config.maxCommandCount)
+        ) {
             return false;
         }
 
         var id = item.normalizedItem();
-        if (!ID_PATTERN.matcher(id).matches()) return false;
+        if (!ID_PATTERN.matcher(id).matches()) {
+            return false;
+        }
 
         return item.normalizedComponents().keySet().stream()
                 .allMatch(key -> ID_PATTERN.matcher(key).matches());
@@ -106,8 +117,11 @@ public final class DefaultItemService implements ItemService {
     private static int firstTokenEnd(String value) {
         for (var i = 0; i < value.length(); i++) {
             var c = value.charAt(i);
-            if (Character.isWhitespace(c) || c == '[') return i;
+            if (Character.isWhitespace(c) || c == '[') {
+                return i;
+            }
         }
+
         return value.length();
     }
 
@@ -122,12 +136,17 @@ public final class DefaultItemService implements ItemService {
         var depth = 0;
         var quote = '\0';
         var escaped = false;
+
         for (var index = start; index < input.length(); index++) {
             var current = input.charAt(index);
             if (quote != '\0') {
-                if (escaped) escaped = false;
-                else if (current == '\\') escaped = true;
-                else if (current == quote) quote = '\0';
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else {
+                    if (current == quote) quote = '\0';
+                }
                 continue;
             }
 
@@ -136,31 +155,48 @@ public final class DefaultItemService implements ItemService {
                 continue;
             }
 
-            if (current == '[') depth++;
-            else if (current == ']' && --depth == 0) return index;
+            if (current == '[') {
+                depth++;
+            } else if (current == ']' && --depth == 0) {
+                return index;
+            }
         }
 
         return -1;
     }
 
-    private static boolean parseComponentList(String input, Map<String, Object> output) {
+    private static boolean parseComponentList(
+            String input,
+            Map<String, Object> output
+    ) {
         if (input.isBlank()) return true;
 
         for (var entry : splitTopLevel(input, ',')) {
             var equals = topLevelIndex(entry, '=');
-            if (equals <= 0 || equals == entry.length() - 1) return false;
+            if (equals <= 0 || equals == entry.length() - 1) {
+                return false;
+            }
 
             var component = normalizeId(entry.substring(0, equals));
-            if (!ID_PATTERN.matcher(component).matches()) return false;
+            if (!ID_PATTERN.matcher(component).matches()) {
+                return false;
+            }
 
             var raw = entry.substring(equals + 1).trim();
-            if (raw.isEmpty() || output.put(component, new RawItemComponent(raw)) != null) return false;
+            if (raw.isEmpty()
+                    || output.put(component, new RawItemComponent(raw)) != null
+            ) {
+                return false;
+            }
         }
 
         return true;
     }
 
-    private static boolean parseTrailingComponents(String input, Map<String, Object> output) {
+    private static boolean parseTrailingComponents(
+            String input,
+            Map<String, Object> output
+    ) {
         var value = input.trim();
 
         if (value.startsWith("{") && value.endsWith("}")) {
@@ -170,8 +206,11 @@ public final class DefaultItemService implements ItemService {
                     var key = normalizeId(String.valueOf(entry.getKey()));
                     if (!ID_PATTERN.matcher(key).matches()
                             || output.put(key, entry.getValue()) != null
-                    ) return false;
+                    ) {
+                        return false;
+                    }
                 }
+
                 return true;
             } catch (IOException | RuntimeException _) {
                 return false;
@@ -191,12 +230,17 @@ public final class DefaultItemService implements ItemService {
         var depth = 0;
         var quote = '\0';
         var escaped = false;
+
         for (var index = 0; index < input.length(); index++) {
             var current = input.charAt(index);
             if (quote != '\0') {
-                if (escaped) escaped = false;
-                else if (current == '\\') escaped = true;
-                else if (current == quote) quote = '\0';
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else if (current == quote) {
+                    quote = '\0';
+                }
                 continue;
             }
 
@@ -205,7 +249,9 @@ public final class DefaultItemService implements ItemService {
             } else if (current == '{' || current == '[' || current == '(') {
                 depth++;
             } else if (current == '}' || current == ']' || current == ')') {
-                if (--depth < 0) return List.of("");
+                if (--depth < 0) {
+                    return List.of("");
+                }
             } else if (current == delimiter && depth == 0) {
                 result.add(input.substring(start, index).trim());
                 start = index + 1;
@@ -224,6 +270,7 @@ public final class DefaultItemService implements ItemService {
         var depth = 0;
         var quote = '\0';
         var escaped = false;
+
         for (var index = 0; index < input.length(); index++) {
             var current = input.charAt(index);
             if (quote != '\0') {
@@ -279,7 +326,9 @@ public final class DefaultItemService implements ItemService {
         }
 
         var alias = aliases.get(key(first));
-        if (alias != null) value = alias + value.substring(firstEnd);
+        if (alias != null) {
+            value = alias + value.substring(firstEnd);
+        }
 
         var cursor = 0;
         while (cursor < value.length()
@@ -289,10 +338,14 @@ public final class DefaultItemService implements ItemService {
             cursor++;
         }
 
-        if (cursor == 0) return Optional.empty();
+        if (cursor == 0) {
+            return Optional.empty();
+        }
 
         var itemId = normalizeId(value.substring(0, cursor));
-        if (!ID_PATTERN.matcher(itemId).matches()) return Optional.empty();
+        if (!ID_PATTERN.matcher(itemId).matches()) {
+            return Optional.empty();
+        }
 
         var descriptor = new ItemDescriptor(itemId, 1);
         if (cursor < value.length() && value.charAt(cursor) == '[') {
@@ -311,12 +364,14 @@ public final class DefaultItemService implements ItemService {
             var firstTail = whitespace < 0
                     ? tail
                     : tail.substring(0, whitespace);
+
             if (INTEGER_PATTERN.matcher(firstTail).matches()) {
                 try {
                     descriptor.count = Integer.parseInt(firstTail);
                 } catch (NumberFormatException _) {
                     return Optional.empty();
                 }
+
                 tail = whitespace < 0 ? "" : tail.substring(whitespace).trim();
             }
         }
@@ -341,7 +396,9 @@ public final class DefaultItemService implements ItemService {
         }
 
         var components = item.normalizedComponents();
-        if (components.isEmpty()) return id;
+        if (components.isEmpty()) {
+            return id;
+        }
 
         var parts = new ArrayList<String>();
         components.forEach((key, value) -> {
@@ -372,6 +429,7 @@ public final class DefaultItemService implements ItemService {
     @Override
     public Set<String> names() {
         var names = new LinkedHashSet<String>();
+        names.addAll(platform.itemIds());
         names.addAll(aliases.keySet());
         names.addAll(customItems.keySet());
         return Set.copyOf(names);
@@ -381,25 +439,33 @@ public final class DefaultItemService implements ItemService {
     public boolean give(CellPlayer player, ItemDescriptor item) {
         return valid(item)
                 && item.count <= config.maxCommandCount
-                && platform.giveItem(player, commandArgument(item), item.count);
+                && platform.grant(player, item.copy()).successful();
     }
 
     @Override
     public int count(CellPlayer player, ItemDescriptor item) {
-        return valid(item)
-                ? platform.countItem(player, commandArgument(item))
+        if (!valid(item)) {
+            return 0;
+        }
+
+        var result = platform.count(player, item.copy());
+        return result.successful() && result.value().isPresent()
+                ? result.value().orElseThrow()
                 : 0;
     }
 
     @Override
     public boolean take(CellPlayer player, ItemDescriptor item) {
         return valid(item)
-                && platform.takeItem(player, commandArgument(item), item.count);
+                && platform.take(player, item.copy()).successful();
     }
 
     @Override
     public Optional<String> heldItemId(CellPlayer player) {
-        return platform.heldItemId(player);
+        var result = platform.heldItemId(player);
+        return result.successful()
+                ? result.value()
+                : Optional.empty();
     }
 
     private String serialize(Object value) {
@@ -407,8 +473,10 @@ public final class DefaultItemService implements ItemService {
             if (value1.isBlank()) {
                 throw new IllegalArgumentException("Raw component must not be blank");
             }
+
             return value1;
         }
+
         return JacksonCodecs.writeJsonString(value);
     }
 

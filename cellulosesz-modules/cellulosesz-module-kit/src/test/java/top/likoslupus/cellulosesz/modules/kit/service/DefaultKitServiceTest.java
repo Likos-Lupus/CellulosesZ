@@ -3,17 +3,18 @@ package top.likoslupus.cellulosesz.modules.kit.service;
 import org.jspecify.annotations.NullMarked;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
-import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 
+import java.lang.reflect.Proxy;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.List;
@@ -31,11 +32,13 @@ final class DefaultKitServiceTest {
     void savePublishesOnlyAfterPersistenceAndDoesNotLeakMutableDefinitions() {
         var storage = new DelayedStorage();
         var config = new KitConfig();
+
         config.createStarterKitWhenEmpty = false;
         var service = new DefaultKitService(
                 storage,
                 new NoopUsers(),
-                new NoopPlatform(),
+                noopInventory(),
+                immediateServerThread(),
                 Optional.empty(),
                 config,
                 Path.of("kits")
@@ -55,6 +58,47 @@ final class DefaultKitServiceTest {
         assertEquals("Daily", service.kit("daily").orElseThrow().displayName);
     }
 
+    private static InventoryPlatformService noopInventory() {
+        return (InventoryPlatformService) Proxy.newProxyInstance(
+                InventoryPlatformService.class.getClassLoader(),
+                new Class<?>[]{InventoryPlatformService.class},
+                (instance, method, args) -> {
+                    if (method.getDeclaringClass() == Object.class) {
+                        return switch (method.getName()) {
+                            case "toString" -> "NoopInventory";
+                            case "hashCode" -> System.identityHashCode(instance);
+                            case "equals" -> instance == args[0];
+                            default -> throw new UnsupportedOperationException(method.getName());
+                        };
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                }
+        );
+    }
+
+    private static ServerThreadExecutor immediateServerThread() {
+        return new ServerThreadExecutor() {
+            @Override
+            public boolean isServerThread() {
+                return true;
+            }
+
+            @Override
+            public void execute(Runnable task) {
+                task.run();
+            }
+
+            @Override
+            public <T> CompletableFuture<T> submit(Supplier<T> task) {
+                try {
+                    return CompletableFuture.completedFuture(task.get());
+                } catch (RuntimeException failure) {
+                    return CompletableFuture.failedFuture(failure);
+                }
+            }
+        };
+    }
+
     private static KitDefinition kit(String id, String displayName) {
         var definition = new KitDefinition();
         definition.id = id;
@@ -72,7 +116,8 @@ final class DefaultKitServiceTest {
         var service = new DefaultKitService(
                 storage,
                 new NoopUsers(),
-                new NoopPlatform(),
+                noopInventory(),
+                immediateServerThread(),
                 Optional.empty(),
                 config,
                 Path.of("kits")
@@ -110,7 +155,9 @@ final class DefaultKitServiceTest {
 
         @Override
         public <T> CompletableFuture<Void> save(Path path, T value) {
-            if (pendingSave != null) throw new IllegalStateException("test save already pending");
+            if (pendingSave != null) {
+                throw new IllegalStateException("test save already pending");
+            }
             pendingSave = new CompletableFuture<>();
             return pendingSave;
         }
@@ -155,7 +202,7 @@ final class DefaultKitServiceTest {
         }
 
         @Override
-        public CompletableFuture<CellUser> loadFromPlayer(Object player) {
+        public CompletableFuture<CellUser> loadFromPlayer(CellPlayer player) {
             return CompletableFuture.failedFuture(new UnsupportedOperationException());
         }
 
@@ -175,13 +222,10 @@ final class DefaultKitServiceTest {
         }
 
         @Override
-        public <T> CompletableFuture<T> update(UUID uuid, Function<CellUser, T> mutation) {
+        public <T> CompletableFuture<T> update(UUID uuid, Function<CellUser, UserUpdate<T>> mutation) {
             return CompletableFuture.failedFuture(new UnsupportedOperationException());
         }
 
-        @Override
-        public void markDirty(UUID uuid) {
-        }
 
         @Override
         public CompletableFuture<Void> save(UUID uuid) {
@@ -191,66 +235,6 @@ final class DefaultKitServiceTest {
         @Override
         public CompletableFuture<Void> saveAll() {
             return CompletableFuture.completedFuture(null);
-        }
-
-    }
-
-    @NullMarked
-    private static final class NoopPlatform implements PlatformService {
-
-        @Override
-        public Optional<CellPlayer> player(CommandInvocation invocation) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<CellPlayer> player(Object nativeHandle) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<CellPlayer> onlinePlayer(String name) {
-            return Optional.empty();
-        }
-
-        @Override
-        public List<CellPlayer> onlinePlayers() {
-            return List.of();
-        }
-
-        @Override
-        public List<String> worlds() {
-            return List.of();
-        }
-
-        @Override
-        public String defaultWorld() {
-            return "minecraft:overworld";
-        }
-
-        @Override
-        public CellLocation location(CellPlayer player) {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public CompletableFuture<Boolean> teleport(CellPlayer player, CellLocation location) {
-            return CompletableFuture.completedFuture(false);
-        }
-
-        @Override
-        public Optional<CellLocation> safeLocation(CellLocation location) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<CellLocation> highestLocation(String world, double x, double z) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<CellLocation> targetLocation(CellPlayer player, int maxDistance) {
-            return Optional.empty();
         }
 
     }

@@ -16,9 +16,10 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.*;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultTeleportCommandService implements TeleportCommandService {
 
@@ -222,7 +223,8 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                     }
 
                     return chain
-                            .thenApply(_ -> counts[2] == 0 ?
+                            .thenApply(_ -> counts[2] == 0
+                                    ?
                                     TeleportCommandResult.success(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
                                             Map.of(
@@ -230,8 +232,8 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                                                     "blocked", counts[1],
                                                     "failed", counts[2]
                                             )
-                                    ) :
-                                    TeleportCommandResult.partial(
+                                    )
+                                    : TeleportCommandResult.partial(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
                                             Map.of(
                                                     "success", counts[0],
@@ -251,7 +253,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 ? CompletableFuture.completedFuture(true)
                 : users
                         .load(player.uuid())
-                        .thenApply(user -> user.preferences.teleportRequests)
+                        .thenApply(user -> user.preferences().teleportRequests())
                         .exceptionally(_ -> false);
     }
 
@@ -349,7 +351,9 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
 
         return serverThread
                 .submit(() ->
-                        locations.currentLocation(actor).withWorld(resolution.worldId().orElseThrow())
+                        locations
+                                .currentLocation(actor)
+                                .withWorld(resolution.worldId().orElseThrow())
                 )
                 .thenCompose(destination ->
                         teleports.teleport(
@@ -415,7 +419,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 ? CompletableFuture.completedFuture(true)
                 : users
                         .load(mover.uuid())
-                        .thenApply(user -> user.preferences.teleportRequests);
+                        .thenApply(user -> user.preferences().teleportRequests());
 
         return policy
                 .thenCompose(allowed -> {
@@ -469,7 +473,8 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
             case CANCELLED_DISCONNECT -> CANCELLED_DISCONNECT;
             case CANCELLED_REPLACED -> CANCELLED_REPLACED;
             case PLATFORM_FAILURE -> PLATFORM_FAILURE;
-            case SUCCESS -> throw new IllegalStateException("Successful teleport result reported as failure");
+            case SUCCESS ->
+                    throw new IllegalStateException("Successful teleport result reported as failure");
         };
         return TeleportCommandResult.failure(
                 status,

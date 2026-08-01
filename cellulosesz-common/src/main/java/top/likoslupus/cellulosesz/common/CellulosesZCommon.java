@@ -12,6 +12,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.common.bootstrap.CommonRuntime;
@@ -43,7 +44,9 @@ public final class CellulosesZCommon {
     public static void initialize(CommonRuntime runtime) {
         requireNonNull(runtime, "runtime");
         if (!INITIALIZED.compareAndSet(false, true)) {
-            throw new IllegalStateException("CellulosesZ common runtime has already been initialized");
+            throw new IllegalStateException(
+                    "CellulosesZ common runtime has already been initialized"
+            );
         }
 
         var bootstrap = runtime.bootstrap();
@@ -71,6 +74,10 @@ public final class CellulosesZCommon {
         bootstrap.registerService(
                 PlayerDirectory.class,
                 new MinecraftPlayerDirectory(server)
+        );
+        bootstrap.registerService(
+                ClientLocaleService.class,
+                new MinecraftClientLocaleService()
         );
         bootstrap.registerService(
                 PlayerAudienceService.class,
@@ -108,7 +115,6 @@ public final class CellulosesZCommon {
 
         var commandManager = new CommandManager(
                 bootstrap,
-                runtime.platform(),
                 commands,
                 runtime.commandRoots(),
                 treeRefresh
@@ -143,11 +149,11 @@ public final class CellulosesZCommon {
         });
         PlayerEvent.PLAYER_JOIN.register(player -> {
             runtime.hooks().afterPlayerJoin(player);
-            bootstrap.onPlayerJoin(player);
+            bootstrap.onPlayerJoin(MinecraftPlayers.wrap(player));
         });
         PlayerEvent.PLAYER_QUIT.register(player -> {
             runtime.hooks().afterPlayerQuit(player);
-            bootstrap.onPlayerDisconnect(player);
+            bootstrap.onPlayerDisconnect(MinecraftPlayers.wrap(player));
         });
     }
 

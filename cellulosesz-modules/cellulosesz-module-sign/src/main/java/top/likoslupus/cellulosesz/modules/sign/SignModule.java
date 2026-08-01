@@ -1,14 +1,15 @@
 package top.likoslupus.cellulosesz.modules.sign;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.SignBreakEvent;
 import top.likoslupus.cellulosesz.api.event.SignCreateEvent;
 import top.likoslupus.cellulosesz.api.event.SignEditEvent;
-import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
@@ -16,28 +17,32 @@ import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStateService;
-import top.likoslupus.cellulosesz.api.sign.SignMutationExecution;
-import top.likoslupus.cellulosesz.api.sign.SignService;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
+import top.likoslupus.cellulosesz.api.sign.*;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
+import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.modules.sign.command.EditSignCommand;
 import top.likoslupus.cellulosesz.modules.sign.handler.*;
 import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletionException;
-import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -47,8 +52,17 @@ import static java.util.Objects.requireNonNull;
         description = "Persistent validated interactive sign handlers.",
         phase = ModulePhase.FEATURE,
         requires = {
-                "permission", "economy", "item", "teleport", "warp", "kit",
-                "playerstate", "world", "text", "messaging", "command"
+                "permission",
+                "economy",
+                "item",
+                "teleport",
+                "warp",
+                "kit",
+                "playerstate",
+                "world",
+                "text",
+                "messaging",
+                "command"
         }
 )
 public final class SignModule implements CellulosesZModule {
@@ -69,9 +83,9 @@ public final class SignModule implements CellulosesZModule {
     }
 
     @Override
+    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var permissions = context.services().require(PermissionService.class);
-        var platform = context.services().require(PlatformService.class);
         var storage = context.services().require(StorageService.class);
         var items = context.services().require(ItemService.class);
         var economy = context.services().require(EconomyService.class);
@@ -92,16 +106,28 @@ public final class SignModule implements CellulosesZModule {
                 context.dataDirectory().resolve("signs.json")
         );
         registerHandlers(
-                signs, platform, economy, items, playerStates, worlds, texts, mail,
-                randomTeleports, randomSettings, teleports, warps, kits, permissions, context.logger()
+                context,
+                requireNonNull(signs, "SignService has not been initialized"),
+                economy,
+                items,
+                playerStates,
+                worlds,
+                texts,
+                mail,
+                randomTeleports,
+                randomSettings,
+                teleports,
+                warps,
+                kits,
+                permissions
         );
         context.services().register(SignService.class, signs);
         context.services().register(DefaultSignService.class, signs);
     }
 
     private void registerHandlers(
+            ModuleContext context,
             DefaultSignService service,
-            PlatformService platform,
             EconomyService economy,
             ItemService items,
             PlayerStateService playerStates,
@@ -113,106 +139,224 @@ public final class SignModule implements CellulosesZModule {
             TeleportService teleports,
             WarpService warps,
             KitService kits,
-            PermissionService permissions,
-            top.likoslupus.cellulosesz.api.logging.CellulosesZLogger logger
+            PermissionService permissions
     ) {
-        service.register(new WarpSignHandler(warps, teleports, permissions));
-        service.register(new BuySignHandler(items, economy, platform));
-        service.register(new SellSignHandler(items, economy, platform, logger));
+        var inventory = context.services().require(InventoryPlatformService.class);
+        var itemPlatform = context.services().require(ItemPlatformService.class);
+        var workstations = context.services().require(WorkstationPlatformService.class);
+        var playerStatePlatform = context.services().require(PlayerStatePlatformService.class);
+        var entities = context.services().require(EntityPlatformService.class);
+        var worldDirectory = context.services().require(WorldDirectory.class);
+        var serverThread = context.services().require(ServerThreadExecutor.class);
+
+        service.register(new WarpSignHandler(
+                warps,
+                teleports,
+                permissions
+        ));
+        service.register(new BuySignHandler(
+                items,
+                economy,
+                inventory,
+                serverThread
+        ));
+        service.register(new SellSignHandler(
+                items,
+                economy,
+                inventory,
+                serverThread,
+                context.logger()
+        ));
         service.register(new KitSignHandler(kits, permissions));
         service.register(new BalanceSignHandler(economy));
-        service.register(new FreeSignHandler(items, platform));
-        service.register(new TradeSignHandler(items, platform));
-        service.register(new EnchantSignHandler(platform));
-        service.register(new RepairSignHandler(platform));
-        service.register(new GameModeSignHandler(platform));
+        service.register(new FreeSignHandler(items, inventory));
+        service.register(new TradeSignHandler(items, inventory));
+        service.register(new EnchantSignHandler(itemPlatform));
+        service.register(new RepairSignHandler(itemPlatform));
+        service.register(new GameModeSignHandler(playerStatePlatform));
         service.register(new HealSignHandler(playerStates));
         service.register(new InfoSignHandler(texts));
         service.register(new MailSignHandler(mail));
-        service.register(new RandomTeleportSignHandler(platform, randomTeleports, randomSettings, teleports));
-        service.register(new WorkstationSignHandler(platform, "Anvil", "anvil"));
-        service.register(new WorkstationSignHandler(platform, "Cartography", "cartography"));
-        service.register(new WorkstationSignHandler(platform, "Disposal", "disposal"));
-        service.register(new WorkstationSignHandler(platform, "Grindstone", "grindstone"));
-        service.register(new WorkstationSignHandler(platform, "Loom", "loom"));
-        service.register(new WorkstationSignHandler(platform, "Smithing", "smithing"));
-        service.register(new WorkstationSignHandler(platform, "Workbench", "workbench"));
-        service.register(new SpawnMobSignHandler(platform));
-        service.register(new TimeSignHandler(platform, worlds));
-        service.register(new WeatherSignHandler(platform, worlds));
+        service.register(new RandomTeleportSignHandler(
+                worldDirectory,
+                randomTeleports,
+                randomSettings,
+                teleports
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Anvil",
+                WorkstationKind.ANVIL
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Cartography",
+                WorkstationKind.CARTOGRAPHY
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Disposal",
+                WorkstationKind.DISPOSAL
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Grindstone",
+                WorkstationKind.GRINDSTONE
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Loom",
+                WorkstationKind.LOOM
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Smithing",
+                WorkstationKind.SMITHING
+        ));
+        service.register(new WorkstationSignHandler(
+                workstations,
+                "Workbench",
+                WorkstationKind.WORKBENCH
+        ));
+        service.register(new SpawnMobSignHandler(entities));
+        service.register(new TimeSignHandler(worldDirectory, worlds));
+        service.register(new WeatherSignHandler(worldDirectory, worlds));
     }
 
     @Override
     public void registerEvents(ModuleContext context) {
         var service = requireNonNull(signs, "SignService has not been initialized");
-        var platform = context.services().require(PlatformService.class);
+        var platform = context.services().require(SignPlatformService.class);
+        var serverThread = context.services().require(ServerThreadExecutor.class);
+        var audience = context.services().require(PlayerAudienceService.class);
         var renderer = context.services().require(MessageRenderer.class);
         var locales = context.services().require(LocaleResolver.class);
 
-        context.events().listen(PlayerDisconnectEvent.class, event -> {
-            var command = editSign;
-            if (command != null) command.clearClipboard(event.player().uuid());
-        });
-        context.events().listen(SignCreateEvent.class, event -> {
-            var execution = service.create(event.player(), event.location(), event.front(), event.lines());
-            if (!execution.handled()) return;
-            event.cancel();
-            var expected = List.of("", "", "", "");
-            var replacement = service.formattedLines(event.lines());
-            completeMutation(
-                    execution,
-                    platform,
-                    renderer,
-                    locales,
-                    event.player(),
-                    () -> platform.replaceSignText(
-                            event.player(), event.location(), event.front(), expected, replacement)
-            );
-        });
-        context.events().listen(SignEditEvent.class, event -> {
-            var execution = service.edit(
-                    event.player(), event.location(), event.front(), event.previousLines(), event.lines()
-            );
-            if (!execution.handled()) return;
-            event.cancel();
-            var replacement = service.formattedLines(event.lines());
-            completeMutation(
-                    execution,
-                    platform,
-                    renderer,
-                    locales,
-                    event.player(),
-                    () -> platform.replaceSignText(
-                            event.player(), event.location(), event.front(), event.previousLines(), replacement)
-            );
-        });
-        context.events().listen(SignBreakEvent.class, event -> {
-            var execution = service.breakSign(
-                    event.player(), event.location(), event.frontLines(), event.backLines()
-            );
-            if (!execution.handled()) return;
-            event.cancel();
-            completeMutation(
-                    execution,
-                    platform,
-                    renderer,
-                    locales,
-                    event.player(),
-                    () -> platform.breakSignBlock(
-                            event.player(), event.location(), event.frontLines(), event.backLines())
-            );
-        });
+        context.events().listen(
+                PlayerDisconnectEvent.class,
+                event -> {
+                    var command = editSign;
+                    if (command != null) {
+                        command.clearClipboard(event.player().uuid());
+                    }
+                }
+        );
+        context.events().listen(
+                SignCreateEvent.class,
+                event -> {
+                    var execution = service.create(
+                            event.player(),
+                            event.location(),
+                            event.front(),
+                            event.lines()
+                    );
+                    if (!execution.handled()) {
+                        return;
+                    }
+
+                    event.cancel();
+                    var expected = List.of("", "", "", "");
+                    var replacement = service.formattedLines(event.lines());
+
+                    completeMutation(
+                            execution,
+                            serverThread,
+                            audience,
+                            renderer,
+                            locales,
+                            event.player(),
+                            () -> platform.compareAndReplace(new SignWriteRequest(
+                                    event.player(),
+                                    event.location(),
+                                    event.front(),
+                                    expected,
+                                    replacement,
+                                    false
+                            ))
+                    );
+                }
+        );
+        context.events().listen(
+                SignEditEvent.class,
+                event -> {
+                    var execution = service.edit(
+                            event.player(),
+                            event.location(),
+                            event.front(),
+                            event.previousLines(),
+                            event.lines()
+                    );
+                    if (!execution.handled()) {
+                        return;
+                    }
+
+                    event.cancel();
+                    var replacement = service.formattedLines(event.lines());
+
+                    completeMutation(
+                            execution,
+                            serverThread,
+                            audience,
+                            renderer,
+                            locales,
+                            event.player(),
+                            () -> platform.compareAndReplace(new SignWriteRequest(
+                                    event.player(),
+                                    event.location(),
+                                    event.front(),
+                                    event.previousLines(),
+                                    replacement,
+                                    false
+                            ))
+                    );
+                }
+        );
+        context.events().listen(
+                SignBreakEvent.class,
+                event -> {
+                    var execution = service.breakSign(
+                            event.player(),
+                            event.location(),
+                            event.frontLines(),
+                            event.backLines()
+                    );
+                    if (!execution.handled()) {
+                        return;
+                    }
+
+                    event.cancel();
+                    completeMutation(
+                            execution,
+                            serverThread,
+                            audience,
+                            renderer,
+                            locales,
+                            event.player(),
+                            () -> platform.compareAndBreak(new SignBreakRequest(
+                                    event.player(),
+                                    event.location(),
+                                    event.frontLines(),
+                                    event.backLines()
+                            ))
+                    );
+                }
+        );
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
         editSign = new EditSignCommand(
-                context.services().require(PlatformService.class),
-                context.services().require(WorldPlatformService.class),
+                context.services().require(SignPlatformService.class),
                 requireNonNull(signs, "SignService has not been initialized"),
+                context.services().require(ServerThreadExecutor.class),
                 requireNonNull(config, "SignConfig has not been initialized")
         );
-        context.commands().register(editSign);
+        context.track(context
+                .services()
+                .require(CommandRegistry.class)
+                .register("editsign", editSign)
+        );
+
         var catalog = context.services().require(PermissionCatalog.class);
         catalog.register("cellulosesz.command.editsign.waxed", "Edit waxed signs");
         catalog.register("cellulosesz.command.editsign.color", "Use legacy colors on edited signs");
@@ -230,55 +374,92 @@ public final class SignModule implements CellulosesZModule {
 
     private void completeMutation(
             SignMutationExecution execution,
-            PlatformService platform,
+            ServerThreadExecutor serverThread,
+            PlayerAudienceService audience,
             MessageRenderer renderer,
             LocaleResolver locales,
             CellPlayer player,
-            BooleanSupplier platformAction
+            Supplier<PlatformResult<?>> platformAction
     ) {
-        execution.preparation().whenComplete((commit, preparationFailure) ->
-                platform.runOnServerThread(() -> {
-                    if (preparationFailure != null) {
-                        send(platform, renderer, locales, player, failure(preparationFailure));
-                        return;
-                    }
-                    if (!commit.platformActionRequired()) {
-                        commit.complete(true).whenComplete((result, completionFailure) ->
-                                platform.runOnServerThread(() -> send(
-                                        platform, renderer, locales, player,
-                                        completionFailure == null ? result : failure(completionFailure)
-                                ))
-                        );
-                        return;
-                    }
+        execution
+                .preparation()
+                .whenComplete((commit, preparationFailure) -> serverThread
+                        .execute(() -> {
+                            if (preparationFailure != null) {
+                                send(
+                                        audience,
+                                        renderer,
+                                        locales,
+                                        player,
+                                        failure(preparationFailure)
+                                );
+                                return;
+                            }
 
-                    boolean applied;
-                    try {
-                        applied = platformAction.getAsBoolean();
-                    } catch (RuntimeException exception) {
-                        applied = false;
-                    }
-                    commit.complete(applied).whenComplete((result, completionFailure) ->
-                            platform.runOnServerThread(() -> send(
-                                    platform, renderer, locales, player,
-                                    completionFailure == null ? result : failure(completionFailure)
-                            ))
-                    );
-                })
-        );
+                            if (!commit.platformActionRequired()) {
+                                commit
+                                        .complete(true)
+                                        .whenComplete((result, completionFailure) -> serverThread
+                                                .execute(
+                                                        () ->
+                                                                send(
+                                                                        audience,
+                                                                        renderer,
+                                                                        locales,
+                                                                        player,
+                                                                        completionFailure == null
+                                                                                ? result
+                                                                                : failure(
+                                                                                        completionFailure
+                                                                                )
+                                                                )
+                                                ));
+                                return;
+                            }
+
+                            PlatformResult<?> applied;
+                            try {
+                                applied = platformAction.get();
+                            } catch (RuntimeException exception) {
+                                applied = PlatformResult.failure(
+                                        PlatformOperationStatus.INTERNAL_ERROR,
+                                        exception.getClass().getSimpleName()
+                                );
+                            }
+                            commit
+                                    .complete(applied.successful())
+                                    .whenComplete((result, completionFailure) ->
+                                            serverThread.execute(() -> send(
+                                                    audience,
+                                                    renderer,
+                                                    locales,
+                                                    player,
+                                                    completionFailure == null
+                                                            ? result
+                                                            : failure(completionFailure)
+                                            ))
+                                    );
+                        }));
     }
 
     private void send(
-            PlatformService platform,
+            PlayerAudienceService audience,
             MessageRenderer renderer,
             LocaleResolver locales,
             CellPlayer player,
             SignUseResult result
     ) {
-        result.optionalMessage().ifPresent(message -> platform.sendMessage(
-                player,
-                renderer.render(locales.locale(player), message.key(), message.placeholders())
-        ));
+        result.optionalMessage()
+                .ifPresent(message -> audience
+                        .send(
+                                player,
+                                renderer.render(
+                                        locales.locale(player),
+                                        message.key(),
+                                        message.placeholders()
+                                )
+                        )
+                );
     }
 
     private SignUseResult failure(Throwable throwable) {
@@ -286,12 +467,15 @@ public final class SignModule implements CellulosesZModule {
         while (cause instanceof CompletionException && cause.getCause() != null) {
             cause = cause.getCause();
         }
+
         var message = cause.getMessage();
         return SignUseResult.failure(
                 "service.sign.execution-failed",
-                java.util.Map.of(
+                Map.of(
                         "reason",
-                        message == null || message.isBlank() ? cause.getClass().getSimpleName() : message
+                        message == null || message.isBlank()
+                                ? cause.getClass().getSimpleName()
+                                : message
                 )
         );
     }

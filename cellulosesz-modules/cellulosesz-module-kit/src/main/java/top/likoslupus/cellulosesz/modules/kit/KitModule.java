@@ -9,7 +9,6 @@ import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.module.ModulePhase;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -49,13 +48,22 @@ public final class KitModule implements CellulosesZModule {
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
-        var platform = context.services().require(PlatformService.class);
+        var inventory = context.services().require(InventoryPlatformService.class);
+        var serverThread = context.services().require(ServerThreadExecutor.class);
         var economy = context.services().optional(EconomyService.class);
         var root = context.dataDirectory().getParent().resolve("kits");
 
         requireNonNull(config, "KitConfig has not been initialized");
 
-        kits = new DefaultKitService(storage, users, platform, economy, config, root);
+        kits = new DefaultKitService(
+                storage,
+                users,
+                inventory,
+                serverThread,
+                economy,
+                config,
+                root
+        );
         context.services().register(KitService.class, kits);
         context.services().register(
                 DefaultKitService.class,

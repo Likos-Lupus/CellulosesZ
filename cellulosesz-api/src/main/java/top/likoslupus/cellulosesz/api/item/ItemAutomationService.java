@@ -1,11 +1,13 @@
 package top.likoslupus.cellulosesz.api.item;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 public interface ItemAutomationService {
 
@@ -13,28 +15,27 @@ public interface ItemAutomationService {
 
     Map<String, List<String>> powerTools(UUID uuid);
 
-    void setPowerTool(
+    CompletableFuture<PlatformResult<Void>> setPowerTool(
             UUID uuid,
             String itemId,
             String command
     );
 
-    void addPowerTool(
+    CompletableFuture<PlatformResult<Void>> addPowerTool(
             UUID uuid,
             String itemId,
             String command
     );
 
-    boolean removePowerTool(
+    CompletableFuture<PlatformResult<Boolean>> removePowerTool(
             UUID uuid,
             String itemId,
             String command
     );
 
-    void clearPowerTool(
-            UUID uuid,
-            String itemId
-    );
+    CompletableFuture<PlatformResult<Void>> clearPowerTool(UUID uuid, String itemId);
+
+    CompletableFuture<PlatformResult<Void>> clearAllPowerTools(UUID uuid);
 
     default boolean executePowerTool(CellPlayer player) {
         return executePowerTool(player, "");
@@ -44,11 +45,17 @@ public interface ItemAutomationService {
 
     boolean powerToolsEnabled(UUID uuid);
 
-    void setPowerToolsEnabled(UUID uuid, boolean enabled);
+    CompletableFuture<PlatformResult<Void>> setPowerToolsEnabled(UUID uuid, boolean enabled);
 
     boolean unlimited(UUID uuid, String itemId);
 
-    void setUnlimited(UUID uuid, String itemId, boolean enabled);
+    CompletableFuture<PlatformResult<Void>> setUnlimited(
+            UUID uuid,
+            String itemId,
+            boolean enabled
+    );
+
+    CompletableFuture<PlatformResult<Void>> clearUnlimited(UUID uuid);
 
     default void maintainUnlimited(CellPlayer player) {
         unlimitedItems(player.uuid())

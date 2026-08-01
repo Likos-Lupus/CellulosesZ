@@ -1,11 +1,22 @@
 package top.likoslupus.cellulosesz.api.user;
 
-import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.UUID;
 
-public final class UserRelations {
+import static java.util.Objects.requireNonNull;
 
-    public Set<UUID> ignored = new LinkedHashSet<>();
+public record UserRelations(Set<UUID> ignored) {
+
+    public UserRelations {
+        ignored = Set.copyOf(requireNonNull(ignored, "ignored"));
+    }
+
+    public static UserRelations defaults() {
+        return new UserRelations(Set.of());
+    }
+
+    public UserRelations withIgnored(Set<UUID> value) {
+        return new UserRelations(value);
+    }
 
 }

@@ -1,107 +1,244 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.SkullRequest;
-import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.item.SkullResult;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
-import java.util.Map;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 
-public final class SkullCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class SkullCommand implements CommandContributor {
+
+    private final InventoryCommandService service;
     private final InventoryPlatformService inventory;
+    private final PlayerDirectory players;
 
     public SkullCommand(
-            PlatformService platform,
-            InventoryPlatformService inventory
+            InventoryCommandService service,
+            InventoryPlatformService inventory,
+            PlayerDirectory players
     ) {
-        this.platform = platform;
-        this.inventory = inventory;
+        this.service = requireNonNull(service, "service");
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.players = requireNonNull(players, "players");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.skull";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/skull [owner] [player]";
-    }
-
-    @Override
-    public String name() {
-        return "skull";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 2) return usage(invocation);
-        var self = platform.player(invocation).orElseThrow();
-        var owner = invocation.args().length == 0 ? self.name() : invocation.args()[0];
-        final CellPlayer recipient;
-        final boolean spawn;
-        Optional<top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot> expected = Optional.empty();
-        if (invocation.args().length == 0) {
-            if (!invocation.hasPermission("cellulosesz.command.skull.spawn")) return denied(invocation);
-            recipient = self;
-            spawn = true;
-        } else if (invocation.args().length == 1) {
-            if (!invocation.hasPermission("cellulosesz.command.skull.modify")) return denied(invocation);
-            recipient = self;
-            spawn = false;
-            expected = platform.heldInventorySnapshot(self);
-            if (expected.isEmpty()) {
-                invocation.errorKey("commands.item.skull.held-head-required");
-                return 0;
-            }
-        } else {
-            if (!invocation.hasPermission("cellulosesz.command.skull.others")
-                    || !invocation.hasPermission("cellulosesz.command.skull.spawn.others")) return denied(invocation);
-            var target = invocation.resolvePlayer(invocation.args()[1]).online();
-            if (target.isEmpty()) {
-                invocation.errorKey("commands.common.unknown-player", Map.of("player", invocation.args()[1]));
-                return 0;
-            }
-            recipient = target.orElseThrow();
-            spawn = true;
-        }
-        inventory.skull(new SkullRequest(owner, recipient, spawn, expected)).whenComplete((result, failure) ->
-                platform.runOnServerThread(() -> {
-                    if (failure != null || result == null) {
-                        invocation.platformError(top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus.INTERNAL_ERROR);
-                    } else if (!result.successful()) {
-                        invocation.platformError(result.status());
-                    } else {
-                        invocation.replyKey("commands.item.skull.success", Map.of(
-                                "owner", owner,
-                                "player", recipient.name(),
-                                "spawned", spawn
-                        ));
-                    }
-                })
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "skull",
+                "cellulosesz.command.skull",
+                CommandSourceKind.PLAYER_ONLY
         );
-        return 1;
+
+        var owner = Commands.argument(
+                        "owner",
+                        PlayerNameArgument.playerName()
+                )
+                .executes(command -> modify(
+                        context,
+                        command,
+                        descriptor
+                ))
+                .then(Commands.argument(
+                                "player",
+                                PlayerNameArgument.playerName()
+                        )
+                        .requires(source ->
+                                context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.skull.others"
+                                ) && context.permissions().has(
+                                        source,
+                                        "cellulosesz.command.skull.spawn.others"
+                                )
+                        )
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        players::onlinePlayerNames,
+                                        builder
+                                )
+                        )
+                        .executes(command -> spawnOther(
+                                context,
+                                command,
+                                descriptor
+                        )));
+
+        var root = Commands.literal("skull")
+                .requires(source -> context.permissions().has(
+                        source,
+                        "cellulosesz.command.skull"
+                ))
+                .executes(command -> spawnSelf(
+                        context,
+                        command,
+                        descriptor
+                ))
+                .then(owner);
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.skull",
+                "/skull [owner] [player]",
+                root
+        );
     }
 
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.skull.usage", Map.of("usage", usage()));
-        return 0;
+    private int spawnSelf(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return run(
+                context,
+                command,
+                descriptor,
+                policy -> {
+                    var self = ItemCommandSupport.current(policy);
+
+                    if (self.isEmpty()
+                            || !policy.hasPermission(
+                            "cellulosesz.command.skull.spawn"
+                    )) {
+                        return null;
+                    }
+
+                    var player = self.orElseThrow();
+
+                    return new SkullRequest(
+                            player.name(),
+                            player,
+                            true,
+                            Optional.empty()
+                    );
+                }
+        );
     }
 
-    private int denied(CommandInvocation invocation) {
-        invocation.errorKey("commands.common.no-permission");
-        return 0;
+    private int modify(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return run(
+                context,
+                command,
+                descriptor,
+                policy -> {
+                    var self = ItemCommandSupport.current(policy);
+
+                    if (self.isEmpty()
+                            || !policy.hasPermission(
+                            "cellulosesz.command.skull.modify"
+                    )) {
+                        return null;
+                    }
+
+                    var player = self.orElseThrow();
+                    var held = inventory.heldSlot(player);
+
+                    if (!held.successful() || held.value().isEmpty()) {
+                        return null;
+                    }
+
+                    return new SkullRequest(
+                            PlayerNameArgument.get(command, "owner"),
+                            player,
+                            false,
+                            Optional.of(
+                                    held.value()
+                                            .orElseThrow()
+                                            .snapshot()
+                            )
+                    );
+                }
+        );
+    }
+
+    private int spawnOther(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return run(
+                context,
+                command,
+                descriptor,
+                _ -> {
+                    var target = players.onlinePlayer(
+                            PlayerNameArgument.get(command, "player")
+                    );
+
+                    return target
+                            .map(player -> new SkullRequest(
+                                    PlayerNameArgument.get(command, "owner"),
+                                    player,
+                                    true,
+                                    Optional.empty()
+                            ))
+                            .orElse(null);
+                }
+        );
+    }
+
+    private int run(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Function<
+                    MinecraftCommandPolicyContext,
+                    @Nullable SkullRequest
+                    > request
+    ) {
+        return ItemCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "skull profile",
+                policy -> {
+                    var value = request.apply(policy);
+
+                    if (value == null) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(
+                                        PlatformOperationStatus.INVALID_STATE,
+                                        "invalid-skull-request"
+                                )
+                        );
+                    }
+
+                    @SuppressWarnings("unchecked")
+                    var future = (CompletableFuture<PlatformResult<SkullResult>>) service.skull(value);
+                    return future;
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

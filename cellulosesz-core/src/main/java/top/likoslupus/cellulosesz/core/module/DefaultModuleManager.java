@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import org.jspecify.annotations.Nullable;
-import top.likoslupus.cellulosesz.api.command.CommandRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
@@ -18,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -28,7 +27,6 @@ public final class DefaultModuleManager {
     private final ServiceRegistry services;
     private final ConfigRegistry configs;
     private final EventRegistry events;
-    private final CommandRegistry commands;
     private final Scheduler scheduler;
     private final CellulosesZLogger logger;
     private final ModuleDependencySorter sorter = new ModuleDependencySorter();
@@ -43,7 +41,6 @@ public final class DefaultModuleManager {
             ServiceRegistry services,
             ConfigRegistry configs,
             EventRegistry events,
-            CommandRegistry commands,
             Scheduler scheduler,
             CellulosesZLogger logger
     ) {
@@ -52,7 +49,6 @@ public final class DefaultModuleManager {
         this.services = services;
         this.configs = configs;
         this.events = events;
-        this.commands = commands;
         this.scheduler = scheduler;
         this.logger = logger;
     }
@@ -96,7 +92,10 @@ public final class DefaultModuleManager {
         for (var descriptor : sorted) {
             chain = chain.thenCompose(_ -> loadModuleAsync(descriptor));
         }
-        return chain.thenRun(() -> logger.info("Loaded %d CellulosesZ module(s).".formatted(loadedModules.size())));
+
+        return chain.thenRun(() -> logger.info("Loaded %d CellulosesZ module(s).".formatted(
+                loadedModules.size()
+        )));
     }
 
     private ModulesConfig defaultModulesConfig(List<ModuleDescriptor> scanned) {
@@ -123,7 +122,6 @@ public final class DefaultModuleManager {
                     services,
                     configs,
                     events,
-                    commands,
                     scheduler,
                     logger,
                     this::moduleEnabled
@@ -137,7 +135,8 @@ public final class DefaultModuleManager {
                  | NoSuchMethodException failure
         ) {
             return CompletableFuture.failedFuture(new ModuleLoadException(
-                    "Module %s failed during instantiate".formatted(descriptor.id()), failure
+                    "Module %s failed during instantiate".formatted(descriptor.id()),
+                    failure
             ));
         } catch (RuntimeException failure) {
             return CompletableFuture.failedFuture(failure);
@@ -145,14 +144,25 @@ public final class DefaultModuleManager {
 
         return initialize(context, descriptor)
                 .thenRun(() -> {
-                    runPhase(descriptor, "register-events", () -> module.registerEvents(context));
-                    runPhase(descriptor, "register-commands", () -> module.registerCommands(context));
+                    runPhase(
+                            descriptor,
+                            "register-events",
+                            () -> module.registerEvents(context)
+                    );
+                    runPhase(
+                            descriptor,
+                            "register-commands",
+                            () -> module.registerCommands(context)
+                    );
+
                     loadedModules.put(descriptor.id(), module);
                     contexts.put(descriptor.id(), context);
                     logger.info("Loaded module: " + descriptor.id());
                 })
                 .whenComplete((_, failure) -> {
-                    if (failure != null && !loadedModules.containsKey(descriptor.id())) {
+                    if (failure != null
+                            && !loadedModules.containsKey(descriptor.id())
+                    ) {
                         rollbackServices(context, descriptor.id());
                     }
                 });
@@ -160,7 +170,12 @@ public final class DefaultModuleManager {
 
     public boolean moduleEnabled(String moduleId) {
         var descriptor = descriptors.get(moduleId);
-        if (descriptor == null || !loadedModules.containsKey(moduleId)) return false;
+        if (descriptor == null
+                || !loadedModules.containsKey(moduleId)
+        ) {
+            return false;
+        }
+
         return requireModulesConfig().modules.getOrDefault(moduleId, descriptor.enabledByDefault());
     }
 
@@ -179,7 +194,10 @@ public final class DefaultModuleManager {
         }
     }
 
-    private CompletableFuture<Void> initialize(DefaultModuleContext context, ModuleDescriptor descriptor) {
+    private CompletableFuture<Void> initialize(
+            DefaultModuleContext context,
+            ModuleDescriptor descriptor
+    ) {
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
         for (var initializable : context.initializables()) {
             chain = chain.thenCompose(_ -> {
@@ -190,8 +208,12 @@ public final class DefaultModuleManager {
                 }
             });
         }
+
         return chain.exceptionallyCompose(failure -> CompletableFuture.failedFuture(
-                new ModuleLoadException("Module %s failed during initialize".formatted(descriptor.id()), unwrap(failure))
+                new ModuleLoadException(
+                        "Module %s failed during initialize".formatted(descriptor.id()),
+                        unwrap(failure)
+                )
         ));
     }
 
@@ -200,7 +222,10 @@ public final class DefaultModuleManager {
             try {
                 registration.close();
             } catch (RuntimeException failure) {
-                logger.error("Failed to roll back service registration for module " + moduleId, failure);
+                logger.error(
+                        "Failed to roll back service registration for module " + moduleId,
+                        failure
+                );
             }
         });
     }
@@ -252,14 +277,18 @@ public final class DefaultModuleManager {
     public CompletableFuture<Void> onServerStoppingAsync() {
         var entries = new ArrayList<>(loadedModules.entrySet());
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+
         for (int index = entries.size() - 1; index >= 0; index--) {
             var entry = entries.get(index);
             var id = entry.getKey();
             var module = entry.getValue();
             var context = contexts.get(id);
-            chain = chain.handle((_, _) -> null)
+
+            chain = chain
+                    .handle((_, _) -> null)
                     .thenCompose(_ -> stopModule(id, module, context));
         }
+
         return chain;
     }
 
@@ -273,9 +302,11 @@ public final class DefaultModuleManager {
         } catch (RuntimeException failure) {
             logger.error("Module %s failed during server-stopping".formatted(id), failure);
         }
+
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
         for (var closeable : context.closeablesInReverseOrder()) {
-            chain = chain.handle((_, _) -> null)
+            chain = chain
+                    .handle((_, _) -> null)
                     .thenCompose(_ -> {
                         try {
                             return closeable.closeAsync();
@@ -288,14 +319,19 @@ public final class DefaultModuleManager {
                         return (Void) null;
                     });
         }
+
         return chain.whenComplete((_, _) ->
-                context.registrationsInReverseOrder().forEach(registration -> {
-                    try {
-                        registration.close();
-                    } catch (RuntimeException closeFailure) {
-                        logger.error("Service unregistration failed for module " + id, closeFailure);
-                    }
-                }));
+                context.registrationsInReverseOrder()
+                        .forEach(registration -> {
+                            try {
+                                registration.close();
+                            } catch (RuntimeException closeFailure) {
+                                logger.error(
+                                        "Service unregistration failed for module " + id,
+                                        closeFailure
+                                );
+                            }
+                        }));
     }
 
     public List<LoadedModuleInfo> modules() {

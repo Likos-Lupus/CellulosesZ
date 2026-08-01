@@ -2,11 +2,18 @@ package top.likoslupus.cellulosesz.fabric;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.util.Filterable;
+import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -19,6 +26,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,16 +39,98 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     private static final int MAX_BOOK_TITLE = 32;
     private static final int MAX_BOOK_AUTHOR = 16;
 
-    private final FabricPlatformService platform;
+    private final FabricServerAccess access;
+    private final FabricInventoryStore store;
 
-    public FabricInventoryOperations(FabricPlatformService platform) {
-        this.platform = requireNonNull(platform, "platform");
+    public FabricInventoryOperations(FabricServerAccess access) {
+        this.access = requireNonNull(access, "access");
+        this.store = new FabricInventoryStore(access);
+    }
+
+    @Override
+    public PlatformResult<Void> openInventory(CellPlayer viewer, CellPlayer target) {
+        return onServerThread(() -> {
+            var viewerPlayer = access.player(viewer);
+            var targetPlayer = access.player(target);
+            var mirror = new InventoryMirror(targetPlayer.getInventory(), 54);
+
+            viewerPlayer.openMenu(new SimpleMenuProvider(
+                    (id, inventory, _) -> ChestMenu.sixRows(
+                            id,
+                            inventory,
+                            mirror
+                    ),
+                    Component.literal(target.name())
+            ));
+
+            return PlatformResult.success();
+        });
+    }
+
+    @Override
+    public PlatformResult<Void> openEnderChest(CellPlayer viewer, CellPlayer target) {
+        return onServerThread(() -> {
+            var viewerPlayer = access.player(viewer);
+            var targetPlayer = access.player(target);
+            viewerPlayer.openMenu(new SimpleMenuProvider(
+                    (id, inventory, ignored) -> ChestMenu.threeRows(
+                            id,
+                            inventory,
+                            targetPlayer.getEnderChestInventory()
+                    ),
+                    Component.literal(target.name())
+            ));
+
+            return PlatformResult.success();
+        });
+    }
+
+    @Override
+    public PlatformResult<List<InventoryItemSnapshot>> inventorySnapshot(CellPlayer player) {
+        return onServerThread(() -> store.snapshot(player)
+                .map(PlatformResult::success)
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        "Inventory snapshot failed"
+                )));
+    }
+
+    @Override
+    public PlatformResult<Boolean> plainSnapshot(InventoryItemSnapshot snapshot) {
+        return PlatformResult.success(store.plain(requireNonNull(snapshot, "snapshot")));
+    }
+
+    @Override
+    public PlatformResult<InventoryMutation> prepareExchange(
+            CellPlayer player,
+            List<InventoryItemRequest> removals,
+            List<InventoryItemRequest> additions
+    ) {
+        return onServerThread(() -> store.prepareExchange(player, removals, additions)
+                .map(PlatformResult::success)
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory exchange could not be prepared"
+                )));
+    }
+
+    @Override
+    public PlatformResult<InventoryGrant> prepareGrant(
+            CellPlayer player,
+            List<? extends InventoryItemSnapshot> snapshots
+    ) {
+        return onServerThread(() -> store.prepareGrant(player, snapshots)
+                .map(PlatformResult::success)
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory grant could not be prepared"
+                )));
     }
 
     @Override
     public PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player) {
         return onServerThread(() -> {
-            var snapshots = platform.inventorySnapshot(player);
+            var snapshots = store.snapshot(player);
             if (snapshots.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INTERNAL_ERROR,
@@ -49,20 +140,22 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
             var views = new ArrayList<InventorySlotView>();
             for (var snapshot : snapshots.orElseThrow()) {
-                var descriptor = platform.describeInventoryItem(snapshot);
+                var descriptor = store.describe(snapshot);
                 if (descriptor.isEmpty()) {
                     return PlatformResult.failure(
                             PlatformOperationStatus.INTERNAL_ERROR,
                             "Inventory snapshot decode failed"
                     );
                 }
+
                 views.add(new InventorySlotView(
                         snapshot,
                         descriptor.orElseThrow(),
                         slotKind(snapshot.slot),
-                        platform.plainInventoryItem(snapshot)
+                        store.plain(snapshot)
                 ));
             }
+
             return PlatformResult.success(List.copyOf(views));
         });
     }
@@ -70,7 +163,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     @Override
     public PlatformResult<InventorySlotView> heldSlot(CellPlayer player) {
         return onServerThread(() -> {
-            var snapshot = platform.heldInventorySnapshot(player);
+            var snapshot = store.heldSnapshot(player);
             if (snapshot.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -78,7 +171,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                 );
             }
 
-            var descriptor = platform.describeInventoryItem(snapshot.orElseThrow());
+            var descriptor = store.describe(snapshot.orElseThrow());
             if (descriptor.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INTERNAL_ERROR,
@@ -90,7 +183,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                     snapshot.orElseThrow(),
                     descriptor.orElseThrow(),
                     InventorySlotKind.MAIN,
-                    platform.plainInventoryItem(snapshot.orElseThrow())
+                    store.plain(snapshot.orElseThrow())
             ));
         });
     }
@@ -101,7 +194,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
             List<InventoryStackSelection> selections
     ) {
         return onServerThread(() ->
-                platform.prepareInventoryRemoval(player, selections)
+                store.prepareRemoval(player, selections)
                         .map(PlatformResult::success)
                         .orElseGet(() -> PlatformResult.failure(
                                 PlatformOperationStatus.CONFLICT,
@@ -112,7 +205,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
     @Override
     public PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot) {
-        var descriptor = platform.describeInventoryItem(requireNonNull(snapshot, "snapshot"));
+        var descriptor = store.describe(requireNonNull(snapshot, "snapshot"));
         return descriptor
                 .map(PlatformResult::success)
                 .orElseGet(() -> PlatformResult.failure(
@@ -138,7 +231,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
         }
 
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var held = nativePlayer.getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
@@ -155,7 +248,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, replacement);
 
             return PlatformResult.success(new HeldStackChange(
-                    platform.stackItemId(replacement),
+                    access.itemId(replacement),
                     previous,
                     targetCount,
                     normalMaximum
@@ -171,7 +264,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     ) {
         requireNonNull(action, "action");
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var inventory = nativePlayer.getInventory();
             var helmet = nativePlayer.getItemBySlot(EquipmentSlot.HEAD);
 
@@ -189,6 +282,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                             "Helmet slot is empty"
                     );
                 }
+
                 var destination = firstInsertionSlot(inventory, helmet);
                 if (destination < 0) {
                     return PlatformResult.failure(
@@ -196,7 +290,8 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                             "Inventory has no space"
                     );
                 }
-                var before = platform.stackItemId(helmet);
+
+                var before = access.itemId(helmet);
                 insertExact(inventory, destination, helmet.copy());
                 nativePlayer.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
                 inventory.setChanged();
@@ -208,15 +303,23 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
             var held = nativePlayer.getMainHandItem();
             if (held.isEmpty()) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Main hand is empty");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Main hand is empty"
+                );
             }
-            var previous = helmet.isEmpty() ? Optional.<String>empty() : Optional.of(platform.stackItemId(helmet));
-            var next = platform.stackItemId(held);
+
+            var previous = helmet.isEmpty()
+                    ? Optional.<String>empty()
+                    : Optional.of(access.itemId(helmet));
+            var next = access.itemId(held);
             var heldCopy = held.copy();
             var helmetCopy = helmet.copy();
+
             nativePlayer.setItemSlot(EquipmentSlot.HEAD, heldCopy);
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, helmetCopy);
             inventory.setChanged();
+
             return PlatformResult.success(new HatResult(previous, Optional.of(next)));
         });
     }
@@ -224,20 +327,30 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     @Override
     public PlatformResult<ItemStackDetails> heldItemDetails(CellPlayer player) {
         return onServerThread(() -> {
-            var stack = platform.nativePlayer(player).getMainHandItem();
+            var stack = access.player(player).getMainHandItem();
             if (stack.isEmpty()) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Main hand is empty");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Main hand is empty"
+                );
             }
-            var plain = ItemStack.isSameItemSameComponents(stack, new ItemStack(stack.getItem(), stack.getCount()));
+
+            var plain = ItemStack.isSameItemSameComponents(
+                    stack,
+                    new ItemStack(stack.getItem(), stack.getCount())
+            );
             var maximumDamage = stack.getMaxDamage();
+
             return PlatformResult.success(new ItemStackDetails(
-                    platform.stackItemId(stack),
+                    access.itemId(stack),
                     stack.getHoverName().getString(),
                     stack.getCount(),
                     stack.getMaxStackSize(),
                     !plain,
                     stack.isDamageableItem(),
-                    maximumDamage == 0 ? 0 : Math.max(0, maximumDamage - stack.getDamageValue()),
+                    maximumDamage == 0
+                            ? 0
+                            : Math.max(0, maximumDamage - stack.getDamageValue()),
                     maximumDamage
             ));
         });
@@ -245,144 +358,282 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
     @Override
     public PlatformResult<BookDetails> heldBook(CellPlayer player) {
-        return onServerThread(() -> details(platform.nativePlayer(player).getMainHandItem()));
+        return onServerThread(() -> details(access.player(player).getMainHandItem()));
     }
 
     @Override
     public PlatformResult<BookMutationResult> mutateBook(CellPlayer player, BookRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var nativePlayer = platform.nativePlayer(player);
+            var nativePlayer = access.player(player);
             var original = nativePlayer.getMainHandItem();
             var current = details(original);
-            if (!current.successful()) return PlatformResult.failure(current.status(), current.detail());
-            if ((request.action() == BookAction.SET_TITLE && request.value().length() > MAX_BOOK_TITLE)
-                    || (request.action() == BookAction.SET_AUTHOR && request.value().length() > MAX_BOOK_AUTHOR)
-                    || request.value().codePoints().anyMatch(Character::isISOControl)) {
-                return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "Book metadata is invalid");
+            if (!current.successful()) {
+                return PlatformResult.failure(current.status(), current.detail());
+            }
+
+            if ((
+                    request.action() == BookAction.SET_TITLE
+                            && request.value().length() > MAX_BOOK_TITLE
+            )
+                    || (
+                    request.action() == BookAction.SET_AUTHOR
+                            && request.value().length() > MAX_BOOK_AUTHOR
+            )
+                    || request.value().codePoints().anyMatch(Character::isISOControl)
+            ) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Book metadata is invalid"
+                );
             }
 
             var replacement = switch (request.action()) {
                 case UNLOCK -> unlock(original);
-                case SIGN -> sign(original, request.actingPlayerName(), request.value());
-                case SET_TITLE -> rewriteMetadata(original, Optional.of(request.value()), Optional.empty());
-                case SET_AUTHOR -> rewriteMetadata(original, Optional.empty(), Optional.of(request.value()));
+                case SIGN -> sign(
+                        original,
+                        request.actingPlayerName(),
+                        request.value()
+                );
+                case SET_TITLE -> rewriteMetadata(
+                        original,
+                        Optional.of(request.value()),
+                        Optional.empty()
+                );
+                case SET_AUTHOR -> rewriteMetadata(
+                        original,
+                        Optional.empty(),
+                        Optional.of(request.value())
+                );
             };
+
             if (replacement.isEmpty()) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Book action is not valid for the held book");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Book action is not valid for the held book"
+                );
             }
+
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, replacement.orElseThrow());
             var after = details(replacement.orElseThrow());
             if (!after.successful() || after.value().isEmpty()) {
                 nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, original);
-                return PlatformResult.failure(PlatformOperationStatus.ROLLBACK_FAILED, "Book verification failed");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.ROLLBACK_FAILED,
+                        "Book verification failed"
+                );
             }
-            return PlatformResult.success(new BookMutationResult(request.action(), after.value().orElseThrow()));
+
+            return PlatformResult.success(new BookMutationResult(
+                    request.action(),
+                    after.value().orElseThrow()
+            ));
         });
     }
 
     @Override
     public CompletableFuture<PlatformResult<SkullResult>> skull(SkullRequest request) {
         requireNonNull(request, "request");
-        var server = platform.requireServer();
-        return server.getProfileCache().getAsync(request.owner()).thenCompose(profile -> {
-            if (profile.isEmpty()) {
-                return CompletableFuture.completedFuture(PlatformResult.failure(
-                        PlatformOperationStatus.TARGET_NOT_FOUND,
-                        "Profile was not found"
+        var server = access.requireServer();
+        return server.getProfileCache()
+                .getAsync(request.owner())
+                .thenCompose(profile -> {
+                    if (profile.isEmpty()) {
+                        return CompletableFuture.completedFuture(PlatformResult.failure(
+                                PlatformOperationStatus.TARGET_NOT_FOUND,
+                                "Profile was not found"
+                        ));
+                    }
+
+                    var future = new CompletableFuture<PlatformResult<SkullResult>>();
+                    access.requireServer().execute(() -> {
+                        try {
+                            future.complete(applySkull(request, profile.orElseThrow()));
+                        } catch (RuntimeException failure) {
+                            future.completeExceptionally(failure);
+                        }
+                    });
+
+                    return future;
+                })
+                .exceptionally(failure -> PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        failure.getClass().getSimpleName()
                 ));
-            }
-            return platform.callOnServerThread(() -> applySkull(request, profile.orElseThrow()));
-        }).exceptionally(failure -> PlatformResult.failure(
-                PlatformOperationStatus.INTERNAL_ERROR,
-                failure.getClass().getSimpleName()
-        ));
     }
 
     private PlatformResult<SkullResult> applySkull(SkullRequest request, GameProfile profile) {
-        var target = platform.nativePlayer(request.recipient());
+        var target = access.player(request.recipient());
         if (target.hasDisconnected()) {
-            return PlatformResult.failure(PlatformOperationStatus.TARGET_NOT_FOUND, "Recipient disconnected");
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    "Recipient disconnected"
+            );
         }
+
         var skull = new ItemStack(Items.PLAYER_HEAD);
-        skull.set(DataComponents.PROFILE, new net.minecraft.world.item.component.ResolvableProfile(profile));
+        skull.set(
+                DataComponents.PROFILE,
+                new ResolvableProfile(profile)
+        );
         if (request.spawn()) {
             if (!target.getInventory().add(skull)) {
-                return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Recipient inventory is full");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.STATE_NOT_ALLOWED,
+                        "Recipient inventory is full"
+                );
             }
-            return PlatformResult.success(new SkullResult(request.owner(), request.recipient().name(), true));
+
+            return PlatformResult.success(new SkullResult(
+                    request.owner(),
+                    request.recipient().name(),
+                    true
+            ));
         }
 
         var expected = request.expectedHeld().orElseThrow();
-        var currentSnapshot = platform.heldInventorySnapshot(request.recipient());
+        var currentSnapshot = store.heldSnapshot(request.recipient());
         if (currentSnapshot.isEmpty()
                 || currentSnapshot.orElseThrow().slot != expected.slot
-                || !currentSnapshot.orElseThrow().validatedStack().equals(expected.validatedStack())) {
-            return PlatformResult.failure(PlatformOperationStatus.CONFLICT, "Held item changed while profile resolved");
+                || !currentSnapshot
+                .orElseThrow()
+                .validatedStack()
+                .equals(expected.validatedStack())
+        ) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.CONFLICT,
+                    "Held item changed while profile resolved"
+            );
         }
+
         var current = target.getMainHandItem();
         if (!current.is(Items.PLAYER_HEAD)) {
-            return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Held item is not a player head");
+            return PlatformResult.failure(
+                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    "Held item is not a player head"
+            );
         }
+
         var replacement = current.copy();
-        replacement.set(DataComponents.PROFILE, new net.minecraft.world.item.component.ResolvableProfile(profile));
+        replacement.set(
+                DataComponents.PROFILE,
+                new ResolvableProfile(profile)
+        );
         target.setItemInHand(InteractionHand.MAIN_HAND, replacement);
-        return PlatformResult.success(new SkullResult(request.owner(), request.recipient().name(), false));
+
+        return PlatformResult.success(new SkullResult(
+                request.owner(),
+                request.recipient().name(),
+                false
+        ));
     }
 
     private Optional<ItemStack> unlock(ItemStack original) {
         var content = original.get(DataComponents.WRITTEN_BOOK_CONTENT);
-        if (!original.is(Items.WRITTEN_BOOK) || content == null) return Optional.empty();
+        if (!original.is(Items.WRITTEN_BOOK) || content == null) {
+            return Optional.empty();
+        }
+
         var replacement = original.transmuteCopy(Items.WRITABLE_BOOK);
         var pages = content.pages().stream()
                 .map(page -> Filterable.passThrough(page.raw().getString()))
                 .toList();
         replacement.remove(DataComponents.WRITTEN_BOOK_CONTENT);
         replacement.set(DataComponents.WRITABLE_BOOK_CONTENT, new WritableBookContent(pages));
+
         return Optional.of(replacement);
     }
 
-    private Optional<ItemStack> sign(ItemStack original, String author, String title) {
-        var content = original.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
-        if (!original.is(Items.WRITABLE_BOOK)) return Optional.empty();
-        var actualTitle = title.isBlank() ? "Book" : title;
-        if (actualTitle.length() > MAX_BOOK_TITLE || author.length() > MAX_BOOK_AUTHOR) return Optional.empty();
+    private Optional<ItemStack> sign(
+            ItemStack original,
+            String author,
+            String title
+    ) {
+        var content = original.getOrDefault(
+                DataComponents.WRITABLE_BOOK_CONTENT,
+                WritableBookContent.EMPTY
+        );
+        if (!original.is(Items.WRITABLE_BOOK)) {
+            return Optional.empty();
+        }
+
+        var actualTitle = title.isBlank()
+                ? "Book"
+                : title;
+        if (actualTitle.length() > MAX_BOOK_TITLE || author.length() > MAX_BOOK_AUTHOR) {
+            return Optional.empty();
+        }
+
         var pages = content.pages().stream()
-                .map(page -> Filterable.passThrough(net.minecraft.network.chat.Component.literal(page.raw())))
+                .map(page -> Filterable
+                        .passThrough(Component.literal(page.raw()))
+                )
                 .toList();
         var replacement = original.transmuteCopy(Items.WRITTEN_BOOK);
+
         replacement.remove(DataComponents.WRITABLE_BOOK_CONTENT);
-        replacement.set(DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(
-                Filterable.passThrough(actualTitle), author, 0, pages, true
-        ));
+        replacement.set(
+                DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(
+                        Filterable.passThrough(actualTitle),
+                        author,
+                        0,
+                        pages,
+                        true
+                )
+        );
+
         return Optional.of(replacement);
     }
 
-    private Optional<ItemStack> rewriteMetadata(ItemStack original, Optional<String> title, Optional<String> author) {
+    private Optional<ItemStack> rewriteMetadata(
+            ItemStack original,
+            Optional<String> title,
+            Optional<String> author
+    ) {
         var content = original.get(DataComponents.WRITTEN_BOOK_CONTENT);
-        if (!original.is(Items.WRITTEN_BOOK) || content == null) return Optional.empty();
+        if (!original.is(Items.WRITTEN_BOOK) || content == null) {
+            return Optional.empty();
+        }
+
         var replacement = original.copy();
-        replacement.set(DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(
-                Filterable.passThrough(title.orElse(content.title().raw())),
-                author.orElse(content.author()),
-                content.generation(),
-                content.pages(),
-                content.resolved()
-        ));
+        replacement.set(
+                DataComponents.WRITTEN_BOOK_CONTENT,
+                new WrittenBookContent(
+                        Filterable.passThrough(title.orElse(content.title().raw())),
+                        author.orElse(content.author()),
+                        content.generation(),
+                        content.pages(),
+                        content.resolved()
+                )
+        );
+
         return Optional.of(replacement);
     }
 
     private PlatformResult<BookDetails> details(ItemStack stack) {
         if (stack.is(Items.WRITABLE_BOOK)) {
-            var content = stack.getOrDefault(DataComponents.WRITABLE_BOOK_CONTENT, WritableBookContent.EMPTY);
-            return PlatformResult.success(new BookDetails(true, false, Optional.empty(), Optional.empty(), content.pages()
-                    .size()));
+            var content = stack.getOrDefault(
+                    DataComponents.WRITABLE_BOOK_CONTENT,
+                    WritableBookContent.EMPTY
+            );
+            return PlatformResult.success(new BookDetails(
+                    true,
+                    false,
+                    Optional.empty(),
+                    Optional.empty(),
+                    content.pages().size()
+            ));
         }
+
         if (stack.is(Items.WRITTEN_BOOK)) {
             var content = stack.get(DataComponents.WRITTEN_BOOK_CONTENT);
             if (content == null) {
-                return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "Written book content is missing");
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INTERNAL_ERROR,
+                        "Written book content is missing"
+                );
             }
+
             return PlatformResult.success(new BookDetails(
                     false,
                     true,
@@ -391,47 +642,122 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                     content.pages().size()
             ));
         }
-        return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Held item is not a book");
+
+        return PlatformResult.failure(
+                PlatformOperationStatus.STATE_NOT_ALLOWED,
+                "Held item is not a book"
+        );
     }
 
     private static boolean bindingCursed(ItemStack stack) {
-        var enchantments = stack.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
-        return enchantments.keySet().stream().anyMatch(holder -> holder.unwrapKey()
-                .map(key -> key.identifier().toString().equals("minecraft:binding_curse"))
-                .orElse(false));
+        var enchantments = stack.getOrDefault(
+                DataComponents.ENCHANTMENTS,
+                ItemEnchantments.EMPTY
+        );
+        return enchantments.keySet().stream()
+                .anyMatch(holder -> holder.unwrapKey()
+                        .map(key -> key.identifier().toString().equals("minecraft:binding_curse"))
+                        .orElse(false));
     }
 
-    private static int firstInsertionSlot(net.minecraft.world.entity.player.Inventory inventory, ItemStack stack) {
+    private static int firstInsertionSlot(
+            Inventory inventory,
+            ItemStack stack
+    ) {
         for (var slot = 0; slot < MAIN_END; slot++) {
             var current = inventory.getItem(slot);
-            if (current.isEmpty()) return slot;
+            if (current.isEmpty()) {
+                return slot;
+            }
+
             if (ItemStack.isSameItemSameComponents(current, stack)
-                    && current.getCount() + stack.getCount() <= current.getMaxStackSize()) return slot;
+                    && ((current.getCount() + stack.getCount()) <= current.getMaxStackSize())
+            ) {
+                return slot;
+            }
         }
         return -1;
     }
 
-    private static void insertExact(net.minecraft.world.entity.player.Inventory inventory, int slot, ItemStack stack) {
+    private static void insertExact(
+            Inventory inventory,
+            int slot,
+            ItemStack stack
+    ) {
         var current = inventory.getItem(slot);
-        if (current.isEmpty()) inventory.setItem(slot, stack);
-        else current.grow(stack.getCount());
-    }
-
-    private <T> PlatformResult<T> onServerThread(java.util.function.Supplier<PlatformResult<T>> operation) {
-        if (!platform.requireServer().isSameThread()) {
-            return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Operation requires the server thread");
-        }
-        try {
-            return operation.get();
-        } catch (RuntimeException failure) {
-            return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, failure.getClass().getSimpleName());
+        if (current.isEmpty()) {
+            inventory.setItem(slot, stack);
+        } else {
+            current.grow(stack.getCount());
         }
     }
 
     private static InventorySlotKind slotKind(int slot) {
-        if (slot < MAIN_END) return InventorySlotKind.MAIN;
-        if (slot < ARMOR_END) return InventorySlotKind.ARMOR;
-        return slot == OFFHAND_SLOT ? InventorySlotKind.OFFHAND : InventorySlotKind.MAIN;
+        if (slot < MAIN_END) {
+            return InventorySlotKind.MAIN;
+        }
+
+        if (slot < ARMOR_END) {
+            return InventorySlotKind.ARMOR;
+        }
+
+        return slot == OFFHAND_SLOT
+                ? InventorySlotKind.OFFHAND
+                : InventorySlotKind.MAIN;
+    }
+
+    private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
+        if (!access.requireServer().isSameThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    "Operation requires the server thread"
+            );
+        }
+
+        try {
+            return operation.get();
+        } catch (RuntimeException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INTERNAL_ERROR,
+                    failure.getClass().getSimpleName()
+            );
+        }
+    }
+
+    private static final class InventoryMirror extends SimpleContainer {
+
+        private final Container target;
+        private final int mirroredSlots;
+        private final boolean loading;
+
+        private InventoryMirror(Container target, int size) {
+            super(size);
+            this.target = target;
+            this.mirroredSlots = Math.min(target.getContainerSize(), size);
+            IntStream.range(0, mirroredSlots)
+                    .forEach(slot -> super.setItem(slot, target.getItem(slot).copy()));
+            loading = false;
+        }
+
+        @Override
+        public void setChanged() {
+            super.setChanged();
+            if (!loading) {
+                synchronize();
+            }
+        }
+
+        private void synchronize() {
+            IntStream.range(0, mirroredSlots)
+                    .forEach(slot -> target.setItem(slot, getItem(slot).copy()));
+            target.setChanged();
+        }
+
+        @Override
+        public boolean canPlaceItem(int slot, ItemStack stack) {
+            return slot >= 0 && slot < mirroredSlots;
+        }
+
     }
 
 }

@@ -1,14 +1,13 @@
 package top.likoslupus.cellulosesz.modules.sign;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.item.InventoryMutation;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
@@ -24,6 +23,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,7 +35,13 @@ final class SignTransactionBehaviorTest {
     void cooldownIsScopedToPlayerSignSideAndHandler() {
         var config = new SignConfig();
         config.interaction.cooldownTicks = 200;
-        var service = new DefaultSignService(config, allowAllPermissions(), new MemoryStorage(), Path.of("signs.json"));
+
+        var service = new DefaultSignService(
+                config,
+                allowAllPermissions(),
+                new MemoryStorage(),
+                Path.of("signs.json")
+        );
         service.register(new SynchronousSignHandler() {
             @Override
             public String id() {
@@ -46,17 +53,40 @@ final class SignTransactionBehaviorTest {
                 return SignUseResult.success("test.success");
             }
         });
+
         var player = new CellPlayer(UUID.randomUUID(), "tester", new Object());
         var first = new CellLocation("minecraft:overworld", 1, 64, 1, 0, 0);
         var second = new CellLocation("minecraft:overworld", 2, 64, 1, 0, 0);
         var raw = List.of("[Balance]", "", "", "");
         var formatted = service.formattedLines(raw);
+
         create(service, player, first, raw);
         create(service, player, second, raw);
 
-        assertTrue(service.use(player, first, true, formatted, false).result().join().success());
-        assertEquals("service.sign.cooldown", key(service.use(player, first, true, formatted, false).result().join()));
-        assertTrue(service.use(player, second, true, formatted, false).result().join().success());
+        assertTrue(service.use(
+                player,
+                first,
+                true,
+                formatted,
+                false
+        ).result().join().success());
+        assertEquals(
+                "service.sign.cooldown",
+                key(service.use(
+                        player,
+                        first,
+                        true,
+                        formatted,
+                        false
+                ).result().join())
+        );
+        assertTrue(service.use(
+                player,
+                second,
+                true,
+                formatted,
+                false
+        ).result().join().success());
     }
 
     @NullMarked
@@ -68,12 +98,20 @@ final class SignTransactionBehaviorTest {
             }
 
             @Override
-            public int intOption(Object source, String key, int fallback) {
+            public int intOption(
+                    Object source,
+                    String key,
+                    int fallback
+            ) {
                 return fallback;
             }
 
             @Override
-            public boolean boolOption(Object source, String key, boolean fallback) {
+            public boolean boolOption(
+                    Object source,
+                    String key,
+                    boolean fallback
+            ) {
                 return fallback;
             }
 
@@ -92,6 +130,7 @@ final class SignTransactionBehaviorTest {
     ) {
         var execution = service.create(player, location, true, lines);
         assertTrue(execution.handled());
+
         var commit = execution.preparation().join();
         assertTrue(commit.result().success());
         assertTrue(commit.complete(true).join().success());
@@ -115,17 +154,24 @@ final class SignTransactionBehaviorTest {
                 return false;
             }
         };
-        var platform = proxy(PlatformService.class, (method, args) -> method.getName()
-                .equals("prepareInventoryExchange")
-                ? Optional.of(mutation) : defaultValue(method));
-        var items = proxy(ItemService.class, (method, args) -> switch (method.getName()) {
-            case "parse" -> Optional.of(new ItemDescriptor(String.valueOf(args[0]), 1));
-            case "valid" -> true;
-            case "blacklisted" -> false;
-            case "commandArgument" -> ((ItemDescriptor) args[0]).normalizedItem();
-            default -> defaultValue(method);
-        });
-        var handler = new TradeSignHandler(items, platform);
+        var inventory = proxy(
+                InventoryPlatformService.class,
+                (method, _) -> method.getName()
+                        .equals("prepareExchange")
+                        ? PlatformResult.success(mutation)
+                        : defaultValue(method)
+        );
+        var items = proxy(
+                ItemService.class,
+                (method, args) -> switch (method.getName()) {
+                    case "parse" -> Optional.of(new ItemDescriptor(String.valueOf(args[0]), 1));
+                    case "valid" -> true;
+                    case "blacklisted" -> false;
+                    case "commandArgument" -> ((ItemDescriptor) args[0]).normalizedItem();
+                    default -> defaultValue(method);
+                }
+        );
+        var handler = new TradeSignHandler(items, inventory);
         var context = new SignUseContext(
                 new CellPlayer(UUID.randomUUID(), "trader", new Object()),
                 new CellLocation("minecraft:overworld", 0, 64, 0, 0, 0),
@@ -140,19 +186,28 @@ final class SignTransactionBehaviorTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T proxy(Class<T> type, BiFunction<Method, Object[], Object> behavior) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, (instance, method, rawArgs) -> {
-            var args = rawArgs == null ? new Object[0] : rawArgs;
-            if (method.getDeclaringClass() == Object.class) {
-                return switch (method.getName()) {
-                    case "toString" -> type.getSimpleName() + "TestProxy";
-                    case "hashCode" -> System.identityHashCode(instance);
-                    case "equals" -> instance == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                };
-            }
-            return behavior.apply(method, args);
-        });
+    private static <T> T proxy(
+            Class<T> type,
+            BiFunction<Method, Object[], Object> behavior
+    ) {
+        return (T) Proxy.newProxyInstance(
+                type.getClassLoader(),
+                new Class<?>[]{type},
+                (instance, method, rawArgs) -> {
+                    var args = rawArgs == null
+                            ? new Object[0]
+                            : rawArgs;
+                    if (method.getDeclaringClass() == Object.class) {
+                        return switch (method.getName()) {
+                            case "toString" -> type.getSimpleName() + "TestProxy";
+                            case "hashCode" -> System.identityHashCode(instance);
+                            case "equals" -> instance == args[0];
+                            default -> throw new UnsupportedOperationException(method.getName());
+                        };
+                    }
+                    return behavior.apply(method, args);
+                }
+        );
     }
 
     private static Object defaultValue(Method method) {
@@ -177,13 +232,21 @@ final class SignTransactionBehaviorTest {
         private @Nullable Object document;
 
         @Override
-        public <T> CompletableFuture<T> loadOrDefault(Path path, Class<T> type, Supplier<T> defaults) {
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaults
+        ) {
             if (document == null) return CompletableFuture.completedFuture(defaults.get());
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
         @Override
-        public <T> CompletableFuture<T> createIfMissing(Path path, Class<T> type, Supplier<T> defaults) {
+        public <T> CompletableFuture<T> createIfMissing(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaults
+        ) {
             if (document == null) document = defaults.get();
             return CompletableFuture.completedFuture(type.cast(document));
         }

@@ -1,19 +1,22 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
+import top.likoslupus.cellulosesz.api.entity.SpawnMobRequest;
+import top.likoslupus.cellulosesz.api.entity.SpawnMobResult;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 
 import java.util.Map;
-import java.util.Objects;
+
+import static java.util.Objects.requireNonNull;
 
 public final class SpawnMobSignHandler implements SynchronousSignHandler {
 
-    private final PlatformService platform;
+    private final EntityPlatformService entities;
 
-    public SpawnMobSignHandler(PlatformService platform) {
-        this.platform = Objects.requireNonNull(platform, "platform");
+    public SpawnMobSignHandler(EntityPlatformService entities) {
+        this.entities = requireNonNull(entities, "entities");
     }
 
     @Override
@@ -23,13 +26,16 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult validate(SignUseContext context) {
-        if (!platform.validEntityType(context.line(1))) {
+        if (!entities.validLivingEntity(context.line(1))) {
             return SignUseResult.failure("service.sign.spawnmob-format");
         }
+
         if (!context.line(2).isBlank()
-                && SignHandlerSupport.count(context.line(2), 1, 64).isEmpty()) {
+                && SignHandlerSupport.count(context.line(2), 1, 64).isEmpty()
+        ) {
             return SignUseResult.failure("service.sign.spawnmob-format");
         }
+
         return context.line(3).isBlank()
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure("service.sign.spawnmob-format");
@@ -37,14 +43,28 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
-        var count = SignHandlerSupport.count(context.line(2), 1, 64).orElse(0);
-        if (count == 0) return SignUseResult.failure("service.sign.spawnmob-format");
-        var spawned = platform.spawnMob(context.player(), context.line(1), count);
-        return spawned == count
-                ? SignUseResult.success("service.sign.spawnmob-success", Map.of(
-                "count", count, "entity", context.line(1)))
-                : SignUseResult.failure("service.sign.spawnmob-failed", Map.of(
-                        "spawned", spawned, "count", count));
+        var count = SignHandlerSupport
+                .count(context.line(2), 1, 64)
+                .orElse(1);
+        var result = entities.spawnMob(new SpawnMobRequest(
+                context.line(1),
+                count,
+                context.player()
+        ));
+        var spawned = result.value()
+                .map(SpawnMobResult::spawned)
+                .orElse(0);
+
+        return result.successful() && spawned.equals(count)
+                ?
+                SignUseResult.success(
+                        "service.sign.spawnmob-success",
+                        Map.of("count", count, "entity", context.line(1))
+                )
+                : SignUseResult.failure(
+                        "service.sign.spawnmob-failed",
+                        Map.of("spawned", spawned, "count", count)
+                );
     }
 
 }

@@ -1,93 +1,210 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.BookAction;
 import top.likoslupus.cellulosesz.api.item.BookRequest;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
-import java.util.Map;
+import java.util.List;
 
-public final class BookCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class BookCommand implements CommandContributor {
+
+    private static final int MAXIMUM_TITLE = 64;
+    private static final int MAXIMUM_AUTHOR = 64;
+
+    private final InventoryCommandService service;
     private final InventoryPlatformService inventory;
 
     public BookCommand(
-            PlatformService platform,
+            InventoryCommandService service,
             InventoryPlatformService inventory
     ) {
-        this.platform = platform;
-        this.inventory = inventory;
+        this.service = requireNonNull(service, "service");
+        this.inventory = requireNonNull(inventory, "inventory");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.book";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "book",
+                "cellulosesz.command.book",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("book")
+                .executes(command -> toggle(context, command, descriptor))
+                .then(Commands.literal("title")
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.command.book.title"
+                        ))
+                        .then(Commands.argument(
+                                                "title",
+                                                StringArgumentType.greedyString()
+                                        )
+                                        .executes(command -> mutate(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                BookAction.SET_TITLE,
+                                                Checks.requireMaxLength(
+                                                        Checks.requireNoControlCharacters(
+                                                                StringArgumentType.getString(
+                                                                        command,
+                                                                        "title"
+                                                                ),
+                                                                "title"
+                                                        ),
+                                                        MAXIMUM_TITLE,
+                                                        "title"
+                                                )
+                                        ))
+                        )
+                )
+                .then(Commands.literal("author")
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.command.book.author"
+                        ))
+                        .then(Commands.argument(
+                                                "author",
+                                                StringArgumentType.greedyString()
+                                        )
+                                        .executes(command -> mutate(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                BookAction.SET_AUTHOR,
+                                                Checks.requireMaxLength(
+                                                        Checks.requireNoControlCharacters(
+                                                                StringArgumentType.getString(
+                                                                        command,
+                                                                        "author"
+                                                                ),
+                                                                "author"
+                                                        ),
+                                                        MAXIMUM_AUTHOR,
+                                                        "author"
+                                                )
+                                        ))
+                        )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.book",
+                "/book | /book title <title...> | /book author <author...>",
+                root
+        );
+    }
+
+    private int toggle(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "book toggle",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var details = inventory.heldBook(currentPlayer);
+
+                    if (!details.successful() || details.value().isEmpty()) {
+                        return details;
+                    }
+
+                    var book = details.value().orElseThrow();
+
+                    if (book.written()
+                            && book.author().isPresent()
+                            && !book.author().orElseThrow()
+                            .equalsIgnoreCase(currentPlayer.name())
+                            && !policy.hasPermission(
+                            "cellulosesz.command.book.others"
+                    )) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.PERMISSION_DENIED,
+                                "book-owner"
+                        );
+                    }
+
+                    return service.book(
+                            currentPlayer,
+                            new BookRequest(
+                                    book.written()
+                                            ? BookAction.UNLOCK
+                                            : BookAction.SIGN,
+                                    "",
+                                    currentPlayer.name()
+                            )
+                    );
+                }
+        );
+    }
+
+    private int mutate(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            BookAction action,
+            String value
+    ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "book " + action.name().toLowerCase(),
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+
+                    return player.<PlatformResult<?>>map(valuePlayer ->
+                                    service.book(
+                                            valuePlayer,
+                                            new BookRequest(
+                                                    action,
+                                                    value,
+                                                    valuePlayer.name()
+                                            )
+                                    )
+                            )
+                            .orElseGet(() -> PlatformResult.failure(
+                                    PlatformOperationStatus.INVALID_SOURCE,
+                                    "player-only"
+                            ));
+                }
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/book | /book title <title> | /book author <author>";
-    }
-
-    @Override
-    public String name() {
-        return "book";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length == 1 || invocation.args().length > 2) return usage(invocation);
-        var player = platform.player(invocation).orElseThrow();
-        var before = inventory.heldBook(player);
-        if (!before.successful() || before.value().isEmpty()) {
-            invocation.errorKey("commands.item.book.not-book");
-            return 0;
-        }
-        final BookRequest request;
-        var details = before.value().orElseThrow();
-        if (details.written()
-                && details.author().isPresent()
-                && !details.author().orElseThrow().equalsIgnoreCase(player.name())
-                && !invocation.hasPermission("cellulosesz.command.book.others")) {
-            return denied(invocation);
-        }
-        if (invocation.args().length == 0) {
-            request = new BookRequest(details.written() ? BookAction.UNLOCK : BookAction.SIGN, "", player.name());
-        } else if (invocation.args()[0].equalsIgnoreCase("title")) {
-            if (!invocation.hasPermission("cellulosesz.command.book.title")) return denied(invocation);
-            request = new BookRequest(BookAction.SET_TITLE, invocation.args()[1], player.name());
-        } else if (invocation.args()[0].equalsIgnoreCase("author")) {
-            if (!invocation.hasPermission("cellulosesz.command.book.author")) return denied(invocation);
-            request = new BookRequest(BookAction.SET_AUTHOR, invocation.args()[1], player.name());
-        } else return usage(invocation);
-        var result = inventory.mutateBook(player, request);
-        if (!result.successful() || result.value().isEmpty()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.item.book.success", Map.of("action", request.action()
-                .name()
-                .toLowerCase(java.util.Locale.ROOT)));
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.book.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private int denied(CommandInvocation invocation) {
-        invocation.errorKey("commands.common.no-permission");
-        return 0;
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

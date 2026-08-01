@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
 import java.util.*;
@@ -121,8 +122,11 @@ public final class PrivateMessageCommandService {
     public CompletableFuture<MessageResult> toggleMessages(UUID uuid) {
         return users
                 .update(uuid, user -> {
-                    user.preferences.privateMessages = !user.preferences.privateMessages;
-                    return user.preferences.privateMessages;
+                    var enabled = !user.preferences().privateMessages();
+                    return UserUpdate.of(
+                            user.withPreferences(user.preferences().withPrivateMessages(enabled)),
+                            enabled
+                    );
                 })
                 .thenApply(enabled -> MessageResult.success(
                         enabled
@@ -175,9 +179,11 @@ public final class PrivateMessageCommandService {
         return users
                 .update(target, user -> {
                     var enabled = requested
-                            .orElse(!user.preferences.replyToLastRecipient);
-                    user.preferences.replyToLastRecipient = enabled;
-                    return enabled;
+                            .orElse(!user.preferences().replyToLastRecipient());
+                    return UserUpdate.of(
+                            user.withPreferences(user.preferences().withReplyToLastRecipient(enabled)),
+                            enabled
+                    );
                 })
                 .thenApply(enabled -> MessageResult.success(
                         enabled
@@ -195,9 +201,11 @@ public final class PrivateMessageCommandService {
         return users
                 .update(target, user -> {
                     var enabled = requested
-                            .orElse(!user.preferences.socialSpy);
-                    user.preferences.socialSpy = enabled;
-                    return enabled;
+                            .orElse(!user.preferences().socialSpy());
+                    return UserUpdate.of(
+                            user.withPreferences(user.preferences().withSocialSpy(enabled)),
+                            enabled
+                    );
                 })
                 .thenApply(enabled -> MessageResult.success(
                         enabled

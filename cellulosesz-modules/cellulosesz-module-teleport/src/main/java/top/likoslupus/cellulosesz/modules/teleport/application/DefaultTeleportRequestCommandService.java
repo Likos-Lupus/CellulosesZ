@@ -16,10 +16,11 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.*;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultTeleportRequestCommandService implements TeleportRequestCommandService {
 
@@ -129,10 +130,12 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
 
                     users.load(target.orElseThrow().uuid())
                             .thenAccept(user -> {
-                                if (user.preferences.teleportAutoAccept) {
+                                if (user.preferences().teleportAutoAccept()) {
                                     accept(
                                             target.orElseThrow(),
-                                            Optional.of(new TeleportRequestSelector.RequestId(creation.request().id())),
+                                            Optional.of(new TeleportRequestSelector.RequestId(
+                                                    creation.request().id()
+                                            )),
                                             true
                                     );
                                 }
@@ -165,43 +168,45 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
 
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
         for (var target : candidates) {
-            chain = chain.thenCompose(_ -> allowed(target, bypassPreference)
-                    .thenAccept(allowed -> {
-                        if (!allowed) {
-                            counts[1]++;
-                            return;
-                        }
+            chain = chain
+                    .thenCompose(_ -> allowed(target, bypassPreference)
+                            .thenAccept(allowed -> {
+                                if (!allowed) {
+                                    counts[1]++;
+                                    return;
+                                }
 
-                        var creation = requests.create(
-                                requester,
-                                target,
-                                TeleportRequestType.TARGET_TO_REQUESTER,
-                                timeoutSeconds
-                        );
-                        if (!creation.created()) {
-                            counts[2]++;
-                            return;
-                        }
+                                var creation = requests.create(
+                                        requester,
+                                        target,
+                                        TeleportRequestType.TARGET_TO_REQUESTER,
+                                        timeoutSeconds
+                                );
+                                if (!creation.created()) {
+                                    counts[2]++;
+                                    return;
+                                }
 
-                        counts[0]++;
-                        notify(
-                                target,
-                                "commands.teleport.request.received-tpahere",
-                                Map.of(
-                                        "player", requester.name(),
-                                        "seconds", timeoutSeconds,
-                                        "request", creation.request().id()
-                                )
-                        );
-                    })
-                    .exceptionally(_ -> {
-                        counts[3]++;
-                        return null;
-                    })
-            );
+                                counts[0]++;
+                                notify(
+                                        target,
+                                        "commands.teleport.request.received-tpahere",
+                                        Map.of(
+                                                "player", requester.name(),
+                                                "seconds", timeoutSeconds,
+                                                "request", creation.request().id()
+                                        )
+                                );
+                            })
+                            .exceptionally(_ -> {
+                                counts[3]++;
+                                return null;
+                            })
+                    );
         }
 
-        return chain.thenApply(_ -> counts[3] == 0 ?
+        return chain.thenApply(_ -> counts[3] == 0
+                ?
                 TeleportCommandResult.success(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
                         Map.of(
@@ -210,8 +215,8 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                 "existing", counts[2],
                                 "failed", counts[3]
                         )
-                ) :
-                TeleportCommandResult.partial(
+                )
+                : TeleportCommandResult.partial(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
                         Map.of(
                                 "sent", counts[0],
@@ -438,7 +443,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
         return bypass
                 ? CompletableFuture.completedFuture(true)
                 : users.load(target.uuid())
-                        .thenApply(user -> user.preferences.teleportRequests)
+                        .thenApply(user -> user.preferences().teleportRequests())
                         .exceptionally(_ -> false);
     }
 
@@ -509,9 +514,9 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
     private String displayName(UUID uuid) {
         return players.onlinePlayer(uuid).map(CellPlayer::name)
                 .or(() -> users.cached(uuid)
-                        .map(user -> user.lastKnownName == null
+                        .map(user -> user.lastKnownName() == null
                                 ? uuid.toString()
-                                : user.lastKnownName
+                                : user.lastKnownName()
                         )
                 )
                 .orElse(uuid.toString());

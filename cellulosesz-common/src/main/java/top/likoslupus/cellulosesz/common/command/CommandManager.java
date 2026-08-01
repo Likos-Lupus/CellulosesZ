@@ -4,23 +4,24 @@ import com.mojang.brigadier.CommandDispatcher;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
 import top.likoslupus.cellulosesz.api.command.execution.CommandExecutionPipeline;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.CommandTreeService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.common.command.legacy.LegacyCommandBridge;
+import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
 /**
- * Loader-neutral coordinator for module-owned direct trees and the temporary legacy bridge.
+ * Loader-neutral coordinator for the single module-owned Brigadier command catalog.
  */
 public final class CommandManager implements CommandTreeService {
 
@@ -29,34 +30,34 @@ public final class CommandManager implements CommandTreeService {
     private final CommandRootLeaseManager leases;
     private final MinecraftCommandResponder responder;
     private final CommandExecutionPipeline pipeline;
-    private final PlatformService platform;
+    private final PlayerDirectory players;
+    private final CommandAvailabilityService availability;
     private final CommandTreeRefreshService refreshService;
-    private final LegacyCommandBridge legacy;
     private volatile @Nullable CommandDispatcher<CommandSourceStack> dispatcher;
     private volatile @Nullable CommandBuildContext buildContext;
     private volatile Commands.@Nullable CommandSelection environment;
 
     public CommandManager(
             CellulosesZBootstrap bootstrap,
-            PlatformService platform,
             CommandRegistry registry,
             CommandRootMutator mutator,
             CommandTreeRefreshService refreshService
     ) {
         this.bootstrap = requireNonNull(bootstrap, "bootstrap");
-        this.platform = requireNonNull(platform, "platform");
         this.registry = requireNonNull(registry, "registry");
         this.leases = new CommandRootLeaseManager(bootstrap.logger(), mutator);
         this.pipeline = bootstrap.serviceRegistry().require(CommandExecutionPipeline.class);
+        this.players = bootstrap.serviceRegistry().require(PlayerDirectory.class);
+        this.availability = bootstrap.serviceRegistry().require(CommandAvailabilityService.class);
         this.responder = new MinecraftCommandResponder(
-                platform,
+                players,
+                bootstrap.serviceRegistry().require(PlayerAudienceService.class),
                 bootstrap.serviceRegistry().require(MessageRenderer.class),
                 bootstrap.serviceRegistry().require(LocaleResolver.class),
                 bootstrap.serviceRegistry().require(ServerThreadExecutor.class),
                 bootstrap.logger()
         );
         this.refreshService = requireNonNull(refreshService, "refreshService");
-        this.legacy = new LegacyCommandBridge(bootstrap, platform, responder);
     }
 
     public synchronized void register(
@@ -68,7 +69,10 @@ public final class CommandManager implements CommandTreeService {
         this.dispatcher = requireNonNull(dispatcher, "dispatcher");
         this.buildContext = requireNonNull(buildContext, "buildContext");
         this.environment = requireNonNull(environment, "environment");
-        if (changedDispatcher) leases.capture(dispatcher);
+
+        if (changedDispatcher) {
+            leases.capture(dispatcher);
+        }
         rebuild();
     }
 
@@ -82,16 +86,12 @@ public final class CommandManager implements CommandTreeService {
                     leases,
                     responder,
                     pipeline,
-                    platform
+                    players,
+                    availability
             );
-
-            registry.freezeAndSnapshot()
-                    .forEach(contributor -> contributor.register(context));
-            legacy.register(context);
+            registry.freezeAndSnapshot().forEach(contributor -> contributor.register(context));
             registerConfiguredAliases(context);
-            bootstrap.serviceRegistry()
-                    .require(CommandCatalog.class)
-                    .replaceDirect(context.directEntries());
+            bootstrap.serviceRegistry().require(CommandCatalog.class).replace(context.entries());
             transaction.commit();
         }
     }
@@ -100,10 +100,10 @@ public final class CommandManager implements CommandTreeService {
         context.configuredAliases().forEach((canonical, aliases) -> {
             var normalizedCanonical = canonical.toLowerCase(Locale.ROOT);
             var target = leases.ownedNode(normalizedCanonical);
-            var targetLease = leases.lease(normalizedCanonical);
-
-            if (target.isEmpty() || targetLease.isEmpty()) {
-                bootstrap.logger().warn("Skipping configured aliases for unavailable command /" + canonical);
+            if (target.isEmpty()) {
+                bootstrap
+                        .logger()
+                        .warn("Skipping configured aliases for unavailable command /" + canonical);
                 return;
             }
 
@@ -118,7 +118,6 @@ public final class CommandManager implements CommandTreeService {
                         normalized,
                         normalizedCanonical,
                         "config",
-                        targetLease.orElseThrow().mode(),
                         Commands.literal(normalized)
                                 .requires(node::canUse)
                                 .redirect(node)
@@ -129,7 +128,9 @@ public final class CommandManager implements CommandTreeService {
 
     @Override
     public synchronized void refresh() {
-        if (dispatcher == null || buildContext == null || environment == null) return;
+        if (dispatcher == null || buildContext == null || environment == null) {
+            return;
+        }
         rebuild();
         refreshService.refreshOnlinePlayers();
     }

@@ -1,71 +1,77 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.entity.TemporaryMobRequest;
 import top.likoslupus.cellulosesz.api.entity.TemporaryMobType;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
 
-public final class KittyCannonCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class KittyCannonCommand implements CommandContributor {
+
     private final EntityPlatformService entities;
     private final WorldConfig config;
 
     public KittyCannonCommand(
-            PlatformService platform,
             EntityPlatformService entities,
             WorldConfig config
     ) {
-        this.platform = platform;
-        this.entities = entities;
-        this.config = config;
+        this.entities = requireNonNull(entities, "entities");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.kittycannon";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "kittycannon",
+                "cellulosesz.command.kittycannon",
+                CommandSourceKind.PLAYER_ONLY
+        );
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.kittycannon",
+                "/kittycannon",
+                Commands.literal("kittycannon")
+                        .executes(command -> WorldCommandSupport.sync(
+                                context,
+                                command,
+                                descriptor,
+                                "kittycannon",
+                                policy -> {
+                                    var player = WorldCommandSupport.current(policy);
+                                    return player
+                                            .<PlatformResult<?>>map(value -> entities.launchTemporaryMob(
+                                                    new TemporaryMobRequest(
+                                                            value,
+                                                            TemporaryMobType.CAT,
+                                                            config.temporaryMobSpeed,
+                                                            config.temporaryMobLifetimeTicks,
+                                                            config.temporaryMobExplosionPower,
+                                                            false
+                                                    )
+                                            ))
+                                            .orElseGet(() -> PlatformResult.failure(
+                                                    PlatformOperationStatus.INVALID_SOURCE,
+                                                    "player-only"
+                                            ));
+                                }
+                        ))
+        );
     }
 
     @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/kittycannon";
-    }
-
-    @Override
-    public String name() {
-        return "kittycannon";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length != 0) return usage(invocation);
-        var result = entities.launchTemporaryMob(new TemporaryMobRequest(
-                platform.player(invocation).orElseThrow(), TemporaryMobType.CAT,
-                config.temporaryMobSpeed, config.temporaryMobLifetimeTicks,
-                config.temporaryMobExplosionPower, config.explosionBlockDamage
-        ));
-        if (!result.successful()) {
-            invocation.platformError(result.status());
-            return 0;
-        }
-        invocation.replyKey("commands.world.kittycannon.success");
-        return 1;
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.world.kittycannon.usage", Map.of("usage", usage()));
-        return 0;
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

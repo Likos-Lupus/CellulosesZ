@@ -1,363 +1,736 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
 
-public final class ClearInventoryCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+
+public final class ClearInventoryCommand implements CommandContributor {
 
     private static final String ACTION = "clearinventory";
-    private static final UUID CONSOLE_ACTOR = new UUID(0L, 0L);
 
-    private final PlatformService platform;
     private final InventoryPlatformService inventory;
     private final ItemService items;
     private final UserService users;
     private final ConfirmationService confirmations;
     private final PermissionService permissions;
+    private final PlayerDirectory players;
     private final ItemConfig config;
+    private final Clock clock;
 
     public ClearInventoryCommand(
-            PlatformService platform,
             InventoryPlatformService inventory,
             ItemService items,
             UserService users,
             ConfirmationService confirmations,
             PermissionService permissions,
-            ItemConfig config
+            PlayerDirectory players,
+            ItemConfig config,
+            Clock clock
     ) {
-        this.platform = platform;
-        this.inventory = inventory;
-        this.items = items;
-        this.users = users;
-        this.confirmations = confirmations;
-        this.permissions = permissions;
-        this.config = config;
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.items = requireNonNull(items, "items");
+        this.users = requireNonNull(users, "users");
+        this.confirmations = requireNonNull(confirmations, "confirmations");
+        this.permissions = requireNonNull(permissions, "permissions");
+        this.players = requireNonNull(players, "players");
+        this.config = requireNonNull(config, "config");
+        this.clock = requireNonNull(clock, "clock");
     }
 
-    private static String normalize(String value) {
-        var id = value.strip().toLowerCase(Locale.ROOT);
-        return id.contains(":") ? id : "minecraft:" + id;
-    }
-
-    @Override
-    public List<String> aliases() {
-        return List.of("ci", "clearinv");
-    }
-
-    @Override
-    public String permission() {
-        return "cellulosesz.command.clearinventory";
-    }
-
-    @Override
-    public String usage() {
-        return "/clearinventory [self|player|*] [item|*|**] [amount] | /clearinventory confirm <token>";
-    }
-
-    @Override
-    public String name() {
-        return "clearinventory";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length == 2 && invocation.args()[0].equalsIgnoreCase("confirm")) {
-            return confirm(invocation, invocation.args()[1]);
-        }
-        var parsed = parse(invocation);
-        if (parsed.isEmpty()) return 0;
-        return prepare(invocation, parsed.orElseThrow(), false, Optional.empty());
-    }
-
-    private int confirm(CommandInvocation invocation, String token) {
-        var actor = actor(invocation);
-        var payload = confirmations.consume(actor, ACTION, token, ClearPayload.class);
-        if (payload.isEmpty() || !payload.orElseThrow().actor().equals(actor)) {
-            invocation.errorKey("commands.item.clearinventory.confirm-invalid");
-            return 0;
-        }
-        return prepare(invocation, payload.orElseThrow().request(), true, Optional.of(payload.orElseThrow()
-                .targetUuids()));
-    }
-
-    private int prepare(
-            CommandInvocation invocation, ClearRequest request, boolean confirmed,
-            Optional<List<UUID>> expectedTargets
+    private static Target target(
+            CommandContext<CommandSourceStack> command,
+            @Nullable Target fixedTarget
     ) {
-        var resolved = resolveTargets(invocation, request);
-        if (resolved.isEmpty()) return 0;
-        var targets = resolved.orElseThrow();
-        var targetUuids = targets.stream().map(CellPlayer::uuid).sorted().toList();
-        if (expectedTargets.isPresent() && !expectedTargets.orElseThrow().equals(targetUuids)) {
-            invocation.errorKey("commands.item.clearinventory.confirm-mismatch");
-            return 0;
-        }
-        if (targets.size() > config.clearMaximumTargets) {
-            invocation.errorKey("commands.item.clearinventory.too-many-targets", Map.of("maximum", config.clearMaximumTargets));
-            return 0;
-        }
+        return fixedTarget == null ?
+                Target.player(
+                        PlayerNameArgument.get(command, "player")
+                ) :
+                fixedTarget;
+    }
 
-        var plans = new ArrayList<Plan>();
-        var noMatch = 0;
-        var exempt = 0;
-        var total = 0;
-        for (var target : targets) {
-            if (permissions.has(target.nativeHandle(), "cellulosesz.command.clearinventory.exempt")) {
-                exempt++;
+    private static List<InventoryStackSelection> select(
+            List<InventorySlotView> slots,
+            InventoryClearFilter filter,
+            int amount
+    ) {
+        var remaining = amount == 0
+                ? Integer.MAX_VALUE
+                : amount;
+        var selected = new ArrayList<InventoryStackSelection>();
+
+        for (var slot : slots) {
+            var equipment = slot.kind() != InventorySlotKind.MAIN;
+
+            if (equipment
+                    && filter.kind()
+                    != InventoryClearFilter.Kind.ALL_WITH_EQUIPMENT
+            ) {
                 continue;
             }
-            var slots = inventory.inventorySlots(target);
-            if (!slots.successful() || slots.value().isEmpty()) {
-                invocation.errorKey("commands.item.clearinventory.snapshot-failed", Map.of("player", target.name()));
-                return 0;
+
+            if (filter.kind() == InventoryClearFilter.Kind.ITEM &&
+                    !slot.descriptor()
+                            .normalizedItem()
+                            .equals(filter.itemId().orElseThrow())
+            ) {
+                continue;
             }
-            var selections = select(slots.value().orElseThrow(), request);
+
+            var count = Math.min(
+                    remaining,
+                    slot.descriptor().count
+            );
+
+            if (count > 0) {
+                selected.add(new InventoryStackSelection(
+                        slot.snapshot(),
+                        count
+                ));
+            }
+
+            remaining -= count;
+            if (remaining == 0) {
+                break;
+            }
+        }
+
+        return List.copyOf(selected);
+    }
+
+    private ArgumentBuilder<CommandSourceStack, ?> playerTarget(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor
+    ) {
+        var branch = Commands.argument(
+                        "player",
+                        PlayerNameArgument.playerName()
+                )
+                .suggests((_, builder) ->
+                        CommandSuggestionSupport.suggest(
+                                players::onlinePlayerNames,
+                                builder
+                        )
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        Target.player(
+                                PlayerNameArgument.get(command, "player")
+                        ),
+                        InventoryClearFilter.inventory(),
+                        0,
+                        false
+                ));
+
+        return addFilterBranches(
+                branch,
+                context,
+                descriptor,
+                null
+        );
+    }
+
+    private ArgumentBuilder<CommandSourceStack, ?> targetLiteral(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            String literal,
+            Target target
+    ) {
+        var branch = Commands.literal(literal)
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        target,
+                        InventoryClearFilter.inventory(),
+                        0,
+                        false
+                ));
+
+        return addFilterBranches(
+                branch,
+                context,
+                descriptor,
+                target
+        );
+    }
+
+    private ArgumentBuilder<CommandSourceStack, ?> allTarget(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor
+    ) {
+        var branch = Commands.literal("all")
+                .requires(source -> context.permissions().has(
+                        source,
+                        "cellulosesz.command.clearinventory.all"
+                ))
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        Target.all(),
+                        InventoryClearFilter.inventory(),
+                        0,
+                        false
+                ));
+
+        return addFilterBranches(
+                branch,
+                context,
+                descriptor,
+                Target.all()
+        );
+    }
+
+    private <T extends ArgumentBuilder<CommandSourceStack, T>> T addFilterBranches(
+            T parent,
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            @Nullable Target fixedTarget
+    ) {
+        parent.then(Commands.literal("all")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        target(command, fixedTarget),
+                        InventoryClearFilter.inventory(),
+                        0,
+                        false
+                ))
+        );
+
+        parent.then(Commands.literal("equipment")
+                .requires(source -> context.permissions().has(
+                        source,
+                        "cellulosesz.command.clearinventory.armor"
+                ))
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        target(command, fixedTarget),
+                        InventoryClearFilter.withEquipment(),
+                        0,
+                        false
+                ))
+        );
+
+        parent.then(Commands.literal("item")
+                .then(Commands.argument(
+                                        "item",
+                                        ItemIdArgument.itemId(items)
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                items::names,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        target(command, fixedTarget),
+                                        InventoryClearFilter.item(
+                                                ItemIdArgument.get(command, "item")
+                                        ),
+                                        0,
+                                        false
+                                ))
+                                .then(Commands.argument(
+                                                        "amount",
+                                                        IntegerArgumentType.integer(
+                                                                1,
+                                                                1_000_000
+                                                        )
+                                                )
+                                                .executes(command -> execute(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        target(command, fixedTarget),
+                                                        InventoryClearFilter.item(
+                                                                ItemIdArgument.get(
+                                                                        command,
+                                                                        "item"
+                                                                )
+                                                        ),
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "amount"
+                                                        ),
+                                                        false
+                                                ))
+                                )
+                )
+        );
+
+        return parent;
+    }
+
+    private int confirm(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        return ItemCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "clearinventory confirm",
+                policy -> {
+                    var actor = ItemCommandSupport.current(policy);
+
+                    if (actor.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-confirmation-required"
+                        );
+                    }
+
+                    var currentActor = actor.orElseThrow();
+                    var payload = confirmations.consume(
+                            currentActor.uuid(),
+                            ACTION,
+                            StringArgumentType.getString(command, "token"),
+                            ClearPayload.class
+                    );
+
+                    if (payload.isEmpty()
+                            || !payload.orElseThrow()
+                            .actor()
+                            .equals(currentActor.uuid())
+                    ) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.CONFLICT,
+                                "confirmation-invalid"
+                        );
+                    }
+
+                    var value = payload.orElseThrow();
+                    var resolved = value.targets()
+                            .stream()
+                            .map(players::onlinePlayer)
+                            .toList();
+
+                    if (resolved.stream().anyMatch(Optional::isEmpty)) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.NOT_FOUND,
+                                "target-offline"
+                        );
+                    }
+
+                    return executePrepared(
+                            currentActor,
+                            resolved.stream()
+                                    .map(Optional::orElseThrow)
+                                    .toList(),
+                            value.filter(),
+                            value.amount()
+                    );
+                }
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Target target,
+            InventoryClearFilter filter,
+            int amount,
+            boolean confirmed
+    ) {
+        return ItemCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "clearinventory",
+                policy -> {
+                    var actor = policy.currentPlayer();
+                    var targets = resolveTargets(target, actor);
+
+                    if (targets.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.NOT_FOUND,
+                                "target-offline"
+                        );
+                    }
+
+                    if (targets.size() > config.clearMaximumTargets) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_INPUT,
+                                "too-many-targets"
+                        );
+                    }
+
+                    if (targets.size() > 1
+                            && !policy.hasPermission(
+                            "cellulosesz.command.clearinventory.multiple"
+                    )) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.PERMISSION_DENIED,
+                                "multiple-targets"
+                        );
+                    }
+
+                    var filtered = targets.stream()
+                            .filter(value -> !permissions.has(
+                                    value.nativeHandle(),
+                                    "cellulosesz.command.clearinventory.exempt"
+                            ))
+                            .sorted(Comparator.comparing(CellPlayer::uuid))
+                            .toList();
+
+                    if (filtered.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.PERMISSION_DENIED,
+                                "targets-exempt"
+                        );
+                    }
+
+                    var total = estimate(filtered, filter, amount);
+                    var needsConfirmation = actor.isPresent() &&
+                            users.cached(actor.orElseThrow().uuid())
+                                    .map(user -> user.preferences()
+                                            .confirmInventoryClears())
+                                    .orElse(true) && (
+                            target.kind() == TargetKind.ALL
+                                    || filtered.size() > 1
+                                    || filter.kind() != InventoryClearFilter.Kind.ITEM
+                                    || total >= config.clearLargeRemovalThreshold);
+
+                    if (!confirmed
+                            && needsConfirmation
+                            && !policy.hasPermission(
+                            "cellulosesz.command.clearinventory.bypass-confirm"
+                    )) {
+                        var currentActor = actor.orElseThrow();
+
+                        var payload = new ClearPayload(
+                                currentActor.uuid(),
+                                filtered.stream()
+                                        .map(CellPlayer::uuid)
+                                        .toList(),
+                                filter,
+                                amount,
+                                clock.millis()
+                        );
+
+                        var token = confirmations.request(
+                                currentActor.uuid(),
+                                ACTION,
+                                payload,
+                                Duration.ofSeconds(
+                                        config.clearConfirmationTtlSeconds
+                                )
+                        );
+
+                        return PlatformResult.partial(
+                                token,
+                                "confirmation-required"
+                        );
+                    }
+
+                    return executePrepared(
+                            actor.orElse(null),
+                            filtered,
+                            filter,
+                            amount
+                    );
+                }
+        );
+    }
+
+    private List<CellPlayer> resolveTargets(
+            Target target,
+            Optional<CellPlayer> actor
+    ) {
+        return switch (target.kind()) {
+            case SELF -> actor.map(List::of)
+                    .orElseGet(List::of);
+            case PLAYER -> players.onlinePlayer(target.name())
+                    .map(List::of)
+                    .orElseGet(List::of);
+            case ALL -> players.onlinePlayers();
+        };
+    }
+
+    private int estimate(
+            List<CellPlayer> targets,
+            InventoryClearFilter filter,
+            int amount
+    ) {
+        var total = 0;
+
+        for (var target : targets) {
+            var slots = inventory.inventorySlots(target);
+
+            if (!slots.successful() || slots.value().isEmpty()) {
+                continue;
+            }
+
+            var selected = select(
+                    slots.value().orElseThrow(),
+                    filter,
+                    amount
+            );
+
+            total = Math.addExact(
+                    total,
+                    selected.stream()
+                            .mapToInt(InventoryStackSelection::count)
+                            .sum()
+            );
+        }
+
+        return total;
+    }
+
+    private PlatformResult<ClearSummary> executePrepared(
+            CellPlayer actor,
+            List<CellPlayer> targets,
+            InventoryClearFilter filter,
+            int amount
+    ) {
+        var plans = new ArrayList<Plan>();
+        var noMatch = 0;
+
+        for (var target : targets) {
+            var slots = inventory.inventorySlots(target);
+
+            if (!slots.successful() || slots.value().isEmpty()) {
+                return PlatformResult.failure(
+                        slots.status(),
+                        "inventory-snapshot-failed"
+                );
+            }
+
+            var selections = select(
+                    slots.value().orElseThrow(),
+                    filter,
+                    amount
+            );
+
             if (selections.isEmpty()) {
                 noMatch++;
                 continue;
             }
-            var count = selections.stream().mapToInt(InventoryStackSelection::count).sum();
-            var mutation = platform.prepareInventoryRemoval(target, selections);
-            if (mutation.isEmpty()) {
-                invocation.errorKey("commands.item.clearinventory.prepare-failed", Map.of("player", target.name()));
-                return 0;
+
+            var prepared = inventory.prepareRemoval(
+                    target,
+                    selections
+            );
+
+            if (!prepared.successful() || prepared.value().isEmpty()) {
+                return PlatformResult.failure(
+                        prepared.status(),
+                        "inventory-prepare-failed"
+                );
             }
-            total = Math.addExact(total, count);
-            plans.add(new Plan(target, mutation.orElseThrow(), count));
+
+            plans.add(new Plan(
+                    target,
+                    prepared.value().orElseThrow(),
+                    selections.stream()
+                            .mapToInt(InventoryStackSelection::count)
+                            .sum()
+            ));
         }
 
         if (plans.isEmpty()) {
-            invocation.errorKey("commands.item.clearinventory.no-matches", Map.of("targets", targets.size(), "exempt", exempt));
-            return 0;
-        }
-
-        if (!confirmed && requiresConfirmation(invocation, request, targets.size(), total)) {
-            var actor = actor(invocation);
-            if (actor.equals(CONSOLE_ACTOR)) {
-                invocation.errorKey("commands.item.clearinventory.console-confirmation-unavailable");
-                return 0;
-            }
-            var payload = new ClearPayload(actor, request, targetUuids, System.currentTimeMillis());
-            var token = confirmations.request(
-                    actor,
-                    ACTION,
-                    payload,
-                    Duration.ofSeconds(config.clearConfirmationTtlSeconds)
+            return PlatformResult.failure(
+                    PlatformOperationStatus.NOT_FOUND,
+                    "no-matches"
             );
-            invocation.replyKey("commands.item.clearinventory.confirm", Map.of(
-                    "token", token,
-                    "targets", targets.size(),
-                    "items", total,
-                    "seconds", config.clearConfirmationTtlSeconds
-            ));
-            return 1;
         }
 
         var committed = new ArrayList<Plan>();
+
         for (var plan : plans) {
             if (!plan.mutation().commit()) {
-                var rollbackFailed = committed.stream()
-                        .sorted(Comparator.comparing(planEntry -> planEntry.target().uuid()))
-                        .map(Plan::mutation)
-                        .map(InventoryMutation::rollback)
-                        .filter(result -> !result)
+                var rollbackFailures = committed.stream()
+                        .filter(value -> !value.mutation().rollback())
                         .count();
-                invocation.errorKey(
-                        rollbackFailed == 0
-                                ? "commands.item.clearinventory.conflict"
-                                : "commands.item.clearinventory.rollback-failed",
-                        Map.of("player", plan.target().name(), "rollbackFailures", rollbackFailed)
+
+                return PlatformResult.failure(
+                        rollbackFailures == 0
+                                ? PlatformOperationStatus.CONFLICT
+                                : PlatformOperationStatus.ROLLBACK_FAILED,
+                        rollbackFailures == 0
+                                ? "inventory-conflict"
+                                : "rollback-failed"
                 );
-                return 0;
             }
+
             committed.add(plan);
         }
-        confirmations.clear(actor(invocation), ACTION);
-        plans.forEach(plan -> invocation.replyKey("commands.item.clearinventory.target-success", Map.of(
-                "player", plan.target().name(),
-                "removed", plan.removed()
-        )));
-        invocation.replyKey("commands.item.clearinventory.summary", Map.of(
-                "successful", plans.size(),
-                "noMatch", noMatch,
-                "failed", 0,
-                "exempt", exempt,
-                "removed", total
+
+        confirmations.clear(actor.uuid(), ACTION);
+
+        return PlatformResult.success(new ClearSummary(
+                committed.size(),
+                noMatch,
+                committed.stream()
+                        .mapToInt(Plan::removed)
+                        .sum()
         ));
-        return plans.size();
     }
 
-    private Optional<ClearRequest> parse(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length > 3) return usage(invocation);
-        var self = platform.player(invocation);
-        final TargetKind kind;
-        final String targetName;
-        var index = 0;
-        if (args.length == 0) {
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.item.clearinventory.console-target-required");
-                return Optional.empty();
-            }
-            kind = TargetKind.SELF;
-            targetName = self.orElseThrow().name();
-        } else if (args[0].equalsIgnoreCase("self")) {
-            if (self.isEmpty()) {
-                invocation.errorKey("commands.item.clearinventory.console-target-required");
-                return Optional.empty();
-            }
-            kind = TargetKind.SELF;
-            targetName = self.orElseThrow().name();
-            index = 1;
-        } else if (args[0].equals("*")) {
-            if (!invocation.hasPermission("cellulosesz.command.clearinventory.all")) return denied(invocation);
-            kind = TargetKind.ALL;
-            targetName = "*";
-            index = 1;
-        } else {
-            if (!invocation.hasPermission("cellulosesz.command.clearinventory.others")) return denied(invocation);
-            kind = TargetKind.PLAYER;
-            targetName = args[0];
-            index = 1;
-        }
-
-        var filter = "*";
-        var includeEquipment = false;
-        if (index < args.length) {
-            filter = args[index++];
-            includeEquipment = filter.equals("**");
-            if (includeEquipment && !invocation.hasPermission("cellulosesz.command.clearinventory.armor")) {
-                return denied(invocation);
-            }
-            if (!filter.equals("*") && !filter.equals("**")) {
-                var parsed = items.parse(filter);
-                if (parsed.isEmpty() || !items.valid(parsed.orElseThrow())) {
-                    invocation.errorKey("commands.item.clearinventory.unknown-item", Map.of("item", filter));
-                    return Optional.empty();
-                }
-                filter = normalize(parsed.orElseThrow().item);
-            }
-        }
-        var amount = 0;
-        if (index < args.length) {
-            try {
-                amount = Integer.parseInt(args[index++]);
-            } catch (NumberFormatException failure) {
-                return invalidAmount(invocation);
-            }
-            if (amount <= 0) return invalidAmount(invocation);
-        }
-        if (index != args.length) return usage(invocation);
-        return Optional.of(new ClearRequest(kind, targetName, filter, amount, includeEquipment));
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
-    private Optional<List<CellPlayer>> resolveTargets(CommandInvocation invocation, ClearRequest request) {
-        if (request.kind() == TargetKind.ALL) {
-            var players = platform.onlinePlayers();
-            if (players.size() > 1 && !invocation.hasPermission("cellulosesz.command.clearinventory.multiple")) {
-                return deniedTargets(invocation);
-            }
-            return Optional.of(players);
-        }
-        if (request.kind() == TargetKind.SELF) return platform.player(invocation).map(List::of);
-        var target = invocation.resolvePlayer(request.targetName()).online();
-        if (target.isEmpty()) {
-            invocation.errorKey("commands.common.unknown-player", Map.of("player", request.targetName()));
-            return Optional.empty();
-        }
-        return Optional.of(List.of(target.orElseThrow()));
-    }
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "clearinventory",
+                "cellulosesz.command.clearinventory",
+                CommandSourceKind.ANY
+        );
 
-    private List<InventoryStackSelection> select(List<InventorySlotView> slots, ClearRequest request) {
-        var result = new ArrayList<InventoryStackSelection>();
-        var remaining = request.amount() == 0 ? Integer.MAX_VALUE : request.amount();
-        for (var slot : slots) {
-            if (slot.kind() != InventorySlotKind.MAIN && !request.includeEquipment()) continue;
-            if (!request.filter().equals("*") && !request.filter().equals("**")
-                    && !normalize(slot.descriptor().item).equals(request.filter())) continue;
-            var count = Math.min(remaining, slot.descriptor().count);
-            if (count > 0) result.add(new InventoryStackSelection(slot.snapshot(), count));
-            remaining -= count;
-            if (remaining == 0) break;
-        }
-        return List.copyOf(result);
-    }
+        var root = Commands.literal("clearinventory")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        Target.self(),
+                        InventoryClearFilter.inventory(),
+                        0,
+                        false
+                ))
+                .then(targetLiteral(
+                        context,
+                        descriptor,
+                        "self",
+                        Target.self()
+                ))
+                .then(Commands.literal("player")
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.command.clearinventory.others"
+                        ))
+                        .then(playerTarget(context, descriptor))
+                )
+                .then(allTarget(context, descriptor))
+                .then(Commands.literal("confirm")
+                        .then(Commands.argument(
+                                                "token",
+                                                StringArgumentType.word()
+                                        )
+                                        .executes(command -> confirm(
+                                                context,
+                                                command,
+                                                descriptor
+                                        ))
+                        )
+                );
 
-    private boolean requiresConfirmation(CommandInvocation invocation, ClearRequest request, int targets, int total) {
-        if (invocation.hasPermission("cellulosesz.command.clearinventory.bypass-confirm")) return false;
-        var player = platform.player(invocation);
-        var preference = player.flatMap(value -> users.cached(value.uuid()))
-                .map(user -> user.preferences.confirmInventoryClears)
-                .orElse(true);
-        return preference && (request.kind() == TargetKind.ALL || targets > 1
-                || request.filter().equals("*") || request.filter().equals("**")
-                || total >= config.clearLargeRemovalThreshold);
-    }
+        var node = context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of("ci", "clearinv"),
+                "commands.description.clearinventory",
+                "/clearinventory [self|player <player>|all] "
+                        + "[all|equipment|item <item> [amount]] "
+                        + "| /clearinventory confirm <token>",
+                root
+        );
 
-    private UUID actor(CommandInvocation invocation) {
-        return platform.player(invocation).map(CellPlayer::uuid).orElse(CONSOLE_ACTOR);
-    }
-
-    private Optional<ClearRequest> usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.clearinventory.usage", Map.of("usage", usage()));
-        return Optional.empty();
-    }
-
-    private Optional<ClearRequest> invalidAmount(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.clearinventory.invalid-amount");
-        return Optional.empty();
-    }
-
-    private Optional<ClearRequest> denied(CommandInvocation invocation) {
-        invocation.errorKey("commands.common.no-permission");
-        return Optional.empty();
-    }
-
-    private Optional<List<CellPlayer>> deniedTargets(CommandInvocation invocation) {
-        invocation.errorKey("commands.common.no-permission");
-        return Optional.empty();
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "ci",
+                node
+        );
+        context.registerAlias(
+                moduleId(),
+                descriptor,
+                "clearinv",
+                node
+        );
     }
 
     private enum TargetKind {
+
         SELF,
         PLAYER,
         ALL
+
     }
 
-    private record ClearRequest(
+    private record Target(
             TargetKind kind,
-            String targetName,
-            String filter,
-            int amount,
-            boolean includeEquipment
+            String name
     ) {
 
-        public ClearRequest {
-            if (targetName.isBlank() || filter.isBlank() || amount < 0)
-                throw new IllegalArgumentException("Invalid clear request");
+        private Target {
+            requireNonNull(kind, "kind");
+            name = requireNonNull(name, "name");
+
+            if (kind == TargetKind.PLAYER) {
+                requireNonBlank(name, "name");
+            }
+        }
+
+        static Target self() {
+            return new Target(TargetKind.SELF, "");
+        }
+
+        static Target player(String name) {
+            return new Target(TargetKind.PLAYER, name);
+        }
+
+        static Target all() {
+            return new Target(TargetKind.ALL, "");
         }
 
     }
 
     private record ClearPayload(
             UUID actor,
-            ClearRequest request,
-            List<UUID> targetUuids,
-            long requestedAt
+            List<UUID> targets,
+            InventoryClearFilter filter,
+            int amount,
+            long issuedAt
     ) {
 
         private ClearPayload {
-            targetUuids = List.copyOf(targetUuids);
+            requireNonNull(actor, "actor");
+            targets = List.copyOf(targets);
+            requireNonNull(filter, "filter");
+            requireNonNegative(amount, "amount");
+            requireNonNegative(issuedAt, "issuedAt");
         }
 
     }
@@ -367,6 +740,26 @@ public final class ClearInventoryCommand implements CellCommand {
             InventoryMutation mutation,
             int removed
     ) {
+
+        private Plan {
+            requireNonNull(target, "target");
+            requireNonNull(mutation, "mutation");
+            requirePositive(removed, "removed");
+        }
+
+    }
+
+    private record ClearSummary(
+            int successful,
+            int noMatch,
+            int removed
+    ) {
+
+        private ClearSummary {
+            requirePositive(successful, "successful");
+            requireNonNegative(noMatch, "noMatch");
+            requirePositive(removed, "removed");
+        }
 
     }
 

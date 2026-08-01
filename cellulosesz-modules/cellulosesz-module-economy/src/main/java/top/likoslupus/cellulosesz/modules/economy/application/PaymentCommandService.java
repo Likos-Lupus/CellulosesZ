@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.api.user.UserUpdate;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -117,14 +118,18 @@ public final class PaymentCommandService {
     }
 
     private CompletableFuture<EconomyCommandResult> validateAndPay(
-            CellPlayer sender, List<ResolvedPlayer> resolved,
-            BigDecimal amount, Optional<String> token,
+            CellPlayer sender,
+            List<ResolvedPlayer> resolved,
+            BigDecimal amount,
+            Optional<String> token,
             boolean offlinePermission,
             EconomyCommandSettings snapshot
     ) {
-        if (resolved.isEmpty()) return CompletableFuture.completedFuture(EconomyCommandResult.failure(
-                "commands.economy.abstract-economy-command.error.player-not-found"
-        ));
+        if (resolved.isEmpty()) {
+            return CompletableFuture.completedFuture(EconomyCommandResult.failure(
+                    "commands.economy.abstract-economy-command.error.player-not-found"
+            ));
+        }
 
         for (var target : resolved) {
             if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
@@ -168,12 +173,16 @@ public final class PaymentCommandService {
     private CompletableFuture<Map<UUID, CellUser>> loadUsers(List<UUID> ids) {
         CompletableFuture<Map<UUID, CellUser>> future = CompletableFuture.completedFuture(new LinkedHashMap<>());
         for (var id : ids.stream().distinct().toList()) {
-            future = future.thenCombine(users.load(id), (loaded, user) -> {
-                var copy = new LinkedHashMap<>(loaded);
-                copy.put(id, user);
-                return copy;
-            });
+            future = future.thenCombine(
+                    users.load(id), (loaded, user) -> {
+                        var copy = new LinkedHashMap<>(loaded);
+                        copy.put(id, user);
+
+                        return copy;
+                    }
+            );
         }
+
         return future.thenApply(Map::copyOf);
     }
 
@@ -193,7 +202,7 @@ public final class PaymentCommandService {
                 ));
             }
 
-            if (!recipient.preferences.payments) {
+            if (!recipient.preferences().payments()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-command.error.player-not-accepting-payments",
                         Map.of("player", target.name())
@@ -201,7 +210,7 @@ public final class PaymentCommandService {
             }
 
             if (snapshot.respectIgnore()
-                    && recipient.relations.ignored.contains(sender.uuid())
+                    && recipient.relations().ignored().contains(sender.uuid())
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-ignored",
@@ -230,7 +239,7 @@ public final class PaymentCommandService {
                 snapshot.version()
         );
 
-        if (senderUser.preferences.confirmLargePayments
+        if (senderUser.preferences().confirmLargePayments()
                 && snapshot.confirmationThreshold().signum() > 0
                 && total.compareTo(snapshot.confirmationThreshold()) >= 0
         ) {
@@ -299,7 +308,8 @@ public final class PaymentCommandService {
                                             "commands.economy.pay-received",
                                             Map.of(
                                                     "player", sender.name(),
-                                                    "amount", economy.format(amount))
+                                                    "amount", economy.format(amount)
+                                            )
                                     )
                             ))
                     );
@@ -315,7 +325,17 @@ public final class PaymentCommandService {
     }
 
     public CompletableFuture<EconomyCommandResult> togglePayments(UUID uuid) {
-        return users.update(uuid, user -> user.preferences.payments = !user.preferences.payments)
+        return users
+                .update(
+                        uuid,
+                        user -> {
+                            var enabled = !user.preferences().payments();
+                            return UserUpdate.of(
+                                    user.withPreferences(user.preferences().withPayments(enabled)),
+                                    enabled
+                            );
+                        }
+                )
                 .thenApply(enabled -> EconomyCommandResult.success(
                         enabled
                                 ? "commands.economy.payments-enabled"
@@ -324,7 +344,19 @@ public final class PaymentCommandService {
     }
 
     public CompletableFuture<EconomyCommandResult> toggleConfirmation(UUID uuid) {
-        return users.update(uuid, user -> user.preferences.confirmLargePayments = !user.preferences.confirmLargePayments)
+        return users
+                .update(
+                        uuid,
+                        user -> {
+                            var enabled = !user.preferences().confirmLargePayments();
+                            return UserUpdate.of(
+                                    user.withPreferences(user
+                                            .preferences()
+                                            .withConfirmLargePayments(enabled)),
+                                    enabled
+                            );
+                        }
+                )
                 .thenApply(enabled -> {
                     confirmations.clear(uuid, CONFIRM_ACTION);
                     return EconomyCommandResult.success(

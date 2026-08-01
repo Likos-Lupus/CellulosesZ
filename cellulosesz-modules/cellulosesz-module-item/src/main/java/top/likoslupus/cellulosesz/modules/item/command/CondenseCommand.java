@@ -1,143 +1,207 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
-import top.likoslupus.cellulosesz.api.command.CellCommand;
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
+import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.api.item.InventorySlotView;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.recipe.CompressionRule;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
-public final class CondenseCommand implements CellCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final PlatformService platform;
+public final class CondenseCommand implements CommandContributor {
+
     private final ItemService items;
+    private final InventoryPlatformService inventory;
     private final RecipePlatformService recipes;
     private final ItemConfig config;
 
     public CondenseCommand(
-            PlatformService platform,
             ItemService items,
+            InventoryPlatformService inventory,
             RecipePlatformService recipes,
             ItemConfig config
     ) {
-        this.platform = platform;
-        this.items = items;
-        this.recipes = recipes;
-        this.config = config;
+        this.items = requireNonNull(items, "items");
+        this.inventory = requireNonNull(inventory, "inventory");
+        this.recipes = requireNonNull(recipes, "recipes");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.command.condense";
+    public void register(CommandRegistrationContext context) {
+        var descriptor = ItemCommandSupport.descriptor(
+                "condense",
+                "cellulosesz.command.condense",
+                CommandSourceKind.PLAYER_ONLY
+        );
+
+        var root = Commands.literal("condense")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        Optional.empty()
+                ))
+                .then(Commands.argument(
+                                        "item",
+                                        ItemIdArgument.itemId(items)
+                                )
+                                .suggests((_, builder) ->
+                                        CommandSuggestionSupport.suggest(
+                                                items::names,
+                                                builder
+                                        )
+                                )
+                                .executes(command -> execute(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(
+                                                ItemIdArgument.get(
+                                                        command,
+                                                        "item"
+                                                )
+                                        )
+                                ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.condense",
+                "/condense [item]",
+                root
+        );
     }
 
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/condense [item]";
-    }
-
-    @Override
-    public String name() {
-        return "condense";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        if (invocation.args().length > 1) return usage(invocation);
-        var filter = Optional.<String>empty();
-        if (invocation.args().length == 1) {
-            var parsed = items.parse(invocation.args()[0]);
-            if (parsed.isEmpty()) {
-                invocation.errorKey("commands.item.condense.invalid-item", Map.of("item", invocation.args()[0]));
-                return 0;
-            }
-            filter = Optional.of(parsed.orElseThrow().normalizedItem());
-        }
-        var rulesResult = recipes.compressionRules(filter, config.maximumCondenseRules);
-        if (!rulesResult.successful() || rulesResult.value().isEmpty()) {
-            invocation.platformError(rulesResult.status());
-            return 0;
-        }
-        var player = platform.player(invocation).orElseThrow();
-        var snapshot = platform.inventorySnapshot(player);
-        if (snapshot.isEmpty()) {
-            invocation.errorKey("commands.item.condense.platform-failed", Map.of("reason", "inventory-snapshot"));
-            return 0;
-        }
-        var plainCounts = new LinkedHashMap<String, Integer>();
-        for (var stack : snapshot.orElseThrow()) {
-            if (!platform.plainInventoryItem(stack)) continue;
-            var described = platform.describeInventoryItem(stack);
-            if (described.isEmpty()) continue;
-            plainCounts.merge(described.orElseThrow().normalizedItem(), described.orElseThrow().count, Math::addExact);
-        }
-        var removals = new ArrayList<InventoryItemRequest>();
-        var additions = new ArrayList<InventoryItemRequest>();
-        var conversions = new ArrayList<Conversion>();
-        var totalBatches = 0;
-        for (CompressionRule rule : rulesResult.value().orElseThrow()) {
-            var available = plainCounts.getOrDefault(rule.inputItem(), 0);
-            var batches = Math.min(available / rule.inputCount(), config.maximumCondenseBatches - totalBatches);
-            if (batches <= 0) continue;
-            try {
-                var removed = Math.multiplyExact(batches, rule.inputCount());
-                var added = Math.multiplyExact(batches, rule.outputCount());
-                removals.add(new InventoryItemRequest(rule.inputItem(), removed));
-                additions.add(new InventoryItemRequest(rule.outputItem(), added));
-                conversions.add(new Conversion(rule.inputItem(), removed, rule.outputItem(), added));
-                totalBatches = Math.addExact(totalBatches, batches);
-                if (totalBatches >= config.maximumCondenseBatches) break;
-            } catch (ArithmeticException failure) {
-                invocation.errorKey("commands.item.condense.overflow");
-                return 0;
-            }
-        }
-        if (conversions.isEmpty()) {
-            invocation.errorKey("commands.item.condense.none");
-            return 0;
-        }
-        var mutation = platform.prepareInventoryExchange(player, removals, additions);
-        if (mutation.isEmpty() || !mutation.orElseThrow().commit()) {
-            invocation.errorKey("commands.item.condense.no-space-or-conflict");
-            return 0;
-        }
-        for (var conversion : conversions) {
-            invocation.replyKey("commands.item.condense.conversion", Map.of(
-                    "input", conversion.input(), "removed", conversion.removed(),
-                    "output", conversion.output(), "added", conversion.added()
-            ));
-        }
-        invocation.replyKey("commands.item.condense.success", Map.of(
-                "rules", conversions.size(), "batches", totalBatches
-        ));
-        return conversions.size();
-    }
-
-    private int usage(CommandInvocation invocation) {
-        invocation.errorKey("commands.item.condense.usage", Map.of("usage", usage()));
-        return 0;
-    }
-
-    private record Conversion(
-            String input,
-            int removed,
-            String output,
-            int added
+    private int execute(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            Optional<String> filter
     ) {
+        return ItemCommandSupport.sync(
+                context,
+                command,
+                descriptor,
+                "condense",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
 
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    var currentPlayer = player.orElseThrow();
+                    var rules = recipes.compressionRules(
+                            filter,
+                            config.maximumCondenseRules
+                    );
+                    var slots = inventory.inventorySlots(currentPlayer);
+
+                    if (!rules.successful() || rules.value().isEmpty()) {
+                        return rules;
+                    }
+
+                    if (!slots.successful() || slots.value().isEmpty()) {
+                        return slots;
+                    }
+
+                    var counts = slots.value().orElseThrow().stream()
+                            .filter(InventorySlotView::plain)
+                            .collect(Collectors.toMap(
+                                    slot -> slot.descriptor().normalizedItem(),
+                                    slot -> slot.descriptor().count,
+                                    Integer::sum,
+                                    HashMap::new
+                            ));
+                    var removals = new ArrayList<InventoryItemRequest>();
+                    var additions = new ArrayList<InventoryItemRequest>();
+                    var conversions = 0;
+
+                    for (var rule : rules.value().orElseThrow()) {
+                        var batches = Math.min(
+                                config.maximumCondenseBatches,
+                                counts.getOrDefault(
+                                        rule.inputItem(),
+                                        0
+                                ) / rule.inputCount()
+                        );
+
+                        if (batches <= 0) {
+                            continue;
+                        }
+
+                        removals.add(new InventoryItemRequest(
+                                rule.inputItem(),
+                                Math.multiplyExact(
+                                        batches,
+                                        rule.inputCount()
+                                )
+                        ));
+                        additions.add(new InventoryItemRequest(
+                                rule.outputItem(),
+                                Math.multiplyExact(
+                                        batches,
+                                        rule.outputCount()
+                                )
+                        ));
+                        conversions += batches;
+                    }
+
+                    if (conversions == 0) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.NOT_FOUND,
+                                "no-compression"
+                        );
+                    }
+
+                    var mutation = inventory.prepareExchange(
+                            currentPlayer,
+                            removals,
+                            additions
+                    );
+
+                    if (!mutation.successful()
+                            || mutation.value().isEmpty()) {
+                        return mutation;
+                    }
+
+                    return mutation.value().orElseThrow().commit()
+                            ? PlatformResult.success(conversions)
+                            : PlatformResult.failure(
+                                    PlatformOperationStatus.CONFLICT,
+                                    "inventory-conflict"
+                            );
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return ItemCommandSupport.MODULE;
     }
 
 }

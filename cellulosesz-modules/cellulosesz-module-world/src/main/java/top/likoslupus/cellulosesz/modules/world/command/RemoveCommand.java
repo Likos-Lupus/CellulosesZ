@@ -1,79 +1,103 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
-import top.likoslupus.cellulosesz.api.world.EntityRemoveService;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.world.EntityRemovalPlatformService;
+import top.likoslupus.cellulosesz.api.world.EntityRemovalRequest;
+import top.likoslupus.cellulosesz.common.command.CommandContributor;
+import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.world.command.argument.EntityRemoveSelectorArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
-import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 
-public final class RemoveCommand extends AbstractWorldCommand {
+import static java.util.Objects.requireNonNull;
 
-    private final EntityRemoveService remover;
+public final class RemoveCommand implements CommandContributor {
+
+    private final EntityRemovalPlatformService service;
+    private final WorldConfig config;
 
     public RemoveCommand(
-            PlatformService platform,
-            WorldConfig config,
-            EntityRemoveService remover
+            EntityRemovalPlatformService service,
+            WorldConfig config
     ) {
-        super(platform, config);
-        this.remover = remover;
+        this.service = requireNonNull(service, "service");
+        this.config = requireNonNull(config, "config");
     }
 
     @Override
-    public String permission() {
-        return "cellulosesz.world.remove";
-    }
-
-    @Override
-    public CommandSourceKind sourceKind() {
-        return CommandSourceKind.PLAYER_ONLY;
-    }
-
-    @Override
-    public String usage() {
-        return "/remove <selector> [radius]";
-    }
-
-    @Override
-    public String name() {
-        return "remove";
-    }
-
-    @Override
-    public int execute(CommandInvocation invocation) {
-        var args = invocation.args();
-        if (args.length < 1) {
-            invocation.errorKey(
-                    "commands.world.remove-command.error.usage",
-                    Map.of("usage", usage())
-            );
-            return 0;
-        }
-
-        var radius = args.length >= 2
-                ? parse(args[1], config.defaultRemoveRadius)
-                : config.defaultRemoveRadius;
-        var result = remover.remove(
-                args[0],
-                player(invocation),
-                radius
+    public void register(CommandRegistrationContext context) {
+        var descriptor = WorldCommandSupport.descriptor(
+                "remove",
+                "cellulosesz.world.remove",
+                CommandSourceKind.PLAYER_ONLY
         );
-        if (result.success()) {
-            invocation.reply(result.message());
-        } else {
-            invocation.error(result.message());
-        }
-        return result.success() ? 1 : 0;
+        var selector = Commands.argument("selector", EntityRemoveSelectorArgument.selector())
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        config.defaultRemoveRadius
+                ))
+                .then(Commands.argument("radius", IntegerArgumentType.integer(1, 4_096))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                IntegerArgumentType.getInteger(command, "radius")
+                        ))
+                );
+
+        context.registerDirect(
+                moduleId(),
+                descriptor,
+                List.of(),
+                "commands.description.remove",
+                "/remove <selector> [radius]",
+                Commands.literal("remove").then(selector)
+        );
     }
 
-    private int parse(String value, int fallback) {
-        try {
-            return Math.max(1, Integer.parseInt(value));
-        } catch (NumberFormatException _) {
-            return fallback;
-        }
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            int radius
+    ) {
+        return WorldCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "remove",
+                policy -> {
+                    var origin = policy.currentPlayer();
+                    if (origin.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "console-position-required"
+                        );
+                    }
+
+                    return service.remove(new EntityRemovalRequest(
+                            EntityRemoveSelectorArgument.get(command, "selector"),
+                            Optional.of(origin.orElseThrow()),
+                            radius
+                    ));
+                }
+        );
+    }
+
+    @Override
+    public String moduleId() {
+        return WorldCommandSupport.MODULE;
     }
 
 }

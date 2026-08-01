@@ -1,24 +1,26 @@
 package top.likoslupus.cellulosesz.core.i18n;
 
-import top.likoslupus.cellulosesz.api.command.CommandInvocation;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.validation.Checks;
 
 import java.util.Locale;
 
+import static java.util.Objects.requireNonNull;
+
 public final class DefaultLocaleResolver implements LocaleResolver {
 
-    private final PlatformService platform;
-    private String defaultLocale;
-    private boolean useClientLocale;
+    private final ClientLocaleService clients;
+    private volatile String defaultLocale;
+    private volatile boolean useClientLocale;
 
     public DefaultLocaleResolver(
-            PlatformService platform,
+            ClientLocaleService clients,
             String defaultLocale,
             boolean useClientLocale
     ) {
-        this.platform = platform;
+        this.clients = requireNonNull(clients, "clients");
         configure(defaultLocale, useClientLocale);
     }
 
@@ -28,23 +30,21 @@ public final class DefaultLocaleResolver implements LocaleResolver {
     }
 
     private String normalize(String locale) {
-        if (locale.isBlank()) return "en_us";
-        return locale
+        var normalized = Checks.requireNonBlank(locale, "locale")
                 .toLowerCase(Locale.ROOT)
                 .replace('-', '_');
-    }
-
-    @Override
-    public String locale(CommandInvocation invocation) {
-        return platform.player(invocation)
-                .map(this::locale)
-                .orElse(defaultLocale);
+        return normalized.isBlank()
+                ? "en_us"
+                : normalized;
     }
 
     @Override
     public String locale(CellPlayer player) {
-        if (!useClientLocale) return defaultLocale;
-        var locale = platform.locale(player);
+        if (!useClientLocale) {
+            return defaultLocale;
+        }
+
+        var locale = clients.clientLocale(player);
         return locale.isBlank()
                 ? defaultLocale
                 : normalize(locale);

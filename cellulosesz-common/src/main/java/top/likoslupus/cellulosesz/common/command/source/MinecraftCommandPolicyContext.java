@@ -6,7 +6,7 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.PlatformService;
+import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.MinecraftCommandResponder;
 
@@ -21,7 +21,7 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     private final CommandSourceStack source;
     private final CommandDescriptor descriptor;
     private final PermissionService permissions;
-    private final PlatformService platform;
+    private final PlayerDirectory players;
     private final MinecraftCommandResponder responder;
     private final String invokedLabel;
     private final String auditSummary;
@@ -30,7 +30,7 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
             CommandSourceStack source,
             CommandDescriptor descriptor,
             PermissionService permissions,
-            PlatformService platform,
+            PlayerDirectory players,
             MinecraftCommandResponder responder,
             String invokedLabel,
             String auditSummary
@@ -38,7 +38,7 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
         this.source = requireNonNull(source, "source");
         this.descriptor = requireNonNull(descriptor, "descriptor");
         this.permissions = requireNonNull(permissions, "permissions");
-        this.platform = requireNonNull(platform, "platform");
+        this.players = requireNonNull(players, "players");
         this.responder = requireNonNull(responder, "responder");
         this.invokedLabel = requireNonNull(invokedLabel, "invokedLabel");
         this.auditSummary = requireNonNull(auditSummary, "auditSummary");
@@ -65,15 +65,15 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
 
     @Override
     public Optional<UUID> playerUuid() {
-        return source.getEntity() instanceof ServerPlayer p
-                ? Optional.of(p.getUUID())
+        return source.getEntity() instanceof ServerPlayer player
+                ? Optional.of(player.getUUID())
                 : Optional.empty();
     }
 
     @Override
     public Optional<String> playerName() {
-        return source.getEntity() instanceof ServerPlayer p
-                ? Optional.of(p.getGameProfile().name())
+        return source.getEntity() instanceof ServerPlayer player
+                ? Optional.of(player.getGameProfile().name())
                 : Optional.empty();
     }
 
@@ -98,11 +98,7 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     }
 
     public Optional<CellPlayer> currentPlayer() {
-        var stableUuid = playerUuid();
-        if (stableUuid.isEmpty()) return Optional.empty();
-        return platform.onlinePlayers().stream()
-                .filter(player -> player.uuid().equals(stableUuid.orElseThrow()))
-                .findFirst();
+        return playerUuid().flatMap(players::onlinePlayer);
     }
 
     public int intPermissionOption(String key, int fallback) {
@@ -114,8 +110,11 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     }
 
     public void respond(boolean success, LocalizedMessage message) {
-        if (success) reply(message);
-        else error(message);
+        if (success) {
+            reply(message);
+        } else {
+            error(message);
+        }
     }
 
 }
