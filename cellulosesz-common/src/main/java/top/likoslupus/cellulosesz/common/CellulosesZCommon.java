@@ -131,16 +131,22 @@ public final class CellulosesZCommon {
         LifecycleEvent.SERVER_STARTED.register(bootstrap::onServerStarted);
         LifecycleEvent.SERVER_STOPPING.register(current -> {
             server.beginStopping(current);
-            try {
-                bootstrap.onServerStopping(current);
-            } finally {
-                try {
-                    runtime.hooks().close();
-                } finally {
-                    runtime.hooks().detachServer();
-                    server.detach(current);
-                }
-            }
+            bootstrap
+                    .onServerStopping(current)
+                    .whenComplete((_, failure) -> {
+                        try {
+                            if (failure != null) {
+                                bootstrap.logger().error(
+                                        "CellulosesZ asynchronous shutdown failed.",
+                                        failure
+                                );
+                            }
+                            runtime.hooks().close();
+                        } finally {
+                            runtime.hooks().detachServer();
+                            server.detach(current);
+                        }
+                    });
         });
         TickEvent.SERVER_POST.register(current -> {
             runtime.hooks().beforeServerTick(current);

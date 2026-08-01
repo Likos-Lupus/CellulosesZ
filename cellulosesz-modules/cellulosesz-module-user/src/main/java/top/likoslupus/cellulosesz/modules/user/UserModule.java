@@ -32,6 +32,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command", "permission"}
 )
+@SuppressWarnings("resource")
 public final class UserModule implements CellulosesZModule {
 
     private @Nullable UserConfig config;
@@ -40,15 +41,15 @@ public final class UserModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.user",
                 UserConfig.class,
                 "modules/user.yml",
                 UserConfig::new
         );
+        config = context.configs().require("module.user", UserConfig.class);
     }
 
-    @SuppressWarnings("resource")
     @Override
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
@@ -145,12 +146,12 @@ public final class UserModule implements CellulosesZModule {
         );
         context.events().listen(
                 PlayerDisconnectEvent.class,
-                event -> {
-                    var quit = users.markQuit(event.player());
-                    if (config.saveOnQuit) {
-                        quit.thenCompose(_ -> users.saveAll());
-                    }
-                }
+                event -> users.markQuit(event.player())
+                        .whenComplete((_, failure) -> {
+                            if (failure != null) {
+                                context.logger().error("Failed to persist quitting user", failure);
+                            }
+                        })
         );
     }
 
@@ -170,11 +171,6 @@ public final class UserModule implements CellulosesZModule {
     public void onReload(ModuleContext context) {
         requireNonNull(displayNames, "DisplayNameService has not been initialized");
         displayNames.refreshAll();
-    }
-
-    @Override
-    public void onServerStopping(ModuleContext context) {
-        requireNonNull(users, "JsonUserService has not been initialized");
     }
 
 }

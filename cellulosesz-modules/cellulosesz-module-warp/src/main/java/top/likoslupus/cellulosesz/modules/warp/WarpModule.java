@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.warp;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
@@ -18,6 +17,8 @@ import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
 import top.likoslupus.cellulosesz.modules.warp.command.WarpCommand;
 import top.likoslupus.cellulosesz.modules.warp.service.JsonWarpService;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
@@ -27,6 +28,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"teleport", "command"}
 )
+@SuppressWarnings("resource")
 public final class WarpModule implements CellulosesZModule {
 
     private @Nullable WarpConfig config;
@@ -34,15 +36,15 @@ public final class WarpModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.warp",
                 WarpConfig.class,
                 "modules/warp.yml",
                 WarpConfig::new
         );
+        config = context.configs().require("module.warp", WarpConfig.class);
     }
 
-    @SuppressWarnings("resource")
     @Override
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
@@ -78,18 +80,25 @@ public final class WarpModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
         var service = context.services().require(WarpCommandService.class);
-        context.track(registry.register("warp-commands", new WarpCommand(service)));
+        context.scope().own(registry.register("warp-commands", new WarpCommand(service)));
     }
 
     @Override
     public void onReload(ModuleContext context) {
         config = context.configs().require("module.warp", WarpConfig.class);
-        context.services().require(WarpCommandService.class)
-                .configure(requireNonNull(config, "WarpConfig has not been initialized"));
+        context.services().require(WarpCommandService.class).configure(requireNonNull(
+                config,
+                "WarpConfig has not been initialized"
+        ));
+
         requireNonNull(warps, "WarpService has not been initialized");
         warps.reload().whenComplete((_, failure) -> {
-            if (failure != null)
-                context.logger().error("Failed to reload warp data; retaining the previous snapshot", failure);
+            if (failure != null) {
+                context.logger().error(
+                        "Failed to reload warp data; retaining the previous snapshot",
+                        failure
+                );
+            }
         });
     }
 

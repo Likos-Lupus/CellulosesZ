@@ -18,7 +18,6 @@ public final class CommandRegistry {
 
     private final Map<Identity, Entry> entries = new LinkedHashMap<>();
     private long sequence;
-    private boolean frozen;
 
     public synchronized Registration register(
             String registrationId,
@@ -27,26 +26,22 @@ public final class CommandRegistry {
         requireNonNull(contributor, "contributor");
         var identity = new Identity(contributor.moduleId(), registrationId);
 
-        if (frozen) {
-            throw new IllegalStateException("Command registry is frozen; cannot register " + identity);
-        }
         if (entries.containsKey(identity)) {
             throw new IllegalStateException("Duplicate command registration " + identity);
         }
+
         if (entries.values().stream()
                 .anyMatch(entry -> entry.contributor() == contributor)
         ) {
-            throw new IllegalStateException("Command contributor instance is already registered: " + identity);
+            throw new IllegalStateException(
+                    "Command contributor instance is already registered: " + identity
+            );
         }
 
         var entry = new Entry(identity, contributor, sequence++);
         entries.put(identity, entry);
-        return new Handle(this, identity);
-    }
 
-    public synchronized List<CommandContributor> freezeAndSnapshot() {
-        frozen = true;
-        return snapshot();
+        return new Handle(this, identity);
     }
 
     public synchronized List<CommandContributor> snapshot() {
@@ -57,10 +52,6 @@ public final class CommandRegistry {
                 )
                 .map(Entry::contributor)
                 .toList();
-    }
-
-    public synchronized boolean frozen() {
-        return frozen;
     }
 
     public synchronized int size() {

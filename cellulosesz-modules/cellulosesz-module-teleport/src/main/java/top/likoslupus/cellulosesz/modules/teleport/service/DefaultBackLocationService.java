@@ -1,11 +1,13 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.BackLocationService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.teleport.data.BackLocationDocument;
 
 import java.nio.file.Path;
@@ -17,13 +19,19 @@ import java.util.function.Consumer;
 
 import static java.util.Objects.requireNonNull;
 
-public final class DefaultBackLocationService implements BackLocationService, AsyncInitializable {
+public final class DefaultBackLocationService
+        implements BackLocationService, AsyncInitializable, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final PlayerLocationPlatformService locations;
     private final StorageService storage;
     private final Path path;
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
     private BackLocationDocument document = new BackLocationDocument();
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public DefaultBackLocationService(
             PlayerLocationPlatformService locations,
@@ -37,7 +45,8 @@ public final class DefaultBackLocationService implements BackLocationService, As
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(
+        return storage
+                .createIfMissing(
                         path,
                         BackLocationDocument.class,
                         BackLocationDocument::new
@@ -65,8 +74,9 @@ public final class DefaultBackLocationService implements BackLocationService, As
         var result = new BackLocationDocument();
         var values = new LinkedHashMap<String, CellLocation>();
 
-        source.locations
-                .forEach((key, value) -> values.put(key, copy(value)));
+        source.locations.forEach((key, value) ->
+                values.put(key, copy(value))
+        );
         result.locations = values;
 
         return result;
@@ -93,29 +103,39 @@ public final class DefaultBackLocationService implements BackLocationService, As
 
     @Override
     public CompletableFuture<Void> remember(CellPlayer player) {
-        return remember(
-                player.uuid(),
-                locations.currentLocation(player)
-        );
+        return mutations.submit(() -> {
+            var uuid = player.uuid();
+            var location = locations.currentLocation(player);
+            validateLocation(location);
+
+            return mutateAccepted(next -> next.locations.put(
+                    uuid.toString(),
+                    copy(location)
+            ));
+        });
     }
 
     @Override
     public CompletableFuture<Void> remember(UUID uuid, CellLocation location) {
-        requireNonNull(uuid, "uuid");
-        validateLocation(location);
+        return mutations.submit(() -> {
+            requireNonNull(uuid, "uuid");
+            validateLocation(location);
 
-        var snapshot = copy(location);
-        return mutate(next ->
-                next.locations.put(uuid.toString(), snapshot)
-        );
+            var snapshot = copy(location);
+            return mutateAccepted(next ->
+                    next.locations.put(uuid.toString(), snapshot)
+            );
+        });
     }
 
     @Override
     public CompletableFuture<Void> forget(UUID uuid) {
-        requireNonNull(uuid, "uuid");
-        return mutate(next ->
-                next.locations.remove(uuid.toString())
-        );
+        return mutations.submit(() -> {
+            requireNonNull(uuid, "uuid");
+            return mutateAccepted(next ->
+                    next.locations.remove(uuid.toString())
+            );
+        });
     }
 
     @Override
@@ -124,38 +144,32 @@ public final class DefaultBackLocationService implements BackLocationService, As
                 .map(DefaultBackLocationService::copy);
     }
 
-    private synchronized CompletableFuture<Void> mutate(
+    private CompletableFuture<Void> mutateAccepted(
             Consumer<BackLocationDocument> mutation
     ) {
-        var result = new CompletableFuture<Void>();
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
-                    final BackLocationDocument next;
+        final BackLocationDocument next;
+        synchronized (this) {
+            next = copy(document);
+        }
+
+        mutation.accept(next);
+        return storage
+                .save(path, next)
+                .thenRun(() -> {
                     synchronized (this) {
-                        next = copy(document);
-                    }
-
-                    mutation.accept(next);
-                    return storage
-                            .save(path, next)
-                            .thenRun(() -> {
-                                synchronized (this) {
-                                    document = next;
-                                }
-                            });
-                });
-
-        mutationTail
-                .whenComplete((_, failure) -> {
-                    if (failure == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(failure);
+                        document = next;
                     }
                 });
+    }
 
-        return result;
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
     }
 
 }

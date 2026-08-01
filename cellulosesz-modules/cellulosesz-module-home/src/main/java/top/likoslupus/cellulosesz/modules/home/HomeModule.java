@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.home;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
@@ -18,6 +17,8 @@ import top.likoslupus.cellulosesz.modules.home.application.HomeCommandService;
 import top.likoslupus.cellulosesz.modules.home.command.HomeCommand;
 import top.likoslupus.cellulosesz.modules.home.service.JsonHomeService;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
@@ -27,6 +28,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "teleport", "command"}
 )
+@SuppressWarnings("resource")
 public final class HomeModule implements CellulosesZModule {
 
     private @Nullable HomeConfig config;
@@ -34,16 +36,16 @@ public final class HomeModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.home",
                 HomeConfig.class,
                 "modules/home.yml",
                 HomeConfig::new
         );
+        config = context.configs().require("module.home", HomeConfig.class);
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var root = context.dataDirectory().getParent();
@@ -51,22 +53,25 @@ public final class HomeModule implements CellulosesZModule {
         homes = new JsonHomeService(storage, root.resolve("homes"));
         context.services().register(HomeService.class, homes);
         context.services().register(JsonHomeService.class, (JsonHomeService) homes);
-        context.services().register(HomeCommandService.class, new DefaultHomeCommandService(
-                homes,
-                context.services().require(TeleportService.class),
-                context.services().require(CooldownService.class),
-                context.services().require(PlayerResolver.class),
-                context.services().require(PlayerLocationPlatformService.class),
-                context.services().require(ServerThreadExecutor.class),
-                requireNonNull(config, "HomeConfig has not been initialized")
-        ));
+        context.services().register(
+                HomeCommandService.class,
+                new DefaultHomeCommandService(
+                        homes,
+                        context.services().require(TeleportService.class),
+                        context.services().require(CooldownService.class),
+                        context.services().require(PlayerResolver.class),
+                        context.services().require(PlayerLocationPlatformService.class),
+                        context.services().require(ServerThreadExecutor.class),
+                        requireNonNull(config, "HomeConfig has not been initialized")
+                )
+        );
     }
 
     @Override
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
         var service = context.services().require(HomeCommandService.class);
-        context.track(registry.register("home-commands", new HomeCommand(service)));
+        context.scope().own(registry.register("home-commands", new HomeCommand(service)));
     }
 
     @Override

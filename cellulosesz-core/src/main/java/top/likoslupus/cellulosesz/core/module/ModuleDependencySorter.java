@@ -36,6 +36,7 @@ public final class ModuleDependencySorter {
                 parent,
                 sorted
         ));
+
         return sorted;
     }
 
@@ -47,7 +48,10 @@ public final class ModuleDependencySorter {
             Map<String, String> parent,
             List<ModuleDescriptor> sorted
     ) {
-        if (visited.contains(descriptor.id())) return;
+        if (visited.contains(descriptor.id())) {
+            return;
+        }
+
         if (!visiting.add(descriptor.id())) {
             throw new ModuleLoadException("Module dependency cycle detected at " + descriptor.id());
         }
@@ -55,10 +59,41 @@ public final class ModuleDependencySorter {
         for (var required : descriptor.requires()) {
             var dependency = byId.get(required);
             if (dependency == null) {
-                throw new ModuleLoadException("Module " + descriptor.id() + " requires missing module " + required);
+                throw new ModuleLoadException(
+                        "Module " + descriptor.id() + " requires missing module " + required
+                );
             }
-            parent.put(required, descriptor.id());
-            visit(dependency, byId, visiting, visited, parent, sorted);
+
+            parent.put(
+                    required,
+                    descriptor.id()
+            );
+            visit(
+                    dependency,
+                    byId,
+                    visiting,
+                    visited,
+                    parent,
+                    sorted
+            );
+        }
+
+        for (var optional : descriptor.optional()) {
+            var dependency = byId.get(optional);
+            if (dependency != null) {
+                parent.put(
+                        optional,
+                        descriptor.id()
+                );
+                visit(
+                        dependency,
+                        byId,
+                        visiting,
+                        visited,
+                        parent,
+                        sorted
+                );
+            }
         }
 
         visiting.remove(descriptor.id());

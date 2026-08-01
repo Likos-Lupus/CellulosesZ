@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
@@ -30,6 +29,7 @@ import top.likoslupus.cellulosesz.modules.economy.service.JsonWorthService;
 
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command", "item"}
 )
+@SuppressWarnings("resource")
 public final class EconomyModule implements CellulosesZModule {
 
     private final AtomicLong configVersion = new AtomicLong();
@@ -53,12 +54,18 @@ public final class EconomyModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        var registered = context.configs().register(
+        context.configs().register(
                 "module.economy",
                 EconomyConfig.class,
                 "modules/economy.yml",
                 EconomyConfig::new
         );
+
+        var registered = context.configs().require(
+                "module.economy",
+                EconomyConfig.class
+        );
+
         settings = EconomyCommandSettings.from(
                 registered,
                 configVersion.incrementAndGet()
@@ -77,7 +84,10 @@ public final class EconomyModule implements CellulosesZModule {
         worths = new JsonWorthService(storage, root);
         var economyService = requireNonNull(economy, "economy");
         var worthService = requireNonNull(worths, "worths");
-        var settingsSupplier = (Supplier<EconomyCommandSettings>) () -> requireNonNull(settings, "Economy command settings have not been initialized");
+        var settingsSupplier = (Supplier<EconomyCommandSettings>) () -> requireNonNull(
+                settings,
+                "Economy command settings have not been initialized"
+        );
 
         balances = new BalanceCommandService(
                 economyService,
@@ -115,20 +125,77 @@ public final class EconomyModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
         var players = context.services().require(PlayerDirectory.class);
-        var balanceService = requireNonNull(balances, "BalanceCommandService has not been initialized");
-        var paymentService = requireNonNull(payments, "PaymentCommandService has not been initialized");
-        var itemService = requireNonNull(itemValues, "ItemValueCommandService has not been initialized");
-        var settingsSupplier = (Supplier<EconomyCommandSettings>) () -> requireNonNull(settings, "Economy command settings have not been initialized");
+        var balanceService = requireNonNull(
+                balances,
+                "BalanceCommandService has not been initialized"
+        );
+        var paymentService = requireNonNull(
+                payments,
+                "PaymentCommandService has not been initialized"
+        );
+        var itemService = requireNonNull(
+                itemValues,
+                "ItemValueCommandService has not been initialized"
+        );
+        var settingsSupplier = (Supplier<EconomyCommandSettings>) () -> requireNonNull(
+                settings,
+                "Economy command settings have not been initialized"
+        );
 
-        track(context, registry, "balance-command", new BalanceCommand(balanceService, players));
-        track(context, registry, "balancetop-command", new BalanceTopCommand(balanceService, settingsSupplier));
-        track(context, registry, "eco-command", new EcoCommand(balanceService, settingsSupplier));
-        track(context, registry, "pay-command", new PayCommand(paymentService, players, settingsSupplier));
-        track(context, registry, "payconfirmtoggle-command", new PayConfirmToggleCommand(paymentService, players));
-        track(context, registry, "paytoggle-command", new PayToggleCommand(paymentService, players));
-        track(context, registry, "sell-command", new SellCommand(itemService, players));
-        track(context, registry, "setworth-command", new SetWorthCommand(itemService, settingsSupplier));
-        track(context, registry, "worth-command", new WorthCommand(itemService, players));
+        track(
+                context,
+                registry,
+                "balance-command",
+                new BalanceCommand(balanceService, players)
+        );
+        track(
+                context,
+                registry,
+                "balancetop-command",
+                new BalanceTopCommand(balanceService, settingsSupplier)
+        );
+        track(
+                context,
+                registry,
+                "eco-command",
+                new EcoCommand(balanceService, settingsSupplier)
+        );
+        track(
+                context,
+                registry,
+                "pay-command",
+                new PayCommand(paymentService, players, settingsSupplier)
+        );
+        track(
+                context,
+                registry,
+                "payconfirmtoggle-command",
+                new PayConfirmToggleCommand(paymentService, players)
+        );
+        track(
+                context,
+                registry,
+                "paytoggle-command",
+                new PayToggleCommand(paymentService, players)
+        );
+        track(
+                context,
+                registry,
+                "sell-command",
+                new SellCommand(itemService, players)
+        );
+        track(
+                context,
+                registry,
+                "setworth-command",
+                new SetWorthCommand(itemService, settingsSupplier)
+        );
+        track(
+                context,
+                registry,
+                "worth-command",
+                new WorthCommand(itemService, players)
+        );
     }
 
     private static void track(
@@ -137,14 +204,17 @@ public final class EconomyModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     @Override
     public void onReload(ModuleContext context) {
         var current = requireNonNull(config, "EconomyConfig has not been initialized");
         var candidate = context.configs().require("module.economy", EconomyConfig.class);
-        var candidateSettings = EconomyCommandSettings.from(candidate, configVersion.incrementAndGet());
+        var candidateSettings = EconomyCommandSettings.from(
+                candidate,
+                configVersion.incrementAndGet()
+        );
 
         if (economy instanceof JsonEconomyService service) {
             service.configure(candidate);

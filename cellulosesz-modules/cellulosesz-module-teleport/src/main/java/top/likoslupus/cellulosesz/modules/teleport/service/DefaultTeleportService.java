@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
@@ -8,16 +9,15 @@ import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.teleport.*;
 
 import java.time.Clock;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
-public final class DefaultTeleportService implements TeleportService {
+@SuppressWarnings("resource")
+public final class DefaultTeleportService implements TeleportService, AsyncCloseable {
 
     private final TeleportOperations operations;
     private final PlayerLocationPlatformService locations;
@@ -26,6 +26,10 @@ public final class DefaultTeleportService implements TeleportService {
     private final BackLocationService backLocations;
     private final Clock clock;
     private final Map<UUID, PendingWarmup> warmups = new ConcurrentHashMap<>();
+    private final Object lifecycleLock = new Object();
+    private final Set<CompletableFuture<?>> inFlight = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final CompletableFuture<Void> drainFuture = new CompletableFuture<>();
+    private boolean accepting = true;
 
     public DefaultTeleportService(
             TeleportOperations operations,
@@ -50,12 +54,17 @@ public final class DefaultTeleportService implements TeleportService {
             String key
     ) {
         var cause = failure;
-        while (cause instanceof CompletionException && cause.getCause() != null) {
+        while (cause instanceof CompletionException
+                && cause.getCause() != null
+        ) {
             cause = cause.getCause();
         }
+
         result.complete(
-                TeleportResult.failed(status, key,
-                        Map.of("reason", cause.getClass().getSimpleName()))
+                TeleportResult.failed(
+                        status, key,
+                        Map.of("reason", cause.getClass().getSimpleName())
+                )
         );
     }
 
@@ -77,7 +86,17 @@ public final class DefaultTeleportService implements TeleportService {
         requireNonNull(target, "target");
         requireNonNull(options, "options");
 
-        var result = new CompletableFuture<TeleportResult>();
+        final CompletableFuture<TeleportResult> result;
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Teleport service is closing"
+                ));
+            }
+
+            result = trackAccepted(new CompletableFuture<>());
+        }
+
         serverThread
                 .submit(() -> prepare(player, target, options))
                 .whenComplete((prepared, failure) -> {
@@ -120,6 +139,7 @@ public final class DefaultTeleportService implements TeleportService {
     @Override
     public boolean cancelWarmup(UUID uuid, TeleportStatus status) {
         requireNonNull(status, "status");
+
         if (!status.name().startsWith("CANCELLED_")) {
             throw new IllegalArgumentException("cancellation status required");
         }
@@ -156,12 +176,33 @@ public final class DefaultTeleportService implements TeleportService {
 
     @Override
     public CompletableFuture<Void> rememberBackLocation(CellPlayer player) {
-        return backLocations.remember(player);
+        requireNonNull(player, "player");
+
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Teleport service is closing"
+                ));
+            }
+
+            return trackAccepted(backLocations.remember(player));
+        }
     }
 
     @Override
     public CompletableFuture<Void> rememberBackLocation(UUID uuid, CellLocation location) {
-        return backLocations.remember(uuid, location);
+        requireNonNull(uuid, "uuid");
+        requireNonNull(location, "location");
+
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Teleport service is closing"
+                ));
+            }
+
+            return trackAccepted(backLocations.remember(uuid, location));
+        }
     }
 
     @Override
@@ -171,10 +212,50 @@ public final class DefaultTeleportService implements TeleportService {
 
     @Override
     public void shutdown() {
+        stopAccepting();
+    }
+
+    @Override
+    public void stopAccepting() {
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return;
+            }
+            accepting = false;
+        }
         warmups.forEach((_, pending) ->
                 cancelPending(pending, TeleportStatus.CANCELLED_REPLACED)
         );
         warmups.clear();
+        completeDrainIfReady();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        completeDrainIfReady();
+        return drainFuture;
+    }
+
+    private <T> CompletableFuture<T> trackAccepted(CompletableFuture<T> future) {
+        requireNonNull(future, "future");
+
+        inFlight.add(future);
+        future.whenComplete((_, _) -> {
+            synchronized (lifecycleLock) {
+                inFlight.remove(future);
+            }
+            completeDrainIfReady();
+        });
+
+        return future;
+    }
+
+    private void completeDrainIfReady() {
+        synchronized (lifecycleLock) {
+            if (!accepting && inFlight.isEmpty()) {
+                drainFuture.complete(null);
+            }
+        }
     }
 
     private void scheduleWarmup(
@@ -194,25 +275,58 @@ public final class DefaultTeleportService implements TeleportService {
             return;
         }
 
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                result.complete(TeleportResult.failed(
+                        TeleportStatus.CANCELLED_REPLACED,
+                        cancellationKey(TeleportStatus.CANCELLED_REPLACED)
+                ));
+                return;
+            }
+        }
+
         final PendingWarmup[] holder = new PendingWarmup[1];
-        var handle = scheduler
-                .syncLater(
-                        () -> {
-                            var pending = holder[0];
-                            if (!warmups.remove(player.uuid(), pending) || result.isDone()) {
-                                return;
-                            }
-                            execute(player, target, options, result);
-                        },
-                        ticks
-                );
+        final TaskHandle handle;
+        try {
+            handle = scheduler.syncLater(
+                    () -> {
+                        var pending = holder[0];
+                        if (!warmups.remove(player.uuid(), pending)
+                                || result.isDone()
+                        ) {
+                            return;
+                        }
+                        execute(player, target, options, result);
+                    },
+                    ticks
+            );
+        } catch (RuntimeException failure) {
+            completeFailure(
+                    result,
+                    failure,
+                    TeleportStatus.PLATFORM_FAILURE,
+                    "service.teleport.exception"
+            );
+            return;
+        }
 
         var pending = new PendingWarmup(handle, result);
         holder[0] = pending;
 
-        var replaced = warmups.put(player.uuid(), pending);
-        if (replaced != null) {
-            cancelPending(replaced, TeleportStatus.CANCELLED_REPLACED);
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                handle.close();
+                result.complete(TeleportResult.failed(
+                        TeleportStatus.CANCELLED_REPLACED,
+                        cancellationKey(TeleportStatus.CANCELLED_REPLACED)
+                ));
+                return;
+            }
+
+            var replaced = warmups.put(player.uuid(), pending);
+            if (replaced != null) {
+                cancelPending(replaced, TeleportStatus.CANCELLED_REPLACED);
+            }
         }
     }
 
@@ -264,27 +378,30 @@ public final class DefaultTeleportService implements TeleportService {
                                                 return;
                                             }
 
-                                            restoreBack(player.uuid(), previousBack, options.rememberBack())
-                                                    .whenComplete((_, rollbackFailure) -> {
-                                                        if (rollbackFailure != null) {
-                                                            result.complete(TeleportResult.failed(
-                                                                    TeleportStatus.ROLLBACK_FAILURE,
-                                                                    "service.teleport.back-rollback-failed"
-                                                            ));
-                                                        } else if (moveFailure != null) {
-                                                            completeFailure(
-                                                                    result,
-                                                                    moveFailure,
-                                                                    TeleportStatus.PLATFORM_FAILURE,
-                                                                    "service.teleport.exception"
-                                                            );
-                                                        } else {
-                                                            result.complete(TeleportResult.failed(
-                                                                    TeleportStatus.PLATFORM_FAILURE,
-                                                                    "service.teleport.failed"
-                                                            ));
-                                                        }
-                                                    });
+                                            restoreBack(
+                                                    player.uuid(),
+                                                    previousBack,
+                                                    options.rememberBack()
+                                            ).whenComplete((_, rollbackFailure) -> {
+                                                if (rollbackFailure != null) {
+                                                    result.complete(TeleportResult.failed(
+                                                            TeleportStatus.ROLLBACK_FAILURE,
+                                                            "service.teleport.back-rollback-failed"
+                                                    ));
+                                                } else if (moveFailure != null) {
+                                                    completeFailure(
+                                                            result,
+                                                            moveFailure,
+                                                            TeleportStatus.PLATFORM_FAILURE,
+                                                            "service.teleport.exception"
+                                                    );
+                                                } else {
+                                                    result.complete(TeleportResult.failed(
+                                                            TeleportStatus.PLATFORM_FAILURE,
+                                                            "service.teleport.failed"
+                                                    ));
+                                                }
+                                            });
                                         });
                             });
                 });
@@ -295,11 +412,14 @@ public final class DefaultTeleportService implements TeleportService {
             CellLocation requested,
             TeleportOptions options
     ) {
-        // Accessing the injected clock here makes preparation deterministic under tests and avoids scattered wall clocks.
+        // Accessing the injected clock here makes preparation deterministic under tests and avoids
+        // scattered wall clocks.
         clock.instant();
         var origin = locations.currentLocation(player);
 
-        if (!options.allowCrossWorld() && !origin.world.equals(requested.world)) {
+        if (!options.allowCrossWorld()
+                && !origin.world.equals(requested.world)
+        ) {
             return PreparedResult.failure(TeleportResult.failed(
                     TeleportStatus.CROSS_WORLD_DISABLED,
                     "service.teleport.cross-world-disabled"

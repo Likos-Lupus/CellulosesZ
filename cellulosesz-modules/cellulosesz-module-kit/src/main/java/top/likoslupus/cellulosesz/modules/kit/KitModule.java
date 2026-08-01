@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.kit;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
@@ -18,6 +17,8 @@ import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.command.KitCommand;
 import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
 
+import org.jspecify.annotations.Nullable;
+
 import static java.util.Objects.requireNonNull;
 
 @CellulosesModule(
@@ -28,6 +29,7 @@ import static java.util.Objects.requireNonNull;
         requires = {"user", "command"},
         optional = {"economy"}
 )
+@SuppressWarnings("resource")
 public final class KitModule implements CellulosesZModule {
 
     private @Nullable KitConfig config;
@@ -35,16 +37,16 @@ public final class KitModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.kit",
                 KitConfig.class,
                 "modules/kit.yml",
                 KitConfig::new
         );
+        config = context.configs().require("module.kit", KitConfig.class);
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var users = context.services().require(UserService.class);
@@ -84,7 +86,7 @@ public final class KitModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
         var service = context.services().require(KitCommandService.class);
-        context.track(registry.register("kit-commands", new KitCommand(service)));
+        context.scope().own(registry.register("kit-commands", new KitCommand(service)));
     }
 
     @Override

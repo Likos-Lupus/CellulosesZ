@@ -5,14 +5,31 @@ import java.util.function.Supplier;
 
 public interface Scheduler {
 
-    TaskHandle sync(Runnable task);
+    default TaskHandle sync(Runnable task) {
+        return sync(task, "global");
+    }
 
-    TaskHandle syncLater(Runnable task, long ticks);
+    TaskHandle sync(Runnable task, String owner);
+
+    default TaskHandle syncLater(Runnable task, long ticks) {
+        return syncLater(task, ticks, "global");
+    }
+
+    TaskHandle syncLater(Runnable task, long ticks, String owner);
+
+    default TaskHandle syncRepeating(
+            Runnable task,
+            long delayTicks,
+            long periodTicks
+    ) {
+        return syncRepeating(task, delayTicks, periodTicks, "global");
+    }
 
     TaskHandle syncRepeating(
             Runnable task,
             long delayTicks,
-            long periodTicks
+            long periodTicks,
+            String owner
     );
 
     CompletableFuture<Void> async(Runnable task);

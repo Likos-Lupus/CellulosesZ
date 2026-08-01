@@ -29,6 +29,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command"}
 )
+@SuppressWarnings("resource")
 public final class TextModule implements CellulosesZModule {
 
     private @Nullable TextConfig config;
@@ -36,16 +37,16 @@ public final class TextModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.text",
                 TextConfig.class,
                 "modules/text.yml",
                 TextConfig::new
         );
+        config = context.configs().require("module.text", TextConfig.class);
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         texts = new ConfigTextService(requireNonNull(
                 config,
@@ -65,10 +66,18 @@ public final class TextModule implements CellulosesZModule {
         context.events().listen(
                 PlayerJoinEvent.class,
                 event -> {
-                    var current = requireNonNull(config, "TextConfig has not been initialized");
-                    if (!current.showMotdOnJoin) return;
+                    var current = requireNonNull(
+                            config,
+                            "TextConfig has not been initialized"
+                    );
+                    if (!current.showMotdOnJoin) {
+                        return;
+                    }
 
-                    var service = requireNonNull(texts, "TextService has not been initialized");
+                    var service = requireNonNull(
+                            texts,
+                            "TextService has not been initialized"
+                    );
                     service.motd().forEach(line -> audience.send(
                             event.player(),
                             renderer.render(
@@ -85,7 +94,7 @@ public final class TextModule implements CellulosesZModule {
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
         var service = context.services().require(TextCommandService.class);
-        context.track(registry.register("text-commands", new TextCommand(service)));
+        context.scope().own(registry.register("text-commands", new TextCommand(service)));
     }
 
     @Override

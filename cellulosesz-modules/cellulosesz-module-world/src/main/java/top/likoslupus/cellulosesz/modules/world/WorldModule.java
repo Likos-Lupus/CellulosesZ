@@ -29,6 +29,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command"}
 )
+@SuppressWarnings("resource")
 public final class WorldModule implements CellulosesZModule {
 
     private @Nullable WorldConfig config;
@@ -38,17 +39,17 @@ public final class WorldModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.world",
                 WorldConfig.class,
                 "modules/world.yml",
                 WorldConfig::new
         );
+        config = context.configs().require("module.world", WorldConfig.class);
         requireNonNull(config, "WorldConfig has not been initialized").validate();
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var current = requireNonNull(config, "WorldConfig has not been initialized");
         worlds = new DefaultWorldService(
@@ -238,7 +239,16 @@ public final class WorldModule implements CellulosesZModule {
     }
 
     @Override
+    public void onUnload(ModuleContext context) {
+        clearTrackedEntities(context);
+    }
+
+    @Override
     public void onServerStopping(ModuleContext context) {
+        clearTrackedEntities(context);
+    }
+
+    private void clearTrackedEntities(ModuleContext context) {
         context.services().require(EntityPlatformService.class).clearTrackedEntities();
     }
 
@@ -248,7 +258,7 @@ public final class WorldModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {

@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.teleport;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.event.PlayerDamageEvent;
@@ -30,6 +29,7 @@ import top.likoslupus.cellulosesz.modules.teleport.service.*;
 import java.time.Clock;
 import java.util.Map;
 import java.util.random.RandomGenerator;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command"}
 )
+@SuppressWarnings("resource")
 public final class TeleportModule implements CellulosesZModule {
 
     private @Nullable TeleportConfig config;
@@ -51,11 +52,15 @@ public final class TeleportModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.teleport",
                 TeleportConfig.class,
                 "modules/teleport.yml",
                 TeleportConfig::new
+        );
+        config = context.configs().require(
+                "module.teleport",
+                TeleportConfig.class
         ).validatedCopy();
     }
 
@@ -163,9 +168,18 @@ public final class TeleportModule implements CellulosesZModule {
 
     @Override
     public void registerEvents(ModuleContext context) {
-        var service = requireNonNull(teleports, "TeleportService has not been initialized");
-        var requestService = requireNonNull(requests, "TeleportRequestService has not been initialized");
-        var offline = requireNonNull(offlineLocations, "OfflineLocationService has not been initialized");
+        var service = requireNonNull(
+                teleports,
+                "TeleportService has not been initialized"
+        );
+        var requestService = requireNonNull(
+                requests,
+                "TeleportRequestService has not been initialized"
+        );
+        var offline = requireNonNull(
+                offlineLocations,
+                "OfflineLocationService has not been initialized"
+        );
         var audience = context.services().require(PlayerAudienceService.class);
         var renderer = context.services().require(MessageRenderer.class);
         var serverThread = context.services().require(ServerThreadExecutor.class);
@@ -205,7 +219,8 @@ public final class TeleportModule implements CellulosesZModule {
                             return;
                         }
                         context.logger().error(
-                                "Failed to persist death back location for " + event.player().uuid(),
+                                "Failed to persist death back location for "
+                                        + event.player().uuid(),
                                 failure
                         );
                         serverThread.execute(() -> audience.send(
@@ -234,7 +249,8 @@ public final class TeleportModule implements CellulosesZModule {
                     ).whenComplete((_, failure) -> {
                         if (failure != null) {
                             context.logger().error(
-                                    "Failed to persist logout location for " + event.player().uuid(),
+                                    "Failed to persist logout location for "
+                                            + event.player().uuid(),
                                     failure
                             );
                         }
@@ -252,31 +268,147 @@ public final class TeleportModule implements CellulosesZModule {
         var requestCommands = context.services().require(TeleportRequestCommandService.class);
         var preferenceCommands = context.services().require(TeleportPreferenceCommandService.class);
         var randomCommands = context.services().require(RandomTeleportCommandService.class);
-        var requestService = requireNonNull(requests, "TeleportRequestService has not been initialized");
-        var current = requireNonNull(config, "TeleportConfig has not been initialized");
+        var requestService = requireNonNull(
+                requests,
+                "TeleportRequestService has not been initialized"
+        );
+        var current = requireNonNull(
+                config,
+                "TeleportConfig has not been initialized"
+        );
 
-        track(context, registry, "tp-command", new TpCommand(commandService, players));
-        track(context, registry, "tphere-command", new TpHereCommand(commandService, players));
-        track(context, registry, "tppos-command", new TpPosCommand(commandService, players, worlds));
-        track(context, registry, "tpa-command", new TpaCommand(requestCommands, players));
-        track(context, registry, "tpahere-command", new TpaHereCommand(requestCommands, players));
-        track(context, registry, "tpaccept-command", new TpAcceptCommand(requestCommands, requestService, players));
-        track(context, registry, "tpdeny-command", new TpDenyCommand(requestCommands, requestService, players));
-        track(context, registry, "tpacancel-command", new TpaCancelCommand(requestCommands, requestService, players));
-        track(context, registry, "tptoggle-command", new TpToggleCommand(preferenceCommands, players));
-        track(context, registry, "tpauto-command", new TpAutoCommand(preferenceCommands, players));
-        track(context, registry, "tpaall-command", new TpaAllCommand(requestCommands, players));
-        track(context, registry, "tpall-command", new TpAllCommand(commandService, players));
-        track(context, registry, "tpo-command", new TpoCommand(commandService, players));
-        track(context, registry, "tpohere-command", new TpoHereCommand(commandService, players));
-        track(context, registry, "tpoffline-command", new TpOfflineCommand(commandService, players));
-        track(context, registry, "settpr-command", new SetTprCommand(randomCommands, players, worlds));
-        track(context, registry, "back-command", new BackCommand(commandService, players));
-        track(context, registry, "jump-command", new JumpCommand(commandService, players, current.maximumJumpDistance));
-        track(context, registry, "top-command", new TopCommand(commandService, players));
-        track(context, registry, "bottom-command", new BottomCommand(commandService, players));
-        track(context, registry, "world-command", new WorldCommand(commandService, players, worlds));
-        track(context, registry, "tpr-command", new TprCommand(randomCommands, players));
+        track(
+                context,
+                registry,
+                "tp-command",
+                new TpCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "tphere-command",
+                new TpHereCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "tppos-command",
+                new TpPosCommand(commandService, players, worlds)
+        );
+        track(
+                context,
+                registry,
+                "tpa-command",
+                new TpaCommand(requestCommands, players)
+        );
+        track(
+                context,
+                registry,
+                "tpahere-command",
+                new TpaHereCommand(requestCommands, players)
+        );
+        track(
+                context,
+                registry,
+                "tpaccept-command",
+                new TpAcceptCommand(requestCommands, requestService, players)
+        );
+        track(
+                context,
+                registry,
+                "tpdeny-command",
+                new TpDenyCommand(requestCommands, requestService, players)
+        );
+        track(
+                context,
+                registry,
+                "tpacancel-command",
+                new TpaCancelCommand(requestCommands, requestService, players)
+        );
+        track(
+                context,
+                registry,
+                "tptoggle-command",
+                new TpToggleCommand(preferenceCommands, players)
+        );
+        track(
+                context,
+                registry,
+                "tpauto-command",
+                new TpAutoCommand(preferenceCommands, players)
+        );
+        track(
+                context,
+                registry,
+                "tpaall-command",
+                new TpaAllCommand(requestCommands, players)
+        );
+        track(
+                context,
+                registry,
+                "tpall-command",
+                new TpAllCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "tpo-command",
+                new TpoCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "tpohere-command",
+                new TpoHereCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "tpoffline-command",
+                new TpOfflineCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "settpr-command",
+                new SetTprCommand(randomCommands, players, worlds)
+        );
+        track(
+                context,
+                registry,
+                "back-command",
+                new BackCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "jump-command",
+                new JumpCommand(commandService, players, current.maximumJumpDistance)
+        );
+        track(
+                context,
+                registry,
+                "top-command",
+                new TopCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "bottom-command",
+                new BottomCommand(commandService, players)
+        );
+        track(
+                context,
+                registry,
+                "world-command",
+                new WorldCommand(commandService, players, worlds)
+        );
+        track(
+                context,
+                registry,
+                "tpr-command",
+                new TprCommand(randomCommands, players)
+        );
     }
 
     private static void track(
@@ -285,7 +417,7 @@ public final class TeleportModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     @Override
@@ -295,28 +427,23 @@ public final class TeleportModule implements CellulosesZModule {
 
     @Override
     public void onReload(ModuleContext context) {
-        var next = context.configs().require("module.teleport", TeleportConfig.class).validatedCopy();
+        var next = context
+                .configs()
+                .require("module.teleport", TeleportConfig.class)
+                .validatedCopy();
         requireNonNull(config, "TeleportConfig has not been initialized").copyFrom(next);
         scheduleRequestExpiry(context);
     }
 
-    @Override
-    public void onServerStopping(ModuleContext context) {
-        if (requestExpiryTask != null) {
-            requestExpiryTask.cancel();
-        }
-        requestExpiryTask = null;
-        if (teleports != null) {
-            teleports.shutdown();
-        }
-    }
-
     private void scheduleRequestExpiry(ModuleContext context) {
         if (requestExpiryTask != null) {
-            requestExpiryTask.cancel();
+            requestExpiryTask.close();
         }
         requestExpiryTask = context.scheduler().syncRepeating(
-                () -> requireNonNull(requests, "TeleportRequestService has not been initialized").clearExpired(),
+                () -> requireNonNull(
+                        requests,
+                        "TeleportRequestService has not been initialized"
+                ).clearExpired(),
                 20L,
                 20L
         );

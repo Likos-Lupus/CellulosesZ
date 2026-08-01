@@ -57,6 +57,7 @@ final class JsonUserServiceTest {
     void concurrentFirstLoadSharesOneStorageOperation() {
         var storage = new MemoryStorage();
         storage.createGate = new CompletableFuture<>();
+
         var service = new JsonUserService(
                 storage,
                 new MemoryNames(),
@@ -64,14 +65,97 @@ final class JsonUserServiceTest {
                 new NoopLogger()
         );
         var uuid = UUID.randomUUID();
-
         var first = service.load(uuid);
         var second = service.load(uuid);
 
-        assertSame(first, second);
+        assertNotSame(first, second);
         assertEquals(1, storage.createCalls.get());
+
         storage.createGate.complete(null);
         assertSame(first.join(), second.join());
+        assertEquals(1, storage.createCalls.get());
+    }
+
+
+    @Test
+    void saveAllQueuesBehindAcceptedUpdateAndReadsLatestCacheAtExecution() {
+        var storage = new MemoryStorage();
+        var service = new JsonUserService(
+                storage,
+                new MemoryNames(),
+                Path.of("users"),
+                new NoopLogger()
+        );
+        var uuid = UUID.randomUUID();
+        service.load(uuid).join();
+        storage.resetSaveHistory();
+
+        var updateGate = new CompletableFuture<Void>();
+        storage.saveGates.add(updateGate);
+        var update = service.updateVoid(
+                uuid,
+                user -> user.withPreferences(user.preferences().withPrivateMessages(false))
+        );
+        var saveAll = service.saveAll();
+
+        assertEquals(1, storage.saveCalls.get());
+        updateGate.complete(null);
+        update.join();
+        saveAll.join();
+
+        assertEquals(2, storage.saveCalls.get());
+        var saved = (top.likoslupus.cellulosesz.api.user.CellUser) storage.savedValues.getLast();
+        assertFalse(saved.preferences().privateMessages());
+    }
+
+    @Test
+    void acceptedUpdateCompletesDuringCloseAndNewOperationsAreRejected() {
+        var storage = new MemoryStorage();
+        var service = new JsonUserService(
+                storage,
+                new MemoryNames(),
+                Path.of("users"),
+                new NoopLogger()
+        );
+        var uuid = UUID.randomUUID();
+        service.load(uuid).join();
+
+        var saveGate = new CompletableFuture<Void>();
+        storage.saveGates.add(saveGate);
+        var accepted = service.updateVoid(
+                uuid,
+                user -> user.withPreferences(user.preferences().withPayments(false))
+        );
+        var close = service.closeAsync();
+
+        assertFalse(close.isDone());
+        assertTrue(service.load(UUID.randomUUID()).isCompletedExceptionally());
+        assertTrue(service.save(uuid).isCompletedExceptionally());
+        assertTrue(service.saveAll().isCompletedExceptionally());
+        assertTrue(service.updateVoid(uuid, user -> user).isCompletedExceptionally());
+
+        saveGate.complete(null);
+        accepted.join();
+        close.join();
+        assertFalse(service.cached(uuid).orElseThrow().preferences().payments());
+    }
+
+    @Test
+    void closeWaitsForFinalNameCacheSave() {
+        var names = new MemoryNames();
+        names.saveGate = new CompletableFuture<>();
+        var service = new JsonUserService(
+                new MemoryStorage(),
+                names,
+                Path.of("users"),
+                new NoopLogger()
+        );
+
+        var close = service.closeAsync();
+        assertFalse(close.isDone());
+        assertEquals(1, names.saveCalls.get());
+        names.saveGate.complete(null);
+        close.join();
     }
 
     @Test
@@ -144,6 +228,9 @@ final class JsonUserServiceTest {
 
         private final Map<Path, Object> values = new ConcurrentHashMap<>();
         private final AtomicInteger createCalls = new AtomicInteger();
+        private final AtomicInteger saveCalls = new AtomicInteger();
+        private final List<Object> savedValues = Collections.synchronizedList(new ArrayList<>());
+        private final Queue<CompletableFuture<Void>> saveGates = new ArrayDeque<>();
         private CompletableFuture<Void> createGate = CompletableFuture.completedFuture(null);
         private boolean failSaves;
 
@@ -173,13 +260,18 @@ final class JsonUserServiceTest {
         }
 
         @Override
-        public <T> CompletableFuture<Void> save(Path path, T value) {
+        public synchronized <T> CompletableFuture<Void> save(Path path, T value) {
+            saveCalls.incrementAndGet();
+            savedValues.add(value);
             if (failSaves) {
                 return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
             }
 
-            values.put(path, value);
-            return CompletableFuture.completedFuture(null);
+            var gate = saveGates.poll();
+            var ready = gate == null
+                    ? CompletableFuture.completedFuture(null)
+                    : gate;
+            return ready.thenRun(() -> values.put(path, value));
         }
 
         @Override
@@ -197,12 +289,20 @@ final class JsonUserServiceTest {
             return CompletableFuture.completedFuture(List.of());
         }
 
+        private void resetSaveHistory() {
+            saveCalls.set(0);
+            savedValues.clear();
+            saveGates.clear();
+        }
+
     }
 
     @NullMarked
     private static final class MemoryNames implements NameCacheService {
 
         private final Map<UUID, String> names = new HashMap<>();
+        private final AtomicInteger saveCalls = new AtomicInteger();
+        private CompletableFuture<Void> saveGate = CompletableFuture.completedFuture(null);
 
         @Override
         public void remember(UUID uuid, String name) {
@@ -229,7 +329,8 @@ final class JsonUserServiceTest {
 
         @Override
         public CompletableFuture<Void> save() {
-            return CompletableFuture.completedFuture(null);
+            saveCalls.incrementAndGet();
+            return saveGate;
         }
 
     }

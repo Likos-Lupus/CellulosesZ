@@ -89,8 +89,9 @@ public final class CommandManager implements CommandTreeService {
                     players,
                     availability
             );
-            registry.freezeAndSnapshot().forEach(contributor -> contributor.register(context));
+            registry.snapshot().forEach(contributor -> contributor.register(context));
             registerConfiguredAliases(context);
+
             bootstrap.serviceRegistry().require(CommandCatalog.class).replace(context.entries());
             transaction.commit();
         }

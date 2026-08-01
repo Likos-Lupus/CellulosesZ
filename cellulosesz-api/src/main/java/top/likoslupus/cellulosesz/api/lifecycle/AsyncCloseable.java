@@ -4,6 +4,13 @@ import java.util.concurrent.CompletableFuture;
 
 public interface AsyncCloseable {
 
-    CompletableFuture<Void> closeAsync();
+    default CompletableFuture<Void> closeAsync() {
+        stopAccepting();
+        return drain();
+    }
+
+    void stopAccepting();
+
+    CompletableFuture<Void> drain();
 
 }

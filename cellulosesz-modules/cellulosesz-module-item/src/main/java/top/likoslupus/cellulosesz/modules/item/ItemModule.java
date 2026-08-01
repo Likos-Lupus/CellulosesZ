@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.item;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.*;
 import top.likoslupus.cellulosesz.api.item.*;
@@ -23,6 +22,7 @@ import top.likoslupus.cellulosesz.modules.item.service.DefaultItemService;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -33,6 +33,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command"}
 )
+@SuppressWarnings("resource")
 public final class ItemModule implements CellulosesZModule {
 
     private @Nullable ItemConfig config;
@@ -41,17 +42,17 @@ public final class ItemModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.item",
                 ItemConfig.class,
                 "modules/item.yml",
                 ItemConfig::new
         );
+        config = context.configs().require("module.item", ItemConfig.class);
         requireNonNull(config, "ItemConfig has not been initialized").validate();
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var itemPlatform = context.services().require(ItemPlatformService.class);
         var users = context.services().require(UserService.class);
@@ -86,9 +87,18 @@ public final class ItemModule implements CellulosesZModule {
         var users = context.services().require(UserService.class);
         var confirmations = context.services().require(ConfirmationService.class);
         var permissions = context.services().require(PermissionService.class);
-        var loadedItems = requireNonNull(items, "ItemService has not been initialized");
-        var loadedAutomation = requireNonNull(automation, "ItemAutomationService has not been initialized");
-        var loadedConfig = requireNonNull(config, "ItemConfig has not been initialized");
+        var loadedItems = requireNonNull(
+                items,
+                "ItemService has not been initialized"
+        );
+        var loadedAutomation = requireNonNull(
+                automation,
+                "ItemAutomationService has not been initialized"
+        );
+        var loadedConfig = requireNonNull(
+                config,
+                "ItemConfig has not been initialized"
+        );
 
         var itemCommands = new ItemCommandService(loadedItems, itemPlatform);
         var inventoryCommands = new InventoryCommandService(inventory);
@@ -154,7 +164,11 @@ public final class ItemModule implements CellulosesZModule {
                 "firework-command",
                 new FireworkCommand(itemCommands)
         );
-        trackWorkstations(context, registry, workstationCommands);
+        trackWorkstations(
+                context,
+                registry,
+                workstationCommands
+        );
         track(
                 context, registry,
                 "more-command",
@@ -173,7 +187,8 @@ public final class ItemModule implements CellulosesZModule {
         track(
                 context, registry,
                 "powertooltoggle-command",
-                new PowerToolToggleCommand(loadedAutomation))
+                new PowerToolToggleCommand(loadedAutomation)
+        )
         ;
         track(
                 context, registry,
@@ -222,18 +237,13 @@ public final class ItemModule implements CellulosesZModule {
 
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
         var suggestions = context.services().require(CommandSuggestionRegistry.class);
-        List.of(
-                        "item",
-                        "give",
-                        "worth",
-                        "sell",
-                        "setworth"
-                )
-                .forEach(command -> suggestions.register(
+        List.of("item", "give", "worth", "sell", "setworth").forEach(command ->
+                suggestions.register(
                         command,
                         "item",
                         _ -> loadedItems.names()
-                ));
+                )
+        );
     }
 
     @Override
@@ -244,14 +254,18 @@ public final class ItemModule implements CellulosesZModule {
         candidate.validate();
         current.copyFrom(candidate);
 
-        ((DefaultItemService) requireNonNull(
-                items,
-                "ItemService has not been initialized"
-        )).configure(current);
-        ((DefaultItemAutomationService) requireNonNull(
-                automation,
-                "ItemAutomationService has not been initialized"
-        )).configure(current);
+        (
+                (DefaultItemService) requireNonNull(
+                        items,
+                        "ItemService has not been initialized"
+                )
+        ).configure(current);
+        (
+                (DefaultItemAutomationService) requireNonNull(
+                        automation,
+                        "ItemAutomationService has not been initialized"
+                )
+        ).configure(current);
     }
 
     private static void track(
@@ -260,7 +274,7 @@ public final class ItemModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     private static void trackWorkstations(
@@ -352,21 +366,66 @@ public final class ItemModule implements CellulosesZModule {
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {
         Map.ofEntries(
-                Map.entry("cellulosesz.command.clearinventory.others", "Clear another player's inventory"),
-                Map.entry("cellulosesz.command.clearinventory.all", "Clear all online player inventories"),
-                Map.entry("cellulosesz.command.clearinventory.multiple", "Clear multiple player inventories"),
-                Map.entry("cellulosesz.command.clearinventory.armor", "Include equipment in an inventory clear"),
-                Map.entry("cellulosesz.command.clearinventory.bypass-confirm", "Bypass inventory clear confirmation"),
-                Map.entry("cellulosesz.command.clearinventory.exempt", "Exempt a player from inventory clears"),
-                Map.entry("cellulosesz.command.more.oversized", "Create permitted oversized held stacks"),
-                Map.entry("cellulosesz.command.hat.ignore-binding", "Move binding-cursed helmets"),
-                Map.entry("cellulosesz.command.book.title", "Change a held book title"),
-                Map.entry("cellulosesz.command.book.author", "Change a held book author"),
-                Map.entry("cellulosesz.command.book.others", "Modify a book signed by another author"),
-                Map.entry("cellulosesz.command.skull.modify", "Change the profile of a held player head"),
-                Map.entry("cellulosesz.command.skull.spawn", "Create a player head"),
-                Map.entry("cellulosesz.command.skull.others", "Give or modify a head for another player"),
-                Map.entry("cellulosesz.command.skull.spawn.others", "Create a player head for another player")
+                Map.entry(
+                        "cellulosesz.command.clearinventory.others",
+                        "Clear another player's inventory"
+                ),
+                Map.entry(
+                        "cellulosesz.command.clearinventory.all",
+                        "Clear all online player inventories"
+                ),
+                Map.entry(
+                        "cellulosesz.command.clearinventory.multiple",
+                        "Clear multiple player inventories"
+                ),
+                Map.entry(
+                        "cellulosesz.command.clearinventory.armor",
+                        "Include equipment in an inventory clear"
+                ),
+                Map.entry(
+                        "cellulosesz.command.clearinventory.bypass-confirm",
+                        "Bypass inventory clear confirmation"
+                ),
+                Map.entry(
+                        "cellulosesz.command.clearinventory.exempt",
+                        "Exempt a player from inventory clears"
+                ),
+                Map.entry(
+                        "cellulosesz.command.more.oversized",
+                        "Create permitted oversized held stacks"
+                ),
+                Map.entry(
+                        "cellulosesz.command.hat.ignore-binding",
+                        "Move binding-cursed helmets"
+                ),
+                Map.entry(
+                        "cellulosesz.command.book.title",
+                        "Change a held book title"
+                ),
+                Map.entry(
+                        "cellulosesz.command.book.author",
+                        "Change a held book author"
+                ),
+                Map.entry(
+                        "cellulosesz.command.book.others",
+                        "Modify a book signed by another author"
+                ),
+                Map.entry(
+                        "cellulosesz.command.skull.modify",
+                        "Change the profile of a held player head"
+                ),
+                Map.entry(
+                        "cellulosesz.command.skull.spawn",
+                        "Create a player head"
+                ),
+                Map.entry(
+                        "cellulosesz.command.skull.others",
+                        "Give or modify a head for another player"
+                ),
+                Map.entry(
+                        "cellulosesz.command.skull.spawn.others",
+                        "Create a player head for another player"
+                )
         ).forEach(catalog::register);
     }
 

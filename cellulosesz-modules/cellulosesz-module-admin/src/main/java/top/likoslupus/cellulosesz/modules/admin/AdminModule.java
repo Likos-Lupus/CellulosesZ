@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.modules.admin;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
@@ -31,6 +29,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -41,6 +40,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command", "permission"}
 )
+@SuppressWarnings("resource")
 public final class AdminModule implements CellulosesZModule {
 
     private @Nullable AdminConfig config;
@@ -54,13 +54,18 @@ public final class AdminModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
+        context.configs().register(
+                "module.admin",
+                AdminConfig.class,
+                "modules/admin.yml",
+                AdminConfig::new
+        );
         config = context.configs()
-                .register("module.admin", AdminConfig.class, "modules/admin.yml", AdminConfig::new)
+                .require("module.admin", AdminConfig.class)
                 .validatedCopy();
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var current = requireNonNull(config, "AdminConfig has not been initialized");
         var clock = Clock.systemUTC();
@@ -161,138 +166,180 @@ public final class AdminModule implements CellulosesZModule {
         context.services().register(JailEnforcementService.class, enforcement);
 
         mutePolicy = new MuteCommandMiddleware(mutes, current);
-        context.services().require(CommandMiddlewareRegistry.class).addMiddleware(mutePolicy);
+        context.middlewares().addMiddleware(mutePolicy);
     }
 
     @Override
     public void registerEvents(ModuleContext context) {
-        var temporary = requireNonNull(tempBans, "TempBanService has not been initialized");
-        var mute = requireNonNull(mutes, "MuteService has not been initialized");
-        var jailService = requireNonNull(jails, "JailService has not been initialized");
-        var addressBook = requireNonNull(addresses, "AddressBookService has not been initialized");
-        var jailEnforcement = requireNonNull(enforcement, "JailEnforcementService has not been initialized");
+        var temporary = requireNonNull(
+                tempBans,
+                "TempBanService has not been initialized"
+        );
+        var mute = requireNonNull(
+                mutes,
+                "MuteService has not been initialized"
+        );
+        var jailService = requireNonNull(
+                jails,
+                "JailService has not been initialized"
+        );
+        var addressBook = requireNonNull(
+                addresses,
+                "AddressBookService has not been initialized"
+        );
+        var jailEnforcement = requireNonNull(
+                enforcement,
+                "JailEnforcementService has not been initialized"
+        );
         var networks = context.services().require(PlayerNetworkService.class);
         var connections = context.services().require(PlayerConnectionService.class);
         var audience = context.services().require(PlayerAudienceService.class);
         var renderer = context.services().require(MessageRenderer.class);
         var permissions = context.services().require(PermissionService.class);
 
-        context.events().listen(PlayerJoinEvent.class, event -> {
-            var player = event.player();
-            var address = networks.address(player);
+        context.events().listen(
+                PlayerJoinEvent.class,
+                event -> {
+                    var player = event.player();
+                    var address = networks.address(player);
 
-            address.ifPresent(value ->
-                    addressBook.remember(player.uuid(), player.name(), value)
-                            .whenComplete((_, failure) -> {
-                                if (failure != null) {
-                                    context.logger().error(
-                                            "Failed to persist a player login address",
-                                            failure
-                                    );
-                                }
-                            })
-            );
+                    address.ifPresent(value -> addressBook.remember(
+                                            player.uuid(),
+                                            player.name(),
+                                            value
+                                    )
+                                    .whenComplete((_, failure) -> {
+                                        if (failure != null) {
+                                            context.logger().error(
+                                                    "Failed to persist a player login address",
+                                                    failure
+                                            );
+                                        }
+                                    })
+                    );
 
-            var active = temporary.active(player.uuid(), player.name())
-                    .or(() -> address.flatMap(temporary::activeIp));
+                    var active = temporary
+                            .active(player.uuid(), player.name())
+                            .or(() -> address.flatMap(temporary::activeIp));
 
-            if (active.isPresent()) {
-                connections.disconnect(
-                        player,
-                        renderer.render(
-                                audience.locale(player),
-                                "service.admin.temp-ban-kick",
-                                Map.of("reason", active.orElseThrow().reason())
-                        )
-                );
-                return;
-            }
-
-            var jailed = jailService.jailed(player.uuid());
-
-            if (jailed.filter(value -> value.state() == JailState.RELEASE_PENDING).isPresent()) {
-                jailService.completePendingRelease(player)
-                        .whenComplete((_, failure) -> {
-                            if (failure != null) {
-                                context.logger().error(
-                                        "Failed to complete pending jail release",
-                                        failure
-                                );
-                            }
-                        });
-            } else {
-                jailEnforcement.enforce(player)
-                        .whenComplete((_, failure) -> {
-                            if (failure != null) {
-                                context.logger().error(
-                                        "Failed to enforce jail on join",
-                                        failure
-                                );
-                            }
-                        });
-            }
-        });
-
-        context.events().listen(PlayerChatEvent.class, event -> {
-            if (permissions.has(event.player(), "cellulosesz.admin.mute.bypass")
-                    || !mute.muted(event.player().uuid())) {
-                return;
-            }
-
-            event.cancel();
-            audience.send(
-                    event.player(),
-                    renderer.render(
-                            audience.locale(event.player()),
-                            "service.admin.muted-chat",
-                            Map.of()
-                    )
-            );
-        });
-
-        context.events().listen(PlayerCommandPreprocessEvent.class, event -> {
-            if (permissions.has(event.player(), "cellulosesz.admin.mute.bypass")
-                    || !mute.muted(event.player().uuid())) {
-                return;
-            }
-
-            var root = normalizeRoot(event.command());
-            var middleware = requireNonNull(
-                    mutePolicy,
-                    "MuteCommandMiddleware has not been initialized"
-            );
-
-            if (!middleware.blocked(root)) {
-                return;
-            }
-
-            event.cancel();
-            audience.send(
-                    event.player(),
-                    renderer.render(
-                            audience.locale(event.player()),
-                            "commands.admin.mute-command-middleware.error.muted-cannot-use-command",
-                            Map.of()
-                    )
-            );
-        });
-
-        context.events().listen(PlayerMoveEvent.class, event ->
-                jailEnforcement.activeJail(event.player()).ifPresent(jail -> {
-                    if (!jailEnforcement.inside(jail.location(), event.to())) {
-                        event.to(jail.location());
-                        event.cancel();
+                    if (active.isPresent()) {
+                        connections.disconnect(
+                                player,
+                                renderer.render(
+                                        audience.locale(player),
+                                        "service.admin.temp-ban-kick",
+                                        Map.of("reason", active.orElseThrow().reason())
+                                )
+                        );
+                        return;
                     }
-                })
+
+                    var jailed = jailService.jailed(player.uuid());
+                    if (jailed.filter(value ->
+                                    value.state() == JailState.RELEASE_PENDING
+                            )
+                            .isPresent()
+                    ) {
+                        jailService
+                                .completePendingRelease(player)
+                                .whenComplete((_, failure) -> {
+                                    if (failure != null) {
+                                        context.logger().error(
+                                                "Failed to complete pending jail release",
+                                                failure
+                                        );
+                                    }
+                                });
+                    } else {
+                        jailEnforcement
+                                .enforce(player)
+                                .whenComplete((_, failure) -> {
+                                    if (failure != null) {
+                                        context.logger().error(
+                                                "Failed to enforce jail on join",
+                                                failure
+                                        );
+                                    }
+                                });
+                    }
+                }
         );
 
-        context.events().listen(PlayerRespawnEvent.class, event ->
-                jailEnforcement.activeJail(event.player())
+        context.events().listen(
+                PlayerChatEvent.class,
+                event -> {
+                    if (permissions.has(event.player(), "cellulosesz.admin.mute.bypass")
+                            || !mute.muted(event.player().uuid())
+                    ) {
+                        return;
+                    }
+
+                    event.cancel();
+                    audience.send(
+                            event.player(),
+                            renderer.render(
+                                    audience.locale(event.player()),
+                                    "service.admin.muted-chat",
+                                    Map.of()
+                            )
+                    );
+                }
+        );
+
+        context.events().listen(
+                PlayerCommandPreprocessEvent.class,
+                event -> {
+                    if (permissions.has(event.player(), "cellulosesz.admin.mute.bypass")
+                            || !mute.muted(event.player().uuid())
+                    ) {
+                        return;
+                    }
+
+                    var root = normalizeRoot(event.command());
+                    var middleware = requireNonNull(
+                            mutePolicy,
+                            "MuteCommandMiddleware has not been initialized"
+                    );
+
+                    if (!middleware.blocked(root)) {
+                        return;
+                    }
+
+                    event.cancel();
+                    audience.send(
+                            event.player(),
+                            renderer.render(
+                                    audience.locale(event.player()),
+                                    "commands.admin.mute-command-middleware.error.muted-cannot-use-command",
+                                    Map.of()
+                            )
+                    );
+                }
+        );
+
+        context.events().listen(
+                PlayerMoveEvent.class,
+                event -> jailEnforcement
+                        .activeJail(event.player())
+                        .ifPresent(jail -> {
+                            if (!jailEnforcement.inside(jail.location(), event.to())) {
+                                event.to(jail.location());
+                                event.cancel();
+                            }
+                        })
+        );
+
+        context.events().listen(
+                PlayerRespawnEvent.class,
+                event -> jailEnforcement
+                        .activeJail(event.player())
                         .ifPresent(jail -> event.location(jail.location()))
         );
 
-        context.events().listen(PlayerWorldChangeEvent.class, event ->
-                jailEnforcement.enforce(event.player())
+        context.events().listen(
+                PlayerWorldChangeEvent.class,
+                event -> jailEnforcement
+                        .enforce(event.player())
                         .whenComplete((_, failure) -> {
                             if (failure != null) {
                                 context.logger().error(
@@ -303,21 +350,31 @@ public final class AdminModule implements CellulosesZModule {
                         })
         );
 
-        context.events().listen(PlayerGameModeChangeEvent.class, event -> {
-            if (jailService.jailed(event.player().uuid())
-                    .filter(value -> value.state() == JailState.ACTIVE)
-                    .isPresent()) {
-                event.cancel();
-            }
-        });
+        context.events().listen(
+                PlayerGameModeChangeEvent.class,
+                event -> {
+                    if (jailService
+                            .jailed(event.player().uuid())
+                            .filter(value -> value.state() == JailState.ACTIVE)
+                            .isPresent()
+                    ) {
+                        event.cancel();
+                    }
+                }
+        );
 
-        context.events().listen(PlayerAttackEvent.class, event -> {
-            if (jailService.jailed(event.player().uuid())
-                    .filter(value -> value.state() == JailState.ACTIVE)
-                    .isPresent()) {
-                event.cancel();
-            }
-        });
+        context.events().listen(
+                PlayerAttackEvent.class,
+                event -> {
+                    if (jailService
+                            .jailed(event.player().uuid())
+                            .filter(value -> value.state() == JailState.ACTIVE)
+                            .isPresent()
+                    ) {
+                        event.cancel();
+                    }
+                }
+        );
     }
 
     @Override
@@ -334,7 +391,12 @@ public final class AdminModule implements CellulosesZModule {
 
         track(context, registry, "ban-command", new BanCommand(ban, players));
         track(context, registry, "banip-command", new BanIpCommand(ban, players));
-        track(context, registry, "burn-command", new BurnCommand(controls, players, current.maximumBurnSeconds));
+        track(
+                context,
+                registry,
+                "burn-command",
+                new BurnCommand(controls, players, current.maximumBurnSeconds)
+        );
         track(context, registry, "deljail-command", new DelJailCommand(jail));
         track(context, registry, "ext-command", new ExtCommand(controls, players));
         track(context, registry, "ice-command", new IceCommand(controls, players));
@@ -367,24 +429,21 @@ public final class AdminModule implements CellulosesZModule {
                 .require("module.admin", AdminConfig.class)
                 .validatedCopy();
 
-        requireNonNull(config, "AdminConfig has not been initialized").copyFrom(next);
-        requireNonNull(mutePolicy, "MuteCommandMiddleware has not been initialized").configure(next);
+        requireNonNull(
+                config,
+                "AdminConfig has not been initialized"
+        ).copyFrom(next);
+        requireNonNull(
+                mutePolicy,
+                "MuteCommandMiddleware has not been initialized"
+        ).configure(next);
 
         schedule(context);
     }
 
-    @Override
-    public void onServerStopping(ModuleContext context) {
-        if (maintenance != null) {
-            maintenance.cancel();
-        }
-
-        maintenance = null;
-    }
-
     private void schedule(ModuleContext context) {
         if (maintenance != null) {
-            maintenance.cancel();
+            maintenance.close();
         }
 
         var seconds = requireNonNull(
@@ -394,50 +453,51 @@ public final class AdminModule implements CellulosesZModule {
 
         var period = Math.multiplyExact(seconds, 20L);
 
-        maintenance = context.scheduler().syncRepeating(() -> {
-            requireNonNull(tempBans, "TempBanService has not been initialized")
-                    .purgeExpired()
-                    .whenComplete((_, failure) -> {
-                        if (failure != null) {
-                            context.logger().error(
-                                    "Failed to purge expired temporary bans",
-                                    failure
-                            );
-                        }
-                    });
+        maintenance = context.scheduler().syncRepeating(
+                () -> {
+                    requireNonNull(tempBans, "TempBanService has not been initialized")
+                            .purgeExpired()
+                            .whenComplete((_, failure) -> {
+                                if (failure != null) {
+                                    context.logger().error(
+                                            "Failed to purge expired temporary bans",
+                                            failure
+                                    );
+                                }
+                            });
 
-            requireNonNull(mutes, "MuteService has not been initialized")
-                    .purgeExpired()
-                    .whenComplete((_, failure) -> {
-                        if (failure != null) {
-                            context.logger().error(
-                                    "Failed to purge expired mutes",
-                                    failure
-                            );
-                        }
-                    });
+                    requireNonNull(mutes, "MuteService has not been initialized")
+                            .purgeExpired()
+                            .whenComplete((_, failure) -> {
+                                if (failure != null) {
+                                    context.logger().error(
+                                            "Failed to purge expired mutes",
+                                            failure
+                                    );
+                                }
+                            });
 
-            requireNonNull(jails, "JailService has not been initialized")
-                    .purgeExpired()
-                    .whenComplete((_, failure) -> {
-                        if (failure != null) {
-                            context.logger().error(
-                                    "Failed to purge expired jail records",
-                                    failure
-                            );
-                        }
-                    });
+                    requireNonNull(jails, "JailService has not been initialized")
+                            .purgeExpired()
+                            .whenComplete((_, failure) -> {
+                                if (failure != null) {
+                                    context.logger().error(
+                                            "Failed to purge expired jail records",
+                                            failure
+                                    );
+                                }
+                            });
 
-            var service = requireNonNull(
-                    enforcement,
-                    "JailEnforcementService has not been initialized"
-            );
+                    var service = requireNonNull(
+                            enforcement,
+                            "JailEnforcementService has not been initialized"
+                    );
 
-            context.services()
-                    .require(PlayerDirectory.class)
-                    .onlinePlayers()
-                    .forEach(player ->
-                            service.enforce(player)
+                    context.services()
+                            .require(PlayerDirectory.class)
+                            .onlinePlayers()
+                            .forEach(player -> service
+                                    .enforce(player)
                                     .whenComplete((_, failure) -> {
                                         if (failure != null) {
                                             context.logger().error(
@@ -446,8 +506,11 @@ public final class AdminModule implements CellulosesZModule {
                                             );
                                         }
                                     })
-                    );
-        }, 20L, period);
+                            );
+                },
+                20L,
+                period
+        );
     }
 
     private static Duration maximumDuration(long seconds) {
@@ -462,7 +525,7 @@ public final class AdminModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {
@@ -507,8 +570,11 @@ public final class AdminModule implements CellulosesZModule {
                 : raw.substring(0, separator);
         var namespace = root.indexOf(':');
 
-        return (namespace >= 0 ? root.substring(namespace + 1) : root)
-                .toLowerCase(Locale.ROOT);
+        return (
+                namespace >= 0
+                        ? root.substring(namespace + 1)
+                        : root
+        ).toLowerCase(Locale.ROOT);
     }
 
 }

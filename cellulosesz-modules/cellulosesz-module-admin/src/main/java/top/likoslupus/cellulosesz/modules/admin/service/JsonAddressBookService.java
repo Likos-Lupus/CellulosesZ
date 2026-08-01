@@ -1,8 +1,10 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.AddressBookService;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.data.AddressBookDocument;
 
 import java.net.InetAddress;
@@ -12,17 +14,24 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonEmpty;
+
+import static java.util.Objects.requireNonNull;
 
 public final class JsonAddressBookService implements
         AddressBookService,
-        AsyncInitializable {
+        AsyncInitializable,
+        AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final StorageService storage;
     private final Path path;
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
     private AddressBookDocument document = new AddressBookDocument();
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonAddressBookService(
             StorageService storage,
@@ -56,7 +65,9 @@ public final class JsonAddressBookService implements
             //noinspection ResultOfMethodCallIgnored
             UUID.fromString(uuid);
             entry.name = requireNonEmpty(entry.name, "entry.name").trim();
-            var address = IpAddresses.parseLiteral(entry.address)
+
+            var address = IpAddresses
+                    .parseLiteral(entry.address)
                     .orElseThrow(() -> new IllegalStateException("Invalid stored IP address"));
             entry.address = IpAddresses.canonical(address);
         });
@@ -74,7 +85,7 @@ public final class JsonAddressBookService implements
     }
 
     @Override
-    public synchronized CompletableFuture<Void> remember(
+    public CompletableFuture<Void> remember(
             UUID uuid,
             String name,
             InetAddress address
@@ -82,11 +93,9 @@ public final class JsonAddressBookService implements
         requireNonNull(uuid, "uuid");
         var normalizedName = requireNonEmpty(name, "name").trim();
         var normalizedAddress = IpAddresses.canonical(requireNonNull(address, "address"));
-        var result = new CompletableFuture<Void>();
 
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
+        return mutations
+                .submit(() -> {
                     AddressBookDocument next;
                     synchronized (this) {
                         next = copy(document);
@@ -99,26 +108,12 @@ public final class JsonAddressBookService implements
 
                     return storage
                             .save(path, next)
-                            .handle((_, failure) -> {
-                                if (failure == null) {
-                                    synchronized (this) {
-                                        document = next;
-                                    }
-                                    result.complete(null);
-                                } else {
-                                    result.completeExceptionally(failure);
+                            .thenRun(() -> {
+                                synchronized (this) {
+                                    document = next;
                                 }
-                                return (Void) null;
                             });
                 });
-
-        mutationTail
-                .whenComplete((_, failure) -> {
-                    if (failure != null) {
-                        result.completeExceptionally(failure);
-                    }
-                });
-        return result;
     }
 
     @Override
@@ -136,7 +131,8 @@ public final class JsonAddressBookService implements
         var normalized = requireNonEmpty(name, "name").trim().toLowerCase(Locale.ROOT);
         return document.players.values().stream()
                 .filter(entry -> entry.name.toLowerCase(Locale.ROOT).equals(normalized))
-                .findFirst().flatMap(entry -> parseStored(entry.address));
+                .findFirst()
+                .flatMap(entry -> parseStored(entry.address));
     }
 
     private static Optional<InetAddress> parseStored(String value) {
@@ -144,7 +140,19 @@ public final class JsonAddressBookService implements
         if (parsed.isEmpty()) {
             throw new IllegalStateException("Address book contains invalid address");
         }
+
         return parsed;
+    }
+
+
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
     }
 
 }

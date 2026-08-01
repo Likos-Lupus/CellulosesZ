@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.command;
 
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
@@ -25,18 +24,20 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.CORE,
         priority = 0
 )
+@SuppressWarnings("resource")
 public final class CommandModule implements CellulosesZModule {
 
     private @Nullable CommandConfig config;
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = validate(context.configs().register(
+        context.configs().register(
                 "module.command",
                 CommandConfig.class,
                 "modules/command.yml",
                 CommandConfig::new
-        ));
+        );
+        config = validate(context.configs().require("module.command", CommandConfig.class));
     }
 
     @Override
@@ -45,10 +46,7 @@ public final class CommandModule implements CellulosesZModule {
         context.services()
                 .require(CommandAvailabilityService.class)
                 .replaceDisabledCommands(current.disabledCommands);
-
-        var middlewares = context.services().require(
-                CommandMiddlewareRegistry.class
-        );
+        var middlewares = context.middlewares();
 
         middlewares.addMiddleware(new SourceKindCommandMiddleware());
         middlewares.addMiddleware(new ModuleEnabledCommandMiddleware(context));
@@ -66,14 +64,14 @@ public final class CommandModule implements CellulosesZModule {
     @Override
     public void registerCommands(ModuleContext context) {
         var registry = context.services().require(CommandRegistry.class);
-        context.track(registry.register(
+        context.scope().own(registry.register(
                 "cellulosesz-command",
                 new CellulosesZCommand(
                         context.services().require(RuntimeService.class),
                         context.services().require(ServerThreadExecutor.class)
                 )
         ));
-        context.track(registry.register("help-command", new HelpCommand()));
+        context.scope().own(registry.register("help-command", new HelpCommand()));
     }
 
     @Override

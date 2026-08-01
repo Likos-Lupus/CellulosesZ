@@ -65,6 +65,7 @@ import static java.util.Objects.requireNonNull;
                 "command"
         }
 )
+@SuppressWarnings("resource")
 public final class SignModule implements CellulosesZModule {
 
     private @Nullable SignConfig config;
@@ -73,12 +74,13 @@ public final class SignModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.sign",
                 SignConfig.class,
                 "modules/sign.yml",
                 SignConfig::new
         );
+        config = context.configs().require("module.sign", SignConfig.class);
         requireNonNull(config, "SignConfig has not been initialized").validate();
     }
 
@@ -351,11 +353,10 @@ public final class SignModule implements CellulosesZModule {
                 context.services().require(ServerThreadExecutor.class),
                 requireNonNull(config, "SignConfig has not been initialized")
         );
-        context.track(context
-                .services()
-                .require(CommandRegistry.class)
-                .register("editsign", editSign)
-        );
+        context.scope().own(context.services().require(CommandRegistry.class).register(
+                "editsign",
+                editSign
+        ));
 
         var catalog = context.services().require(PermissionCatalog.class);
         catalog.register("cellulosesz.command.editsign.waxed", "Edit waxed signs");

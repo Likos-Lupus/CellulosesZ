@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.playerstate;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
@@ -30,6 +29,7 @@ import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishServi
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -40,6 +40,7 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "permission", "command"}
 )
+@SuppressWarnings("resource")
 public final class PlayerStateModule implements CellulosesZModule {
 
     private final Map<UUID, PersonalTimeSetting> lastTime = new ConcurrentHashMap<>();
@@ -57,12 +58,13 @@ public final class PlayerStateModule implements CellulosesZModule {
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.playerstate",
                 PlayerStateConfig.class,
                 "modules/playerstate.yml",
                 PlayerStateConfig::new
         );
+        config = context.configs().require("module.playerstate", PlayerStateConfig.class);
         settings = PlayerStateCommandSettings.from(config);
     }
 
@@ -76,11 +78,13 @@ public final class PlayerStateModule implements CellulosesZModule {
         var displayNames = context.services().require(DisplayNameService.class);
         var statePlatform = context.services().require(PlayerStatePlatformService.class);
 
-        states = new DefaultPlayerStateService(statePlatform,
+        states = new DefaultPlayerStateService(
+                statePlatform,
                 serverThread,
                 players,
                 users,
-                displayNames);
+                displayNames
+        );
         vanish = new DefaultVanishService(
                 context.services().require(VanishPlatformService.class),
                 players,
@@ -172,7 +176,12 @@ public final class PlayerStateModule implements CellulosesZModule {
         var currentSettings = requireNonNull(settings, "settings");
 
         track(context, registry, "afk-command", new AfkCommand(abilityService, players));
-        track(context, registry, "compass-command", new CompassCommand(informationService, players));
+        track(
+                context,
+                registry,
+                "compass-command",
+                new CompassCommand(informationService, players)
+        );
         track(context, registry, "depth-command", new DepthCommand(informationService, players));
         track(context, registry, "exp-command", new ExpCommand(abilityService, players));
         track(context, registry, "feed-command", new FeedCommand(abilityService, players));
@@ -184,16 +193,46 @@ public final class PlayerStateModule implements CellulosesZModule {
         nearCommand = new NearCommand(informationService, players, currentSettings);
         track(context, registry, "near-command", nearCommand);
         track(context, registry, "nick-command", new NickCommand(abilityService, players));
-        track(context, registry, "ping-command", new PingCommand(currentSettings.maximumPingLength()));
-        track(context, registry, "playtime-command", new PlaytimeCommand(informationService, players, names));
+        track(
+                context,
+                registry,
+                "ping-command",
+                new PingCommand(currentSettings.maximumPingLength())
+        );
+        track(
+                context,
+                registry,
+                "playtime-command",
+                new PlaytimeCommand(informationService, players, names)
+        );
         track(context, registry, "ptime-command", new PTimeCommand(abilityService, players));
         track(context, registry, "pweather-command", new PWeatherCommand(abilityService, players));
-        track(context, registry, "realname-command", new RealNameCommand(informationService, players));
+        track(
+                context,
+                registry,
+                "realname-command",
+                new RealNameCommand(informationService, players)
+        );
         track(context, registry, "rest-command", new RestCommand(abilityService, players));
-        track(context, registry, "seen-command", new SeenCommand(informationService, players, names));
-        track(context, registry, "speed-command", new SpeedCommand(abilityService, players, currentSettings));
+        track(
+                context,
+                registry,
+                "seen-command",
+                new SeenCommand(informationService, players, names)
+        );
+        track(
+                context,
+                registry,
+                "speed-command",
+                new SpeedCommand(abilityService, players, currentSettings)
+        );
         track(context, registry, "vanish-command", new VanishCommand(abilityService, players));
-        track(context, registry, "whois-command", new WhoisCommand(informationService, players, names));
+        track(
+                context,
+                registry,
+                "whois-command",
+                new WhoisCommand(informationService, players, names)
+        );
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
     }
 
@@ -203,23 +242,59 @@ public final class PlayerStateModule implements CellulosesZModule {
             String id,
             CommandContributor contributor
     ) {
-        context.track(registry.register(id, contributor));
+        context.scope().own(registry.register(id, contributor));
     }
 
     private static void registerCommandPermissions(PermissionCatalog catalog) {
         Map.ofEntries(
-                Map.entry("cellulosesz.command.getpos.others", "Inspect another visible player's position"),
-                Map.entry("cellulosesz.command.rest.others", "Reset another player's rest statistic"),
-                Map.entry("cellulosesz.command.exp.others", "Inspect another player's experience"),
-                Map.entry("cellulosesz.command.exp.set", "Set personal experience"),
-                Map.entry("cellulosesz.command.exp.set.others", "Set another player's experience"),
-                Map.entry("cellulosesz.command.exp.give", "Give personal experience"),
-                Map.entry("cellulosesz.command.exp.give.others", "Give another player experience"),
-                Map.entry("cellulosesz.command.exp.take", "Take personal experience"),
-                Map.entry("cellulosesz.command.exp.take.others", "Take another player's experience"),
-                Map.entry("cellulosesz.command.exp.reset", "Reset personal experience"),
-                Map.entry("cellulosesz.command.exp.reset.others", "Reset another player's experience"),
-                Map.entry("cellulosesz.playerstate.vanish.see", "See vanished players")
+                Map.entry(
+                        "cellulosesz.command.getpos.others",
+                        "Inspect another visible player's position"
+                ),
+                Map.entry(
+                        "cellulosesz.command.rest.others",
+                        "Reset another player's rest statistic"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.others",
+                        "Inspect another player's experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.set",
+                        "Set personal experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.set.others",
+                        "Set another player's experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.give",
+                        "Give personal experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.give.others",
+                        "Give another player experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.take",
+                        "Take personal experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.take.others",
+                        "Take another player's experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.reset",
+                        "Reset personal experience"
+                ),
+                Map.entry(
+                        "cellulosesz.command.exp.reset.others",
+                        "Reset another player's experience"
+                ),
+                Map.entry(
+                        "cellulosesz.playerstate.vanish.see",
+                        "See vanished players"
+                )
         ).forEach(catalog::register);
     }
 
@@ -252,8 +327,16 @@ public final class PlayerStateModule implements CellulosesZModule {
     }
 
     @Override
+    public void onUnload(ModuleContext context) {
+        clearRuntimeState();
+    }
+
+    @Override
     public void onServerStopping(ModuleContext context) {
-        cancelTasks();
+        clearRuntimeState();
+    }
+
+    private void clearRuntimeState() {
         lastTime.clear();
         lastWeather.clear();
     }
@@ -278,18 +361,21 @@ public final class PlayerStateModule implements CellulosesZModule {
 
     private void cancelTasks() {
         if (afkTask != null) {
-            afkTask.cancel();
+            afkTask.close();
             afkTask = null;
         }
+
         if (personalWorldTask != null) {
-            personalWorldTask.cancel();
+            personalWorldTask.close();
             personalWorldTask = null;
         }
     }
 
     private void checkAutomaticAfk(ModuleContext context) {
         var current = requireNonNull(settings, "settings");
-        if (current.autoAfkMillis() <= 0L) return;
+        if (current.autoAfkMillis() <= 0L) {
+            return;
+        }
 
         var stateService = requireNonNull(states, "states");
         var players = context.services().require(PlayerDirectory.class).onlinePlayers();
@@ -310,7 +396,11 @@ public final class PlayerStateModule implements CellulosesZModule {
                     && idle >= current.autoAfkMillis()
             ) {
                 stateService
-                        .setAfk(player.uuid(), player.name(), true)
+                        .setAfk(
+                                player.uuid(),
+                                player.name(),
+                                true
+                        )
                         .whenComplete((result, failure) ->
                                 serverThread.execute(() -> {
                                     var online = context.services()
@@ -318,13 +408,17 @@ public final class PlayerStateModule implements CellulosesZModule {
                                             .onlinePlayer(player.uuid());
                                     if (failure != null) {
                                         context.logger().error(
-                                                "Failed to persist automatic AFK state for " + player.uuid(),
+                                                "Failed to persist automatic AFK state for "
+                                                        + player.uuid(),
                                                 failure
                                         );
                                     } else {
                                         online.ifPresent(target -> audience.send(
                                                 target,
-                                                renderer.render(audience.locale(target), result.message())
+                                                renderer.render(
+                                                        audience.locale(target),
+                                                        result.message()
+                                                )
                                         ));
                                     }
                                 })
@@ -354,11 +448,11 @@ public final class PlayerStateModule implements CellulosesZModule {
     private void maintainPersonalWorldState(ModuleContext context) {
         var stateService = requireNonNull(states, "states");
         context.services().require(PlayerDirectory.class).onlinePlayers()
-                .forEach(player ->
-                        stateService.cachedPersonalWorldState(player.uuid())
-                                .ifPresent(state ->
-                                        applyPersonalWorldState(context, player, state)
-                                )
+                .forEach(player -> stateService
+                        .cachedPersonalWorldState(player.uuid())
+                        .ifPresent(state ->
+                                applyPersonalWorldState(context, player, state)
+                        )
                 );
     }
 
@@ -382,13 +476,16 @@ public final class PlayerStateModule implements CellulosesZModule {
 
                                     if (failure != null) {
                                         context.logger().error(
-                                                "Failed to restore player state for " + joined.uuid(),
+                                                "Failed to restore player state for "
+                                                        + joined.uuid(),
                                                 failure
                                         );
                                         return;
                                     }
 
-                                    if (online.isEmpty()) return;
+                                    if (online.isEmpty()) {
+                                        return;
+                                    }
 
                                     var player = online.orElseThrow();
                                     var statePlatform = context.services()
@@ -421,7 +518,8 @@ public final class PlayerStateModule implements CellulosesZModule {
     }
 
     private void disconnect(ModuleContext context, CellPlayer player) {
-        context.services().require(VanishPlatformService.class)
+        context.services()
+                .require(VanishPlatformService.class)
                 .setVanishedState(player, false);
         requireNonNull(states, "states").forgetActivity(player.uuid());
 
@@ -438,7 +536,11 @@ public final class PlayerStateModule implements CellulosesZModule {
                 System.currentTimeMillis()
         );
         if (wasAfk) {
-            service.setAfk(player.uuid(), player.name(), false);
+            service.setAfk(
+                    player.uuid(),
+                    player.name(),
+                    false
+            );
         }
     }
 
@@ -446,7 +548,8 @@ public final class PlayerStateModule implements CellulosesZModule {
         lastTime.remove(player.uuid());
         lastWeather.remove(player.uuid());
 
-        requireNonNull(states, "states").cachedPersonalWorldState(player.uuid())
+        requireNonNull(states, "states")
+                .cachedPersonalWorldState(player.uuid())
                 .ifPresent(state -> applyPersonalWorldState(context, player, state));
     }
 

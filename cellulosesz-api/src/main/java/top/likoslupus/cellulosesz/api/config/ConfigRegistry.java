@@ -1,15 +1,27 @@
 package top.likoslupus.cellulosesz.api.config;
 
+import top.likoslupus.cellulosesz.api.service.Registration;
+
 import java.util.Optional;
 import java.util.function.Supplier;
 
 public interface ConfigRegistry {
 
-    <T> T register(
+    default Registration register(
             String key,
-            Class<T> type,
+            Class<?> type,
             String relativePath,
-            Supplier<T> defaultSupplier
+            Supplier<?> defaultSupplier
+    ) {
+        return register(key, type, relativePath, defaultSupplier, "global");
+    }
+
+    Registration register(
+            String key,
+            Class<?> type,
+            String relativePath,
+            Supplier<?> defaultSupplier,
+            String owner
     );
 
     <T> T require(String key, Class<T> type);

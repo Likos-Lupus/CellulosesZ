@@ -6,19 +6,27 @@ import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.*;
+import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
+import java.util.function.Supplier;
+
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
 /** Persist-before-publish immutable user repository. */
 public final class JsonUserService implements UserService, AsyncInitializable, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_PER_USER = 1_024;
+    private static final int MAXIMUM_PENDING_BATCHES = 128;
 
     private final StorageService storage;
     private final NameCacheService nameCache;
@@ -27,9 +35,17 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     private final Clock clock;
     private final ConcurrentHashMap<UUID, CellUser> users = new ConcurrentHashMap<>();
     private final Set<UUID> knownUuids = ConcurrentHashMap.newKeySet();
-    private final ConcurrentHashMap<UUID, CompletableFuture<CellUser>> loadFutures = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, CompletableFuture<Void>> updateTails = new ConcurrentHashMap<>();
-    private final AtomicBoolean closing = new AtomicBoolean();
+    private final KeyedSerialAsyncQueue<UUID> userOperations = new KeyedSerialAsyncQueue<>(
+            Runnable::run,
+            MAXIMUM_PENDING_PER_USER
+    );
+    private final SerialAsyncQueue batchOperations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_BATCHES
+    );
+    private final Object lifecycleLock = new Object();
+    private boolean accepting = true;
+    private @Nullable CompletableFuture<Void> drainFuture;
 
     public JsonUserService(
             StorageService storage,
@@ -58,15 +74,14 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     public CompletableFuture<Void> initialize() {
         return storage
                 .loadDirectory(usersDirectory, CellUser.class)
-                .thenAccept(documents -> documents
-                        .forEach(user -> {
-                            validate(user, user.uuid());
-                            knownUuids.add(user.uuid());
-                            if (user.lastKnownName() != null) {
-                                nameCache.remember(user.uuid(), user.lastKnownName());
-                            }
-                        })
-                );
+                .thenAccept(documents -> documents.forEach(user -> {
+                    validate(user, user.uuid());
+                    knownUuids.add(user.uuid());
+
+                    if (user.lastKnownName() != null) {
+                        nameCache.remember(user.uuid(), user.lastKnownName());
+                    }
+                }));
     }
 
     private static void validate(CellUser user, UUID expectedUuid) {
@@ -92,7 +107,8 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
                         } catch (ArithmeticException overflow) {
                             playTime = Long.MAX_VALUE;
                             logger.warn("User play time overflowed and was saturated for "
-                                    + player.uuid());
+                                    + player.uuid()
+                            );
                         }
                     }
 
@@ -109,74 +125,9 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     }
 
     @Override
-    public CompletableFuture<Void> closeAsync() {
-        closing.set(true);
-        var loads = CompletableFuture.allOf(
-                loadFutures
-                        .values()
-                        .toArray(CompletableFuture[]::new)
-        );
-        var updates = CompletableFuture.allOf(
-                updateTails
-                        .values()
-                        .toArray(CompletableFuture[]::new)
-        );
-
-        return CompletableFuture.allOf(loads, updates)
-                .thenCompose(_ -> nameCache.save());
-    }
-
-    private Path userPath(UUID uuid) {
-        return usersDirectory.resolve(uuid + ".json");
-    }
-
-    @Override
     public CompletableFuture<CellUser> load(UUID uuid) {
-        requireNonNull(uuid, "uuid");
-        var cached = users.get(uuid);
-
-        if (cached != null) {
-            return CompletableFuture.completedFuture(cached);
-        }
-
-        if (closing.get()) {
-            return CompletableFuture.failedFuture(new IllegalStateException(
-                    "User service is closing"
-            ));
-        }
-
-        return loadFutures.computeIfAbsent(
-                uuid,
-                key -> {
-                    var created = storage
-                            .createIfMissing(
-                                    userPath(key),
-                                    CellUser.class,
-                                    () -> create(key)
-                            )
-                            .thenApply(user -> {
-                                validate(user, key);
-                                var normalized = user.timestamps().activeSessionStartedAt() == null
-                                        ? user
-                                        : user.withTimestamps(
-                                                user
-                                                        .timestamps()
-                                                        .withActiveSessionStartedAt(null)
-                                        );
-
-                                users.put(key, normalized);
-                                knownUuids.add(key);
-
-                                if (normalized.lastKnownName() != null) {
-                                    nameCache.remember(key, normalized.lastKnownName());
-                                }
-
-                                return normalized;
-                            });
-                    created.whenComplete((_, _) -> loadFutures.remove(key, created));
-                    return created;
-                }
-        );
+        var key = requireNonNull(uuid, "uuid");
+        return enqueueUserOperation(key, () -> loadAccepted(key));
     }
 
     @Override
@@ -203,15 +154,12 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
 
                     return UserUpdate.of(updated, updated);
                 }
-        ).thenApply(user -> {
-            nameCache.remember(player.uuid(), player.name());
-            return user;
-        });
+        );
     }
 
     @Override
     public Optional<CellUser> cached(UUID uuid) {
-        return Optional.ofNullable(users.get(uuid));
+        return Optional.ofNullable(users.get(requireNonNull(uuid, "uuid")));
     }
 
     @Override
@@ -237,58 +185,32 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
             UUID uuid,
             Function<CellUser, UserUpdate<T>> mutation
     ) {
-        requireNonNull(uuid, "uuid");
+        var key = requireNonNull(uuid, "uuid");
         requireNonNull(mutation, "mutation");
+        return enqueueUserOperation(
+                key,
+                () -> loadAccepted(key).thenCompose(current -> {
+                    var update = requireNonNull(mutation.apply(current), "update");
+                    validate(update.user(), key);
 
-        if (closing.get()) {
-            return CompletableFuture.failedFuture(new IllegalStateException(
-                    "User service is closing"
-            ));
-        }
-
-        var result = new CompletableFuture<T>();
-        updateTails.compute(
-                uuid,
-                (_, previous) -> {
-                    var tail = previous == null
-                            ? CompletableFuture.<Void>completedFuture(null)
-                            : previous;
-                    var next = tail
-                            .handle((_, _) -> null)
-                            .thenCompose(_ -> load(uuid))
-                            .thenCompose(current -> {
-                                final UserUpdate<T> update;
-                                try {
-                                    update = requireNonNull(mutation.apply(current), "update");
-                                    validate(update.user(), uuid);
-                                } catch (RuntimeException exception) {
-                                    return CompletableFuture.failedFuture(exception);
-                                }
-
-                                return storage
-                                        .save(userPath(uuid), update.user())
-                                        .thenRun(() -> {
-                                            users.put(uuid, update.user());
-                                            result.complete(update.result());
-                                        });
+                    return storage
+                            .save(userPath(key), update.user())
+                            .thenApply(_ -> {
+                                publish(key, update.user());
+                                // FIXME: result() is nullable
+                                return update.result();
                             });
-
-                    next.whenComplete((_, failure) -> {
-                        updateTails.remove(uuid, next);
-                        if (failure != null) {
-                            result.completeExceptionally(failure);
-                        }
-                    });
-
-                    return next;
-                }
+                })
         );
-
-        return result;
     }
 
     @Override
     public CompletableFuture<Void> save(UUID uuid) {
+        var key = requireNonNull(uuid, "uuid");
+        return enqueueUserOperation(key, () -> saveAccepted(key));
+    }
+
+    private CompletableFuture<Void> saveAccepted(UUID uuid) {
         var user = users.get(uuid);
         return user == null
                 ? CompletableFuture.completedFuture(null)
@@ -297,24 +219,154 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
 
     @Override
     public CompletableFuture<Void> saveAll() {
-        return CompletableFuture
-                .allOf(users.keySet().stream()
-                        .map(this::save)
-                        .toArray(CompletableFuture[]::new)
+        final CompletableFuture<Void> accepted;
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return closedFuture();
+            }
+
+            var snapshot = Set.copyOf(users.keySet());
+            var saves = snapshot.stream()
+                    .map(uuid -> userOperations.submit(uuid, () -> saveAccepted(uuid)))
+                    .toArray(CompletableFuture[]::new);
+            accepted = batchOperations.submit(() -> CompletableFuture
+                    .allOf(saves)
+                    .thenCompose(_ -> nameCache.save()));
+        }
+
+        return accepted.whenComplete((_, failure) -> {
+            if (failure != null) {
+                logger.error("Failed to save user data", unwrap(failure));
+            }
+        });
+    }
+
+    private static <T> CompletableFuture<T> closedFuture() {
+        return CompletableFuture.failedFuture(new IllegalStateException("User service is closing"));
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        var current = failure;
+        while (current instanceof CompletionException
+                && current.getCause() != null
+        ) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private <T> CompletableFuture<T> enqueueUserOperation(
+            UUID uuid,
+            Supplier<? extends CompletableFuture<T>> operation
+    ) {
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "User service is closing"
+                ));
+            }
+
+            return userOperations.submit(uuid, operation);
+        }
+    }
+
+    private CompletableFuture<CellUser> loadAccepted(UUID uuid) {
+        var cached = users.get(uuid);
+        if (cached != null) {
+            return CompletableFuture.completedFuture(cached);
+        }
+
+        return storage.createIfMissing(
+                        userPath(uuid),
+                        CellUser.class,
+                        () -> create(uuid)
                 )
-                .thenCompose(_ -> nameCache.save())
-                .whenComplete((_, failure) -> {
-                    if (failure != null) {
-                        logger.error("Failed to save user data", failure);
-                    }
+                .thenApply(user -> {
+                    validate(user, uuid);
+                    var normalized = user.timestamps().activeSessionStartedAt() == null
+                            ? user
+                            : user.withTimestamps(
+                                    user.timestamps().withActiveSessionStartedAt(null)
+                            );
+                    publish(uuid, normalized);
+                    return normalized;
                 });
+    }
+
+    private Path userPath(UUID uuid) {
+        return usersDirectory.resolve(uuid + ".json");
     }
 
     private CellUser create(UUID uuid) {
         var now = clock.millis();
-        return CellUser
-                .create(uuid)
+        return CellUser.create(uuid)
                 .withTimestamps(UserTimestamps.defaults().withFirstJoin(now));
+    }
+
+    private void publish(UUID uuid, CellUser user) {
+        users.put(uuid, user);
+        knownUuids.add(uuid);
+
+        if (user.lastKnownName() != null) {
+            nameCache.remember(uuid, user.lastKnownName());
+        }
+    }
+
+    @Override
+    public void stopAccepting() {
+        synchronized (lifecycleLock) {
+            if (!accepting) {
+                return;
+            }
+
+            accepting = false;
+            userOperations.stopAccepting();
+            batchOperations.stopAccepting();
+        }
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        synchronized (lifecycleLock) {
+            if (!accepting && drainFuture != null) {
+                return drainFuture;
+            }
+
+            var accepted = CompletableFuture.allOf(
+                    userOperations.drain(),
+                    batchOperations.drain()
+            );
+
+            var barrier = accepted
+                    .handle((_, failure) -> failure == null
+                            ? null
+                            : unwrap(failure))
+                    .thenCompose(acceptedFailure -> nameCache.save()
+                            .handle((_, nameFailure) -> {
+                                if (acceptedFailure == null && nameFailure == null) {
+                                    return (Void) null;
+                                }
+
+                                var aggregate = new IllegalStateException(
+                                        "User service drain failed"
+                                );
+                                if (acceptedFailure != null) {
+                                    aggregate.addSuppressed(acceptedFailure);
+                                }
+                                if (nameFailure != null) {
+                                    aggregate.addSuppressed(unwrap(nameFailure));
+                                }
+
+                                throw new CompletionException(aggregate);
+                            })
+                    );
+
+            if (!accepting) {
+                drainFuture = barrier;
+            }
+
+            return barrier;
+        }
     }
 
 }

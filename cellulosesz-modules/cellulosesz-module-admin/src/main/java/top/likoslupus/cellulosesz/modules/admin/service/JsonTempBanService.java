@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
@@ -11,6 +12,7 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.data.TempBanDocument;
 
 import java.net.InetAddress;
@@ -24,7 +26,10 @@ import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
-public final class JsonTempBanService implements TempBanService, AsyncInitializable {
+public final class JsonTempBanService
+        implements TempBanService, AsyncInitializable, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final StorageService storage;
     private final Path path;
@@ -37,8 +42,11 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
     private final Clock clock;
     private final boolean disconnectOnline;
 
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
     private TempBanDocument document = new TempBanDocument();
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonTempBanService(
             StorageService storage,
@@ -66,7 +74,8 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(
+        return storage
+                .createIfMissing(
                         path,
                         TempBanDocument.class,
                         TempBanDocument::new
@@ -84,11 +93,7 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
 
     private static List<BanRecord> snapshot(TempBanDocument source) {
         var result = new ArrayList<BanRecord>();
-
-        source.records.forEach(
-                value -> result.add(fromDocument(value))
-        );
-
+        source.records.forEach(value -> result.add(fromDocument(value)));
         return List.copyOf(result);
     }
 
@@ -97,7 +102,6 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
 
         source.records.forEach(value -> {
             var next = new TempBanDocument.Record();
-
             next.ip = value.ip;
             next.uuid = value.uuid;
             next.name = value.name;
@@ -107,7 +111,6 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             next.actorName = value.actorName;
             next.createdAt = value.createdAt;
             next.expiresAt = value.expiresAt;
-
             target.records.add(next);
         });
 
@@ -118,29 +121,17 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
         var actor = new AdminActor(
                 value.actorUuid.isBlank()
                         ? Optional.empty()
-                        : Optional.of(
-                                UUID.fromString(value.actorUuid)
-                        ),
+                        : Optional.of(UUID.fromString(value.actorUuid)),
                 value.actorName
         );
 
-        var created = Instant.ofEpochMilli(
-                value.createdAt
-        );
-
-        var expiration = Expiration.at(
-                Instant.ofEpochMilli(value.expiresAt)
-        );
+        var created = Instant.ofEpochMilli(value.createdAt);
+        var expiration = Expiration.at(Instant.ofEpochMilli(value.expiresAt));
 
         if (value.ip) {
-            var address = IpAddresses.parseLiteral(
-                            value.address
-                    )
-                    .orElseThrow(() ->
-                            new IllegalStateException(
-                                    "Invalid stored IP address"
-                            )
-                    );
+            var address = IpAddresses
+                    .parseLiteral(value.address)
+                    .orElseThrow(() -> new IllegalStateException("Invalid stored IP address"));
 
             return BanRecord.address(
                     address,
@@ -169,50 +160,46 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             Duration duration,
             String reason
     ) {
-        final Expiration expiration;
+        return mutations.submit(() -> {
+            final Expiration expiration;
+            try {
+                expiration = Expiration.after(clock.instant(), duration);
+            } catch (IllegalArgumentException failure) {
+                return invalidDuration();
+            }
 
-        try {
-            expiration = Expiration.after(
+            var record = BanRecord.player(
+                    uuid,
+                    name,
+                    reason,
+                    actor,
                     clock.instant(),
-                    duration
-            );
-        } catch (IllegalArgumentException failure) {
-            return invalidDuration();
-        }
-
-        var record = BanRecord.player(
-                uuid,
-                name,
-                reason,
-                actor,
-                clock.instant(),
-                expiration
-        );
-
-        return mutate(current -> {
-            current.records.removeIf(value ->
-                    !value.ip
-                            && (value.uuid.equals(
-                            uuid.toString()
-                    )
-                            || value.name.equalsIgnoreCase(name))
+                    expiration
             );
 
-            current.records.add(toDocument(record));
-
-            return AdminResult.success(
-                    "service.admin.temp-ban-success",
-                    Map.of("player", name)
-            );
-        }).thenCompose(result ->
-                !result.success() || !disconnectOnline
-                        ? completed(result)
-                        : disconnectUser(
-                                uuid,
-                                reason,
-                                result
+            return mutateAccepted(current -> {
+                current.records.removeIf(value ->
+                        !value.ip
+                                && (
+                                value.uuid.equals(uuid.toString())
+                                        || value.name.equalsIgnoreCase(name)
                         )
-        );
+                );
+                current.records.add(toDocument(record));
+
+                return AdminResult.success(
+                        "service.admin.temp-ban-success",
+                        Map.of("player", name)
+                );
+            }).thenCompose(result -> (!result.success() || !disconnectOnline)
+                    ? completed(result)
+                    : disconnectUser(
+                            uuid,
+                            reason,
+                            result
+                    )
+            );
+        });
     }
 
     @Override
@@ -222,48 +209,42 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             Duration duration,
             String reason
     ) {
-        final Expiration expiration;
+        return mutations.submit(() -> {
+            final Expiration expiration;
+            try {
+                expiration = Expiration.after(clock.instant(), duration);
+            } catch (IllegalArgumentException _) {
+                return invalidDuration();
+            }
 
-        try {
-            expiration = Expiration.after(
+            var record = BanRecord.address(
+                    address,
+                    reason,
+                    actor,
                     clock.instant(),
-                    duration
-            );
-        } catch (IllegalArgumentException _) {
-            return invalidDuration();
-        }
-
-        var record = BanRecord.address(
-                address,
-                reason,
-                actor,
-                clock.instant(),
-                expiration
-        );
-
-        var canonical = IpAddresses.canonical(address);
-
-        return mutate(current -> {
-            current.records.removeIf(value ->
-                    value.ip
-                            && value.address.equals(canonical)
+                    expiration
             );
 
-            current.records.add(toDocument(record));
+            var canonical = IpAddresses.canonical(address);
+            return mutateAccepted(current -> {
+                current.records.removeIf(value -> value.ip
+                        && value.address.equals(canonical)
+                );
+                current.records.add(toDocument(record));
 
-            return AdminResult.success(
-                    "service.admin.temp-ban-ip-success",
-                    Map.of("address", canonical)
+                return AdminResult.success(
+                        "service.admin.temp-ban-ip-success",
+                        Map.of("address", canonical)
+                );
+            }).thenCompose(result -> (!result.success() || !disconnectOnline)
+                    ? completed(result)
+                    : disconnectAddress(
+                            address,
+                            reason,
+                            result
+                    )
             );
-        }).thenCompose(result ->
-                !result.success() || !disconnectOnline
-                        ? completed(result)
-                        : disconnectAddress(
-                                address,
-                                reason,
-                                result
-                        )
-        );
+        });
     }
 
     @Override
@@ -272,45 +253,46 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             String name,
             AdminActor actor
     ) {
-        return mutate(current ->
+        return mutations.submit(() -> mutateAccepted(current ->
                 current.records.removeIf(value ->
-                        !value.ip
-                                && (value.uuid.equals(
-                                uuid.toString()
+                        !value.ip && (
+                                value.uuid.equals(uuid.toString())
+                                        || value.name.equalsIgnoreCase(name)
                         )
-                                || value.name.equalsIgnoreCase(name))
                 )
-                        ? AdminResult.success(
-                        "service.admin.temp-unban-success",
-                        Map.of("player", name)
-                )
+                        ?
+                        AdminResult.success(
+                                "service.admin.temp-unban-success",
+                                Map.of("player", name)
+                        )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.temp-ban-not-found",
                                 Map.of("player", name)
                         )
-        );
+        ));
     }
 
     @Override
     public CompletableFuture<AdminResult> unbanIp(InetAddress address, AdminActor actor) {
-        var canonical = IpAddresses.canonical(address);
-
-        return mutate(current ->
-                current.records.removeIf(value ->
-                        value.ip
-                                && value.address.equals(canonical)
-                )
-                        ? AdminResult.success(
-                        "service.admin.temp-unban-ip-success",
-                        Map.of("address", canonical)
-                )
-                        : AdminResult.failure(
-                                AdminStatus.NOT_FOUND,
-                                "service.admin.temp-ban-ip-not-found",
-                                Map.of("address", canonical)
-                        )
-        );
+        return mutations.submit(() -> {
+            var canonical = IpAddresses.canonical(address);
+            return mutateAccepted(current ->
+                    current.records.removeIf(value ->
+                            value.ip && value.address.equals(canonical)
+                    )
+                            ?
+                            AdminResult.success(
+                                    "service.admin.temp-unban-ip-success",
+                                    Map.of("address", canonical)
+                            )
+                            : AdminResult.failure(
+                                    AdminStatus.NOT_FOUND,
+                                    "service.admin.temp-ban-ip-not-found",
+                                    Map.of("address", canonical)
+                            )
+            );
+        });
     }
 
     @Override
@@ -324,8 +306,7 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                 )
                 .filter(value ->
                         value.uuid().orElseThrow().equals(uuid)
-                                || value.name()
-                                .equalsIgnoreCase(name)
+                                || value.name().equalsIgnoreCase(name)
                 )
                 .findFirst();
     }
@@ -340,35 +321,23 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                 .filter(BanRecord::ip)
                 .filter(value -> !value.expired(now))
                 .filter(value ->
-                        IpAddresses.canonical(
-                                value.address().orElseThrow()
-                        ).equals(canonical)
+                        IpAddresses.canonical(value.address().orElseThrow()).equals(canonical)
                 )
                 .findFirst();
     }
 
     @Override
     public CompletableFuture<Integer> purgeExpired() {
-        var result = new CompletableFuture<Integer>();
+        return mutations.submit(() -> persistAccepted(current -> {
+            var before = current.records.size();
+            var now = clock.instant();
 
-        enqueue(
-                current -> {
-                    var before = current.records.size();
-                    var now = clock.instant();
-
-                    current.records.removeIf(value ->
-                            fromDocument(value).expired(now)
-                    );
-
-                    return new Mutation<>(
-                            current,
-                            before - current.records.size()
-                    );
-                },
-                result
-        );
-
-        return result;
+            current.records.removeIf(value -> fromDocument(value).expired(now));
+            return new Mutation<>(
+                    current,
+                    before - current.records.size()
+            );
+        }));
     }
 
     private CompletableFuture<AdminResult> disconnectAddress(
@@ -376,7 +345,8 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             String reason,
             AdminResult success
     ) {
-        return serverThread.submit(() -> {
+        return serverThread
+                .submit(() -> {
                     var failed = false;
                     var canonical = IpAddresses.canonical(address);
 
@@ -384,7 +354,8 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                         if (networks.address(player)
                                 .map(IpAddresses::canonical)
                                 .filter(canonical::equals)
-                                .isEmpty()) {
+                                .isEmpty()
+                        ) {
                             continue;
                         }
 
@@ -403,8 +374,7 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                                 ? success
                                 : AdminResult.partial(
                                         "service.admin.temp-ban-ip-success",
-                                        success.message()
-                                                .placeholders()
+                                        success.message().placeholders()
                                 )
                 )
                 .exceptionally(_ ->
@@ -424,20 +394,16 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
         );
     }
 
-    private CompletableFuture<AdminResult> mutate(
+    private CompletableFuture<AdminResult> mutateAccepted(
             Function<TempBanDocument, AdminResult> operation
     ) {
-        var result = new CompletableFuture<AdminResult>();
-
-        enqueue(
-                current -> new Mutation<>(
-                        current,
-                        operation.apply(current)
-                ),
-                result
-        );
-
-        return result;
+        return persistAccepted(current -> new Mutation<>(
+                current,
+                operation.apply(current)
+        )).exceptionally(_ -> AdminResult.failure(
+                AdminStatus.PERSISTENCE_FAILURE,
+                "service.admin.persistence-failed"
+        ));
     }
 
     private static TempBanDocument.Record toDocument(BanRecord value) {
@@ -475,23 +441,20 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
             String reason,
             AdminResult success
     ) {
-        return serverThread.submit(() ->
-                        players.onlinePlayer(uuid)
-                                .map(player ->
-                                        connections.disconnect(
-                                                player,
-                                                kickMessage(player, reason)
-                                        ).successful()
-                                )
-                                .orElse(true)
+        return serverThread
+                .submit(() -> players.onlinePlayer(uuid)
+                        .map(player -> connections.disconnect(
+                                player,
+                                kickMessage(player, reason)
+                        ).successful())
+                        .orElse(true)
                 )
                 .thenApply(disconnected ->
                         disconnected
                                 ? success
                                 : AdminResult.partial(
                                         "service.admin.temp-ban-success",
-                                        success.message()
-                                                .placeholders()
+                                        success.message().placeholders()
                                 )
                 )
                 .exceptionally(_ ->
@@ -502,60 +465,24 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                 );
     }
 
-    private synchronized <T> void enqueue(
-            Function<TempBanDocument, Mutation<T>> operation,
-            CompletableFuture<T> result
+    private <T> CompletableFuture<T> persistAccepted(
+            Function<TempBanDocument, Mutation<T>> operation
     ) {
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
-                    TempBanDocument current;
+        TempBanDocument current;
+        synchronized (this) {
+            current = copy(document);
+        }
+
+        var mutation = operation.apply(current);
+        return storage
+                .save(path, mutation.document())
+                .thenApply(_ -> {
                     synchronized (this) {
-                        current = copy(document);
+                        document = mutation.document();
                     }
 
-                    final Mutation<T> mutation;
-                    try {
-                        mutation = operation.apply(current);
-                    } catch (RuntimeException failure) {
-                        result.completeExceptionally(failure);
-                        return CompletableFuture.completedFuture(null);
-                    }
-
-                    return storage.save(
-                                    path,
-                                    mutation.document()
-                            )
-                            .handle((_, failure) -> {
-                                if (failure == null) {
-                                    synchronized (this) {
-                                        document = mutation.document();
-                                    }
-
-                                    result.complete(mutation.result());
-                                } else if (mutation.result() instanceof AdminResult) {
-                                    @SuppressWarnings("unchecked")
-                                    var value = (T) AdminResult.failure(
-                                            AdminStatus.PERSISTENCE_FAILURE,
-                                            "service.admin.persistence-failed"
-                                    );
-
-                                    result.complete(value);
-                                } else {
-                                    result.completeExceptionally(
-                                            failure
-                                    );
-                                }
-
-                                return (Void) null;
-                            });
+                    return mutation.result();
                 });
-
-        mutationTail.whenComplete((_, failure) -> {
-            if (failure != null) {
-                result.completeExceptionally(failure);
-            }
-        });
     }
 
     private RichText kickMessage(
@@ -567,6 +494,16 @@ public final class JsonTempBanService implements TempBanService, AsyncInitializa
                 "service.admin.temp-ban-kick",
                 Map.of("reason", reason)
         );
+    }
+
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
     }
 
     private record Mutation<T>(

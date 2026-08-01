@@ -7,37 +7,50 @@ import top.likoslupus.cellulosesz.api.module.ModulePhase;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
+import org.jspecify.annotations.Nullable;
+
+import static java.util.Objects.requireNonNull;
+
 @CellulosesModule(
         id = "permission",
         name = "Permission",
         description = "Permission provider integration and cache.",
         phase = ModulePhase.CORE
 )
+@SuppressWarnings("resource")
 public final class PermissionModule implements CellulosesZModule {
 
-    private PermissionConfig config;
+    private @Nullable PermissionConfig config;
 
     @Override
     public void registerConfigs(ModuleContext context) {
-        config = context.configs().register(
+        context.configs().register(
                 "module.permission",
                 PermissionConfig.class,
                 "modules/permission.yml",
                 PermissionConfig::new
         );
+        config = context.configs().require("module.permission", PermissionConfig.class);
     }
 
     @Override
     public void registerServices(ModuleContext context) {
         var permissions = context.services().require(DefaultPermissionService.class);
-        permissions.cache(config.cache.enabled, config.cache.expireSeconds);
+        requireNonNull(config);
+        permissions.cache(
+                config.cache.enabled,
+                config.cache.expireSeconds
+        );
     }
 
     @Override
     public void onReload(ModuleContext context) {
         config = context.configs().require("module.permission", PermissionConfig.class);
         var permissions = context.services().require(DefaultPermissionService.class);
-        permissions.cache(config.cache.enabled, config.cache.expireSeconds);
+        permissions.cache(
+                config.cache.enabled,
+                config.cache.expireSeconds
+        );
     }
 
 }

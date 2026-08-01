@@ -1,34 +1,31 @@
 package top.likoslupus.cellulosesz.core.module;
 
+import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
+import top.likoslupus.cellulosesz.api.module.ModuleScope;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
-import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
-
-import static java.util.Objects.requireNonNull;
 
 public final class DefaultModuleContext implements ModuleContext {
 
     private final String moduleId;
     private final Path dataDirectory;
+    private final DefaultModuleScope scope;
     private final ModuleScopedServiceRegistry services;
     private final ConfigRegistry configs;
     private final EventRegistry events;
     private final Scheduler scheduler;
+    private final CommandMiddlewareRegistry middlewares;
     private final CellulosesZLogger logger;
     private final Predicate<String> enabledPredicate;
-    private final List<Registration> trackedRegistrations = new ArrayList<>();
 
     public DefaultModuleContext(
             String moduleId,
@@ -37,15 +34,18 @@ public final class DefaultModuleContext implements ModuleContext {
             ConfigRegistry configs,
             EventRegistry events,
             Scheduler scheduler,
+            CommandMiddlewareRegistry middlewares,
             CellulosesZLogger logger,
             Predicate<String> enabledPredicate
     ) {
         this.moduleId = moduleId;
         this.dataDirectory = dataDirectory;
-        this.services = new ModuleScopedServiceRegistry(moduleId, services);
-        this.configs = configs;
-        this.events = events;
-        this.scheduler = scheduler;
+        this.scope = new DefaultModuleScope(moduleId);
+        this.services = new ModuleScopedServiceRegistry(moduleId, services, scope);
+        this.configs = new ModuleScopedConfigRegistry(moduleId, configs, scope);
+        this.events = new ModuleScopedEventRegistry(moduleId, events, scope);
+        this.scheduler = new ModuleScopedScheduler(moduleId, scheduler, scope);
+        this.middlewares = new ModuleScopedCommandMiddlewareRegistry(moduleId, middlewares, scope);
         this.logger = logger;
         this.enabledPredicate = enabledPredicate;
     }
@@ -58,6 +58,11 @@ public final class DefaultModuleContext implements ModuleContext {
     @Override
     public Path dataDirectory() {
         return dataDirectory;
+    }
+
+    @Override
+    public ModuleScope scope() {
+        return scope;
     }
 
     @Override
@@ -81,6 +86,11 @@ public final class DefaultModuleContext implements ModuleContext {
     }
 
     @Override
+    public CommandMiddlewareRegistry middlewares() {
+        return middlewares;
+    }
+
+    @Override
     public CellulosesZLogger logger() {
         return logger;
     }
@@ -90,26 +100,8 @@ public final class DefaultModuleContext implements ModuleContext {
         return enabledPredicate.test(moduleId);
     }
 
-    @Override
-    public synchronized void track(Registration registration) {
-        trackedRegistrations.add(requireNonNull(registration, "registration"));
-    }
-
     List<AsyncInitializable> initializables() {
         return services.initializables();
-    }
-
-    List<AsyncCloseable> closeablesInReverseOrder() {
-        return services.closeablesInReverseOrder();
-    }
-
-    synchronized List<Registration> registrationsInReverseOrder() {
-        var result = new ArrayList<>(services.registrationsInReverseOrder());
-        var tracked = new ArrayList<>(trackedRegistrations);
-
-        Collections.reverse(tracked);
-        result.addAll(0, tracked);
-        return List.copyOf(result);
     }
 
 }

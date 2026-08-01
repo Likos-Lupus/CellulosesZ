@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.common.command;
 
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -42,19 +42,19 @@ final class CommandRegistryTest {
     }
 
     @Test
-    void rollbackHandleRemovesContributionAndFreezeRejectsNewOnes() {
+    void closedContributorCanBeRegisteredAgainForDynamicModuleReload() {
         var registry = new CommandRegistry();
-        var handle = registry.register("main", new TestContributor("home"));
+        var first = new TestContributor("home");
+        var handle = registry.register("main", first);
+
         handle.close();
-
-        assertEquals(0, registry.size());
-        registry.freezeAndSnapshot();
-
-        assertThrows(
-                IllegalStateException.class,
-                () -> registry.register("main", new TestContributor("warp"))
-        );
+        handle.close();
         assertTrue(handle.closed());
+        assertEquals(List.of(), registry.snapshot());
+
+        var replacement = new TestContributor("home");
+        registry.register("main", replacement);
+        assertEquals(List.of(replacement), registry.snapshot());
     }
 
     @Test
@@ -62,7 +62,7 @@ final class CommandRegistryTest {
         var registry = new CommandRegistry();
         registry.register("main", new TestContributor("home"));
 
-        assertEquals(registry.freezeAndSnapshot(), registry.freezeAndSnapshot());
+        assertEquals(registry.snapshot(), registry.snapshot());
         assertEquals(1, registry.snapshot().size());
     }
 

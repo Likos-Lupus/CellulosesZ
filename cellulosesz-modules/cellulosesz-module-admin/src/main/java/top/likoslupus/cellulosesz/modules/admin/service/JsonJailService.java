@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -10,6 +11,7 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.data.JailDocument;
 
@@ -23,7 +25,9 @@ import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
-public final class JsonJailService implements JailService, AsyncInitializable {
+public final class JsonJailService implements JailService, AsyncInitializable, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final StorageService storage;
     private final Path path;
@@ -34,8 +38,11 @@ public final class JsonJailService implements JailService, AsyncInitializable {
     private final Clock clock;
     private final AdminConfig config;
 
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
     private JailDocument document = new JailDocument();
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonJailService(
             StorageService storage,
@@ -74,9 +81,7 @@ public final class JsonJailService implements JailService, AsyncInitializable {
         );
     }
 
-    private static JailDocument.JailedEntry toDocument(
-            JailedPlayer value
-    ) {
+    private static JailDocument.JailedEntry toDocument(JailedPlayer value) {
         var target = new JailDocument.JailedEntry();
 
         target.uuid = value.uuid().toString();
@@ -102,7 +107,8 @@ public final class JsonJailService implements JailService, AsyncInitializable {
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(
+        return storage
+                .createIfMissing(
                         path,
                         JailDocument.class,
                         JailDocument::new
@@ -119,25 +125,19 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                 });
     }
 
-    private static List<Jail> snapshotJails(
-            JailDocument source
-    ) {
+    private static List<Jail> snapshotJails(JailDocument source) {
         var result = source.jails
                 .stream()
                 .map(JsonJailService::fromDocument)
                 .collect(Collectors.toCollection(ArrayList::new));
-
         return List.copyOf(result);
     }
 
-    private static List<JailedPlayer> snapshotJailed(
-            JailDocument source
-    ) {
+    private static List<JailedPlayer> snapshotJailed(JailDocument source) {
         var result = source.jailed
                 .stream()
                 .map(JsonJailService::fromDocument)
                 .collect(Collectors.toCollection(ArrayList::new));
-
         return List.copyOf(result);
     }
 
@@ -177,9 +177,7 @@ public final class JsonJailService implements JailService, AsyncInitializable {
         return target;
     }
 
-    private static Jail fromDocument(
-            JailDocument.JailEntry value
-    ) {
+    private static Jail fromDocument(JailDocument.JailEntry value) {
         return new Jail(
                 validateName(value.name),
                 copy(value.location),
@@ -188,9 +186,7 @@ public final class JsonJailService implements JailService, AsyncInitializable {
         );
     }
 
-    private static JailedPlayer fromDocument(
-            JailDocument.JailedEntry value
-    ) {
+    private static JailedPlayer fromDocument(JailDocument.JailedEntry value) {
         var expiration = value.permanent
                 ? Expiration.permanent()
                 : Expiration.at(
@@ -232,7 +228,8 @@ public final class JsonJailService implements JailService, AsyncInitializable {
 
         if (value.isBlank()
                 || value.length() > 32
-                || !value.matches("[a-z0-9_-]+")) {
+                || !value.matches("[a-z0-9_-]+")
+        ) {
             throw new IllegalArgumentException(
                     "invalid jail name"
             );
@@ -247,64 +244,64 @@ public final class JsonJailService implements JailService, AsyncInitializable {
             CellLocation location,
             AdminActor actor
     ) {
-        var normalized = validateName(name);
+        return mutations
+                .submit(() -> {
+                    var normalized = validateName(name);
+                    var value = new Jail(
+                            normalized,
+                            location,
+                            actor.name(),
+                            clock.instant()
+                    );
 
-        var value = new Jail(
-                normalized,
-                location,
-                actor.name(),
-                clock.instant()
-        );
+                    return mutateAccepted(current -> {
+                        current.jails.removeIf(
+                                entry -> entry.name.equalsIgnoreCase(normalized)
+                        );
 
-        return mutate(current -> {
-            current.jails.removeIf(
-                    entry -> entry.name.equalsIgnoreCase(normalized)
-            );
+                        current.jails.add(toDocument(value));
 
-            current.jails.add(toDocument(value));
-
-            return AdminResult.success(
-                    "service.admin.jail-set",
-                    Map.of("jail", normalized)
-            );
-        });
+                        return AdminResult.success(
+                                "service.admin.jail-set",
+                                Map.of("jail", normalized)
+                        );
+                    });
+                });
     }
 
     @Override
-    public CompletableFuture<AdminResult> deleteJail(
-            String name
-    ) {
-        var normalized = validateName(name);
+    public CompletableFuture<AdminResult> deleteJail(String name) {
+        return mutations.submit(() -> {
+            var normalized = validateName(name);
 
-        return mutate(current -> {
-            if (current.jailed.stream()
-                    .anyMatch(entry ->
-                            entry.state.equals(
-                                    JailState.ACTIVE.name()
-                            )
-                                    && entry.jail.equalsIgnoreCase(
-                                    normalized
-                            )
-                    )) {
-                return AdminResult.failure(
-                        AdminStatus.INVALID_INPUT,
-                        "service.admin.jail-in-use",
-                        Map.of("jail", normalized)
-                );
-            }
-
-            return current.jails.removeIf(
-                    entry -> entry.name.equalsIgnoreCase(normalized)
-            )
-                    ? AdminResult.success(
-                    "service.admin.jail-deleted",
-                    Map.of("jail", normalized)
-            )
-                    : AdminResult.failure(
-                            AdminStatus.NOT_FOUND,
-                            "service.admin.jail-not-found",
+            return mutateAccepted(current -> {
+                if (current.jailed.stream()
+                        .anyMatch(entry ->
+                                entry.state.equals(JailState.ACTIVE.name())
+                                        && entry.jail.equalsIgnoreCase(normalized)
+                        )
+                ) {
+                    return AdminResult.failure(
+                            AdminStatus.INVALID_INPUT,
+                            "service.admin.jail-in-use",
                             Map.of("jail", normalized)
                     );
+                }
+
+                return current.jails.removeIf(
+                        entry -> entry.name.equalsIgnoreCase(normalized)
+                )
+                        ?
+                        AdminResult.success(
+                                "service.admin.jail-deleted",
+                                Map.of("jail", normalized)
+                        )
+                        : AdminResult.failure(
+                                AdminStatus.NOT_FOUND,
+                                "service.admin.jail-not-found",
+                                Map.of("jail", normalized)
+                        );
+            });
         });
     }
 
@@ -339,7 +336,233 @@ public final class JsonJailService implements JailService, AsyncInitializable {
             Expiration expiration,
             String reason
     ) {
-        var destination = jail(jailName);
+        return mutations.submit(() -> jailPlayerAccepted(
+                player,
+                jailName,
+                actor,
+                expiration,
+                reason
+        ));
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> unjail(
+            UUID uuid,
+            String name,
+            AdminActor actor
+    ) {
+        return mutations.submit(() -> unjailAccepted(uuid, name));
+    }
+
+    @Override
+    public CompletableFuture<AdminResult> completePendingRelease(CellPlayer player) {
+        return mutations.submit(() -> {
+            var record = jailedAccepted(player.uuid());
+
+            if (record.isEmpty()
+                    || record.orElseThrow().state()
+                    != JailState.RELEASE_PENDING
+            ) {
+                return completed(
+                        AdminResult.failure(
+                                AdminStatus.NOT_FOUND,
+                                "service.admin.player-not-jailed",
+                                Map.of("player", player.name())
+                        )
+                );
+            }
+
+            return finishReleaseAccepted(
+                    player,
+                    record.orElseThrow()
+            );
+        });
+    }
+
+    @Override
+    public synchronized Optional<JailedPlayer> jailed(UUID uuid) {
+        return snapshotJailed(document).stream()
+                .filter(value -> value.uuid().equals(uuid))
+                .findFirst();
+    }
+
+    @Override
+    public synchronized List<JailedPlayer> jailedPlayers() {
+        var now = clock.instant();
+
+        return snapshotJailed(document)
+                .stream()
+                .filter(value -> !value.expired(now))
+                .sorted(Comparator.comparing(
+                        JailedPlayer::name,
+                        String.CASE_INSENSITIVE_ORDER
+                ))
+                .toList();
+    }
+
+    @Override
+    public CompletableFuture<Integer> purgeExpired() {
+        return mutations.submit(() -> {
+            var expired = jailedPlayersIncludingExpired()
+                    .stream()
+                    .filter(value -> value.expired(clock.instant()))
+                    .toList();
+
+            var chain = CompletableFuture.completedFuture(0);
+
+            for (var value : expired) {
+                chain = chain.thenCompose(count ->
+                        unjailAccepted(
+                                value.uuid(),
+                                value.name()
+                        ).thenApply(result ->
+                                result.success()
+                                        ? count + 1
+                                        : count
+                        )
+                );
+            }
+
+            return chain;
+        });
+    }
+
+    private Optional<JailedPlayer> jailedAccepted(UUID uuid) {
+        synchronized (this) {
+            return snapshotJailed(document)
+                    .stream()
+                    .filter(value -> value.uuid().equals(uuid))
+                    .findFirst();
+        }
+    }
+
+    private static CompletableFuture<AdminResult> completed(AdminResult value) {
+        return CompletableFuture.completedFuture(value);
+    }
+
+    private CompletableFuture<AdminResult> finishReleaseAccepted(
+            CellPlayer player,
+            JailedPlayer record
+    ) {
+        if (record.returnLocation().isEmpty()
+                || !config.teleportOnJailRelease
+        ) {
+            return removeAccepted(record.uuid())
+                    .thenApply(removed ->
+                            removed
+                                    ?
+                                    AdminResult.success(
+                                            "service.admin.player-unjailed",
+                                            Map.of(
+                                                    "player",
+                                                    player.name()
+                                            )
+                                    )
+                                    : AdminResult.failure(
+                                            AdminStatus.PERSISTENCE_FAILURE,
+                                            "service.admin.persistence-failed"
+                                    )
+                    );
+        }
+
+        return teleports
+                .teleport(
+                        player,
+                        record.returnLocation().orElseThrow(),
+                        TeleportOptions.defaults().withoutBackMemory()
+                )
+                .thenCompose(result ->
+                        !result.success()
+                                ?
+                                completed(
+                                        AdminResult.failure(
+                                                AdminStatus.PLATFORM_FAILURE,
+                                                "service.admin.unjail-teleport-failed",
+                                                Map.of(
+                                                        "player",
+                                                        player.name()
+                                                )
+                                        )
+                                )
+                                : removeAccepted(record.uuid())
+                                        .thenApply(removed ->
+                                                removed
+                                                        ?
+                                                        AdminResult.success(
+                                                                "service.admin.player-unjailed",
+                                                                Map.of(
+                                                                        "player",
+                                                                        player.name()
+                                                                )
+                                                        )
+                                                        : AdminResult.failure(
+                                                                AdminStatus.ROLLBACK_FAILURE,
+                                                                "service.admin.unjail-remove-failed",
+                                                                Map.of(
+                                                                        "player",
+                                                                        player.name()
+                                                                )
+                                                        )
+                                        )
+                );
+    }
+
+    private CompletableFuture<Boolean> removeAccepted(UUID uuid) {
+        return persistAccepted(current -> new Mutation<>(
+                current,
+                current.jailed.removeIf(value -> value.uuid.equals(uuid.toString()))
+        )).exceptionally(_ -> false);
+    }
+
+    private CompletableFuture<AdminResult> mutateAccepted(
+            Function<JailDocument, AdminResult> operation
+    ) {
+        return persistAccepted(current -> new Mutation<>(
+                current,
+                operation.apply(current)
+        )).exceptionally(_ -> AdminResult.failure(
+                AdminStatus.PERSISTENCE_FAILURE,
+                "service.admin.persistence-failed"
+        ));
+    }
+
+    private static JailDocument.JailEntry toDocument(Jail value) {
+        var target = new JailDocument.JailEntry();
+
+        target.name = value.name();
+        target.location = value.location();
+        target.createdBy = value.createdBy();
+        target.createdAt = value.createdAt().toEpochMilli();
+
+        return target;
+    }
+
+    private <T> CompletableFuture<T> persistAccepted(
+            Function<JailDocument, Mutation<T>> operation
+    ) {
+        JailDocument current;
+        synchronized (this) {
+            current = copy(document);
+        }
+
+        var mutation = operation.apply(current);
+        return storage.save(path, mutation.document()).thenApply(_ -> {
+            synchronized (this) {
+                document = mutation.document();
+            }
+
+            return mutation.result();
+        });
+    }
+
+    private CompletableFuture<AdminResult> jailPlayerAccepted(
+            CellPlayer player,
+            String jailName,
+            AdminActor actor,
+            Expiration expiration,
+            String reason
+    ) {
+        var destination = jailAccepted(jailName);
 
         if (destination.isEmpty()) {
             return completed(
@@ -351,15 +574,15 @@ public final class JsonJailService implements JailService, AsyncInitializable {
             );
         }
 
+        var target = destination.orElseThrow();
         return serverThread
                 .submit(() -> locations.currentLocation(player))
                 .thenCompose(returnLocation -> {
-                    var previous = jailed(player.uuid());
-
+                    var previous = jailedAccepted(player.uuid());
                     var value = new JailedPlayer(
                             player.uuid(),
                             player.name(),
-                            destination.orElseThrow().name(),
+                            target.name(),
                             reason,
                             actor.name(),
                             clock.instant(),
@@ -368,7 +591,7 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                             JailState.ACTIVE
                     );
 
-                    return replace(value)
+                    return replaceAccepted(value)
                             .thenCompose(saved -> {
                                 if (!saved) {
                                     return completed(
@@ -381,10 +604,8 @@ public final class JsonJailService implements JailService, AsyncInitializable {
 
                                 return teleports.teleport(
                                                 player,
-                                                destination.orElseThrow()
-                                                        .location(),
-                                                TeleportOptions.defaults()
-                                                        .withoutBackMemory()
+                                                target.location(),
+                                                TeleportOptions.defaults().withoutBackMemory()
                                         )
                                         .thenCompose(result -> {
                                             if (result.success()) {
@@ -395,34 +616,27 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                                                                         "player",
                                                                         player.name(),
                                                                         "jail",
-                                                                        destination
-                                                                                .orElseThrow()
-                                                                                .name()
+                                                                        target.name()
                                                                 )
                                                         )
                                                 );
                                             }
 
-                                            return restore(
+                                            return restoreAccepted(
                                                     player.uuid(),
                                                     previous
                                             ).thenApply(rolledBack ->
                                                     rolledBack
-                                                            ? AdminResult.failure(
-                                                            AdminStatus.PLATFORM_FAILURE,
-                                                            "service.admin.jail-teleport-failed",
-                                                            Map.of(
-                                                                    "player",
-                                                                    player.name()
+                                                            ?
+                                                            AdminResult.failure(
+                                                                    AdminStatus.PLATFORM_FAILURE,
+                                                                    "service.admin.jail-teleport-failed",
+                                                                    Map.of("player", player.name())
                                                             )
-                                                    )
                                                             : AdminResult.failure(
                                                                     AdminStatus.ROLLBACK_FAILURE,
                                                                     "service.admin.jail-rollback-failed",
-                                                                    Map.of(
-                                                                            "player",
-                                                                            player.name()
-                                                                    )
+                                                                    Map.of("player", player.name())
                                                             )
                                             );
                                         });
@@ -430,13 +644,11 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                 });
     }
 
-    @Override
-    public CompletableFuture<AdminResult> unjail(
+    private CompletableFuture<AdminResult> unjailAccepted(
             UUID uuid,
-            String name,
-            AdminActor actor
+            String name
     ) {
-        var existing = jailed(uuid);
+        var existing = jailedAccepted(uuid);
 
         if (existing.isEmpty()) {
             return completed(
@@ -453,7 +665,7 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                 JailState.RELEASE_PENDING
         );
 
-        return replace(pending)
+        return replaceAccepted(pending)
                 .thenCompose(saved -> {
                     if (!saved) {
                         return completed(
@@ -475,257 +687,11 @@ public final class JsonJailService implements JailService, AsyncInitializable {
                         );
                     }
 
-                    return finishRelease(
+                    return finishReleaseAccepted(
                             online.orElseThrow(),
                             pending
                     );
                 });
-    }
-
-    @Override
-    public CompletableFuture<AdminResult> completePendingRelease(
-            CellPlayer player
-    ) {
-        var record = jailed(player.uuid());
-
-        if (record.isEmpty()
-                || record.orElseThrow().state()
-                != JailState.RELEASE_PENDING
-        ) {
-            return completed(
-                    AdminResult.failure(
-                            AdminStatus.NOT_FOUND,
-                            "service.admin.player-not-jailed",
-                            Map.of("player", player.name())
-                    )
-            );
-        }
-
-        return finishRelease(
-                player,
-                record.orElseThrow()
-        );
-    }
-
-    @Override
-    public synchronized Optional<JailedPlayer> jailed(
-            UUID uuid
-    ) {
-        return snapshotJailed(document)
-                .stream()
-                .filter(value -> value.uuid().equals(uuid))
-                .findFirst();
-    }
-
-    @Override
-    public synchronized List<JailedPlayer> jailedPlayers() {
-        var now = clock.instant();
-
-        return snapshotJailed(document)
-                .stream()
-                .filter(value -> !value.expired(now))
-                .sorted(Comparator.comparing(
-                        JailedPlayer::name,
-                        String.CASE_INSENSITIVE_ORDER
-                ))
-                .toList();
-    }
-
-    @Override
-    public CompletableFuture<Integer> purgeExpired() {
-        var expired = jailedPlayersIncludingExpired()
-                .stream()
-                .filter(value -> value.expired(clock.instant()))
-                .toList();
-
-        var chain = CompletableFuture.completedFuture(0);
-
-        for (var value : expired) {
-            chain = chain.thenCompose(count ->
-                    unjail(
-                            value.uuid(),
-                            value.name(),
-                            AdminActor.console("system")
-                    ).thenApply(result ->
-                            result.success()
-                                    ? count + 1
-                                    : count
-                    )
-            );
-        }
-
-        return chain;
-    }
-
-    private static CompletableFuture<AdminResult> completed(
-            AdminResult value
-    ) {
-        return CompletableFuture.completedFuture(value);
-    }
-
-    private CompletableFuture<AdminResult> finishRelease(
-            CellPlayer player,
-            JailedPlayer record
-    ) {
-        if (record.returnLocation().isEmpty()
-                || !config.teleportOnJailRelease
-        ) {
-            return remove(record.uuid())
-                    .thenApply(removed ->
-                            removed
-                                    ? AdminResult.success(
-                                    "service.admin.player-unjailed",
-                                    Map.of(
-                                            "player",
-                                            player.name()
-                                    )
-                            )
-                                    : AdminResult.failure(
-                                            AdminStatus.PERSISTENCE_FAILURE,
-                                            "service.admin.persistence-failed"
-                                    )
-                    );
-        }
-
-        return teleports.teleport(
-                        player,
-                        record.returnLocation().orElseThrow(),
-                        TeleportOptions.defaults()
-                                .withoutBackMemory()
-                )
-                .thenCompose(result ->
-                        !result.success()
-                                ? completed(
-                                AdminResult.failure(
-                                        AdminStatus.PLATFORM_FAILURE,
-                                        "service.admin.unjail-teleport-failed",
-                                        Map.of(
-                                                "player",
-                                                player.name()
-                                        )
-                                )
-                        )
-                                : remove(record.uuid())
-                                        .thenApply(removed ->
-                                                removed
-                                                        ? AdminResult.success(
-                                                        "service.admin.player-unjailed",
-                                                        Map.of(
-                                                                "player",
-                                                                player.name()
-                                                        )
-                                                )
-                                                        : AdminResult.failure(
-                                                                AdminStatus.ROLLBACK_FAILURE,
-                                                                "service.admin.unjail-remove-failed",
-                                                                Map.of(
-                                                                        "player",
-                                                                        player.name()
-                                                                )
-                                                        )
-                                        )
-                );
-    }
-
-    private CompletableFuture<Boolean> remove(UUID uuid) {
-        var result = new CompletableFuture<Boolean>();
-
-        enqueue(
-                current -> new Mutation<>(
-                        current,
-                        current.jailed.removeIf(
-                                value -> value.uuid.equals(uuid.toString())
-                        )
-                ),
-                result
-        );
-
-        return result;
-    }
-
-    private CompletableFuture<AdminResult> mutate(
-            Function<JailDocument, AdminResult> operation
-    ) {
-        var result = new CompletableFuture<AdminResult>();
-
-        enqueue(
-                current -> new Mutation<>(
-                        current,
-                        operation.apply(current)
-                ),
-                result
-        );
-
-        return result;
-    }
-
-    private static JailDocument.JailEntry toDocument(
-            Jail value
-    ) {
-        var target = new JailDocument.JailEntry();
-
-        target.name = value.name();
-        target.location = value.location();
-        target.createdBy = value.createdBy();
-        target.createdAt = value.createdAt().toEpochMilli();
-
-        return target;
-    }
-
-    private synchronized <T> void enqueue(
-            Function<JailDocument, Mutation<T>> operation,
-            CompletableFuture<T> result
-    ) {
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
-                    JailDocument current;
-
-                    synchronized (this) {
-                        current = copy(document);
-                    }
-
-                    final Mutation<T> mutation;
-
-                    try {
-                        mutation = operation.apply(current);
-                    } catch (RuntimeException failure) {
-                        result.completeExceptionally(failure);
-                        return CompletableFuture.completedFuture(null);
-                    }
-
-                    return storage.save(
-                                    path,
-                                    mutation.document()
-                            )
-                            .handle((_, failure) -> {
-                                if (failure == null) {
-                                    synchronized (this) {
-                                        document = mutation.document();
-                                    }
-
-                                    result.complete(mutation.result());
-                                } else if (mutation.result() instanceof AdminResult) {
-                                    @SuppressWarnings("unchecked")
-                                    var value = (T) AdminResult.failure(
-                                            AdminStatus.PERSISTENCE_FAILURE,
-                                            "service.admin.persistence-failed"
-                                    );
-
-                                    result.complete(value);
-                                } else {
-                                    result.completeExceptionally(failure);
-                                }
-
-                                return (Void) null;
-                            });
-                });
-
-        mutationTail.whenComplete((_, failure) -> {
-            if (failure != null) {
-                result.completeExceptionally(failure);
-            }
-        });
     }
 
     private synchronized List<JailedPlayer>
@@ -733,51 +699,43 @@ public final class JsonJailService implements JailService, AsyncInitializable {
         return snapshotJailed(document);
     }
 
-    private CompletableFuture<Boolean> replace(
-            JailedPlayer record
-    ) {
-        var result = new CompletableFuture<Boolean>();
-
-        enqueue(
-                current -> {
-                    current.jailed.removeIf(value ->
-                            value.uuid.equals(
-                                    record.uuid().toString()
-                            )
-                    );
-
-                    current.jailed.add(toDocument(record));
-
-                    return new Mutation<>(current, true);
-                },
-                result
-        );
-
-        return result;
+    private Optional<Jail> jailAccepted(String name) {
+        var normalized = validateName(name);
+        synchronized (this) {
+            return snapshotJails(document)
+                    .stream()
+                    .filter(value -> value.name().equalsIgnoreCase(normalized))
+                    .findFirst();
+        }
     }
 
-    private CompletableFuture<Boolean> restore(
+    private CompletableFuture<Boolean> replaceAccepted(JailedPlayer record) {
+        return persistAccepted(current -> {
+            current.jailed.removeIf(value -> value.uuid.equals(record.uuid().toString()));
+            current.jailed.add(toDocument(record));
+            return new Mutation<>(current, true);
+        }).exceptionally(_ -> false);
+    }
+
+    private CompletableFuture<Boolean> restoreAccepted(
             UUID uuid,
             Optional<JailedPlayer> previous
     ) {
-        var result = new CompletableFuture<Boolean>();
+        return persistAccepted(current -> {
+            current.jailed.removeIf(value -> value.uuid.equals(uuid.toString()));
+            previous.ifPresent(value -> current.jailed.add(toDocument(value)));
+            return new Mutation<>(current, true);
+        }).exceptionally(_ -> false);
+    }
 
-        enqueue(
-                current -> {
-                    current.jailed.removeIf(value ->
-                            value.uuid.equals(uuid.toString())
-                    );
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
 
-                    previous.ifPresent(value ->
-                            current.jailed.add(toDocument(value))
-                    );
-
-                    return new Mutation<>(current, true);
-                },
-                result
-        );
-
-        return result.exceptionally(_ -> false);
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
     }
 
     private record Mutation<T>(

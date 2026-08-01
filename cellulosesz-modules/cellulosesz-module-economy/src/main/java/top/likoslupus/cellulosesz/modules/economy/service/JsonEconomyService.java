@@ -1,10 +1,11 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.economy.*;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 import top.likoslupus.cellulosesz.modules.economy.data.EconomyDocument;
 import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogEntry;
@@ -18,22 +19,28 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.jspecify.annotations.Nullable;
 
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
-public final class JsonEconomyService implements EconomyService, AsyncInitializable {
+public final class JsonEconomyService
+        implements EconomyService, AsyncInitializable, AsyncCloseable {
 
     private static final int MAX_LOG_ENTRIES = 500;
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final StorageService storage;
     private final Path path;
     private final CellulosesZLogger logger;
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
     private EconomyDocument document;
     private volatile ConfigSnapshot config;
     private volatile List<BalanceEntry> cachedTop = List.of();
     private volatile long cachedTopAt;
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonEconomyService(
             StorageService storage,
@@ -50,7 +57,12 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(path, EconomyDocument.class, EconomyDocument::new)
+        return storage
+                .createIfMissing(
+                        path,
+                        EconomyDocument.class,
+                        EconomyDocument::new
+                )
                 .thenApply(loaded -> {
                     validateDocument(loaded, config);
                     return loaded;
@@ -62,7 +74,10 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                 });
     }
 
-    private void validateDocument(EconomyDocument candidate, ConfigSnapshot snapshot) {
+    private void validateDocument(
+            EconomyDocument candidate,
+            ConfigSnapshot snapshot
+    ) {
         candidate.balances.forEach((uuid, amount) -> {
             //noinspection ResultOfMethodCallIgnored
             UUID.fromString(uuid);
@@ -110,14 +125,18 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         symbols.setGroupingSeparator(',');
         symbols.setDecimalSeparator('.');
 
-        var pattern = snapshot.grouping() ? "#,##0" : "0";
+        var pattern = snapshot.grouping()
+                ? "#,##0"
+                : "0";
         if (snapshot.scale() > 0) {
             pattern += "." + "0".repeat(snapshot.scale());
         }
 
         var normalized = normalizeAmount(amount, snapshot);
         var number = new DecimalFormat(pattern, symbols).format(normalized);
-        var spacing = snapshot.spaceBetweenSymbolAndAmount() ? " " : "";
+        var spacing = snapshot.spaceBetweenSymbolAndAmount()
+                ? " "
+                : "";
 
         var money = snapshot.symbolBefore()
                 ? snapshot.symbol() + spacing + number
@@ -126,7 +145,9 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                 ? snapshot.singular()
                 : snapshot.plural();
 
-        return snapshot.showName() ? money + " " + unit : money;
+        return snapshot.showName()
+                ? money + " " + unit
+                : money;
     }
 
     @Override
@@ -181,6 +202,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                             snapshot
                     )
             );
+
             return MutationOutcome.balanceChange(
                     next,
                     TransactionResult.success(
@@ -244,6 +266,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                             snapshot
                     )
             );
+
             return MutationOutcome.balanceChange(
                     next,
                     TransactionResult.success(
@@ -293,6 +316,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                             snapshot
                     )
             );
+
             return MutationOutcome.balanceChange(
                     next,
                     TransactionResult.success(
@@ -339,7 +363,9 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         var minimum = filter.minimum();
         var maximum = filter.maximum();
 
-        if (limit <= 0) return List.of();
+        if (limit <= 0) {
+            return List.of();
+        }
 
         var snapshot = config;
         var now = System.currentTimeMillis();
@@ -479,6 +505,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                         snapshot
                 )
         ));
+
         return MutationOutcome.balanceChange(
                 next,
                 TransactionResult.success(
@@ -489,55 +516,51 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         );
     }
 
-    private synchronized CompletableFuture<TransactionResult> enqueue(
+    private CompletableFuture<TransactionResult> enqueue(
             Function<EconomyDocument, MutationOutcome> operation
     ) {
-        var result = new CompletableFuture<TransactionResult>();
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
-                    EconomyDocument current;
-                    synchronized (this) {
-                        current = copy(document);
-                    }
+        return mutations.submit(() -> {
+            EconomyDocument current;
+            synchronized (this) {
+                current = copy(document);
+            }
 
-                    final MutationOutcome outcome;
-                    try {
-                        outcome = operation.apply(current);
-                    } catch (RuntimeException exception) {
-                        return CompletableFuture.failedFuture(exception);
-                    }
-
-                    return storage.save(path, outcome.document())
-                            .handle((_, saveFailure) -> {
-                                if (saveFailure == null) {
-                                    synchronized (this) {
-                                        document = outcome.document();
-                                        if (outcome.balanceChanged()) {
-                                            invalidateTop();
-                                        }
-                                    }
-                                    result.complete(outcome.result());
-                                } else if (outcome.balanceChanged()) {
-                                    logger.error("Failed to persist the atomic economy document", saveFailure);
-                                    result.complete(TransactionResult.failure(
-                                            "service.economy.persistence-failed",
-                                            outcome.result().amount(),
-                                            outcome.result().balance()
-                                    ));
-                                } else {
-                                    // Audit persistence is secondary: preserve the original business failure.
-                                    logger.error("Failed to persist an economy failure audit entry", saveFailure);
-                                    result.complete(outcome.result());
+            var outcome = operation.apply(current);
+            return storage
+                    .save(path, outcome.document())
+                    .handle((_, saveFailure) -> {
+                        if (saveFailure == null) {
+                            synchronized (this) {
+                                document = outcome.document();
+                                if (outcome.balanceChanged()) {
+                                    invalidateTop();
                                 }
-                                return (Void) null;
-                            });
-                });
+                            }
 
-        mutationTail.whenComplete((_, failure) -> {
-            if (failure != null) result.completeExceptionally(failure);
+                            return outcome.result();
+                        }
+
+                        if (outcome.balanceChanged()) {
+                            logger.error(
+                                    "Failed to persist the atomic economy document",
+                                    saveFailure
+                            );
+
+                            return TransactionResult.failure(
+                                    "service.economy.persistence-failed",
+                                    outcome.result().amount(),
+                                    outcome.result().balance()
+                            );
+                        }
+
+                        logger.error(
+                                "Failed to persist an economy failure audit entry",
+                                saveFailure
+                        );
+
+                        return outcome.result();
+                    });
         });
-        return result;
     }
 
     private MutationOutcome failureOutcome(
@@ -563,6 +586,7 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
                         snapshot
                 )
         );
+
         return MutationOutcome.auditOnly(
                 next,
                 TransactionResult.failure(message, amount, balance)
@@ -609,8 +633,12 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
             ConfigSnapshot snapshot
     ) {
         var entry = new TransactionLogEntry();
-        entry.from = from == null ? null : from.toString();
-        entry.to = to == null ? null : to.toString();
+        entry.from = from == null
+                ? null
+                : from.toString();
+        entry.to = to == null
+                ? null
+                : to.toString();
         entry.amount = normalizeAmount(amount, snapshot).toPlainString();
         entry.causeType = cause.type();
         entry.actor = cause.actor();
@@ -632,17 +660,33 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
         );
     }
 
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
+    }
+
     private record MutationOutcome(
             EconomyDocument document,
             TransactionResult result,
             boolean balanceChanged
     ) {
 
-        private static MutationOutcome balanceChange(EconomyDocument document, TransactionResult result) {
+        private static MutationOutcome balanceChange(
+                EconomyDocument document,
+                TransactionResult result
+        ) {
             return new MutationOutcome(document, result, true);
         }
 
-        private static MutationOutcome auditOnly(EconomyDocument document, TransactionResult result) {
+        private static MutationOutcome auditOnly(
+                EconomyDocument document,
+                TransactionResult result
+        ) {
             return new MutationOutcome(document, result, false);
         }
 
@@ -664,16 +708,32 @@ public final class JsonEconomyService implements EconomyService, AsyncInitializa
     ) {
 
         private static ConfigSnapshot from(EconomyConfig source) {
-            var scale = requireInRange(source.currency.scale, 0, 8, "currency.scale");
-            var starting = new BigDecimal(source.startingBalance).setScale(scale, RoundingMode.HALF_UP);
-            var minimum = new BigDecimal(source.minimumBalance).setScale(scale, RoundingMode.HALF_UP);
-            var maximum = new BigDecimal(source.maximumBalance).setScale(scale, RoundingMode.HALF_UP);
+            var scale = requireInRange(
+                    source.currency.scale,
+                    0,
+                    8,
+                    "currency.scale"
+            );
+            var starting = new BigDecimal(source.startingBalance).setScale(
+                    scale,
+                    RoundingMode.HALF_UP
+            );
+            var minimum = new BigDecimal(source.minimumBalance).setScale(
+                    scale,
+                    RoundingMode.HALF_UP
+            );
+            var maximum = new BigDecimal(source.maximumBalance).setScale(
+                    scale,
+                    RoundingMode.HALF_UP
+            );
+
             if (minimum.compareTo(maximum) > 0
                     || starting.compareTo(minimum) < 0
                     || starting.compareTo(maximum) > 0
             ) {
                 throw new IllegalArgumentException("Economy balance bounds are inconsistent");
             }
+
             return new ConfigSnapshot(
                     source.currency.singular,
                     source.currency.plural,

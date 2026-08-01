@@ -26,6 +26,9 @@ public interface CellulosesZModule {
     default void onReload(ModuleContext context) {
     }
 
+    default void onUnload(ModuleContext context) {
+    }
+
     default void onServerStopping(ModuleContext context) {
     }
 

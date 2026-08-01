@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -42,12 +43,16 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
             Supplier<T> defaultSupplier
     ) {
         var resolved = resolve(path);
-        return enqueue(resolved, "load", () -> {
-            ensureTargetInsideRoot(resolved);
-            return Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)
-                    ? defaultSupplier.get()
-                    : read(resolved, type);
-        });
+        return enqueue(
+                resolved,
+                "load",
+                () -> {
+                    ensureTargetInsideRoot(resolved);
+                    return Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)
+                            ? defaultSupplier.get()
+                            : read(resolved, type);
+                }
+        );
     }
 
     @Override
@@ -65,8 +70,10 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
                     if (Files.notExists(resolved, LinkOption.NOFOLLOW_LINKS)) {
                         var value = defaultSupplier.get();
                         write(resolved, value);
+
                         return value;
                     }
+
                     return read(resolved, type);
                 }
         );
@@ -81,6 +88,7 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
                 () -> {
                     ensureTargetInsideRoot(resolved);
                     write(resolved, value);
+
                     return Boolean.TRUE;
                 }
         ).thenAccept(_ -> {
@@ -123,12 +131,18 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
                     ensureDirectoryInsideRoot(resolved);
                     try (var stream = Files.list(resolved)) {
                         var paths = stream
-                                .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                                .filter(path -> Files.isRegularFile(
+                                        path,
+                                        LinkOption.NOFOLLOW_LINKS
+                                ))
                                 .filter(JacksonStorageService::supportedDocument)
                                 .sorted(Comparator.comparing(path -> path.getFileName().toString()))
                                 .toList();
-                        var documents = new java.util.ArrayList<T>(paths.size());
-                        for (var path : paths) documents.add(read(path, type));
+                        var documents = new ArrayList<T>(paths.size());
+
+                        for (var path : paths) {
+                            documents.add(read(path, type));
+                        }
                         return List.copyOf(documents);
                     }
                 }
@@ -137,7 +151,9 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
 
     private static boolean supportedDocument(Path path) {
         var fileName = path.getFileName().toString();
-        return fileName.endsWith(".json") || fileName.endsWith(".yml") || fileName.endsWith(".yaml");
+        return fileName.endsWith(".json")
+                || fileName.endsWith(".yml")
+                || fileName.endsWith(".yaml");
     }
 
     private void write(Path path, Object value) throws IOException {
@@ -150,12 +166,18 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
 
     private Path resolve(Path path) {
         if (path.isAbsolute()) {
-            throw new IllegalArgumentException("Absolute storage paths are not allowed: " + path);
+            throw new IllegalArgumentException(
+                    "Absolute storage paths are not allowed: " + path
+            );
         }
+
         var resolved = root.resolve(path).normalize();
         if (!resolved.startsWith(root)) {
-            throw new IllegalArgumentException("Storage path escapes the configured data root: " + path);
+            throw new IllegalArgumentException(
+                    "Storage path escapes the configured data root: " + path
+            );
         }
+
         return resolved;
     }
 
@@ -164,28 +186,39 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
             String operation,
             IoSupplier<T> task
     ) {
-        return operations.submit(() -> {
-            try {
-                return CompletableFuture.completedFuture(task.get());
-            } catch (Throwable exception) {
-                logger.error("Failed to " + operation + " document at " + resolved, exception);
-                return CompletableFuture.failedFuture(exception instanceof CompletionException
-                        ? exception
-                        : new CompletionException(exception));
-            }
-        });
+        return operations
+                .submit(() -> {
+                    try {
+                        return CompletableFuture.completedFuture(task.get());
+                    } catch (Throwable exception) {
+                        logger.error(
+                                "Failed to %s document at %s".formatted(operation, resolved),
+                                exception
+                        );
+
+                        return CompletableFuture.failedFuture(exception instanceof CompletionException
+                                ? exception
+                                : new CompletionException(exception)
+                        );
+                    }
+                });
     }
 
     private void ensureTargetInsideRoot(Path path) throws IOException {
         ensureParentInsideRoot(path);
         if (Files.exists(path, LinkOption.NOFOLLOW_LINKS)) {
             if (Files.isSymbolicLink(path)) {
-                throw new IOException("Storage document must not be a symbolic link: " + path);
+                throw new IOException(
+                        "Storage document must not be a symbolic link: " + path
+                );
             }
+
             var realRoot = root.toRealPath();
             var realTarget = path.toRealPath();
             if (!realTarget.startsWith(realRoot)) {
-                throw new IOException("Storage document resolves outside the configured data root: " + path);
+                throw new IOException(
+                        "Storage document resolves outside the configured data root: " + path
+                );
             }
         }
     }
@@ -201,6 +234,7 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
         if (parent == null) {
             throw new IOException("Storage path has no parent: " + path);
         }
+
         ensureDirectoryInsideRoot(parent);
     }
 
@@ -213,6 +247,7 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
         if (!normalized.startsWith(root)) {
             throw new IOException("Storage path escapes the configured data root: " + directory);
         }
+
         Files.createDirectories(root);
         if (Files.isSymbolicLink(root)) {
             throw new IOException("Storage root must not be a symbolic link: " + root);
@@ -220,27 +255,41 @@ public final class JacksonStorageService implements StorageService, AsyncCloseab
 
         var realRoot = root.toRealPath();
         var current = root;
+
         for (var segment : root.relativize(normalized)) {
             current = current.resolve(segment);
             if (Files.exists(current, LinkOption.NOFOLLOW_LINKS)) {
                 if (Files.isSymbolicLink(current)) {
-                    throw new IOException("Storage directory must not contain symbolic links: " + current);
+                    throw new IOException(
+                            "Storage directory must not contain symbolic links: " + current
+                    );
                 }
+
                 if (!Files.isDirectory(current, LinkOption.NOFOLLOW_LINKS)) {
-                    throw new IOException("Storage directory component is not a directory: " + current);
+                    throw new IOException(
+                            "Storage directory component is not a directory: " + current
+                    );
                 }
             } else {
                 Files.createDirectory(current);
             }
+
             if (!current.toRealPath().startsWith(realRoot)) {
-                throw new IOException("Storage path resolves outside the configured data root: " + current);
+                throw new IOException(
+                        "Storage path resolves outside the configured data root: " + current
+                );
             }
         }
     }
 
     @Override
-    public CompletableFuture<Void> closeAsync() {
-        return operations.closeAndDrain();
+    public void stopAccepting() {
+        operations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return operations.drain();
     }
 
     @FunctionalInterface

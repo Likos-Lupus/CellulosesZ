@@ -1,8 +1,10 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import top.likoslupus.cellulosesz.api.admin.*;
+import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.data.MuteDocument;
 
 import java.nio.file.Path;
@@ -10,18 +12,24 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
 import static java.util.Objects.requireNonNull;
 
-public final class JsonMuteService implements MuteService, AsyncInitializable {
+public final class JsonMuteService implements MuteService, AsyncInitializable, AsyncCloseable {
+
+    private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 
     private final StorageService storage;
     private final Path path;
     private final Clock clock;
+    private final SerialAsyncQueue mutations = new SerialAsyncQueue(
+            Runnable::run,
+            MAXIMUM_PENDING_MUTATIONS
+    );
 
     private MuteDocument document = new MuteDocument();
-    private CompletableFuture<Void> mutationTail = CompletableFuture.completedFuture(null);
 
     public JsonMuteService(
             StorageService storage,
@@ -35,7 +43,8 @@ public final class JsonMuteService implements MuteService, AsyncInitializable {
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return storage.createIfMissing(
+        return storage
+                .createIfMissing(
                         path,
                         MuteDocument.class,
                         MuteDocument::new
@@ -149,10 +158,11 @@ public final class JsonMuteService implements MuteService, AsyncInitializable {
                 current.records.removeIf(value ->
                         value.uuid.equals(uuid.toString())
                 )
-                        ? AdminResult.success(
-                        "service.admin.unmute-success",
-                        Map.of("player", name)
-                )
+                        ?
+                        AdminResult.success(
+                                "service.admin.unmute-success",
+                                Map.of("player", name)
+                        )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.not-muted",
@@ -181,42 +191,22 @@ public final class JsonMuteService implements MuteService, AsyncInitializable {
 
     @Override
     public CompletableFuture<Integer> purgeExpired() {
-        var result = new CompletableFuture<Integer>();
+        return enqueue(current -> {
+            var before = current.records.size();
+            var now = clock.instant();
+            current.records.removeIf(value -> fromDocument(value).expired(now));
 
-        enqueue(
-                current -> {
-                    var before = current.records.size();
-                    var now = clock.instant();
-
-                    current.records.removeIf(value ->
-                            fromDocument(value).expired(now)
-                    );
-
-                    return new Mutation<>(
-                            current,
-                            before - current.records.size()
-                    );
-                },
-                result
-        );
-
-        return result;
+            return new Mutation<>(current, before - current.records.size());
+        });
     }
 
     private CompletableFuture<AdminResult> mutate(
             Function<MuteDocument, AdminResult> operation
     ) {
-        var result = new CompletableFuture<AdminResult>();
-
-        enqueue(
-                current -> new Mutation<>(
-                        current,
-                        operation.apply(current)
-                ),
-                result
-        );
-
-        return result;
+        return enqueue(current -> new Mutation<>(
+                current,
+                operation.apply(current)
+        ));
     }
 
     private static MuteDocument.Record toDocument(BanRecord value) {
@@ -240,62 +230,50 @@ public final class JsonMuteService implements MuteService, AsyncInitializable {
         return target;
     }
 
-    private synchronized <T> void enqueue(
-            Function<MuteDocument, Mutation<T>> operation,
-            CompletableFuture<T> result
+    private <T> CompletableFuture<T> enqueue(
+            Function<MuteDocument, Mutation<T>> operation
     ) {
-        mutationTail = mutationTail
-                .handle((_, _) -> null)
-                .thenCompose(_ -> {
-                    MuteDocument current;
-
-                    synchronized (this) {
-                        current = copy(document);
-                    }
-
-                    final Mutation<T> mutation;
-
-                    try {
-                        mutation = operation.apply(current);
-                    } catch (RuntimeException failure) {
-                        result.completeExceptionally(failure);
-                        return CompletableFuture.completedFuture(null);
-                    }
-
-                    return storage.save(
-                                    path,
-                                    mutation.document()
-                            )
-                            .handle((_, failure) -> {
-                                if (failure == null) {
-                                    synchronized (this) {
-                                        document = mutation.document();
-                                    }
-
-                                    result.complete(mutation.result());
-                                } else if (mutation.result() instanceof AdminResult) {
-                                    @SuppressWarnings("unchecked")
-                                    var value = (T) AdminResult.failure(
-                                            AdminStatus.PERSISTENCE_FAILURE,
-                                            "service.admin.persistence-failed"
-                                    );
-
-                                    result.complete(value);
-                                } else {
-                                    result.completeExceptionally(
-                                            failure
-                                    );
-                                }
-
-                                return (Void) null;
-                            });
-                });
-
-        mutationTail.whenComplete((_, failure) -> {
-            if (failure != null) {
-                result.completeExceptionally(failure);
+        return mutations.submit(() -> {
+            MuteDocument current;
+            synchronized (this) {
+                current = copy(document);
             }
+
+            var mutation = operation.apply(current);
+            return storage
+                    .save(path, mutation.document())
+                    .handle((_, failure) -> {
+                        if (failure == null) {
+                            synchronized (this) {
+                                document = mutation.document();
+                            }
+
+                            return mutation.result();
+                        }
+
+                        if (mutation.result() instanceof AdminResult) {
+                            @SuppressWarnings("unchecked")
+                            var value = (T) AdminResult.failure(
+                                    AdminStatus.PERSISTENCE_FAILURE,
+                                    "service.admin.persistence-failed"
+                            );
+
+                            return value;
+                        }
+
+                        throw new CompletionException(failure);
+                    });
         });
+    }
+
+    @Override
+    public void stopAccepting() {
+        mutations.stopAccepting();
+    }
+
+    @Override
+    public CompletableFuture<Void> drain() {
+        return mutations.drain();
     }
 
     private record Mutation<T>(

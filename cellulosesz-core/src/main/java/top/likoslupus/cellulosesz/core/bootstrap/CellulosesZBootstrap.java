@@ -39,8 +39,10 @@ import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
 import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.jspecify.annotations.Nullable;
@@ -104,12 +106,14 @@ public final class CellulosesZBootstrap {
             return;
         }
 
-        coreConfig = configs.register(
+        configs.register(
                 "core",
                 CoreConfig.class,
                 "cellulosesz.yml",
-                CoreConfig::new
+                CoreConfig::new,
+                "core"
         );
+        coreConfig = configs.require("core", CoreConfig.class);
         messages.locales(
                 coreConfig.locale.defaultLocale,
                 coreConfig.locale.fallback
@@ -159,6 +163,7 @@ public final class CellulosesZBootstrap {
                 configs,
                 events,
                 scheduler,
+                commandPipeline,
                 logger
         );
         awaitLifecycle("module initialization", modules.loadAsync());
@@ -195,11 +200,45 @@ public final class CellulosesZBootstrap {
         requireModules().onServerStarted();
     }
 
-    public void onServerStopping(Object server) {
+    public CompletableFuture<Void> onServerStopping(Object server) {
         logger.info("CellulosesZ server stopping.");
-        awaitLifecycle("module shutdown", requireModules().onServerStoppingAsync());
-        awaitLifecycle("storage shutdown", storage.closeAsync());
-        scheduler.close();
+        var failures = new ArrayList<Throwable>();
+        return requireModules().onServerStoppingAsync()
+                .handle((_, failure) -> {
+                    if (failure != null) {
+                        failures.add(unwrap(failure));
+                    }
+                    return (Void) null;
+                })
+                .thenCompose(_ -> storage
+                        .closeAsync()
+                        .handle((_, failure) -> {
+                            if (failure != null) {
+                                failures.add(unwrap(failure));
+                            }
+                            return (Void) null;
+                        })
+                )
+                .thenCompose(_ -> {
+                    scheduler.close();
+                    if (failures.isEmpty()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    var aggregate = new IllegalStateException("CellulosesZ shutdown failed");
+                    failures.forEach(aggregate::addSuppressed);
+                    return CompletableFuture.failedFuture(aggregate);
+                });
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        var current = failure;
+        while (current instanceof CompletionException &&
+                current.getCause() != null
+        ) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     public void onPlayerJoin(CellPlayer player) {
@@ -223,32 +262,49 @@ public final class CellulosesZBootstrap {
 
         var serverThread = services.require(ServerThreadExecutor.class);
         return scheduler
-                .async(() -> {
-                    var preparedConfigs = configs.prepareReload();
-                    var candidateCore = preparedConfigs.require("core", CoreConfig.class);
-                    var preparedMessages = messages.prepareReload(
-                            candidateCore.locale.defaultLocale,
-                            candidateCore.locale.fallback,
-                            candidateCore.locale.primaryColor,
-                            candidateCore.locale.secondaryColor,
-                            candidateCore.locale.legacyColors
-                    );
-                    return new ReloadPlan(preparedConfigs, preparedMessages, candidateCore);
-                })
+                .async(this::prepareReloadPlan)
                 .thenCompose(plan -> serverThread
-                        .submit(() -> {
-                            applyReload(plan);
-                            return (Void) null;
-                        })
+                        .submit(() -> commitReloadPlan(plan))
+                )
+                .thenCompose(previous -> requireModules()
+                        .onReloadAsync()
+                        .thenCompose(_ -> refreshCommands(
+                                serverThread,
+                                "CellulosesZ reloaded."
+                        ))
+                        .exceptionallyCompose(failure -> rollbackReload(
+                                serverThread,
+                                previous,
+                                unwrap(failure)
+                        ))
                 )
                 .whenComplete((_, _) -> reloadRunning.set(false));
     }
 
-    private synchronized void applyReload(ReloadPlan plan) {
-        var previousConfigs = configs.snapshot();
-        var previousMessages = messages.snapshot();
-        var previousCore = coreConfig();
+    private ReloadPlan prepareReloadPlan() {
+        var preparedConfigs = configs.prepareReload();
+        var candidateCore = preparedConfigs.require("core", CoreConfig.class);
+        var preparedMessages = messages.prepareReload(
+                candidateCore.locale.defaultLocale,
+                candidateCore.locale.fallback,
+                candidateCore.locale.primaryColor,
+                candidateCore.locale.secondaryColor,
+                candidateCore.locale.legacyColors
+        );
 
+        return new ReloadPlan(
+                preparedConfigs,
+                preparedMessages,
+                candidateCore
+        );
+    }
+
+    private synchronized PreviousReloadState commitReloadPlan(ReloadPlan plan) {
+        var previous = new PreviousReloadState(
+                configs.snapshot(),
+                messages.snapshot(),
+                coreConfig()
+        );
         try {
             configs.commit(plan.configs());
             coreConfig = plan.core();
@@ -260,23 +316,61 @@ public final class CellulosesZBootstrap {
                     coreConfig.locale.secondaryColor,
                     coreConfig.locale.legacyColors
             );
+
             applyCoreRuntimeConfiguration(coreConfig);
-            requireModules().onReload();
-            services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
-            logger.info("CellulosesZ reloaded.");
+            return previous;
         } catch (RuntimeException failure) {
-            configs.restore(previousConfigs);
-            messages.restore(previousMessages);
-            coreConfig = previousCore;
-            try {
-                applyCoreRuntimeConfiguration(previousCore);
-                requireModules().onReload();
-                services.optional(CommandTreeService.class).ifPresent(CommandTreeService::refresh);
-            } catch (RuntimeException rollbackFailure) {
-                failure.addSuppressed(rollbackFailure);
-            }
+            restoreReloadState(previous, failure);
             throw failure;
         }
+    }
+
+    private CompletableFuture<Void> rollbackReload(
+            ServerThreadExecutor serverThread,
+            PreviousReloadState previous,
+            Throwable originalFailure
+    ) {
+        return serverThread
+                .submit(() -> {
+                    restoreReloadState(previous, originalFailure);
+                    return (Void) null;
+                })
+                .thenCompose(_ -> requireModules().onReloadAsync())
+                .thenCompose(_ -> refreshCommands(serverThread, null))
+                .handle((_, rollbackFailure) -> {
+                    if (rollbackFailure != null) {
+                        originalFailure.addSuppressed(unwrap(rollbackFailure));
+                    }
+                    throw new CompletionException(originalFailure);
+                });
+    }
+
+    private synchronized void restoreReloadState(
+            PreviousReloadState previous,
+            Throwable originalFailure
+    ) {
+        try {
+            configs.restore(previous.configs());
+            messages.restore(previous.messages());
+            coreConfig = previous.core();
+            applyCoreRuntimeConfiguration(previous.core());
+        } catch (RuntimeException rollbackFailure) {
+            originalFailure.addSuppressed(rollbackFailure);
+        }
+    }
+
+    private CompletableFuture<Void> refreshCommands(
+            ServerThreadExecutor serverThread,
+            @Nullable String successMessage
+    ) {
+        return serverThread.submit(() -> {
+            services.optional(CommandTreeService.class)
+                    .ifPresent(CommandTreeService::refresh);
+            if (successMessage != null) {
+                logger.info(successMessage);
+            }
+            return (Void) null;
+        });
     }
 
     public CoreConfig coreConfig() {
@@ -288,6 +382,7 @@ public final class CellulosesZBootstrap {
                 config.locale.defaultLocale,
                 config.locale.useClientLocale
         );
+
         commandCosts.configure(config.commands.costs);
         aliasRegistry.configure(config.commands.aliases);
     }
@@ -331,6 +426,14 @@ public final class CellulosesZBootstrap {
 
     public CellulosesZLogger logger() {
         return logger;
+    }
+
+    private record PreviousReloadState(
+            JacksonConfigRegistry.ReloadSnapshot configs,
+            DefaultMessageService.MessageState messages,
+            CoreConfig core
+    ) {
+
     }
 
     private record ReloadPlan(
