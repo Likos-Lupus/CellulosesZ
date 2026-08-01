@@ -13,7 +13,6 @@ import top.likoslupus.cellulosesz.api.playerstate.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
-import java.io.IOException;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -30,6 +29,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         this.server = requireNonNull(server, "server");
     }
 
+    @SuppressWarnings("resource")
     @Override
     public PlatformResult<Integer> seaLevel(CellPlayer player) {
         return onServerThread(() ->
@@ -47,7 +47,10 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     }
 
     @Override
-    public PlatformResult<ExperienceSnapshot> mutateExperience(CellPlayer player, ExperienceRequest request) {
+    public PlatformResult<ExperienceSnapshot> mutateExperience(
+            CellPlayer player,
+            ExperienceRequest request
+    ) {
         requireNonNull(request, "request");
 
         return onServerThread(() -> {
@@ -69,12 +72,18 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
                     };
 
                     if (targetLevel < 0 || targetLevel > ExperienceMath.maximumLevel()) {
-                        return PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Experience level is outside the supported range");
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.STATE_NOT_ALLOWED,
+                                "Experience level is outside the supported range"
+                        );
                     }
 
                     target = request.action() == ExperienceAction.SET
                             ? ExperienceMath.totalForLevel(targetLevel)
-                            : totalAtLevelWithProgress(targetLevel, targetPlayer.experienceProgress);
+                            : totalAtLevelWithProgress(
+                                    targetLevel,
+                                    targetPlayer.experienceProgress
+                            );
                 } else {
                     target = switch (request.action()) {
                         case RESET -> 0L;
@@ -105,7 +114,9 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Void> resetRest(CellPlayer player) {
         return onServerThread(() -> {
-            MinecraftPlayers.requireOnline(player).resetStat(Stats.CUSTOM.get(Stats.TIME_SINCE_REST));
+            MinecraftPlayers
+                    .requireOnline(player)
+                    .resetStat(Stats.CUSTOM.get(Stats.TIME_SINCE_REST));
             return PlatformResult.success();
         });
     }
@@ -135,7 +146,11 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Boolean> invulnerable(CellPlayer player) {
         return onServerThread(() ->
-                PlatformResult.success(MinecraftPlayers.requireOnline(player).getAbilities().invulnerable)
+                PlatformResult.success(
+                        MinecraftPlayers
+                                .requireOnline(player)
+                                .getAbilities().invulnerable
+                )
         );
     }
 
@@ -176,7 +191,11 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<GameModeKind> gameMode(CellPlayer player) {
         return onServerThread(() ->
-                PlatformResult.success(fromMinecraft(MinecraftPlayers.requireOnline(player).gameMode()))
+                PlatformResult.success(fromMinecraft(
+                        MinecraftPlayers
+                                .requireOnline(player)
+                                .gameMode()
+                ))
         );
     }
 
@@ -192,7 +211,10 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
                         "Game mode change was rejected"
                 );
             }
-            return PlatformResult.success(new GameModeChange(previous, fromMinecraft(target.gameMode())));
+            return PlatformResult.success(new GameModeChange(
+                    previous,
+                    fromMinecraft(target.gameMode())
+            ));
         });
     }
 
@@ -228,34 +250,37 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         });
     }
 
+    @SuppressWarnings("resource")
     @Override
-    public PlatformResult<PersonalTimeSetting> setPersonalTime(CellPlayer player, PersonalTimeSetting setting) {
+    public PlatformResult<PersonalTimeSetting> setPersonalTime(
+            CellPlayer player,
+            PersonalTimeSetting setting
+    ) {
         requireNonNull(setting, "setting");
 
         return onServerThread(() -> {
             var target = MinecraftPlayers.requireOnline(player);
-            Record applied;
+            var level = target.level();
 
-            try (var level = target.level()) {
-                applied = switch (setting) {
-                    case PersonalTimeSetting.Fixed fixed ->
-                            new PersonalTimeSetting.Fixed(Math.floorMod(fixed.ticks(), 24_000L));
-                    case PersonalTimeSetting.Relative relative ->
-                            new PersonalTimeSetting.Fixed(Math.floorMod(level.getDayTime() + relative.offset(), 24_000L));
-                    case PersonalTimeSetting.Reset _ -> new PersonalTimeSetting.Reset();
-                };
-                var ticks = applied instanceof PersonalTimeSetting.Fixed(long ticks1)
-                        ? ticks1
-                        : level.getDayTime();
+            var applied = (Record) switch (setting) {
+                case PersonalTimeSetting.Fixed fixed ->
+                        new PersonalTimeSetting.Fixed(Math.floorMod(fixed.ticks(), 24_000L));
+                case PersonalTimeSetting.Relative relative ->
+                        new PersonalTimeSetting.Fixed(Math.floorMod(
+                                level.getDayTime() + relative.offset(),
+                                24_000L
+                        ));
+                case PersonalTimeSetting.Reset _ -> new PersonalTimeSetting.Reset();
+            };
+            var ticks = applied instanceof PersonalTimeSetting.Fixed(long ticks1)
+                    ? ticks1
+                    : level.getDayTime();
 
-                target.connection.send(new ClientboundSetTimePacket(
-                        level.getGameTime(),
-                        ticks,
-                        applied instanceof PersonalTimeSetting.Reset
-                ));
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
+            target.connection.send(new ClientboundSetTimePacket(
+                    level.getGameTime(),
+                    ticks,
+                    applied instanceof PersonalTimeSetting.Reset
+            ));
 
             return PlatformResult.success(applied);
         });
@@ -272,20 +297,50 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
             var target = MinecraftPlayers.requireOnline(player);
             switch (setting) {
                 case RESET -> restoreWorldWeather(target);
+
                 case CLEAR -> {
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.STOP_RAINING, 0.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, 0.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, 0.0F));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.STOP_RAINING,
+                            0.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
+                            0.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+                            0.0F
+                    ));
                 }
+
                 case RAIN -> {
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, 1.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, 0.0F));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.START_RAINING,
+                            0.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
+                            1.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+                            0.0F
+                    ));
                 }
+
                 case THUNDER -> {
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, 1.0F));
-                    target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, 1.0F));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.START_RAINING,
+                            0.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
+                            1.0F
+                    ));
+                    target.connection.send(new ClientboundGameEventPacket(
+                            ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+                            1.0F
+                    ));
                 }
             }
 
@@ -351,22 +406,36 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
             }
 
             return target.isAlive()
-                    ? PlatformResult.failure(PlatformOperationStatus.STATE_NOT_ALLOWED, "Death was prevented")
+                    ?
+                    PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Death was prevented"
+                    )
                     : PlatformResult.success();
         });
     }
 
+    @SuppressWarnings("resource")
     private static void restoreWorldWeather(ServerPlayer target) {
-        try (var level = target.level()) {
-            if (level.isRaining()) {
-                target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.START_RAINING, 0.0F));
-                target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.RAIN_LEVEL_CHANGE, level.getRainLevel(1.0F)));
-                target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE, level.getThunderLevel(1.0F)));
-            } else {
-                target.connection.send(new ClientboundGameEventPacket(ClientboundGameEventPacket.STOP_RAINING, 0.0F));
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        var level = target.level();
+        if (level.isRaining()) {
+            target.connection.send(new ClientboundGameEventPacket(
+                    ClientboundGameEventPacket.START_RAINING,
+                    0.0F
+            ));
+            target.connection.send(new ClientboundGameEventPacket(
+                    ClientboundGameEventPacket.RAIN_LEVEL_CHANGE,
+                    level.getRainLevel(1.0F)
+            ));
+            target.connection.send(new ClientboundGameEventPacket(
+                    ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE,
+                    level.getThunderLevel(1.0F)
+            ));
+        } else {
+            target.connection.send(new ClientboundGameEventPacket(
+                    ClientboundGameEventPacket.STOP_RAINING,
+                    0.0F
+            ));
         }
     }
 
@@ -443,6 +512,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         );
     }
 
+    @SuppressWarnings("resource")
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         var current = server.current();
         if (current.isEmpty() || !current.orElseThrow().isSameThread()) {

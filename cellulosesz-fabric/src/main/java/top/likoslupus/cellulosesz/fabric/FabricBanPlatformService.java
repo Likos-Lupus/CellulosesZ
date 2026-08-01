@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.fabric;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.*;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.platform.admin.*;
 
 import java.io.IOException;
@@ -12,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Locale;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -32,15 +32,19 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public BanPlatformResult banUser(BanUserRequest request) {
-        NameAndId target;
-        UserBanList bans;
-        try (var active = activeServer()) {
-            if (active == null) return notReady();
-            if (!active.isSameThread()) return wrongThread();
+        @SuppressWarnings("resource")
+        var active = activeServer();
 
-            target = nameAndId(request.target());
-            bans = active.getPlayerList().getBans();
+        if (active == null) {
+            return notReady();
         }
+
+        if (!active.isSameThread()) {
+            return wrongThread();
+        }
+
+        var target = nameAndId(request.target());
+        var bans = active.getPlayerList().getBans();
 
         if (bans.get(target) != null) {
             return BanPlatformResult.failure(BanPlatformStatus.ALREADY_BANNED);
@@ -53,12 +57,14 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
+
         if (!bans.add(entry)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
                     "Minecraft rejected the user ban entry"
             );
         }
+
         if (!save(bans)) {
             rollbackAddedUserBan(bans, target);
             return BanPlatformResult.failure(
@@ -66,31 +72,38 @@ public final class FabricBanPlatformService implements BanPlatformService {
                     "Minecraft could not persist the user ban list"
             );
         }
+
         return BanPlatformResult.success();
     }
 
     @Override
     public BanPlatformResult pardonUser(PlayerProfileId target) {
-        NameAndId profile;
-        UserBanList bans;
-        try (var active = activeServer()) {
-            if (active == null) return notReady();
-            if (!active.isSameThread()) return wrongThread();
+        @SuppressWarnings("resource")
+        var active = activeServer();
 
-            profile = nameAndId(target);
-            bans = active.getPlayerList().getBans();
+        if (active == null) {
+            return notReady();
         }
 
+        if (!active.isSameThread()) {
+            return wrongThread();
+        }
+
+        var profile = nameAndId(target);
+        var bans = active.getPlayerList().getBans();
         var previous = bans.get(profile);
+
         if (previous == null) {
             return BanPlatformResult.failure(BanPlatformStatus.NOT_FOUND);
         }
+
         if (!bans.remove(profile)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
                     "Minecraft rejected the user pardon"
             );
         }
+
         if (!save(bans)) {
             rollbackRemovedUserBan(bans, previous);
             return BanPlatformResult.failure(
@@ -98,20 +111,25 @@ public final class FabricBanPlatformService implements BanPlatformService {
                     "Minecraft could not persist the user ban list"
             );
         }
+
         return BanPlatformResult.success();
     }
 
     @Override
     public BanPlatformResult banIp(BanIpRequest request) {
-        String address;
-        IpBanList bans;
-        try (var active = activeServer()) {
-            if (active == null) return notReady();
-            if (!active.isSameThread()) return wrongThread();
+        @SuppressWarnings("resource")
+        var active = activeServer();
 
-            address = canonical(request.target());
-            bans = active.getPlayerList().getIpBans();
+        if (active == null) {
+            return notReady();
         }
+
+        if (!active.isSameThread()) {
+            return wrongThread();
+        }
+
+        var address = canonical(request.target());
+        var bans = active.getPlayerList().getIpBans();
 
         if (bans.get(address) != null) {
             return BanPlatformResult.failure(BanPlatformStatus.ALREADY_BANNED);
@@ -124,12 +142,14 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
+
         if (!bans.add(entry)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
                     "Minecraft rejected the IP ban entry"
             );
         }
+
         if (!save(bans)) {
             rollbackAddedIpBan(bans, address);
             return BanPlatformResult.failure(
@@ -137,31 +157,38 @@ public final class FabricBanPlatformService implements BanPlatformService {
                     "Minecraft could not persist the IP ban list"
             );
         }
+
         return BanPlatformResult.success();
     }
 
     @Override
     public BanPlatformResult pardonIp(InetAddress address) {
-        String canonical;
-        IpBanList bans;
-        try (var active = activeServer()) {
-            if (active == null) return notReady();
-            if (!active.isSameThread()) return wrongThread();
+        @SuppressWarnings("resource")
+        var active = activeServer();
 
-            canonical = canonical(address);
-            bans = active.getPlayerList().getIpBans();
+        if (active == null) {
+            return notReady();
         }
 
+        if (!active.isSameThread()) {
+            return wrongThread();
+        }
+
+        var canonical = canonical(address);
+        var bans = active.getPlayerList().getIpBans();
         var previous = bans.get(canonical);
+
         if (previous == null) {
             return BanPlatformResult.failure(BanPlatformStatus.NOT_FOUND);
         }
+
         if (!bans.remove(canonical)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
                     "Minecraft rejected the IP pardon"
             );
         }
+
         if (!save(bans)) {
             rollbackRemovedIpBan(bans, previous);
             return BanPlatformResult.failure(
@@ -169,50 +196,61 @@ public final class FabricBanPlatformService implements BanPlatformService {
                     "Minecraft could not persist the IP ban list"
             );
         }
+
         return BanPlatformResult.success();
     }
 
     @Override
     public boolean isUserBanned(PlayerProfileId target) {
-        try (var active = activeServer()) {
-            return active != null
-                    && active.isSameThread()
-                    && active.getPlayerList().getBans().get(nameAndId(target)) != null;
-        }
+        @SuppressWarnings("resource")
+        var active = activeServer();
+        return active != null
+                && active.isSameThread()
+                && active.getPlayerList().getBans().get(nameAndId(target)) != null;
     }
 
     @Override
     public boolean isIpBanned(InetAddress address) {
-        try (var active = activeServer()) {
-            return active != null
-                    && active.isSameThread()
-                    && active.getPlayerList().getIpBans().get(canonical(address)) != null;
-        }
+        @SuppressWarnings("resource")
+        var active = activeServer();
+        return active != null
+                && active.isSameThread()
+                && active.getPlayerList().getIpBans().get(canonical(address)) != null;
     }
 
     @Override
     public BanPlatformResult disconnectMatchingPlayers(BanDisconnectRequest request) {
-        int count;
-        try (var active = activeServer()) {
-            if (active == null) return notReady();
-            if (!active.isSameThread()) return wrongThread();
+        @SuppressWarnings("resource")
+        var active = activeServer();
 
-            count = 0;
-            var component = disconnectReason(request.reason());
-            for (var player : active.getPlayerList().getPlayers()) {
-                if (request.userId() != null && request.userId().equals(player.getUUID())) {
-                    player.connection.disconnect(component);
-                    count++;
-                    continue;
-                }
-                if (request.address() != null
-                        && player.connection.getRemoteAddress() instanceof InetSocketAddress socket
-                        && canonical(request.address()).equals(canonical(socket.getAddress()))) {
-                    player.connection.disconnect(component);
-                    count++;
-                }
+        if (active == null) {
+            return notReady();
+        }
+
+        if (!active.isSameThread()) {
+            return wrongThread();
+        }
+
+        var count = 0;
+        var component = disconnectReason(request.reason());
+        for (var player : active.getPlayerList().getPlayers()) {
+            if (request.userId() != null
+                    && request.userId().equals(player.getUUID())
+            ) {
+                player.connection.disconnect(component);
+                count++;
+                continue;
+            }
+
+            if (request.address() != null
+                    && player.connection.getRemoteAddress() instanceof InetSocketAddress socket
+                    && canonical(request.address()).equals(canonical(socket.getAddress()))
+            ) {
+                player.connection.disconnect(component);
+                count++;
             }
         }
+
         return BanPlatformResult.success(count);
     }
 

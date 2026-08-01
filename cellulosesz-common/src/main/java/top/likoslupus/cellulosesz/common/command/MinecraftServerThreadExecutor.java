@@ -24,12 +24,16 @@ public final class MinecraftServerThreadExecutor implements ServerThreadExecutor
                 .orElse(false);
     }
 
+    @SuppressWarnings("resource")
     @Override
     public void execute(Runnable task) {
-        try (var current = server.requireRunning()) {
-            var checked = requireNonNull(task, "task");
-            if (current.isSameThread()) checked.run();
-            else current.execute(checked);
+        var current = server.requireRunning();
+        var checked = requireNonNull(task, "task");
+
+        if (current.isSameThread()) {
+            checked.run();
+        } else {
+            current.execute(checked);
         }
     }
 

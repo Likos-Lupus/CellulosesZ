@@ -49,7 +49,9 @@ public final class FabricBackupOperations implements BackupPlatformService {
         }
 
         var barrier = new CompletableFuture<Path>();
-        try (var server = access.requireServer()) {
+        try {
+            @SuppressWarnings("resource")
+            var server = access.requireServer();
             server.execute(() -> {
                 try {
                     if (!server.saveEverything(false, true, true)) {
@@ -65,6 +67,9 @@ public final class FabricBackupOperations implements BackupPlatformService {
                     barrier.completeExceptionally(failure);
                 }
             });
+        } catch (Throwable failure) {
+            running.set(false);
+            return CompletableFuture.failedFuture(failure);
         }
 
         return barrier

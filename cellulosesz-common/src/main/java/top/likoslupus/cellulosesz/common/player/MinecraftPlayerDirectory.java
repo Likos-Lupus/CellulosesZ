@@ -19,20 +19,23 @@ public final class MinecraftPlayerDirectory implements PlayerDirectory {
         this.server = requireNonNull(server, "server");
     }
 
+    @SuppressWarnings("resource")
     @Override
     public List<CellPlayer> onlinePlayers() {
         var current = server.current();
-        if (current.isEmpty()) return List.of();
-        try (var server = current.orElseThrow()) {
-            return server.getPlayerList().getPlayers().stream()
-                    .filter(player -> !player.hasDisconnected())
-                    .map(MinecraftPlayers::wrap)
-                    .sorted(
-                            Comparator.comparing(CellPlayer::name, String.CASE_INSENSITIVE_ORDER)
-                                    .thenComparing(CellPlayer::uuid)
-                    )
-                    .toList();
+        if (current.isEmpty()) {
+            return List.of();
         }
+
+        var active = current.orElseThrow();
+        return active.getPlayerList().getPlayers().stream()
+                .filter(player -> !player.hasDisconnected())
+                .map(MinecraftPlayers::wrap)
+                .sorted(
+                        Comparator.comparing(CellPlayer::name, String.CASE_INSENSITIVE_ORDER)
+                                .thenComparing(CellPlayer::uuid)
+                )
+                .toList();
     }
 
     @Override
