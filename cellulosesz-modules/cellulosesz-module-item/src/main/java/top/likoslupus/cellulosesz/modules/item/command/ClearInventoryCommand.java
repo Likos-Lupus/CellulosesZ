@@ -191,7 +191,7 @@ public final class ClearInventoryCommand implements CommandContributor {
             CommandDescriptor descriptor
     ) {
         var branch = Commands.literal("all")
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.clearinventory.all"
                 ))
@@ -232,7 +232,7 @@ public final class ClearInventoryCommand implements CommandContributor {
         );
 
         parent.then(Commands.literal("equipment")
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.clearinventory.armor"
                 ))
@@ -644,7 +644,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                         Target.self()
                 ))
                 .then(Commands.literal("player")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.clearinventory.others"
                         ))

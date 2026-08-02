@@ -47,7 +47,7 @@ public final class BookCommand implements CommandContributor {
         var root = Commands.literal("book")
                 .executes(command -> toggle(context, command, descriptor))
                 .then(Commands.literal("title")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.book.title"
                         ))
@@ -75,7 +75,7 @@ public final class BookCommand implements CommandContributor {
                         )
                 )
                 .then(Commands.literal("author")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.book.author"
                         ))

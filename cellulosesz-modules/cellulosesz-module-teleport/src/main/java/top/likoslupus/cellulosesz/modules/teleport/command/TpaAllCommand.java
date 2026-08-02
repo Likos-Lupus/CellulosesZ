@@ -41,7 +41,7 @@ public final class TpaAllCommand implements CommandContributor {
                                 players,
                                 actor -> service.createAll(
                                         actor,
-                                        context.permissions().has(
+                                        context.hasPermission(
                                                 command.getSource(),
                                                 "cellulosesz.teleport.tpaall.bypass"
                                         )

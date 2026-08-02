@@ -8,6 +8,8 @@ import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
@@ -21,6 +23,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 
 import java.util.*;
@@ -79,8 +82,24 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
     }
 
     @Override
-    public PermissionService permissions() {
-        return bootstrap.permissionService();
+    public boolean hasPermission(
+            CommandSourceStack source,
+            String permission
+    ) {
+        requireNonNull(source, "source");
+        requireNonNull(permission, "permission");
+        if (permission.isBlank()) {
+            return true;
+        }
+
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return !player.hasDisconnected()
+                    && permissions().has(MinecraftPlayers.wrap(player), permission);
+        }
+
+        return source.permissions().hasPermission(
+                new Permission.HasCommandLevel(PermissionLevel.byId(4))
+        );
     }
 
     @Override
@@ -157,7 +176,7 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
         if (availability.disabled(descriptor.canonicalName())
                 || !moduleEnabled(descriptor.moduleId())
                 || !descriptor.permission().isBlank()
-                && !permissions().has(source, descriptor.permission())
+                && !hasPermission(source, descriptor.permission())
                 || descriptor.requiredSourceKind() == CommandSourceKind.PLAYER_ONLY
                 && !(source.getEntity() instanceof ServerPlayer)
         ) {
@@ -166,6 +185,10 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
 
         return descriptor.requiredSourceKind() != CommandSourceKind.CONSOLE_ONLY
                 || !(source.getEntity() instanceof ServerPlayer);
+    }
+
+    private PermissionService permissions() {
+        return bootstrap.permissionService();
     }
 
     @Override

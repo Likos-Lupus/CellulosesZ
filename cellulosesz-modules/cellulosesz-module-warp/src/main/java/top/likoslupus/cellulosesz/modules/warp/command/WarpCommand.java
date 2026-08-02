@@ -95,11 +95,10 @@ public final class WarpCommand implements CommandContributor {
                                 .suggests((command, builder) ->
                                         CommandSuggestionSupport.suggest(
                                                 () -> service.usableNames(
-                                                        permission -> context.permissions()
-                                                                .has(
-                                                                        command.getSource(),
-                                                                        permission
-                                                                )
+                                                        permission -> context.hasPermission(
+                                                                command.getSource(),
+                                                                permission
+                                                        )
                                                 ),
                                                 builder
                                         )

@@ -51,7 +51,7 @@ public final class TpaCommand implements CommandContributor {
                                             actor,
                                             targetName,
                                             TeleportRequestType.REQUESTER_TO_TARGET,
-                                            context.permissions().has(
+                                            context.hasPermission(
                                                     command.getSource(),
                                                     "cellulosesz.teleport.tpa.bypass"
                                             )

@@ -40,13 +40,13 @@ public final class KillCommand implements CommandContributor {
                             context,
                             command,
                             descriptor,
-                            "kill force=" + context.permissions().has(
+                            "kill force=" + context.hasPermission(
                                     command.getSource(),
                                     "cellulosesz.command.kill.force"
                             ),
                             _ -> service.kill(
                                     targetName,
-                                    context.permissions().has(
+                                    context.hasPermission(
                                             command.getSource(),
                                             "cellulosesz.command.kill.force"
                                     )

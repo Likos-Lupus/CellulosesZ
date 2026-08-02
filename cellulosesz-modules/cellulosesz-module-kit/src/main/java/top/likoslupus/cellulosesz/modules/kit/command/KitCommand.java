@@ -67,7 +67,7 @@ public final class KitCommand implements CommandContributor {
                         .suggests((command, builder) ->
                                 CommandSuggestionSupport.suggest(
                                         () -> service.claimableNames(
-                                                permission -> context.permissions().has(
+                                                permission -> context.hasPermission(
                                                         command.getSource(),
                                                         permission
                                                 )

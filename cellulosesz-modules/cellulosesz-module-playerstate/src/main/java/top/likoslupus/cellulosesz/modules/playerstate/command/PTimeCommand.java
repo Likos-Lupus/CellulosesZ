@@ -61,7 +61,7 @@ public final class PTimeCommand implements CommandContributor {
                                                         EntityArgument.player()
                                                 )
                                                 .requires(source ->
-                                                        context.permissions().has(
+                                                        context.hasPermission(
                                                                 source,
                                                                 "cellulosesz.playerstate.ptime.others"
                                                         )

@@ -43,7 +43,7 @@ public final class TpAllCommand implements CommandContributor {
                         policy -> service.all(
                                 TeleportCommandResults.current(policy, players),
                                 Optional.empty(),
-                                context.permissions().has(
+                                context.hasPermission(
                                         command.getSource(),
                                         "cellulosesz.teleport.tpall.bypass"
                                 )
@@ -63,7 +63,7 @@ public final class TpAllCommand implements CommandContributor {
                                     policy -> service.all(
                                             TeleportCommandResults.current(policy, players),
                                             Optional.of(targetName),
-                                            context.permissions().has(
+                                            context.hasPermission(
                                                     command.getSource(),
                                                     "cellulosesz.teleport.tpall.bypass"
                                             )

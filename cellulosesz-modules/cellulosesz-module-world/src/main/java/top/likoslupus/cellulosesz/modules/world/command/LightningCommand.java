@@ -50,7 +50,7 @@ public final class LightningCommand implements CommandContributor {
                 CommandSourceKind.ANY
         );
         var target = Commands.argument("player", EntityArgument.player())
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.lightning.others"
                 ))

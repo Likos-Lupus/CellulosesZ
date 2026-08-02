@@ -48,7 +48,7 @@ public final class RepairCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.literal("all")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.item.repair.all"
                         ))

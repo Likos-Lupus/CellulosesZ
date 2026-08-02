@@ -118,11 +118,11 @@ public final class PayCommand implements CommandContributor {
                                 "amount"
                         ),
                         token,
-                        context.permissions().has(
+                        context.hasPermission(
                                 sender,
                                 "cellulosesz.economy.pay.multiple"
                         ),
-                        context.permissions().has(
+                        context.hasPermission(
                                 sender,
                                 "cellulosesz.economy.pay.offline"
                         )

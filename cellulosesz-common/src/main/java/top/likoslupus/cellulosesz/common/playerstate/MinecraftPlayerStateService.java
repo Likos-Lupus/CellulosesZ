@@ -516,26 +516,32 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         var current = server.current();
-        if (current.isEmpty() || !current.orElseThrow().isSameThread()) {
+        if (current.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.NOT_READY,
+                    "Minecraft server is not active"
+            );
+        }
+        if (!current.orElseThrow().isSameThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
-                    "Operation requires the running server thread"
+                    "Operation requires the server thread"
             );
         }
 
         try {
             return operation.get();
-        } catch (IllegalStateException failure) {
-            return PlatformResult.failure(
-                    PlatformOperationStatus.TARGET_NOT_FOUND,
-                    failure.getMessage() == null
-                            ? failure.getClass().getSimpleName()
-                            : failure.getMessage()
-            );
         } catch (MinecraftPlayerUnavailableException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,
                     failure.getMessage()
+            );
+        } catch (IllegalStateException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_STATE,
+                    failure.getMessage() == null
+                            ? failure.getClass().getSimpleName()
+                            : failure.getMessage()
             );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(

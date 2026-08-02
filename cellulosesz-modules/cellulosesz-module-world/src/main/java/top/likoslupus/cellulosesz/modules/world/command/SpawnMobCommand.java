@@ -57,7 +57,7 @@ public final class SpawnMobCommand implements CommandContributor {
                         Optional.empty()
                 ))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.spawnmob.others"
                         ))

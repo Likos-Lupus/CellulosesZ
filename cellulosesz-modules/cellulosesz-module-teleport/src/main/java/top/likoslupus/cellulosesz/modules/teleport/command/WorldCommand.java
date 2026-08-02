@@ -64,7 +64,7 @@ public final class WorldCommand implements CommandContributor {
                                                 .orElseThrow()
                                                 .replace(':', '.');
 
-                                        if (!context.permissions().has(
+                                        if (!context.hasPermission(
                                                 command.getSource(), permission
                                         )) {
                                             return CompletableFuture.completedFuture(

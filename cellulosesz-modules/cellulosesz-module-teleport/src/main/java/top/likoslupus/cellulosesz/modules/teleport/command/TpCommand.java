@@ -64,7 +64,7 @@ public final class TpCommand implements CommandContributor {
                                     targetName,
                                     Optional.empty(),
                                     override,
-                                    context.permissions().has(
+                                    context.hasPermission(
                                             command.getSource(), permission + ".bypass"
                                     )
                             )
@@ -72,7 +72,7 @@ public final class TpCommand implements CommandContributor {
                 })
                 .then(Commands.argument("second", EntityArgument.player())
                         .requires(source ->
-                                context.permissions().has(source, permission + ".others")
+                                context.hasPermission(source, permission + ".others")
                         )
                         .executes(command -> {
                             var sourceName = EntityArgument.getPlayer(command, "first")

@@ -112,7 +112,7 @@ public final class ExpCommand implements CommandContributor {
     ) {
         var branch = Commands.literal(literal)
                 .requires(source ->
-                        context.permissions().has(
+                        context.hasPermission(
                                 source,
                                 permission
                         )
@@ -186,7 +186,7 @@ public final class ExpCommand implements CommandContributor {
                         EntityArgument.player()
                 )
                 .requires(source ->
-                        context.permissions().has(
+                        context.hasPermission(
                                 source,
                                 permission
                         )

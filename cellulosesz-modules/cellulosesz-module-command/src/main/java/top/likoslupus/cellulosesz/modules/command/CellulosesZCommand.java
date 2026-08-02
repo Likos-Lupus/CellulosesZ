@@ -94,7 +94,7 @@ public final class CellulosesZCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.literal("reload")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.reload"
                         ))
@@ -142,7 +142,7 @@ public final class CellulosesZCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.literal("modules")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.modules"
                         ))
@@ -203,7 +203,7 @@ public final class CellulosesZCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.literal("debug")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.debug"
                         ))

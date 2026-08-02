@@ -61,7 +61,7 @@ public final class SpawnerCommand implements CommandContributor {
                                                 config.spawnerMaximumDelayTicks()
                                         )
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.command.spawner.delay"
                                 ))
