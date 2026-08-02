@@ -1,13 +1,14 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
 import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
-import top.likoslupus.cellulosesz.api.validation.Checks;
 
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -36,7 +37,7 @@ public final class DefaultCommandAvailabilityService implements CommandAvailabil
     }
 
     private String normalize(String value) {
-        return Checks.requireNonBlank(value, "canonicalRoot")
+        return requireNonBlank(value, "canonicalRoot")
                 .trim()
                 .toLowerCase(Locale.ROOT);
     }

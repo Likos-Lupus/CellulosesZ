@@ -2,8 +2,9 @@ package top.likoslupus.cellulosesz.api.entity;
 
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.*;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public record TntBurstRequest(
         CellLocation center,

@@ -1,11 +1,10 @@
 package top.likoslupus.cellulosesz.modules.world.service;
 
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.api.world.WorldStatePlatformService;
-
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -24,11 +23,11 @@ public final class DefaultWorldService implements WorldService {
                 ?
                 AdminResult.success(
                         "service.world.time-set",
-                        Map.of("world", world, "time", time)
+                        MessageArguments.builder().put("world", world).put("time", time).build()
                 )
                 : AdminResult.failure(
                         "service.world.time-failed",
-                        Map.of("world", world)
+                        MessageArguments.builder().put("world", world).build()
                 );
     }
 
@@ -39,11 +38,14 @@ public final class DefaultWorldService implements WorldService {
                 ?
                 AdminResult.success(
                         "service.world.weather-set",
-                        Map.of("world", world, "weather", type.name().toLowerCase())
+                        MessageArguments.builder()
+                                .put("world", world)
+                                .put("weather", type.name().toLowerCase())
+                                .build()
                 )
                 : AdminResult.failure(
                         "service.world.weather-failed",
-                        Map.of("world", world)
+                        MessageArguments.builder().put("world", world).build()
                 );
     }
 

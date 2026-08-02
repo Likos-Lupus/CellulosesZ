@@ -5,8 +5,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import java.util.Optional;
 import java.util.UUID;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.*;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 /**
  * Stable audit identity for a player or non-player command source.

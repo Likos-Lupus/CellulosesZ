@@ -1,6 +1,9 @@
 package top.likoslupus.cellulosesz.api.world;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+import static top.likoslupus.cellulosesz.api.validation.ConditionChecks.requireFalse;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+
 
 public record EntityRemovalResult(
         int matched,

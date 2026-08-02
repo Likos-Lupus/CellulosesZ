@@ -432,12 +432,12 @@ public final class FabricPlatformEventBridge {
     }
 
     private static boolean sameLocation(CellLocation first, CellLocation second) {
-        return first.world.equals(second.world)
-                && Double.compare(first.x, second.x) == 0
-                && Double.compare(first.y, second.y) == 0
-                && Double.compare(first.z, second.z) == 0
-                && Float.compare(first.yaw, second.yaw) == 0
-                && Float.compare(first.pitch, second.pitch) == 0;
+        return first.world().equals(second.world())
+                && Double.compare(first.x(), second.x()) == 0
+                && Double.compare(first.y(), second.y()) == 0
+                && Double.compare(first.z(), second.z()) == 0
+                && Float.compare(first.yaw(), second.yaw()) == 0
+                && Float.compare(first.pitch(), second.pitch()) == 0;
     }
 
     public void playerJoined(ServerPlayer nativePlayer) {
@@ -495,20 +495,20 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (sameLocation(previous.location, current.location)) {
+        if (sameLocation(previous.location(), current.location())) {
             return;
         }
 
-        var event = new PlayerMoveEvent(player, previous.location, current.location);
+        var event = new PlayerMoveEvent(player, previous.location(), current.location());
         events.fire(event);
 
         if (event.cancelled()) {
-            var destination = sameLocation(event.to(), current.location)
-                    ? previous.location
+            var destination = sameLocation(event.to(), current.location())
+                    ? previous.location()
                     : event.to();
             teleports.move(player, destination);
             snapshots.put(player.uuid(), current.withLocation(destination));
-        } else if (!sameLocation(event.to(), current.location)) {
+        } else if (!sameLocation(event.to(), current.location())) {
             teleports.move(player, event.to());
             snapshots.put(player.uuid(), current.withLocation(event.to()));
         }
@@ -519,14 +519,14 @@ public final class FabricPlatformEventBridge {
             PlayerSnapshot previous,
             PlayerSnapshot current
     ) {
-        if (previous.location.world.equals(current.location.world)) {
+        if (previous.location().world().equals(current.location().world())) {
             return;
         }
 
         events.fire(new PlayerWorldChangeEvent(
                 player,
-                previous.location.world,
-                current.location.world
+                previous.location().world(),
+                current.location().world()
         ));
     }
 

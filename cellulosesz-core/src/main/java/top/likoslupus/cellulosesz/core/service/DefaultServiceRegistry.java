@@ -8,8 +8,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 public final class DefaultServiceRegistry implements ServiceRegistry {
 
@@ -41,7 +42,9 @@ public final class DefaultServiceRegistry implements ServiceRegistry {
     @Override
     public <T> Optional<T> optional(Class<T> type) {
         var entry = services.get(type);
-        if (entry == null) return Optional.empty();
+        if (entry == null) {
+            return Optional.empty();
+        }
         return Optional.of(type.cast(entry.instance()));
     }
 

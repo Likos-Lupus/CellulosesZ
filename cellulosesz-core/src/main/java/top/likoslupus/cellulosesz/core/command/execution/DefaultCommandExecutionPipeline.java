@@ -19,7 +19,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

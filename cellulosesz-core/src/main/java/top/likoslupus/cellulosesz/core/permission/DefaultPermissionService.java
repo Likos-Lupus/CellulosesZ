@@ -1,10 +1,13 @@
 package top.likoslupus.cellulosesz.core.permission;
 
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultPermissionService implements PermissionService {
 
@@ -14,7 +17,7 @@ public final class DefaultPermissionService implements PermissionService {
     private volatile long cacheMillis = 5_000L;
 
     public void backend(PermissionBackend backend) {
-        this.backend = backend;
+        this.backend = requireNonNull(backend, "backend");
         clearCache();
     }
 
@@ -32,50 +35,71 @@ public final class DefaultPermissionService implements PermissionService {
     }
 
     @Override
-    public boolean has(
-            Object source,
-            String permission
-    ) {
-        if (permission.isBlank()) return true;
-        return cached(source, permission, "permission", () -> backend.has(source, permission));
+    public boolean has(CellPlayer player, String permission) {
+        requireNonNull(player, "player");
+        if (permission.isBlank()) {
+            return true;
+        }
+
+        return cached(
+                player,
+                permission,
+                "permission",
+                () -> backend.has(player, permission)
+        );
     }
 
     @Override
     public int intOption(
-            Object source,
+            CellPlayer player,
             String key,
             int fallback
     ) {
-        return cached(source, key, "int-option", () -> backend.intOption(source, key, fallback));
+        return cached(
+                player,
+                key,
+                "int-option",
+                () -> backend.intOption(player, key, fallback)
+        );
     }
 
     @Override
     public boolean boolOption(
-            Object source,
+            CellPlayer player,
             String key,
             boolean fallback
     ) {
-        return cached(source, key, "bool-option", () -> backend.boolOption(source, key, fallback));
+        return cached(
+                player,
+                key,
+                "bool-option",
+                () -> backend.boolOption(player, key, fallback)
+        );
     }
 
     @Override
-    public Optional<String> stringOption(
-            Object source,
-            String key
-    ) {
-        return cached(source, key, "string-option", () -> backend.stringOption(source, key));
+    public Optional<String> stringOption(CellPlayer player, String key) {
+        return cached(
+                player,
+                key,
+                "string-option",
+                () -> backend.stringOption(player, key)
+        );
     }
 
     @SuppressWarnings("unchecked")
     private <T> T cached(
-            Object source,
+            CellPlayer player,
             String key,
             String type,
             CacheSupplier<T> supplier
     ) {
-        if (!cacheEnabled || cacheMillis <= 0L) return supplier.get();
+        requireNonNull(player, "player");
+        if (!cacheEnabled || cacheMillis <= 0L) {
+            return supplier.get();
+        }
 
-        var cacheKey = new PermissionCacheKey(System.identityHashCode(source), key, type);
+        var cacheKey = new PermissionCacheKey(player.uuid(), key, type);
         var now = System.currentTimeMillis();
         var existing = cache.get(cacheKey);
 
@@ -85,7 +109,6 @@ public final class DefaultPermissionService implements PermissionService {
 
         var value = supplier.get();
         cache.put(cacheKey, new CacheEntry<>(value, now + cacheMillis));
-
         return value;
     }
 

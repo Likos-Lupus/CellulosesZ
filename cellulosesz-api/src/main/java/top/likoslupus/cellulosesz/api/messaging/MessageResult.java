@@ -2,8 +2,7 @@ package top.likoslupus.cellulosesz.api.messaging;
 
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-
-import java.util.Map;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import static java.util.Objects.requireNonNull;
 
@@ -11,18 +10,6 @@ public record MessageResult(
         CommandOutcome.Status status,
         LocalizedMessage message
 ) {
-
-    public MessageResult(
-            boolean success,
-            LocalizedMessage message
-    ) {
-        this(
-                success
-                        ? CommandOutcome.Status.SUCCESS
-                        : CommandOutcome.Status.REJECTED,
-                message
-        );
-    }
 
     public MessageResult {
         requireNonNull(status, "status");
@@ -39,7 +26,7 @@ public record MessageResult(
 
     public static MessageResult success(
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return success(LocalizedMessage.of(key, placeholders));
     }
@@ -54,7 +41,7 @@ public record MessageResult(
 
     public static MessageResult failure(
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return failure(LocalizedMessage.of(key, placeholders));
     }
@@ -69,7 +56,7 @@ public record MessageResult(
 
     public static MessageResult failed(
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return failed(LocalizedMessage.of(key, placeholders));
     }

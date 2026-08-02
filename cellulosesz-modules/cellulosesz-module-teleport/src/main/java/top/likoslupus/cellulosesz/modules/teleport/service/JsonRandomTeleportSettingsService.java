@@ -6,10 +6,10 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettings;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
-import top.likoslupus.cellulosesz.modules.teleport.data.RandomTeleportSettingsDocument;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.RandomTeleportSettingsDocument;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.RandomTeleportSettingsMapper;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.UnaryOperator;
@@ -75,12 +75,18 @@ public final class JsonRandomTeleportSettingsService
     }
 
     private void validate(RandomTeleportSettingsDocument candidate) {
-        candidate.worlds.replaceAll((_, settings) -> validate(settings));
+        candidate.worlds.forEach((world, settings) ->
+                RandomTeleportSettingsMapper.toDomain(settings, world)
+        );
     }
 
     @Override
     public synchronized RandomTeleportSettings settings(String world) {
-        return document.worlds.getOrDefault(normalize(world), defaults);
+        var key = normalize(world);
+        var stored = document.worlds.get(key);
+        return stored == null
+                ? defaults
+                : RandomTeleportSettingsMapper.toDomain(stored, key);
     }
 
     @Override
@@ -139,8 +145,14 @@ public final class JsonRandomTeleportSettingsService
                 next = copy(document);
             }
 
-            var previous = next.worlds.getOrDefault(key, defaults);
-            next.worlds.put(key, validate(mutation.apply(previous)));
+            var stored = next.worlds.get(key);
+            var previous = stored == null
+                    ? defaults
+                    : RandomTeleportSettingsMapper.toDomain(stored, key);
+            next.worlds.put(
+                    key,
+                    RandomTeleportSettingsMapper.fromDomain(validate(mutation.apply(previous)))
+            );
             return storage
                     .save(path, next)
                     .thenRun(() -> {
@@ -153,7 +165,12 @@ public final class JsonRandomTeleportSettingsService
 
     private RandomTeleportSettingsDocument copy(RandomTeleportSettingsDocument source) {
         var copy = new RandomTeleportSettingsDocument();
-        copy.worlds = new LinkedHashMap<>(source.worlds);
+        source.worlds.forEach((world, settings) -> copy.worlds.put(
+                world,
+                RandomTeleportSettingsMapper.fromDomain(
+                        RandomTeleportSettingsMapper.toDomain(settings, world)
+                )
+        ));
         return copy;
     }
 

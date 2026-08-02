@@ -35,7 +35,7 @@ public final class MinecraftWorkstationOperations implements WorkstationPlatform
             );
         }
 
-        var nativePlayer = MinecraftPlayers.requireOnline(player);
+        var nativePlayer = MinecraftPlayers.requireOnline(server, player);
         if (!nativePlayer.isAlive() || nativePlayer.hasDisconnected()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,

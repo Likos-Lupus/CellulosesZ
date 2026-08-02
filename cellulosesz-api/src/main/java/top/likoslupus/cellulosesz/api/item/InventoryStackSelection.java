@@ -10,7 +10,7 @@ public record InventoryStackSelection(
     public InventoryStackSelection {
         requireNonNull(snapshot, "snapshot");
         if (count <= 0) throw new IllegalArgumentException("count must be positive");
-        snapshot = snapshot.copy();
+        requireNonNull(snapshot, "snapshot");
     }
 
 }

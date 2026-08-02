@@ -4,9 +4,9 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.playerstate.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -144,13 +144,13 @@ public final class PlayerAbilityCommandService {
     ) {
         return PlayerStateCommandResult.success(
                 "commands.playerstate.exp.result",
-                Map.of(
-                        "player", player.name(),
-                        "total", snapshot.totalPoints(),
-                        "level", snapshot.level(),
-                        "progress", Math.round(snapshot.progress() * 1000.0D) / 10.0D,
-                        "next", snapshot.pointsToNextLevel()
-                )
+                MessageArguments.builder()
+                        .put("player", player.name())
+                        .put("total", snapshot.totalPoints())
+                        .put("level", snapshot.level())
+                        .put("progress", Math.round(snapshot.progress() * 1000.0D) / 10.0D)
+                        .put("next", snapshot.pointsToNextLevel())
+                        .build()
         );
     }
 
@@ -179,18 +179,20 @@ public final class PlayerAbilityCommandService {
             if (!result.successful() || result.value().isEmpty()) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.gamemode-invalid",
-                        Map.of("mode", mode.name().toLowerCase(Locale.ROOT))
+                        MessageArguments.builder()
+                                .put("mode", mode.name().toLowerCase(Locale.ROOT))
+                                .build()
                 );
             }
 
             var change = result.value().orElseThrow();
             return PlayerStateCommandResult.success(
                     "commands.playerstate.gamemode-set",
-                    Map.of(
-                            "player", player.name(),
-                            "previous", change.previous().name().toLowerCase(Locale.ROOT),
-                            "mode", change.current().name().toLowerCase(Locale.ROOT)
-                    )
+                    MessageArguments.builder()
+                            .put("player", player.name())
+                            .put("previous", change.previous().name().toLowerCase(Locale.ROOT))
+                            .put("mode", change.current().name().toLowerCase(Locale.ROOT))
+                            .build()
             );
         });
     }
@@ -239,11 +241,11 @@ public final class PlayerAbilityCommandService {
             var change = result.value().orElseThrow();
             return PlayerStateCommandResult.success(
                     "commands.playerstate.speed-set",
-                    Map.of(
-                            "player", player.name(),
-                            "speed", change.current(),
-                            "type", type.name().toLowerCase(Locale.ROOT)
-                    )
+                    MessageArguments.builder()
+                            .put("player", player.name())
+                            .put("speed", change.current())
+                            .put("type", type.name().toLowerCase(Locale.ROOT))
+                            .build()
             );
         });
     }
@@ -254,11 +256,11 @@ public final class PlayerAbilityCommandService {
                         ?
                         PlayerStateCommandResult.success(
                                 "commands.playerstate.rest.success",
-                                Map.of("player", player.name())
+                                MessageArguments.builder().put("player", player.name()).build()
                         )
                         : PlayerStateCommandResult.failure(
                                 "commands.playerstate.rest.failed",
-                                Map.of("player", player.name())
+                                MessageArguments.builder().put("player", player.name()).build()
                         )
         );
     }

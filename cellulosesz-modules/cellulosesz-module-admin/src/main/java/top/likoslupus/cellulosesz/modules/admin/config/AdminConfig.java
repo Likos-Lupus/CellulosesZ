@@ -3,8 +3,11 @@ package top.likoslupus.cellulosesz.modules.admin.config;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
+import static top.likoslupus.cellulosesz.api.validation.ConditionChecks.requireFalse;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.*;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public final class AdminConfig {
 
@@ -74,7 +77,10 @@ public final class AdminConfig {
         requireInRange(sudoMaximumCommandLength, 1, 4096, "sudoMaximumCommandLeng;th");
         requireInRange(maximumReasonLength, 1, 4096, "maximumReasonLength");
         defaultReason = requireNonNull(defaultReason, "defaultReason").trim();
-        requireFalse(defaultReason.isBlank() || defaultReason.length() > maximumReasonLength, "defaultReason is invalid");
+        requireFalse(
+                defaultReason.isBlank() || defaultReason.length() > maximumReasonLength,
+                "defaultReason is invalid"
+        );
         muteCommands.stream()
                 .filter(command -> command.isBlank()
                         || command.chars().anyMatch(Character::isISOControl)

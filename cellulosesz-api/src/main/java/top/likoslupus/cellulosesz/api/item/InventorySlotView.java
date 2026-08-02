@@ -10,8 +10,8 @@ public record InventorySlotView(
 ) {
 
     public InventorySlotView {
-        snapshot = requireNonNull(snapshot, "snapshot").copy();
-        descriptor = requireNonNull(descriptor, "descriptor").copy();
+        requireNonNull(snapshot, "snapshot");
+        requireNonNull(descriptor, "descriptor");
         requireNonNull(kind, "kind");
     }
 

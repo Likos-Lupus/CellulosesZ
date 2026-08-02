@@ -10,8 +10,8 @@ import java.util.Comparator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

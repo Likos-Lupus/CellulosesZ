@@ -4,8 +4,11 @@ import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.math.BigDecimal;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 /**
  * Immutable, fully validated command-facing economy configuration.

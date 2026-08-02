@@ -13,6 +13,7 @@ import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
@@ -177,7 +178,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.command.help-empty",
-                            Map.of("query", rawQuery)
+                            MessageArguments.builder().put("query", rawQuery).build()
                     )
             );
 
@@ -200,7 +201,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.common.page-out-of-range",
-                            Map.of("pages", pages)
+                            MessageArguments.builder().put("pages", pages).build()
                     )
             );
 
@@ -213,7 +214,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.common.page-out-of-range",
-                            Map.of("pages", pages)
+                            MessageArguments.builder().put("pages", pages).build()
                     )
             );
 
@@ -229,14 +230,11 @@ public final class HelpCommand implements CommandContributor {
         policy.reply(
                 LocalizedMessage.of(
                         "commands.command.help-header",
-                        Map.of(
-                                "page",
-                                page,
-                                "pages",
-                                pages,
-                                "query",
-                                rawQuery
-                        )
+                        MessageArguments.builder()
+                                .put("page", page)
+                                .put("pages", pages)
+                                .put("query", rawQuery)
+                                .build()
                 )
         );
 
@@ -244,19 +242,17 @@ public final class HelpCommand implements CommandContributor {
                 .forEach(entry -> policy.reply(
                         LocalizedMessage.of(
                                 "commands.command.help-entry-detail",
-                                Map.of(
-                                        "command",
-                                        entry.name(),
-                                        "aliases",
-                                        String.join(
-                                                ", ",
-                                                entry.aliases()
-                                        ),
-                                        "description",
-                                        entry.description(),
-                                        "usage",
-                                        entry.usage()
-                                )
+                                MessageArguments.builder()
+                                        .put("command", entry.name())
+                                        .put(
+                                                "aliases", String.join(
+                                                        ", ",
+                                                        entry.aliases()
+                                                )
+                                        )
+                                        .put("description", entry.description())
+                                        .put("usage", entry.usage())
+                                        .build()
                         )
                 ));
 

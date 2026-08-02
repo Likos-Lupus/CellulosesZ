@@ -8,10 +8,10 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.BackLocationService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
-import top.likoslupus.cellulosesz.modules.teleport.data.BackLocationDocument;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.BackLocationDocument;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.LocationMapper;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -66,51 +66,29 @@ public final class DefaultBackLocationService
         candidate.locations.forEach((uuid, location) -> {
             //noinspection ResultOfMethodCallIgnored
             UUID.fromString(uuid);
-            validateLocation(location);
+            LocationMapper.toDomain(location, uuid);
         });
     }
 
     private static BackLocationDocument copy(BackLocationDocument source) {
         var result = new BackLocationDocument();
-        var values = new LinkedHashMap<String, CellLocation>();
-
         source.locations.forEach((key, value) ->
-                values.put(key, copy(value))
+                result.locations.put(key, LocationMapper.copy(value))
         );
-        result.locations = values;
-
         return result;
-    }
-
-    private static void validateLocation(CellLocation value) {
-        requireNonNull(value, "location");
-        if (value.world.isBlank()
-                || !Double.isFinite(value.x)
-                || !Double.isFinite(value.y)
-                || !Double.isFinite(value.z)
-        ) {
-            throw new IllegalArgumentException("invalid back location");
-        }
-    }
-
-    private static CellLocation copy(CellLocation value) {
-        return new CellLocation(
-                value.world,
-                value.x, value.y, value.z,
-                value.yaw, value.pitch
-        );
     }
 
     @Override
     public CompletableFuture<Void> remember(CellPlayer player) {
         return mutations.submit(() -> {
             var uuid = player.uuid();
-            var location = locations.currentLocation(player);
-            validateLocation(location);
-
+            var location = requireNonNull(
+                    locations.currentLocation(player),
+                    "location"
+            );
             return mutateAccepted(next -> next.locations.put(
                     uuid.toString(),
-                    copy(location)
+                    LocationMapper.fromDomain(location)
             ));
         });
     }
@@ -119,9 +97,9 @@ public final class DefaultBackLocationService
     public CompletableFuture<Void> remember(UUID uuid, CellLocation location) {
         return mutations.submit(() -> {
             requireNonNull(uuid, "uuid");
-            validateLocation(location);
-
-            var snapshot = copy(location);
+            var snapshot = LocationMapper.fromDomain(
+                    requireNonNull(location, "location")
+            );
             return mutateAccepted(next ->
                     next.locations.put(uuid.toString(), snapshot)
             );
@@ -141,7 +119,7 @@ public final class DefaultBackLocationService
     @Override
     public synchronized Optional<CellLocation> location(UUID uuid) {
         return Optional.ofNullable(document.locations.get(uuid.toString()))
-                .map(DefaultBackLocationService::copy);
+                .map(value -> LocationMapper.toDomain(value, uuid.toString()));
     }
 
     private CompletableFuture<Void> mutateAccepted(

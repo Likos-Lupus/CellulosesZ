@@ -1,17 +1,15 @@
 package top.likoslupus.cellulosesz.api.text;
 
-import java.util.Map;
-
 public interface MessageRenderer {
 
     default RichText render(String locale, String key) {
-        return render(locale, key, Map.of());
+        return render(locale, key, MessageArguments.empty());
     }
 
     RichText render(
             String locale,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     );
 
     default RichText render(String locale, LocalizedMessage message) {
@@ -19,13 +17,13 @@ public interface MessageRenderer {
     }
 
     default RichText renderInline(String locale, String template) {
-        return renderInline(locale, template, Map.of());
+        return renderInline(locale, template, MessageArguments.empty());
     }
 
     RichText renderInline(
             String locale,
             String template,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     );
 
 }

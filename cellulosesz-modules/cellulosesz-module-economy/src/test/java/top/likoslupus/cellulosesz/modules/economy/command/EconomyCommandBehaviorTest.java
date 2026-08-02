@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
@@ -9,6 +8,7 @@ import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.api.text.MessageArgument;
 import top.likoslupus.cellulosesz.modules.economy.application.ItemValueCommandService;
 
 import java.lang.reflect.Method;
@@ -20,6 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -29,8 +30,7 @@ final class EconomyCommandBehaviorTest {
     void sellRollsBackExactPreparedMutationWhenBalanceSaveFails() {
         var player = new CellPlayer(
                 UUID.randomUUID(),
-                "seller",
-                new Object()
+                "seller"
         );
         var snapshot = new InventoryItemSnapshot(
                 4,
@@ -61,7 +61,8 @@ final class EconomyCommandBehaviorTest {
         var economy = proxy(
                 EconomyService.class,
                 (method, args) -> switch (method.getName()) {
-                    case "deposit" -> CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+                    case "deposit" ->
+                            CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
                     case "format" -> ((BigDecimal) args[0]).toPlainString();
                     default -> defaultValue(method);
                 }
@@ -105,7 +106,8 @@ final class EconomyCommandBehaviorTest {
                                 case "toString" -> type.getSimpleName() + "TestProxy";
                                 case "hashCode" -> System.identityHashCode(instance);
                                 case "equals" -> instance == args[0];
-                                default -> throw new UnsupportedOperationException(method.getName());
+                                default ->
+                                        throw new UnsupportedOperationException(method.getName());
                             };
                 }
         );
@@ -113,18 +115,41 @@ final class EconomyCommandBehaviorTest {
 
     private static Object defaultValue(Method method) {
         var type = method.getReturnType();
-        if (type == void.class) return null;
-        if (type == boolean.class) return false;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == double.class) return 0.0D;
-        if (type == String.class) return "";
-        if (Optional.class.isAssignableFrom(type)) return Optional.empty();
-        if (List.class.isAssignableFrom(type)) return List.of();
-        if (CompletableFuture.class.isAssignableFrom(type)) return CompletableFuture.completedFuture(null);
-        if (BigDecimal.class.isAssignableFrom(type)) return BigDecimal.ZERO;
+        if (type == void.class) {
+            return null;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == double.class) {
+            return 0.0D;
+        }
+        if (type == String.class) {
+            return "";
+        }
+        if (Optional.class.isAssignableFrom(type)) {
+            return Optional.empty();
+        }
+        if (List.class.isAssignableFrom(type)) {
+            return List.of();
+        }
+        if (CompletableFuture.class.isAssignableFrom(type)) {
+            return CompletableFuture.completedFuture(null);
+        }
+        if (BigDecimal.class.isAssignableFrom(type)) {
+            return BigDecimal.ZERO;
+        }
         if (PlatformResult.class.isAssignableFrom(type)) {
-            return PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "unsupported test operation");
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INTERNAL_ERROR,
+                    "unsupported test operation"
+            );
         }
         throw new UnsupportedOperationException(method.toString());
     }
@@ -133,8 +158,7 @@ final class EconomyCommandBehaviorTest {
     void worthInventoryUsesEveryStackQuantity() {
         var player = new CellPlayer(
                 UUID.randomUUID(),
-                "owner",
-                new Object()
+                "owner"
         );
         var first = new InventorySlotView(
                 new InventoryItemSnapshot(1, "first"),
@@ -180,16 +204,33 @@ final class EconomyCommandBehaviorTest {
         ).join();
 
         assertTrue(result.success());
-        assertEquals("10.00", result.messages().getLast().placeholders().get("total"));
-        assertEquals(5L, result.messages().getFirst().placeholders().get("count"));
+        assertEquals(
+                "10.00",
+                (
+                        (MessageArgument.Text) result.messages()
+                                .getLast()
+                                .placeholders()
+                                .values()
+                                .get("total")
+                ).value()
+        );
+        assertEquals(
+                5L,
+                (
+                        (MessageArgument.Number) result.messages()
+                                .getFirst()
+                                .placeholders()
+                                .values()
+                                .get("count")
+                ).value().longValueExact()
+        );
     }
 
     @Test
     void componentBearingInventoryIsRejectedWithoutPreparingMutation() {
         var player = new CellPlayer(
                 UUID.randomUUID(),
-                "owner",
-                new Object()
+                "owner"
         );
         var slot = new InventorySlotView(
                 new InventoryItemSnapshot(1, "component-stack"),
@@ -201,7 +242,8 @@ final class EconomyCommandBehaviorTest {
                 InventoryPlatformService.class,
                 (method, _) -> switch (method.getName()) {
                     case "inventorySlots" -> PlatformResult.success(List.of(slot));
-                    case "prepareRemoval" -> throw new AssertionError("mutation must not be prepared");
+                    case "prepareRemoval" ->
+                            throw new AssertionError("mutation must not be prepared");
                     default -> defaultValue(method);
                 }
         );
@@ -234,15 +276,15 @@ final class EconomyCommandBehaviorTest {
         private boolean rolledBack;
 
         @Override
-        public boolean commit() {
+        public PlatformResult<Void> commit() {
             committed = true;
-            return true;
+            return PlatformResult.success();
         }
 
         @Override
-        public boolean rollback() {
+        public PlatformResult<Void> rollback() {
             rolledBack = true;
-            return true;
+            return PlatformResult.success();
         }
 
     }

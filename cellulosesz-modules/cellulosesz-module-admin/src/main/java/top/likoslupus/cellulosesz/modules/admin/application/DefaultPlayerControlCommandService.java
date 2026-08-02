@@ -11,9 +11,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.KillKind;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -55,7 +55,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "commands.admin.burn.invalid-seconds",
-                    Map.of("maximum", config.maximumBurnSeconds())
+                    MessageArguments.builder().put("maximum", config.maximumBurnSeconds()).build()
             ));
         }
 
@@ -68,10 +68,11 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                         seconds == 0
                                 ? "commands.admin.burn.extinguished"
                                 : "commands.admin.burn.success",
-                        Map.of(
-                                "player", target.orElseThrow().name(),
-                                "seconds", seconds
-                        )
+                        MessageArguments
+                                .builder()
+                                .put("player", target.orElseThrow().name())
+                                .put("seconds", seconds)
+                                .build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
@@ -98,7 +99,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.ext.success",
-                        Map.of("player", value.orElseThrow().name())
+                        MessageArguments.builder().put("player", value.orElseThrow().name()).build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
@@ -125,7 +126,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.ice.success",
-                        Map.of("player", value.orElseThrow().name())
+                        MessageArguments.builder().put("player", value.orElseThrow().name()).build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
@@ -144,7 +145,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.FAILURE,
                     "commands.admin.kill.exempt",
-                    Map.of("player", target.orElseThrow().name())
+                    MessageArguments.builder().put("player", target.orElseThrow().name()).build()
             ));
         }
 
@@ -157,12 +158,18 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.kill.success",
-                        Map.of("player", target.orElseThrow().name())
+                        MessageArguments
+                                .builder()
+                                .put("player", target.orElseThrow().name())
+                                .build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "commands.admin.kill.failed",
-                        Map.of("player", target.orElseThrow().name())
+                        MessageArguments
+                                .builder()
+                                .put("player", target.orElseThrow().name())
+                                .build()
                 )
         );
     }
@@ -209,7 +216,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.FAILURE,
                     "commands.admin.sudo.exempt",
-                    Map.of("player", target.orElseThrow().name())
+                    MessageArguments.builder().put("player", target.orElseThrow().name()).build()
             ));
         }
 
@@ -251,15 +258,19 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.sudo.success",
-                        Map.of(
-                                "player", target.orElseThrow().name(),
-                                "result", result.commandResult()
-                        )
+                        MessageArguments
+                                .builder()
+                                .put("player", target.orElseThrow().name())
+                                .put("result", result.commandResult())
+                                .build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "commands.admin.sudo.failed",
-                        Map.of("player", target.orElseThrow().name())
+                        MessageArguments
+                                .builder()
+                                .put("player", target.orElseThrow().name())
+                                .build()
                 )
         );
     }
@@ -272,7 +283,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         return AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "commands.common.unknown-player",
-                Map.of("player", player)
+                MessageArguments.builder().put("player", player).build()
         );
     }
 

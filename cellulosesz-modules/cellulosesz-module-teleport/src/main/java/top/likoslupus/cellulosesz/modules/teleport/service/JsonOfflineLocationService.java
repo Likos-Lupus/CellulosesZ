@@ -6,10 +6,10 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.OfflineLocationService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
-import top.likoslupus.cellulosesz.modules.teleport.data.OfflineLocationDocument;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.LocationMapper;
+import top.likoslupus.cellulosesz.modules.teleport.persistence.OfflineLocationDocument;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -58,10 +58,12 @@ public final class JsonOfflineLocationService
             OfflineLocationDocument next;
             synchronized (this) {
                 next = new OfflineLocationDocument();
-                next.locations = new LinkedHashMap<>(document.locations);
+                document.locations.forEach((key, value) ->
+                        next.locations.put(key, LocationMapper.copy(value))
+                );
             }
 
-            next.locations.put(uuid.toString(), location);
+            next.locations.put(uuid.toString(), LocationMapper.fromDomain(location));
             return storage
                     .save(path, next)
                     .thenRun(() -> {
@@ -74,9 +76,9 @@ public final class JsonOfflineLocationService
 
     @Override
     public synchronized Optional<CellLocation> location(UUID uuid) {
-        return Optional.ofNullable(document.locations.get(
-                requireNonNull(uuid, "uuid").toString()
-        ));
+        var key = requireNonNull(uuid, "uuid").toString();
+        return Optional.ofNullable(document.locations.get(key))
+                .map(value -> LocationMapper.toDomain(value, key));
     }
 
     @Override

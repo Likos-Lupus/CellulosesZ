@@ -7,12 +7,12 @@ import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
@@ -79,11 +79,8 @@ public final class JailedPlayersCommand implements CommandContributor {
                 _ -> CompletableFuture.completedFuture(
                         AdminResult.success(
                                 "service.admin.jailed-list",
-                                Map.of(
-                                        "page",
-                                        page,
-                                        "players",
-                                        service.jailedPlayers()
+                                MessageArguments.builder().put("page", page).put(
+                                        "players", service.jailedPlayers()
                                                 .stream()
                                                 .skip((long) (page - 1) * 10)
                                                 .limit(10)
@@ -96,7 +93,7 @@ public final class JailedPlayersCommand implements CommandContributor {
                                                 )
                                                 .toList()
                                                 .toString()
-                                )
+                                ).build()
                         )
                 )
         );

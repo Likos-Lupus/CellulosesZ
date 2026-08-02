@@ -5,7 +5,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 
 import java.util.*;
 import org.jspecify.annotations.Nullable;
@@ -44,7 +44,7 @@ public final class CommandRootLeaseManager {
     }
 
     private String normalize(String value) {
-        return Checks.requireNonBlank(value, "label").trim().toLowerCase(Locale.ROOT);
+        return TextChecks.requireNonBlank(value, "label").trim().toLowerCase(Locale.ROOT);
     }
 
     public synchronized BuildTransaction beginBuild() {
@@ -117,7 +117,7 @@ public final class CommandRootLeaseManager {
                 new Lease(
                         normalized,
                         normalize(canonical),
-                        Checks.requireNonBlank(owner, "owner"),
+                        TextChecks.requireNonBlank(owner, "owner"),
                         kind,
                         node,
                         generation
@@ -151,7 +151,7 @@ public final class CommandRootLeaseManager {
                 new Lease(
                         normalized,
                         normalize(canonical),
-                        Checks.requireNonBlank(owner, "owner"),
+                        TextChecks.requireNonBlank(owner, "owner"),
                         LabelKind.CONFIG_ALIAS,
                         node,
                         generation

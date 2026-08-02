@@ -7,12 +7,16 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
-import java.util.*;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
@@ -67,7 +71,7 @@ public final class PrivateMessageCommandService {
                     ) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "service.messaging.player-offline",
-                                Map.of("player", targetToken)
+                                MessageArguments.builder().put("player", targetToken).build()
                         ));
                     }
                     if (target.optionalUuid().orElseThrow().equals(sender.uuid())) {
@@ -90,7 +94,7 @@ public final class PrivateMessageCommandService {
         if (message.length() > config.maxMessageLength) {
             return Optional.of(MessageResult.failure(
                     "commands.messaging.message-too-long",
-                    Map.of("maximum", config.maxMessageLength)
+                    MessageArguments.builder().put("maximum", config.maxMessageLength).build()
             ));
         }
         return Optional.empty();
@@ -154,7 +158,7 @@ public final class PrivateMessageCommandService {
                     if (target.optionalUuid().isEmpty()) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "commands.common.player-not-found",
-                                Map.of("player", targetToken)
+                                MessageArguments.builder().put("player", targetToken).build()
                         ));
                     }
 
@@ -177,7 +181,9 @@ public final class PrivateMessageCommandService {
                                             current
                                                     ? "commands.messaging.ignore-disabled"
                                                     : "commands.messaging.ignore-enabled",
-                                            Map.of("player", target.name())
+                                            MessageArguments.builder()
+                                                    .put("player", target.name())
+                                                    .build()
                                     ))
                             );
                 });
@@ -207,7 +213,7 @@ public final class PrivateMessageCommandService {
                         enabled
                                 ? "commands.messaging.reply-toggle.recipient"
                                 : "commands.messaging.reply-toggle.sender",
-                        Map.of("player", targetName)
+                        MessageArguments.builder().put("player", targetName).build()
                 ));
     }
 
@@ -232,7 +238,7 @@ public final class PrivateMessageCommandService {
                         enabled
                                 ? "commands.messaging.social-spy-enabled"
                                 : "commands.messaging.social-spy-disabled",
-                        Map.of("player", targetName)
+                        MessageArguments.builder().put("player", targetName).build()
                 ));
     }
 

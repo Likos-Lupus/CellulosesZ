@@ -10,13 +10,13 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 
 import java.util.Comparator;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -56,7 +56,7 @@ final class WorldCommandSupport {
 
         var player = policy.currentPlayer();
         if (player.isPresent()) {
-            return Optional.of(locations.currentLocation(player.orElseThrow()).world);
+            return Optional.of(locations.currentLocation(player.orElseThrow()).world());
         }
 
         return worlds.loadedWorldIds().stream()
@@ -94,13 +94,15 @@ final class WorldCommandSupport {
                         result.successful()
                                 ? "commands.world.operation.success"
                                 : "commands.world.operation.failed",
-                        Map.of(
-                                "command", command,
-                                "status", result.status().name().toLowerCase(),
-                                "detail", result.detail().isBlank()
-                                        ? "-"
-                                        : result.detail()
-                        )
+                        MessageArguments.builder()
+                                .put("command", command)
+                                .put("status", result.status().name().toLowerCase())
+                                .put(
+                                        "detail", result.detail().isBlank()
+                                                ? "-"
+                                                : result.detail()
+                                )
+                                .build()
                 )
         );
 

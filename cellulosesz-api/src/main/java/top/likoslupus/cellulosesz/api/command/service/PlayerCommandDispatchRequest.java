@@ -4,8 +4,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.UUID;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNoControlCharacters;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNoControlCharacters;
 
 public record PlayerCommandDispatchRequest(
         CellPlayer target,
@@ -32,7 +33,13 @@ public record PlayerCommandDispatchRequest(
             CommandDispatchOrigin origin,
             String command
     ) {
-        return new PlayerCommandDispatchRequest(target, actorId, origin, command, UUID.randomUUID());
+        return new PlayerCommandDispatchRequest(
+                target,
+                actorId,
+                origin,
+                command,
+                UUID.randomUUID()
+        );
     }
 
 }

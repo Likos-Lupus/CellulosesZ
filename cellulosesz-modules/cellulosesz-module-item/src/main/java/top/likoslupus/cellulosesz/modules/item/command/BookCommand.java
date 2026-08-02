@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.api.item.BookRequest;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
@@ -60,8 +60,8 @@ public final class BookCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 BookAction.SET_TITLE,
-                                                Checks.requireMaxLength(
-                                                        Checks.requireNoControlCharacters(
+                                                TextChecks.requireMaxLength(
+                                                        TextChecks.requireNoControlCharacters(
                                                                 StringArgumentType.getString(
                                                                         command,
                                                                         "title"
@@ -88,8 +88,8 @@ public final class BookCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 BookAction.SET_AUTHOR,
-                                                Checks.requireMaxLength(
-                                                        Checks.requireNoControlCharacters(
+                                                TextChecks.requireMaxLength(
+                                                        TextChecks.requireNoControlCharacters(
                                                                 StringArgumentType.getString(
                                                                         command,
                                                                         "author"

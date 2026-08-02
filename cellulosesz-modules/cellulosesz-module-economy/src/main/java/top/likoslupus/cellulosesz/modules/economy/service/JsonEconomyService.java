@@ -23,8 +23,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
 
 public final class JsonEconomyService
         implements EconomyService, AsyncInitializable, AsyncCloseable {

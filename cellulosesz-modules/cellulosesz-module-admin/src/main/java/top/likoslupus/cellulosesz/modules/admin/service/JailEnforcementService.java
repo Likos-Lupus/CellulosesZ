@@ -59,13 +59,13 @@ public final class JailEnforcementService {
     }
 
     public boolean inside(CellLocation jail, CellLocation actual) {
-        if (!jail.world.equals(actual.world)) {
+        if (!jail.world().equals(actual.world())) {
             return false;
         }
 
-        var dx = jail.x - actual.x;
-        var dy = jail.y - actual.y;
-        var dz = jail.z - actual.z;
+        var dx = jail.x() - actual.x();
+        var dy = jail.y() - actual.y();
+        var dz = jail.z() - actual.z();
         var radius = config.jailConfinementRadius();
 
         return dx * dx + dy * dy + dz * dz <= radius * radius;

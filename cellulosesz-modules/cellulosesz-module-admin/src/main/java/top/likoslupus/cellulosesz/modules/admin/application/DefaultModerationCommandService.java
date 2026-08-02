@@ -5,11 +5,11 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -58,7 +58,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         .orElseGet(() -> AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.kick-failed",
-                                Map.of("player", player)
+                                MessageArguments.builder().put("player", player).build()
                         ))
                 );
     }
@@ -89,12 +89,12 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                 }
             }
 
-            var values = Map.<String, Object>of(
-                    "kicked", kicked,
-                    "exempt", exempt,
-                    "alreadyOffline", offline,
-                    "failed", failed
-            );
+            var values = MessageArguments.builder()
+                    .put("kicked", kicked)
+                    .put("exempt", exempt)
+                    .put("alreadyOffline", offline)
+                    .put("failed", failed)
+                    .build();
 
             return failed == 0
                     ? AdminResult.success("service.admin.kick-all-success", values)
@@ -125,7 +125,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                 return completed(AdminResult.failure(
                         AdminStatus.NOT_FOUND,
                         "commands.common.player-not-found",
-                        Map.of("player", player)
+                        MessageArguments.builder().put("player", player).build()
                 ));
             }
 
@@ -165,7 +165,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
-                                Map.of("player", player)
+                                MessageArguments.builder().put("player", player).build()
                         ))
                         : mutes.unmute(
                                 value.optionalUuid().orElseThrow(),

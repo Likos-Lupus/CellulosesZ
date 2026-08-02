@@ -2,12 +2,12 @@ package top.likoslupus.cellulosesz.api.teleport;
 
 import java.util.UUID;
 
-import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
-public sealed interface TeleportRequestSelector permits
-        TeleportRequestSelector.RequestId,
-        TeleportRequestSelector.PlayerName {
+import static java.util.Objects.requireNonNull;
+
+public sealed interface TeleportRequestSelector
+        permits TeleportRequestSelector.RequestId, TeleportRequestSelector.PlayerName {
 
     record RequestId(
             UUID id

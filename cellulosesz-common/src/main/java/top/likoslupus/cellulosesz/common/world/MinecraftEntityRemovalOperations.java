@@ -90,7 +90,7 @@ public final class MinecraftEntityRemovalOperations implements EntityRemovalPlat
             );
         }
 
-        var origin = MinecraftPlayers.requireOnline(originPlayer);
+        var origin = MinecraftPlayers.requireOnline(server, originPlayer);
         var maximumDistance = (double) radius * radius;
         var targets = StreamSupport.stream(
                         origin.level().getAllEntities().spliterator(),

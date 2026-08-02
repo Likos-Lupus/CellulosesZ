@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.common.command.source;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
@@ -9,6 +11,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.MinecraftCommandResponder;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.List;
 import java.util.Optional;
@@ -79,7 +82,17 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
 
     @Override
     public boolean hasPermission(String permission) {
-        return permissions.has(source, permission);
+        if (permission.isBlank()) {
+            return true;
+        }
+
+        if (source.getEntity() instanceof ServerPlayer player) {
+            return permissions.has(MinecraftPlayers.wrap(player), permission);
+        }
+
+        return source.permissions().hasPermission(
+                new Permission.HasCommandLevel(PermissionLevel.byId(4))
+        );
     }
 
     @Override
@@ -102,7 +115,9 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     }
 
     public int intPermissionOption(String key, int fallback) {
-        return permissions.intOption(source, key, fallback);
+        return source.getEntity() instanceof ServerPlayer player
+                ? permissions.intOption(MinecraftPlayers.wrap(player), key, fallback)
+                : fallback;
     }
 
     public void respondAll(boolean success, List<LocalizedMessage> messages) {

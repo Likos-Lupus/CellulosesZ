@@ -4,13 +4,17 @@ import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.data.MuteDocument;
 
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Function;
@@ -143,7 +147,7 @@ public final class JsonMuteService implements MuteService, AsyncInitializable, A
 
             return AdminResult.success(
                     "service.admin.mute-success",
-                    Map.of("player", name)
+                    MessageArguments.builder().put("player", name).build()
             );
         });
     }
@@ -161,12 +165,12 @@ public final class JsonMuteService implements MuteService, AsyncInitializable, A
                         ?
                         AdminResult.success(
                                 "service.admin.unmute-success",
-                                Map.of("player", name)
+                                MessageArguments.builder().put("player", name).build()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.not-muted",
-                                Map.of("player", name)
+                                MessageArguments.builder().put("player", name).build()
                         )
         );
     }

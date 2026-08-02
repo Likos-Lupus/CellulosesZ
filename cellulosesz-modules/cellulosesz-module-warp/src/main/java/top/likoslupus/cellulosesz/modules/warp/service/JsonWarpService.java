@@ -11,8 +11,12 @@ import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
+import top.likoslupus.cellulosesz.modules.warp.persistence.WarpDocument;
+import top.likoslupus.cellulosesz.modules.warp.persistence.WarpMapper;
 
+import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -65,21 +69,25 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
 
     @Override
     public synchronized Optional<Warp> cachedWarp(String name) {
-        return Optional.ofNullable(state.warps().get(normalize(name)))
-                .map(this::copyWarp);
+        return Optional.ofNullable(state.warps().get(normalize(name)));
     }
 
     @Override
     public CompletableFuture<Warp> setWarp(String name, CellLocation location, UUID creator) {
         var key = normalize(name);
-        var replacement = new Warp(key, copyLocation(requireNonNull(location, "location")));
-        replacement.createdBy = creator;
-        var candidate = validatedCopy(replacement);
+        var candidate = validated(new Warp(
+                key,
+                key,
+                BigDecimal.ZERO,
+                requireNonNull(location, "location"),
+                Optional.of(requireNonNull(creator, "creator")),
+                Instant.now()
+        ));
 
         return enqueue(
                 key,
                 () -> storage
-                        .save(path(key), candidate)
+                        .save(path(key), WarpMapper.fromDomain(candidate))
                         .thenApply(_ -> {
                             synchronized (this) {
                                 var next = new LinkedHashMap<>(state.warps());
@@ -91,7 +99,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
                                 mutationVersion++;
                             }
 
-                            return copyWarp(candidate);
+                            return candidate;
                         })
         );
     }
@@ -128,7 +136,16 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
             return Optional.empty();
         }
 
-        return Optional.of("cellulosesz.warp." + normalize(warp.name));
+        return Optional.of("cellulosesz.warp." + normalize(warp.name()));
+    }
+
+    private Warp validated(Warp warp) {
+        requireNonNull(warp, "warp");
+        var normalized = normalize(warp.name());
+        if (!normalized.equals(warp.name())) {
+            throw new IllegalArgumentException("Warp name is not normalized: " + warp.name());
+        }
+        return warp;
     }
 
     private <T> CompletableFuture<T> enqueue(
@@ -153,28 +170,8 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
 
     private synchronized List<Warp> sorted() {
         return state.warps().values().stream()
-                .sorted(Comparator.comparing(warp -> warp.name))
-                .map(this::copyWarp)
+                .sorted(Comparator.comparing(Warp::name))
                 .toList();
-    }
-
-    private Warp copyWarp(Warp source) {
-        var copy = new Warp();
-        copy.name = source.name;
-        copy.displayName = source.displayName;
-        copy.cost = source.cost;
-        copy.location = copyLocation(source.location);
-        copy.createdBy = source.createdBy;
-        copy.createdAt = source.createdAt;
-        return copy;
-    }
-
-    private CellLocation copyLocation(CellLocation source) {
-        return new CellLocation(
-                source.world,
-                source.x, source.y, source.z,
-                source.yaw, source.pitch
-        );
     }
 
     @Override
@@ -193,14 +190,15 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
             }
 
             return storage
-                    .loadDirectory(warpsDirectory, Warp.class)
+                    .loadDirectory(warpsDirectory, WarpDocument.class)
+                    .thenApply(documents -> documents.stream().map(WarpMapper::toDomain).toList())
                     .thenApply(loaded -> {
                         var next = new LinkedHashMap<String, Warp>();
                         loaded.stream()
-                                .map(this::validatedCopy)
-                                .sorted(Comparator.comparing(warp -> warp.name))
+                                .map(this::validated)
+                                .sorted(Comparator.comparing(Warp::name))
                                 .forEach(warp -> {
-                                    var key = normalize(warp.name);
+                                    var key = normalize(warp.name());
                                     if (next.putIfAbsent(key, warp) != null) {
                                         throw new IllegalStateException(
                                                 "Duplicate warp name: " + key);
@@ -214,16 +212,6 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
                         );
                     });
         });
-    }
-
-    private Warp validatedCopy(Warp source) {
-        requireNonNull(source, "warp");
-        var copy = copyWarp(source);
-        copy.name = normalize(copy.name);
-        copy.displayName = requireNonNull(copy.displayName, "warp.displayName");
-        copy.cost = requireNonNull(copy.cost, "warp.cost");
-        copy.location = copyLocation(requireNonNull(copy.location, "warp.location"));
-        return copy;
     }
 
     @Override

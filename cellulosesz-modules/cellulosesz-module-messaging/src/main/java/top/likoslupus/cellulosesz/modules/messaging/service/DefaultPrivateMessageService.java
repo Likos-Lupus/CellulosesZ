@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -77,24 +78,18 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                     }
 
                     return updateReplyTargets(sender.uuid(), target.uuid())
-                            .thenCompose(updated ->
-                                    updated
-                                            ?
-                                            deliver(
-                                                    sender.uuid(),
-                                                    target.uuid(),
-                                                    message
-                                            )
-                                            : CompletableFuture.completedFuture(MessageResult.failure(
-                                                    "service.messaging.persistence-failed"
-                                            )));
+                            .thenCompose(_ -> deliver(
+                                    sender.uuid(),
+                                    target.uuid(),
+                                    message
+                            ));
                 })
                 .exceptionally(_ -> MessageResult.failed(
                         "service.messaging.persistence-failed"
                 ));
     }
 
-    private CompletableFuture<Boolean> updateReplyTargets(UUID sender, UUID target) {
+    private CompletableFuture<Void> updateReplyTargets(UUID sender, UUID target) {
         return users
                 .update(
                         sender,
@@ -131,7 +126,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                 )
                 .thenCompose(update -> {
                     if (update.failure() == null) {
-                        return CompletableFuture.completedFuture(true);
+                        return CompletableFuture.completedFuture(null);
                     }
 
                     return users
@@ -151,7 +146,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                 if (rollbackFailure != null) {
                                     update.failure().addSuppressed(rollbackFailure);
                                 }
-                                return false;
+                                throw new java.util.concurrent.CompletionException(update.failure());
                             });
                 });
     }
@@ -178,10 +173,10 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                             renderer.render(
                                     audiences.locale(targetPlayer),
                                     "messaging.private-incoming",
-                                    Map.of(
-                                            "sender", displayNames.displayName(senderPlayer),
-                                            "message", message
-                                    )
+                                    MessageArguments.builder()
+                                            .put("sender", displayNames.displayName(senderPlayer))
+                                            .put("message", message)
+                                            .build()
                             )
                     );
                     audiences.send(
@@ -189,10 +184,10 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                             renderer.render(
                                     audiences.locale(senderPlayer),
                                     "messaging.private-outgoing",
-                                    Map.of(
-                                            "target", displayNames.displayName(targetPlayer),
-                                            "message", message
-                                    )
+                                    MessageArguments.builder()
+                                            .put("target", displayNames.displayName(targetPlayer))
+                                            .put("message", message)
+                                            .build()
                             )
                     );
 
@@ -306,7 +301,6 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                 .thenCompose(candidates -> {
                     var checks = candidates.stream()
                             .map(player -> socialSpy(player.uuid())
-                                    .exceptionally(_ -> false)
                                     .thenApply(enabled -> new SpyCandidate(player, enabled))
                             )
                             .toList();
@@ -325,11 +319,11 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                                         renderer.render(
                                                                 audiences.locale(candidate.player()),
                                                                 "messaging.social-spy",
-                                                                Map.of(
-                                                                        "sender", sender,
-                                                                        "target", target,
-                                                                        "message", message
-                                                                )
+                                                                MessageArguments.builder()
+                                                                        .put("sender", sender)
+                                                                        .put("target", target)
+                                                                        .put("message", message)
+                                                                        .build()
                                                         )
                                                 ));
                                         return Boolean.TRUE;

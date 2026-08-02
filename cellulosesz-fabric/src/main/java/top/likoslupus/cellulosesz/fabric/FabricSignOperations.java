@@ -15,6 +15,7 @@ import top.likoslupus.cellulosesz.api.sign.SignSnapshot;
 import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
@@ -45,7 +46,7 @@ public final class FabricSignOperations implements SignPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -80,8 +81,9 @@ public final class FabricSignOperations implements SignPlatformService {
         return onServerThread(() -> {
             var level = MinecraftWorlds.findLoaded(
                     server.requireRunning(),
-                    request.location().world
+                    request.location().world()
             );
+
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -131,7 +133,7 @@ public final class FabricSignOperations implements SignPlatformService {
             level.orElseThrow().sendBlockUpdated(position, state, state, 3);
 
             return PlatformResult.success(snapshot(
-                    request.location().world,
+                    request.location().world(),
                     position,
                     sign,
                     request.front()
@@ -145,8 +147,9 @@ public final class FabricSignOperations implements SignPlatformService {
         return onServerThread(() -> {
             var level = MinecraftWorlds.findLoaded(
                     server.requireRunning(),
-                    request.location().world
+                    request.location().world()
             );
+
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -176,7 +179,7 @@ public final class FabricSignOperations implements SignPlatformService {
                     level.orElseThrow().destroyBlock(
                             position,
                             true,
-                            MinecraftPlayers.requireOnline(request.actor())
+                            MinecraftPlayers.requireOnline(server, request.actor())
                     )
             );
 
@@ -190,14 +193,14 @@ public final class FabricSignOperations implements SignPlatformService {
     }
 
     private static BlockPos blockPosition(CellLocation location) {
-        if (!Double.isFinite(location.x)
-                || !Double.isFinite(location.y)
-                || !Double.isFinite(location.z)
+        if (!Double.isFinite(location.x())
+                || !Double.isFinite(location.y())
+                || !Double.isFinite(location.z())
         ) {
             throw new IllegalArgumentException("Sign location must contain finite coordinates");
         }
 
-        return BlockPos.containing(location.x, location.y, location.z);
+        return BlockPos.containing(location.x(), location.y(), location.z());
     }
 
     private static boolean sameLines(
@@ -248,6 +251,11 @@ public final class FabricSignOperations implements SignPlatformService {
 
         try {
             return operation.get();
+        } catch (MinecraftPlayerUnavailableException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,

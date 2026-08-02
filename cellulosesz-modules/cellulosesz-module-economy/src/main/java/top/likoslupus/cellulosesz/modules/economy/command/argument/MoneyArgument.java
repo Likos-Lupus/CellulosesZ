@@ -11,12 +11,14 @@ import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public final class MoneyArgument implements ArgumentType<BigDecimal> {
 
-    private static final DynamicCommandExceptionType INVALID = new DynamicCommandExceptionType(value -> new LiteralMessage("Invalid money amount: " + value));
+    private static final DynamicCommandExceptionType INVALID = new DynamicCommandExceptionType(value -> new LiteralMessage(
+            "Invalid money amount: " + value));
     private final int maximumScale;
     private final BigDecimal maximum;
     private final boolean positive;
@@ -57,9 +59,14 @@ public final class MoneyArgument implements ArgumentType<BigDecimal> {
             }
 
             var value = new BigDecimal(token);
-            if ((positive ? value.signum() <= 0 : value.signum() < 0)
-                    || value.scale() > maximumScale
-                    || value.compareTo(maximum) > 0
+            if (
+                    (
+                            positive
+                                    ? value.signum() <= 0
+                                    : value.signum() < 0
+                    )
+                            || value.scale() > maximumScale
+                            || value.compareTo(maximum) > 0
             ) {
                 throw new NumberFormatException();
             }

@@ -14,6 +14,7 @@ import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
@@ -237,7 +238,9 @@ public final class AdminModule implements CellulosesZModule {
                                 renderer.render(
                                         audience.locale(player),
                                         "service.admin.temp-ban-kick",
-                                        Map.of("reason", active.orElseThrow().reason())
+                                        MessageArguments.builder()
+                                                .put("reason", active.orElseThrow().reason())
+                                                .build()
                                 )
                         );
                         return;
@@ -289,7 +292,7 @@ public final class AdminModule implements CellulosesZModule {
                             renderer.render(
                                     audience.locale(event.player()),
                                     "service.admin.muted-chat",
-                                    Map.of()
+                                    MessageArguments.empty()
                             )
                     );
                 }
@@ -320,7 +323,7 @@ public final class AdminModule implements CellulosesZModule {
                             renderer.render(
                                     audience.locale(event.player()),
                                     "commands.admin.mute-command-middleware.error.muted-cannot-use-command",
-                                    Map.of()
+                                    MessageArguments.empty()
                             )
                     );
                 }

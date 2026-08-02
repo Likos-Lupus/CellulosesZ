@@ -20,6 +20,7 @@ import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.sign.SignService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
@@ -215,7 +216,10 @@ public final class FabricGameplayHooks {
                                         renderer.render(
                                                 locales.locale(wrapped),
                                                 "service.sign.execution-failed",
-                                                Map.of("reason", safeReason(failure))
+                                                MessageArguments
+                                                        .builder()
+                                                        .put("reason", safeReason(failure))
+                                                        .build()
                                         )
                                 );
                                 return;

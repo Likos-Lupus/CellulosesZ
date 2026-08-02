@@ -13,6 +13,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.sign.*;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
@@ -192,7 +193,7 @@ public final class EditSignCommand implements CommandContributor {
         clipboards.put(player.uuid(), new Clipboard(target.lines()));
         policy.reply(LocalizedMessage.of(
                 "commands.sign.editsign.copied",
-                Map.of("side", side(target.front()))
+                MessageArguments.builder().put("side", side(target.front())).build()
         ));
 
         return PlatformResult.success(target);

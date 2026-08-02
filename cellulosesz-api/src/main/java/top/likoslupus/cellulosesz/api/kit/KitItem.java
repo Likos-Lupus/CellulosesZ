@@ -1,20 +1,19 @@
 package top.likoslupus.cellulosesz.api.kit;
 
-import top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
-/**
- * Lossless inventory stack and its original player-inventory slot.
- */
-public final class KitItem extends InventoryItemSnapshot {
+import static java.util.Objects.requireNonNull;
 
-    public KitItem() {
-    }
+/** Lossless inventory stack and its original player-inventory slot. */
+public record KitItem(
+        int slot,
+        String stack
+) {
 
-    public KitItem(
-            int slot,
-            String stack
-    ) {
-        super(slot, stack);
+    public KitItem {
+        requireNonNegative(slot, "slot");
+        stack = requireNonBlank(requireNonNull(stack, "stack").trim(), "stack");
     }
 
 }

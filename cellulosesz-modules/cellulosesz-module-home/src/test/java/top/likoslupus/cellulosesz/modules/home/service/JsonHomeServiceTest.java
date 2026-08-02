@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.modules.home.service;
 
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.home.HomeRenameStatus;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.modules.home.data.HomeDocument;
+import top.likoslupus.cellulosesz.modules.home.persistence.HomeDocument;
+import top.likoslupus.cellulosesz.modules.home.persistence.HomeMapper;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -15,6 +15,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -52,15 +53,16 @@ final class JsonHomeServiceTest {
     }
 
     private static HomeDocument documentWith(Object... entries) {
-        var document = new HomeDocument(PLAYER);
+        var document = HomeMapper.empty(PLAYER);
         IntStream.iterate(
                         0,
                         index -> index < entries.length,
                         index -> index + 2
                 )
                 .forEach(index -> document.homes.put(
-                        (String) entries[index],
-                        (CellLocation) entries[index + 1])
+                                (String) entries[index],
+                                HomeMapper.fromDomain((CellLocation) entries[index + 1])
+                        )
                 );
         return document;
     }

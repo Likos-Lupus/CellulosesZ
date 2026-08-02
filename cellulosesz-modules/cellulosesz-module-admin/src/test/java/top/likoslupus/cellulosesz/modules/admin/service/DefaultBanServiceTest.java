@@ -1,13 +1,12 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.admin.AdminActor;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
 import top.likoslupus.cellulosesz.api.admin.Expiration;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.admin.*;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
@@ -20,6 +19,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -27,7 +28,10 @@ final class DefaultBanServiceTest {
 
     private static final UUID TARGET_ID = UUID.fromString("00000000-0000-0000-0000-000000000123");
     private static final AdminActor CONSOLE = AdminActor.console("Console");
-    private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-07-30T00:00:00Z"), ZoneOffset.UTC);
+    private static final Clock CLOCK = Clock.fixed(
+            Instant.parse("2026-07-30T00:00:00Z"),
+            ZoneOffset.UTC
+    );
 
     @Test
     void recordsTypedActorReasonAndDisconnectsAfterFirstUserBan() {
@@ -69,14 +73,24 @@ final class DefaultBanServiceTest {
                 new Class<?>[]{type},
                 (_, method, _) -> {
                     var returnType = method.getReturnType();
-                    if (returnType == boolean.class) return false;
-                    if (returnType == int.class) return 0;
-                    if (returnType == long.class) return 0L;
-                    if (returnType == Optional.class) return Optional.empty();
-                    if (returnType == List.class) return List.of();
+                    if (returnType == boolean.class) {
+                        return false;
+                    }
+                    if (returnType == int.class) {
+                        return 0;
+                    }
+                    if (returnType == long.class) {
+                        return 0L;
+                    }
+                    if (returnType == Optional.class) {
+                        return Optional.empty();
+                    }
+                    if (returnType == List.class) {
+                        return List.of();
+                    }
                     return null;
                 }
-                );
+        );
     }
 
     @Test
@@ -140,7 +154,11 @@ final class DefaultBanServiceTest {
         var platform = new RecordingBanPlatform();
         platform.banIpResult = BanPlatformResult.failure(BanPlatformStatus.PERSISTENCE_FAILURE);
 
-        var result = service(platform).banIp(InetAddress.getByName("192.0.2.10"), CONSOLE, "reason");
+        var result = service(platform).banIp(
+                InetAddress.getByName("192.0.2.10"),
+                CONSOLE,
+                "reason"
+        );
 
         assertEquals(AdminStatus.PERSISTENCE_FAILURE, result.status());
         assertNull(platform.disconnectRequest);
@@ -183,13 +201,13 @@ final class DefaultBanServiceTest {
         }
 
         @Override
-        public boolean isUserBanned(PlayerProfileId target) {
-            return false;
+        public PlatformResult<Boolean> isUserBanned(PlayerProfileId target) {
+            return PlatformResult.success(false);
         }
 
         @Override
-        public boolean isIpBanned(InetAddress address) {
-            return false;
+        public PlatformResult<Boolean> isIpBanned(InetAddress address) {
+            return PlatformResult.success(false);
         }
 
         @Override

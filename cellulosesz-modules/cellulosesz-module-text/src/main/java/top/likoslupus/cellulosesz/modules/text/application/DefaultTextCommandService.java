@@ -1,11 +1,13 @@
 package top.likoslupus.cellulosesz.modules.text.application;
 
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
-import java.util.*;
-import java.util.stream.IntStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
 
@@ -21,7 +23,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     public PageResult info(int page) {
         return page(
                 GeneratedMessageKeys.COMMANDS_TEXT_INFO_TITLE,
-                Map.of(),
+                MessageArguments.empty(),
                 texts.info(),
                 page
         );
@@ -31,7 +33,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     public PageResult motd(int page) {
         return page(
                 GeneratedMessageKeys.COMMANDS_TEXT_MOTD_TITLE,
-                Map.of(),
+                MessageArguments.empty(),
                 texts.motd(),
                 page
         );
@@ -41,7 +43,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     public PageResult rules(int page) {
         return page(
                 GeneratedMessageKeys.COMMANDS_TEXT_RULES_TITLE,
-                Map.of(),
+                MessageArguments.empty(),
                 texts.rules(),
                 page
         );
@@ -53,13 +55,13 @@ public final class DefaultTextCommandService implements TextCommandService {
         if (lines.isEmpty()) {
             return failure(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMANDS_TEXT_CUSTOM_MISSING,
-                    Map.of("name", name)
+                    MessageArguments.builder().put("name", name).build()
             ));
         }
 
         return page(
                 GeneratedMessageKeys.COMMANDS_TEXT_CUSTOM_TITLE,
-                Map.of("name", name),
+                MessageArguments.of("name", name),
                 lines,
                 page
         );
@@ -72,7 +74,7 @@ public final class DefaultTextCommandService implements TextCommandService {
 
     private PageResult page(
             String titleKey,
-            Map<String, ?> titlePlaceholders,
+            MessageArguments titlePlaceholders,
             List<String> lines,
             int requestedPage
     ) {
@@ -89,7 +91,7 @@ public final class DefaultTextCommandService implements TextCommandService {
         if (requestedPage > pages) {
             return failure(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                    Map.of("pages", pages)
+                    MessageArguments.builder().put("pages", pages).build()
             ));
         }
 
@@ -99,24 +101,25 @@ public final class DefaultTextCommandService implements TextCommandService {
         } catch (ArithmeticException _) {
             return failure(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                    Map.of("pages", pages)
+                    MessageArguments.builder().put("pages", pages).build()
             ));
         }
 
         var messages = new ArrayList<LocalizedMessage>();
-        var titleValues = new LinkedHashMap<String, Object>(titlePlaceholders);
-
-        titleValues.put("page", requestedPage);
-        titleValues.put("pages", pages);
+        var titleValues = MessageArguments.builder()
+                .putAll(titlePlaceholders)
+                .put("page", requestedPage)
+                .put("pages", pages)
+                .build();
         messages.add(LocalizedMessage.of(titleKey, titleValues));
 
         var end = (int) Math.min((long) start + pageSize, lines.size());
-        IntStream.range(start, end)
-                .mapToObj(index -> LocalizedMessage.of(
-                        GeneratedMessageKeys.COMMANDS_TEXT_LINE,
-                        Map.of("line", lines.get(index))
-                ))
-                .forEach(messages::add);
+        for (var index = start; index < end; index++) {
+            messages.add(LocalizedMessage.of(
+                    GeneratedMessageKeys.COMMANDS_TEXT_LINE,
+                    MessageArguments.of("line", lines.get(index))
+            ));
+        }
 
         return new PageResult(true, messages);
     }

@@ -10,9 +10,9 @@ import top.likoslupus.cellulosesz.api.command.service.CommandCostReservation;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostReserveResult;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -50,7 +50,9 @@ public final class CommandCostMiddleware implements CommandMiddleware {
                     if (result instanceof CommandCostReserveResult.Rejected rejected) {
                         context.error(LocalizedMessage.of(
                                 GeneratedMessageKeys.COMMON_COMMAND_COST_FAILED,
-                                Map.of("cost", rejected.amount().toPlainString())
+                                MessageArguments.builder()
+                                        .put("cost", rejected.amount().toPlainString())
+                                        .build()
                         ));
                         return CompletableFuture.completedFuture(CommandOutcome.rejected());
                     }

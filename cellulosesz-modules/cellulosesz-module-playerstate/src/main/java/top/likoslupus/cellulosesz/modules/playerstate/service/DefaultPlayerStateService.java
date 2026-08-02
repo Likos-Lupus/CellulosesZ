@@ -1,20 +1,20 @@
 package top.likoslupus.cellulosesz.modules.playerstate.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -55,25 +55,39 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     @Override
     public AdminResult heal(CellPlayer player) {
         var result = platform.heal(player);
-        return result.successful() ? AdminResult.success(
-                "service.playerstate.heal-success",
-                Map.of("player", displayNames.plainDisplayName(player))
-        ) : AdminResult.failure(
-                "service.playerstate.heal-failed",
-                Map.of("player", displayNames.plainDisplayName(player))
-        );
+        return result.successful()
+                ?
+                AdminResult.success(
+                        "service.playerstate.heal-success",
+                        MessageArguments.builder()
+                                .put("player", displayNames.plainDisplayName(player))
+                                .build()
+                )
+                : AdminResult.failure(
+                        "service.playerstate.heal-failed",
+                        MessageArguments.builder()
+                                .put("player", displayNames.plainDisplayName(player))
+                                .build()
+                );
     }
 
     @Override
     public AdminResult feed(CellPlayer player) {
         var result = platform.feed(player);
-        return result.successful() ? AdminResult.success(
-                "service.playerstate.feed-success",
-                Map.of("player", displayNames.plainDisplayName(player))
-        ) : AdminResult.failure(
-                "service.playerstate.feed-failed",
-                Map.of("player", displayNames.plainDisplayName(player))
-        );
+        return result.successful()
+                ?
+                AdminResult.success(
+                        "service.playerstate.feed-success",
+                        MessageArguments.builder()
+                                .put("player", displayNames.plainDisplayName(player))
+                                .build()
+                )
+                : AdminResult.failure(
+                        "service.playerstate.feed-failed",
+                        MessageArguments.builder()
+                                .put("player", displayNames.plainDisplayName(player))
+                                .build()
+                );
     }
 
     @Override
@@ -96,7 +110,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             afk
                                     ? "service.playerstate.afk-enabled"
                                     : "service.playerstate.afk-disabled",
-                            Map.of("player", name)
+                            MessageArguments.builder().put("player", name).build()
                     );
                 })
                 .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
@@ -119,9 +133,11 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     @Override
     public long lastActivity(UUID uuid) {
         return lastActivityMillis
-                .getOrDefault(uuid, users.cached(uuid)
-                        .map(user -> user.timestamps().lastActivityAt())
-                        .orElse(0L));
+                .getOrDefault(
+                        uuid, users.cached(uuid)
+                                .map(user -> user.timestamps().lastActivityAt())
+                                .orElse(0L)
+                );
     }
 
     @Override
@@ -153,7 +169,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     @Override
-    public CompletableFuture<AdminResult> setPersonalTime(CellPlayer player, PersonalTimeSetting setting) {
+    public CompletableFuture<AdminResult> setPersonalTime(
+            CellPlayer player,
+            PersonalTimeSetting setting
+    ) {
         requireNonNull(setting, "setting");
 
         return loadPersonalWorldState(player.uuid())
@@ -170,16 +189,25 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                     .updateVoid(
                                             player.uuid(),
                                             user -> user.withState(
-                                                    user.state().withPersonalTime(persistedTime(setting))
+                                                    user.state()
+                                                            .withPersonalTime(persistedTime(setting))
                                             )
                                     )
                                     .thenApply(_ -> timeSuccess(player, setting))
                                     .exceptionallyCompose(_ -> serverThread
-                                            .submit(() -> platform.setPersonalTime(player, previousState.time()))
+                                            .submit(() -> platform.setPersonalTime(
+                                                    player,
+                                                    previousState.time()
+                                            ))
                                             .thenApply(rollback ->
                                                     rollback.successful()
-                                                            ? AdminResult.failure("service.user.persistence-failed")
-                                                            : AdminResult.failure("commands.playerstate.ptime-rollback-failed")
+                                                            ?
+                                                            AdminResult.failure(
+                                                                    "service.user.persistence-failed"
+                                                            )
+                                                            : AdminResult.failure(
+                                                                    "commands.playerstate.ptime-rollback-failed"
+                                                            )
                                             )
                                     );
                         })
@@ -208,16 +236,27 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                     .updateVoid(
                                             player.uuid(),
                                             user -> user.withState(
-                                                    user.state().withPersonalWeather(persistedWeather(setting))
+                                                    user.state()
+                                                            .withPersonalWeather(persistedWeather(
+                                                                    setting
+                                                            ))
                                             )
                                     )
                                     .thenApply(_ -> weatherSuccess(player, setting))
                                     .exceptionallyCompose(_ -> serverThread
-                                            .submit(() -> platform.setPersonalWeather(player, previousState.weather()))
+                                            .submit(() -> platform.setPersonalWeather(
+                                                    player,
+                                                    previousState.weather()
+                                            ))
                                             .thenApply(rollback ->
                                                     rollback.successful()
-                                                            ? AdminResult.failure("service.user.persistence-failed")
-                                                            : AdminResult.failure("commands.playerstate.pweather-rollback-failed")
+                                                            ?
+                                                            AdminResult.failure(
+                                                                    "service.user.persistence-failed"
+                                                            )
+                                                            : AdminResult.failure(
+                                                                    "commands.playerstate.pweather-rollback-failed"
+                                                            )
                                             )
                                     );
                         })
@@ -232,16 +271,19 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     private static AdminResult weatherSuccess(CellPlayer player, PersonalWeatherSetting setting) {
-        return setting == PersonalWeatherSetting.RESET ? AdminResult.success(
-                "commands.playerstate.pweather-reset",
-                Map.of("player", player.name())
-        ) : AdminResult.success(
-                "commands.playerstate.pweather-set",
-                Map.of(
-                        "player", player.name(),
-                        "weather", setting.name().toLowerCase(Locale.ROOT)
+        return setting == PersonalWeatherSetting.RESET
+                ?
+                AdminResult.success(
+                        "commands.playerstate.pweather-reset",
+                        MessageArguments.builder().put("player", player.name()).build()
                 )
-        );
+                : AdminResult.success(
+                        "commands.playerstate.pweather-set",
+                        MessageArguments.builder()
+                                .put("player", player.name())
+                                .put("weather", setting.name().toLowerCase(Locale.ROOT))
+                                .build()
+                );
     }
 
     @Override
@@ -276,7 +318,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             online.ifPresent(displayNames::refresh);
                             return stored.map(value -> AdminResult.success(
                                             "player.nick-set",
-                                            Map.of("nickname", value)
+                                            MessageArguments.builder().put("nickname", value).build()
                                     ))
                                     .orElseGet(() -> AdminResult.success("player.nick-cleared"));
                         })
@@ -303,16 +345,16 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         if (setting instanceof PersonalTimeSetting.Reset) {
             return AdminResult.success(
                     "commands.playerstate.ptime-reset",
-                    Map.of("player", player.name())
+                    MessageArguments.builder().put("player", player.name()).build()
             );
         }
 
         return AdminResult.success(
                 "commands.playerstate.ptime-set",
-                Map.of(
-                        "player", player.name(),
-                        "time", requireNonNull(persistedTime(setting), "persisted time")
-                )
+                MessageArguments.builder()
+                        .put("player", player.name())
+                        .put("time", requireNonNull(persistedTime(setting), "persisted time"))
+                        .build()
         );
     }
 
@@ -385,27 +427,47 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                                                 : user.state().withGod(enabled)
                                                 )
                                         ).thenApply(_ -> AdminResult.success(
-                                                flying ?
-                                                        (enabled
-                                                                ? "service.playerstate.fly-enabled"
-                                                                : "service.playerstate.fly-disabled"
-                                                        ) :
-                                                        (enabled
-                                                                ? "service.playerstate.god-enabled"
-                                                                : "service.playerstate.god-disabled"
-                                                        ),
-                                                Map.of("player", displayNames.plainDisplayName(player))
+                                                flying
+                                                        ?
+                                                        (
+                                                                enabled
+                                                                        ? "service.playerstate.fly-enabled"
+                                                                        : "service.playerstate.fly-disabled"
+                                                        )
+                                                        :
+                                                                (
+                                                                        enabled
+                                                                                ? "service.playerstate.god-enabled"
+                                                                                : "service.playerstate.god-disabled"
+                                                                ),
+                                                MessageArguments.builder()
+                                                        .put(
+                                                                "player",
+                                                                displayNames.plainDisplayName(player)
+                                                        )
+                                                        .build()
                                         ))
                                         .exceptionallyCompose(_ -> serverThread
                                                 .submit(() ->
                                                         flying
-                                                                ? platform.setFlying(player, previous)
-                                                                : platform.setInvulnerable(player, previous)
+                                                                ? platform.setFlying(
+                                                                player,
+                                                                previous
+                                                        )
+                                                                : platform.setInvulnerable(
+                                                                        player,
+                                                                        previous
+                                                                )
                                                 )
                                                 .thenApply(rollback ->
                                                         rollback.successful()
-                                                                ? AdminResult.failure("service.user.persistence-failed")
-                                                                : AdminResult.failure("service.user.rollback-failed")
+                                                                ?
+                                                                AdminResult.failure(
+                                                                        "service.user.persistence-failed"
+                                                                )
+                                                                : AdminResult.failure(
+                                                                        "service.user.rollback-failed"
+                                                                )
                                                 )
                                         );
                             });

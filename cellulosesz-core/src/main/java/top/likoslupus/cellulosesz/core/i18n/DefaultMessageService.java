@@ -7,7 +7,8 @@ import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArgument;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.core.config.JacksonCodecs;
@@ -101,6 +102,19 @@ public final class DefaultMessageService implements MessageRenderer {
         return Optional.ofNullable(messages(state, state.fallback()).get(key));
     }
 
+    private static String plainArgument(MessageArgument argument) {
+        return switch (argument) {
+            case MessageArgument.Text(var value3) -> value3;
+            case MessageArgument.Number(var value2) -> value2.toPlainString();
+            case MessageArgument.BooleanValue(var value1) -> Boolean.toString(value1);
+            case MessageArgument.UuidValue(var value) -> value.toString();
+            default -> throw new IllegalArgumentException(
+                    "Message argument requires component rendering: "
+                            + argument.getClass().getName()
+            );
+        };
+    }
+
     public synchronized void locales(String locale, String fallback) {
         var current = state;
         state = new RuntimeState(
@@ -151,17 +165,17 @@ public final class DefaultMessageService implements MessageRenderer {
     }
 
     public String message(String key) {
-        return message(key, Map.of());
+        return message(key, MessageArguments.empty());
     }
 
-    public String message(String key, Map<String, ?> placeholders) {
+    public String message(String key, MessageArguments placeholders) {
         return rich(state.locale(), key, placeholders).plainText();
     }
 
     public RichText rich(
             String locale,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return render(locale, key, placeholders);
     }
@@ -310,7 +324,7 @@ public final class DefaultMessageService implements MessageRenderer {
     public RichText render(
             String requestedLocale,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return render(state, requestedLocale, key, placeholders);
     }
@@ -319,7 +333,7 @@ public final class DefaultMessageService implements MessageRenderer {
     public RichText renderInline(
             String requestedLocale,
             String template,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         return renderInline(state, requestedLocale, template, placeholders);
     }
@@ -328,7 +342,7 @@ public final class DefaultMessageService implements MessageRenderer {
             RuntimeState snapshot,
             String requestedLocale,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         var normalizedLocale = normalizeLocaleValue(requestedLocale, snapshot.locale());
         var template = lookup(snapshot, normalizedLocale, key);
@@ -348,7 +362,7 @@ public final class DefaultMessageService implements MessageRenderer {
             RuntimeState snapshot,
             String requestedLocale,
             String template,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         var input = snapshot.legacyColors()
                 ? LegacyMiniMessagePreprocessor.convert(template)
@@ -357,36 +371,47 @@ public final class DefaultMessageService implements MessageRenderer {
                 .resolver(colorTag("primary", snapshot.primaryColor()))
                 .resolver(colorTag("secondary", snapshot.secondaryColor()));
 
-        placeholders.forEach((name, value) -> {
+        placeholders.values().forEach((name, value) -> {
             var normalized = name.toLowerCase(Locale.ROOT);
             if (!PLACEHOLDER_NAME.matcher(normalized).matches()) {
                 throw new IllegalArgumentException("Invalid message placeholder name: " + name);
             }
-            if (value instanceof RichText richText) {
-                resolver.resolver(Placeholder.component(
-                        normalized,
-                        AdventureRichTextAdapter.toComponent(richText)
-                ));
-            } else if (value instanceof LocalizedMessage(
-                    String key,
-                    Map<String, Object> placeholders1
-            )) {
-                resolver.resolver(Placeholder.component(
-                        normalized,
-                        AdventureRichTextAdapter.toComponent(render(
-                                snapshot,
-                                requestedLocale,
-                                key,
-                                placeholders1
-                        ))
-                ));
-            } else {
-                resolver.resolver(Placeholder.unparsed(normalized, String.valueOf(value)));
-            }
+            addPlaceholder(resolver, snapshot, requestedLocale, normalized, value);
         });
 
         var component = miniMessage.deserialize(input, resolver.build());
         return AdventureRichTextAdapter.fromComponent(component);
+    }
+
+    private void addPlaceholder(
+            TagResolver.Builder resolver,
+            RuntimeState snapshot,
+            String requestedLocale,
+            String name,
+            MessageArgument argument
+    ) {
+        if (argument instanceof MessageArgument.RichTextValue(var value)) {
+            resolver.resolver(Placeholder.component(
+                    name,
+                    AdventureRichTextAdapter.toComponent(value)
+            ));
+            return;
+        }
+
+        if (argument instanceof MessageArgument.NestedMessage(var message)) {
+            resolver.resolver(Placeholder.component(
+                    name,
+                    AdventureRichTextAdapter.toComponent(render(
+                            snapshot,
+                            requestedLocale,
+                            message.key(),
+                            message.placeholders()
+                    ))
+            ));
+            return;
+        }
+
+        resolver.resolver(Placeholder.unparsed(name, plainArgument(argument)));
     }
 
     private TagResolver colorTag(String name, String color) {
@@ -403,6 +428,7 @@ public final class DefaultMessageService implements MessageRenderer {
     ) throws IOException {
         var loaded = new LinkedHashMap<String, String>();
         var packaged = packagedDefaults.get(name);
+
         if (packaged != null) {
             flatten("", packaged, loaded);
         }

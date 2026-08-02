@@ -213,8 +213,7 @@ final class JsonUserServiceTest {
         service
                 .markQuit(new CellPlayer(
                         uuid,
-                        "player",
-                        new Object()
+                        "player"
                 ))
                 .join();
 

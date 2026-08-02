@@ -7,12 +7,12 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -109,7 +109,7 @@ final class PlayerStateCommandSupport {
         return CompletableFuture.completedFuture(
                 PlayerStateCommandResult.failure(
                         "commands.common.player-offline",
-                        Map.of("player", name)
+                        MessageArguments.builder().put("player", name).build()
                 )
         );
     }

@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.api.kit;
 
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
 
 public record KitClaimResult(
         boolean success,
@@ -17,7 +17,7 @@ public record KitClaimResult(
         return new KitClaimResult(true, LocalizedMessage.of(key));
     }
 
-    public static KitClaimResult success(String key, Map<String, ?> placeholders) {
+    public static KitClaimResult success(String key, MessageArguments placeholders) {
         return new KitClaimResult(true, LocalizedMessage.of(key, placeholders));
     }
 
@@ -29,7 +29,7 @@ public record KitClaimResult(
         return new KitClaimResult(false, LocalizedMessage.of(key));
     }
 
-    public static KitClaimResult failure(String key, Map<String, ?> placeholders) {
+    public static KitClaimResult failure(String key, MessageArguments placeholders) {
         return new KitClaimResult(false, LocalizedMessage.of(key, placeholders));
     }
 

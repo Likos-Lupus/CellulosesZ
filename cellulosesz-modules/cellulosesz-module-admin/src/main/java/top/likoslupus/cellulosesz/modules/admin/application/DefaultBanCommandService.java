@@ -5,13 +5,13 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
 
 import java.net.InetAddress;
 import java.time.Duration;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -90,14 +90,16 @@ public final class DefaultBanCommandService implements BanCommandService {
                                                     value.name(),
                                                     actor
                                             )
-                                            .thenApply(temp -> permanent.success() || temp.success()
-                                                    ?
-                                                    AdminResult.success(
-                                                            "service.admin.unban-success",
-                                                            Map.of("player", value.name())
-                                                    )
-                                                    : permanent
-                                            )
+                                            .thenApply(temp -> combineUnban(
+                                                    permanent,
+                                                    temp,
+                                                    "player",
+                                                    value.name(),
+                                                    "service.admin.unban-success",
+                                                    "service.admin.unban-partial",
+                                                    "service.admin.unban-not-found",
+                                                    "service.admin.unban-failed"
+                                            ))
                             );
                 });
     }
@@ -122,17 +124,20 @@ public final class DefaultBanCommandService implements BanCommandService {
 
     @Override
     public CompletableFuture<AdminResult> unbanIp(InetAddress address, AdminActor actor) {
+        var canonical = IpAddresses.canonical(address);
         return serverThread
                 .submit(() -> bans.unbanIp(address, actor))
                 .thenCompose(permanent -> temporary.unbanIp(address, actor)
-                        .thenApply(temp -> permanent.success() || temp.success()
-                                ?
-                                AdminResult.success(
-                                        "service.admin.unban-ip-success",
-                                        Map.of("address", IpAddresses.canonical(address))
-                                )
-                                : permanent
-                        )
+                        .thenApply(temp -> combineUnban(
+                                permanent,
+                                temp,
+                                "address",
+                                canonical,
+                                "service.admin.unban-ip-success",
+                                "service.admin.unban-ip-partial",
+                                "service.admin.unban-ip-not-found",
+                                "service.admin.unban-ip-failed"
+                        ))
                 );
     }
 
@@ -210,8 +215,81 @@ public final class DefaultBanCommandService implements BanCommandService {
         return CompletableFuture.completedFuture(AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "service.admin.address-not-found",
-                Map.of("player", label)
+                MessageArguments.builder().put("player", label).build()
         ));
+    }
+
+    private static AdminResult combineUnban(
+            AdminResult permanent,
+            AdminResult temporary,
+            String targetKey,
+            String targetValue,
+            String successKey,
+            String partialKey,
+            String notFoundKey,
+            String failureKey
+    ) {
+        var components = java.util.List.of(permanent, temporary);
+        var arguments = MessageArguments.builder()
+                .put(targetKey, targetValue)
+                .put("permanent", permanent.status().name())
+                .put("temporary", temporary.status().name())
+                .build();
+
+        if (permanent.status() == AdminStatus.SUCCESS
+                && temporary.status() == AdminStatus.SUCCESS
+        ) {
+            return AdminResult.success(successKey, arguments, components);
+        }
+
+        if (permanent.success() || temporary.success()) {
+            return AdminResult.partial(partialKey, arguments, components);
+        }
+
+        if (permanent.status() == AdminStatus.NOT_FOUND
+                && temporary.status() == AdminStatus.NOT_FOUND
+        ) {
+            return AdminResult.failure(
+                    AdminStatus.NOT_FOUND,
+                    notFoundKey,
+                    arguments,
+                    components
+            );
+        }
+
+        return AdminResult.failure(
+                combinedFailureStatus(permanent.status(), temporary.status()),
+                failureKey,
+                arguments,
+                components
+        );
+    }
+
+    private static AdminStatus combinedFailureStatus(
+            AdminStatus permanent,
+            AdminStatus temporary
+    ) {
+        if (permanent == AdminStatus.PERSISTENCE_FAILURE
+                || temporary == AdminStatus.PERSISTENCE_FAILURE
+        ) {
+            return AdminStatus.PERSISTENCE_FAILURE;
+        }
+
+        if (permanent == AdminStatus.PLATFORM_FAILURE
+                || temporary == AdminStatus.PLATFORM_FAILURE
+                || permanent == AdminStatus.NATIVE_COMMAND_FAILURE
+                || temporary == AdminStatus.NATIVE_COMMAND_FAILURE
+        ) {
+            return AdminStatus.PLATFORM_FAILURE;
+        }
+
+        if (permanent == AdminStatus.INVALID_INPUT
+                || temporary == AdminStatus.INVALID_INPUT
+        ) {
+            return AdminStatus.INVALID_INPUT;
+        }
+
+        return AdminStatus.FAILURE;
     }
 
     private CompletableFuture<Optional<Target>> resolve(
@@ -234,7 +312,7 @@ public final class DefaultBanCommandService implements BanCommandService {
         return CompletableFuture.completedFuture(AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "commands.common.player-not-found",
-                Map.of("player", player)
+                MessageArguments.builder().put("player", player).build()
         ));
     }
 

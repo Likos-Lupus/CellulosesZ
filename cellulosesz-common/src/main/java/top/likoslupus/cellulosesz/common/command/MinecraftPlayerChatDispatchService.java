@@ -36,7 +36,7 @@ public final class MinecraftPlayerChatDispatchService implements PlayerChatDispa
         }
 
         try {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             server.requireRunning().getPlayerList().broadcastSystemMessage(
                     Component.translatable(
                             "chat.type.text",

@@ -2,9 +2,9 @@ package top.likoslupus.cellulosesz.modules.economy.application;
 
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.List;
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -12,14 +12,6 @@ public record EconomyCommandResult(
         CommandOutcome.Status status,
         List<LocalizedMessage> messages
 ) {
-
-    public EconomyCommandResult(boolean success, List<LocalizedMessage> messages) {
-        this(
-                success
-                        ? CommandOutcome.Status.SUCCESS
-                        : CommandOutcome.Status.REJECTED, messages
-        );
-    }
 
     public EconomyCommandResult {
         requireNonNull(status, "status");
@@ -36,7 +28,7 @@ public record EconomyCommandResult(
         );
     }
 
-    public static EconomyCommandResult success(String key, Map<String, ?> values) {
+    public static EconomyCommandResult success(String key, MessageArguments values) {
         return new EconomyCommandResult(
                 CommandOutcome.Status.SUCCESS,
                 List.of(LocalizedMessage.of(key, values))
@@ -54,7 +46,7 @@ public record EconomyCommandResult(
         );
     }
 
-    public static EconomyCommandResult failure(String key, Map<String, ?> values) {
+    public static EconomyCommandResult failure(String key, MessageArguments values) {
         return new EconomyCommandResult(
                 CommandOutcome.Status.REJECTED,
                 List.of(LocalizedMessage.of(key, values))
@@ -72,7 +64,7 @@ public record EconomyCommandResult(
         );
     }
 
-    public static EconomyCommandResult failed(String key, Map<String, ?> values) {
+    public static EconomyCommandResult failed(String key, MessageArguments values) {
         return new EconomyCommandResult(
                 CommandOutcome.Status.FAILED,
                 List.of(LocalizedMessage.of(key, values))

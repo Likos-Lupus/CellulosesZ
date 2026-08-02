@@ -19,7 +19,7 @@ public record SkullRequest(
             throw new IllegalArgumentException("owner must not be blank");
         }
         requireNonNull(recipient, "recipient");
-        expectedHeld = requireNonNull(expectedHeld, "expectedHeld").map(InventoryItemSnapshot::copy);
+        requireNonNull(expectedHeld, "expectedHeld");
         if (spawn && expectedHeld.isPresent()) {
             throw new IllegalArgumentException("spawn request must not carry a held snapshot");
         }

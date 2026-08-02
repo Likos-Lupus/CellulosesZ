@@ -73,14 +73,6 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
         return buildContext;
     }
 
-    public Commands.CommandSelection environment() {
-        return environment;
-    }
-
-    public CommandAliasRegistry aliases() {
-        return services().require(CommandAliasRegistry.class);
-    }
-
     @Override
     public ServiceRegistry services() {
         return bootstrap.serviceRegistry();
@@ -267,7 +259,7 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
                     "Failed to start command /" + descriptor.canonicalName(),
                     failure
             );
-            return 0;
+            throw failure;
         }
     }
 
@@ -283,6 +275,14 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
                         ? trimmed
                         : trimmed.substring(0, split)
         ).toLowerCase(Locale.ROOT);
+    }
+
+    public Commands.CommandSelection environment() {
+        return environment;
+    }
+
+    public CommandAliasRegistry aliases() {
+        return services().require(CommandAliasRegistry.class);
     }
 
     public MinecraftCommandResponder responder() {

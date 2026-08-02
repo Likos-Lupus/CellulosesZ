@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.api.teleport;
 
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -15,26 +15,17 @@ public record TeleportResult(
 
     public TeleportResult {
         requireNonNull(status, "status");
-        destination = requireNonNull(destination, "destination").map(TeleportResult::copy);
+        requireNonNull(destination, "destination");
         requireNonNull(message, "message");
         if (status == TeleportStatus.SUCCESS && destination.isEmpty()) {
             throw new IllegalArgumentException("Successful teleport must expose its destination");
         }
     }
 
-    private static CellLocation copy(CellLocation value) {
-        requireNonNull(value, "location");
-        return new CellLocation(
-                value.world,
-                value.x, value.y, value.z,
-                value.yaw, value.pitch
-        );
-    }
-
     public static TeleportResult success(CellLocation location) {
         return new TeleportResult(
                 TeleportStatus.SUCCESS,
-                Optional.of(copy(location)),
+                Optional.of(requireNonNull(location, "location")),
                 LocalizedMessage.of("service.teleport.success")
         );
     }
@@ -53,7 +44,7 @@ public record TeleportResult(
     public static TeleportResult failed(
             TeleportStatus status,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         if (status == TeleportStatus.SUCCESS) {
             throw new IllegalArgumentException("failure status required");
@@ -63,11 +54,6 @@ public record TeleportResult(
                 Optional.empty(),
                 LocalizedMessage.of(key, placeholders)
         );
-    }
-
-    @Override
-    public Optional<CellLocation> destination() {
-        return destination.map(TeleportResult::copy);
     }
 
     public boolean success() {

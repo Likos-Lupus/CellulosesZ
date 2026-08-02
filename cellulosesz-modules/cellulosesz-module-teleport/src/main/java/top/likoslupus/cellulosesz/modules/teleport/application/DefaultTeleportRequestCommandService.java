@@ -7,12 +7,12 @@ import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -74,7 +74,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
             return completed(failure(
                     NOT_FOUND,
                     "commands.common.player-offline",
-                    Map.of("player", targetName)
+                    MessageArguments.of("player", targetName)
             ));
         }
 
@@ -91,7 +91,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                         return completed(failure(
                                 BLOCKED,
                                 "commands.teleport.request.blocked",
-                                Map.of("player", target.orElseThrow().name())
+                                MessageArguments.of("player", target.orElseThrow().name())
                         ));
                     }
 
@@ -105,7 +105,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                         return completed(failure(
                                 REQUEST_CHANGED,
                                 "commands.teleport.request.already-pending",
-                                Map.of("request", creation.request().id())
+                                MessageArguments.of("request", creation.request().id())
                         ));
                     }
 
@@ -114,11 +114,11 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             type == TeleportRequestType.REQUESTER_TO_TARGET
                                     ? "commands.teleport.request.received-tpa"
                                     : "commands.teleport.request.received-tpahere",
-                            Map.of(
-                                    "player", requester.name(),
-                                    "seconds", settings.requestTimeoutSeconds(),
-                                    "request", creation.request().id()
-                            )
+                            MessageArguments.builder()
+                                    .put("player", requester.name())
+                                    .put("seconds", settings.requestTimeoutSeconds())
+                                    .put("request", creation.request().id())
+                                    .build()
                     );
 
                     users.load(target.orElseThrow().uuid())
@@ -136,10 +136,10 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
 
                     return completed(TeleportCommandResult.success(
                             "commands.teleport.request.sent",
-                            Map.of(
-                                    "player", target.orElseThrow().name(),
-                                    "request", creation.request().id()
-                            )
+                            MessageArguments.builder()
+                                    .put("player", target.orElseThrow().name())
+                                    .put("request", creation.request().id())
+                                    .build()
                     ));
                 });
     }
@@ -184,11 +184,11 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                 notify(
                                         target,
                                         "commands.teleport.request.received-tpahere",
-                                        Map.of(
-                                                "player", requester.name(),
-                                                "seconds", settings.requestTimeoutSeconds(),
-                                                "request", creation.request().id()
-                                        )
+                                        MessageArguments.builder()
+                                                .put("player", requester.name())
+                                                .put("seconds", settings.requestTimeoutSeconds())
+                                                .put("request", creation.request().id())
+                                                .build()
                                 );
                             })
                             .exceptionally(_ -> {
@@ -202,21 +202,21 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                 ?
                 TeleportCommandResult.success(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
-                        Map.of(
-                                "sent", counts[0],
-                                "blocked", counts[1],
-                                "existing", counts[2],
-                                "failed", counts[3]
-                        )
+                        MessageArguments.builder()
+                                .put("sent", counts[0])
+                                .put("blocked", counts[1])
+                                .put("existing", counts[2])
+                                .put("failed", counts[3])
+                                .build()
                 )
                 : TeleportCommandResult.partial(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
-                        Map.of(
-                                "sent", counts[0],
-                                "blocked", counts[1],
-                                "existing", counts[2],
-                                "failed", counts[3]
-                        )
+                        MessageArguments.builder()
+                                .put("sent", counts[0])
+                                .put("blocked", counts[1])
+                                .put("existing", counts[2])
+                                .put("failed", counts[3])
+                                .build()
                 )
         );
     }
@@ -298,20 +298,20 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                 notify(
                                         requester.orElseThrow(),
                                         "commands.teleport.request.accepted-by-target",
-                                        Map.of(
-                                                "player", target.name(),
-                                                "request", value.id()
-                                        )
+                                        MessageArguments.builder()
+                                                .put("player", target.name())
+                                                .put("request", value.id())
+                                                .build()
                                 );
 
                                 return TeleportCommandResult.success(
                                         automatic
                                                 ? "commands.teleport.request.auto-accepted"
                                                 : "commands.teleport.tp-accept-command.reply.teleport-request-accepted",
-                                        Map.of(
-                                                "player", requester.orElseThrow().name(),
-                                                "request", value.id()
-                                        )
+                                        MessageArguments.builder()
+                                                .put("player", requester.orElseThrow().name())
+                                                .put("request", value.id())
+                                                .build()
                                 );
                             });
                 });
@@ -348,15 +348,15 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             .ifPresent(player -> notify(
                                     player,
                                     "commands.teleport.request.denied-by-target",
-                                    Map.of(
-                                            "player", target.name(),
-                                            "request", request.id()
-                                    )
+                                    MessageArguments.builder()
+                                            .put("player", target.name())
+                                            .put("request", request.id())
+                                            .build()
                             ));
 
                     return TeleportCommandResult.success(
                             "commands.teleport.tp-deny-command.reply.denied",
-                            Map.of("request", request.id())
+                            MessageArguments.builder().put("request", request.id()).build()
                     );
                 });
     }
@@ -391,15 +391,15 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                     players.onlinePlayer(request.target()).ifPresent(player -> notify(
                             player,
                             "commands.teleport.request.cancelled-by-requester",
-                            Map.of(
-                                    "player", requester.name(),
-                                    "request", request.id()
-                            )
+                            MessageArguments.builder()
+                                    .put("player", requester.name())
+                                    .put("request", request.id())
+                                    .build()
                     ));
 
                     return TeleportCommandResult.success(
                             "commands.teleport.tp-cancel-command.reply.cancelled",
-                            Map.of("request", request.id())
+                            MessageArguments.builder().put("request", request.id()).build()
                     );
                 });
     }
@@ -423,7 +423,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
     private static TeleportCommandResult failure(
             TeleportCommandStatus status,
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         return TeleportCommandResult.failure(status, key, values);
     }
@@ -436,14 +436,13 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
         return bypass
                 ? CompletableFuture.completedFuture(true)
                 : users.load(target.uuid())
-                        .thenApply(user -> user.preferences().teleportRequests())
-                        .exceptionally(_ -> false);
+                        .thenApply(user -> user.preferences().teleportRequests());
     }
 
     private void notify(
             CellPlayer player,
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         serverThread.execute(() -> audience.send(
                 player,
@@ -474,7 +473,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
         return TeleportCommandResult.failure(
                 AMBIGUOUS,
                 "commands.teleport.request.ambiguous",
-                Map.of("requests", String.join(", ", rows))
+                MessageArguments.builder().put("requests", String.join(", ", rows)).build()
         );
     }
 

@@ -5,7 +5,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireFinite;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireFinite;
 
 public interface RandomTeleportCommandService {
 

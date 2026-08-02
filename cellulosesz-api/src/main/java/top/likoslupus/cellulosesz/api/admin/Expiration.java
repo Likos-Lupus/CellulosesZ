@@ -5,15 +5,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 /**
  * Explicit punishment expiration; permanent punishments never use null or sentinel values.
  */
-public sealed interface Expiration permits
-        Expiration.Permanent,
-        Expiration.At {
+public sealed interface Expiration permits Expiration.Permanent, Expiration.At {
 
     static Expiration permanent() {
         return new Permanent();

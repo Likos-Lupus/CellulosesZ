@@ -4,9 +4,8 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-
-import java.util.Map;
 
 final class SignCommandSupport {
 
@@ -36,13 +35,20 @@ final class SignCommandSupport {
                 result.successful(),
                 LocalizedMessage.of(
                         key,
-                        Map.of(
-                                "status", result.status().name().toLowerCase(),
-                                "reason", result.detail().isBlank() ? "-" : result.detail()
-                        )
+                        MessageArguments.builder()
+                                .put("status", result.status().name().toLowerCase())
+                                .put(
+                                        "reason",
+                                        result.detail().isBlank()
+                                                ? "-"
+                                                : result.detail()
+                                )
+                                .build()
                 )
         );
-        return result.successful() ? 1 : 0;
+        return result.successful()
+                ? 1
+                : 0;
     }
 
 }

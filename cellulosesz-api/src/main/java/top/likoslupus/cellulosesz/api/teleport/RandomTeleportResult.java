@@ -11,23 +11,17 @@ public record RandomTeleportResult(
 
     public RandomTeleportResult {
         requireNonNull(status, "status");
-        location = requireNonNull(location, "location").map(RandomTeleportResult::copy);
+        requireNonNull(location, "location");
         if (status == RandomTeleportStatus.SUCCESS && location.isEmpty()) {
             throw new IllegalArgumentException("successful result requires a location");
         }
     }
 
-    private static CellLocation copy(CellLocation value) {
-        requireNonNull(value, "location");
-        return new CellLocation(
-                value.world,
-                value.x, value.y, value.z,
-                value.yaw, value.pitch
-        );
-    }
-
     public static RandomTeleportResult success(CellLocation location) {
-        return new RandomTeleportResult(RandomTeleportStatus.SUCCESS, Optional.of(copy(location)));
+        return new RandomTeleportResult(
+                RandomTeleportStatus.SUCCESS,
+                Optional.of(requireNonNull(location, "location"))
+        );
     }
 
     public static RandomTeleportResult failure(RandomTeleportStatus status) {

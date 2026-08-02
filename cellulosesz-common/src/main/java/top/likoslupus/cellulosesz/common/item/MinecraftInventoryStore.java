@@ -10,6 +10,8 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
@@ -30,8 +32,8 @@ final class MinecraftInventoryStore {
         this.server = requireNonNull(server, "server");
     }
 
-    Optional<List<InventoryItemSnapshot>> snapshot(CellPlayer player) {
-        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
+    PlatformResult<List<InventoryItemSnapshot>> snapshot(CellPlayer player) {
+        var inventory = MinecraftPlayers.requireOnline(server, player).getInventory();
         var snapshots = new ArrayList<InventoryItemSnapshot>();
 
         for (var slot = 0; slot < inventory.getContainerSize(); slot++) {
@@ -41,163 +43,249 @@ final class MinecraftInventoryStore {
             }
 
             var encoded = encode(stack);
-            if (encoded.isEmpty()) {
-                return Optional.empty();
+            if (!encoded.successful()) {
+                return PlatformResult.failure(encoded.status(), encoded.detail());
             }
 
-            snapshots.add(new InventoryItemSnapshot(slot, encoded.orElseThrow()));
+            snapshots.add(new InventoryItemSnapshot(slot, encoded.value().orElseThrow()));
         }
 
-        return Optional.of(List.copyOf(snapshots));
+        return PlatformResult.success(List.copyOf(snapshots));
     }
 
-    Optional<String> encode(ItemStack stack) {
+    PlatformResult<String> encode(ItemStack stack) {
+        requireNonNull(stack, "stack");
         if (stack.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Cannot encode an empty item stack"
+            );
         }
 
         var operations = server.requireRunning()
                 .registryAccess()
                 .createSerializationContext(JsonOps.INSTANCE);
+        var encoded = ItemStack.CODEC.encodeStart(operations, stack).result();
 
-        return ItemStack.CODEC
-                .encodeStart(operations, stack)
-                .result()
-                .map(Object::toString);
+        if (encoded.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INTERNAL_ERROR,
+                    "Item stack codec did not produce a serialized value"
+            );
+        }
+
+        return PlatformResult.success(encoded.orElseThrow().toString());
     }
 
-    Optional<InventoryItemSnapshot> heldSnapshot(CellPlayer player) {
-        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
+    PlatformResult<InventoryItemSnapshot> heldSnapshot(CellPlayer player) {
+        var inventory = MinecraftPlayers.requireOnline(server, player).getInventory();
         var slot = inventory.getSelectedSlot();
         var stack = inventory.getItem(slot);
 
         if (stack.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    "Main hand is empty"
+            );
         }
 
-        return encode(stack).map(encoded ->
-                new InventoryItemSnapshot(slot, encoded)
-        );
+        var encoded = encode(stack);
+        if (!encoded.successful()) {
+            return PlatformResult.failure(encoded.status(), encoded.detail());
+        }
+
+        return PlatformResult.success(new InventoryItemSnapshot(
+                slot,
+                encoded.value().orElseThrow()
+        ));
     }
 
-    Optional<ItemDescriptor> describe(InventoryItemSnapshot snapshot) {
+    PlatformResult<ItemDescriptor> describe(InventoryItemSnapshot snapshot) {
         requireNonNull(snapshot, "snapshot");
-        return decode(snapshot.validatedStack())
-                .filter(stack -> !stack.isEmpty())
-                .map(stack -> new ItemDescriptor(
-                        MinecraftItems.id(stack),
-                        stack.getCount()
-                ));
+        var decoded = decode(snapshot.stack());
+        if (!decoded.successful()) {
+            return PlatformResult.failure(decoded.status(), decoded.detail());
+        }
+
+        var stack = decoded.value().orElseThrow();
+        if (stack.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Inventory snapshot contains an empty item stack"
+            );
+        }
+
+        return PlatformResult.success(new ItemDescriptor(
+                MinecraftItems.id(stack),
+                stack.getCount()
+        ));
     }
 
-    Optional<ItemStack> decode(String encoded) {
+    PlatformResult<ItemStack> decode(String encoded) {
+        requireNonNull(encoded, "encoded");
         if (encoded.isBlank()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Serialized item stack is blank"
+            );
         }
 
+        final com.google.gson.JsonElement json;
         try {
-            var operations = server.requireRunning()
-                    .registryAccess()
-                    .createSerializationContext(JsonOps.INSTANCE);
-            return ItemStack.CODEC.parse(operations, JsonParser.parseString(encoded)).result();
-        } catch (RuntimeException exception) {
-            return Optional.empty();
+            json = JsonParser.parseString(encoded);
+        } catch (com.google.gson.JsonParseException exception) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Serialized item stack is not valid JSON: " + exception.getMessage()
+            );
         }
+
+        var operations = server.requireRunning()
+                .registryAccess()
+                .createSerializationContext(JsonOps.INSTANCE);
+        var decoded = ItemStack.CODEC.parse(operations, json).result();
+        if (decoded.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Serialized item stack is not valid for the current registry"
+            );
+        }
+
+        return PlatformResult.success(decoded.orElseThrow());
     }
 
-    boolean plain(InventoryItemSnapshot snapshot) {
+    PlatformResult<Boolean> plain(InventoryItemSnapshot snapshot) {
         requireNonNull(snapshot, "snapshot");
-        return decode(snapshot.validatedStack())
-                .filter(stack -> !stack.isEmpty())
-                .map(stack -> ItemStack.isSameItemSameComponents(
-                        stack,
-                        new ItemStack(stack.getItem(), stack.getCount())
-                ))
-                .orElse(false);
+        var decoded = decode(snapshot.stack());
+        if (!decoded.successful()) {
+            return PlatformResult.failure(decoded.status(), decoded.detail());
+        }
+
+        var stack = decoded.value().orElseThrow();
+        if (stack.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Inventory snapshot contains an empty item stack"
+            );
+        }
+
+        return PlatformResult.success(ItemStack.isSameItemSameComponents(
+                stack,
+                new ItemStack(stack.getItem(), stack.getCount())
+        ));
     }
 
-    Optional<InventoryGrant> prepareGrant(
+    PlatformResult<InventoryMutation> prepareGrant(
             CellPlayer player,
-            List<? extends InventoryItemSnapshot> snapshots
+            List<InventoryItemSnapshot> snapshots
     ) {
         requireNonNull(snapshots, "snapshots");
         if (snapshots.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Inventory grant requires at least one item snapshot"
+            );
         }
 
-        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(server, player).getInventory();
         var planned = new LinkedHashMap<Integer, ItemStack>();
         var before = new LinkedHashMap<Integer, ItemStack>();
 
         for (var snapshot : snapshots) {
             requireNonNull(snapshot, "snapshot");
-            if (snapshot.slot < 0
-                    || snapshot.slot >= inventory.getContainerSize()
-                    || planned.containsKey(snapshot.slot)
-            ) {
-                return Optional.empty();
+            if (snapshot.slot() < 0 || snapshot.slot() >= inventory.getContainerSize()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory snapshot slot is outside the target inventory"
+                );
             }
 
-            var decoded = decode(snapshot.validatedStack());
-            if (decoded.isEmpty()
-                    || decoded.orElseThrow().isEmpty()
-            ) {
-                return Optional.empty();
+            if (planned.containsKey(snapshot.slot())) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory grant contains a duplicate slot"
+                );
             }
 
-            var current = inventory.getItem(snapshot.slot);
+            var decoded = decode(snapshot.stack());
+
+            if (!decoded.successful()) {
+                return PlatformResult.failure(decoded.status(), decoded.detail());
+            }
+
+            var stack = decoded.value().orElseThrow();
+
+            if (stack.isEmpty()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory grant contains an empty item stack"
+                );
+            }
+
+            var current = inventory.getItem(snapshot.slot());
             if (!current.isEmpty()) {
-                return Optional.empty();
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory grant destination is no longer empty"
+                );
             }
 
-            planned.put(snapshot.slot, decoded.orElseThrow().copy());
-            before.put(snapshot.slot, current.copy());
+            planned.put(snapshot.slot(), stack.copy());
+            before.put(snapshot.slot(), current.copy());
         }
 
-        return Optional.of(new InventoryGrant() {
+        return PlatformResult.success(new InventoryMutation() {
             private boolean committed;
 
             @Override
-            public boolean commit() {
+            public PlatformResult<Void> commit() {
                 synchronized (inventory) {
                     if (committed) {
-                        return false;
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_STATE,
+                                "Inventory mutation was already committed"
+                        );
                     }
 
                     for (var entry : before.entrySet()) {
                         if (!same(inventory.getItem(entry.getKey()), entry.getValue())) {
-                            return false;
+                            return PlatformResult.failure(
+                                    PlatformOperationStatus.CONFLICT,
+                                    "Inventory changed before commit"
+                            );
                         }
                     }
 
-                    planned.forEach((slot, stack) ->
-                            inventory.setItem(slot, stack.copy())
-                    );
+                    planned.forEach((slot, stack) -> inventory.setItem(slot, stack.copy()));
                     inventory.setChanged();
                     committed = true;
-                    return true;
+                    return PlatformResult.success();
                 }
             }
 
             @Override
-            public boolean rollback() {
+            public PlatformResult<Void> rollback() {
                 synchronized (inventory) {
                     if (!committed) {
-                        return true;
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_STATE,
+                                "Inventory mutation has not been committed"
+                        );
                     }
 
                     for (var entry : planned.entrySet()) {
                         if (!same(inventory.getItem(entry.getKey()), entry.getValue())) {
-                            return false;
+                            return PlatformResult.failure(
+                                    PlatformOperationStatus.ROLLBACK_FAILED,
+                                    "Inventory changed after commit"
+                            );
                         }
                     }
 
-                    before.forEach((slot, stack) ->
-                            inventory.setItem(slot, stack.copy())
-                    );
+                    before.forEach((slot, stack) -> inventory.setItem(slot, stack.copy()));
                     inventory.setChanged();
                     committed = false;
-                    return true;
+                    return PlatformResult.success();
                 }
             }
         });
@@ -212,41 +300,58 @@ final class MinecraftInventoryStore {
                 && ItemStack.isSameItemSameComponents(first, second);
     }
 
-    Optional<InventoryMutation> prepareRemoval(
+    PlatformResult<InventoryMutation> prepareRemoval(
             CellPlayer player,
             List<InventoryStackSelection> selections
     ) {
         requireNonNull(selections, "selections");
         if (selections.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Inventory removal requires at least one selection"
+            );
         }
 
-        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(server, player).getInventory();
         var before = copyInventory(inventory);
         var after = copyStacks(before);
         var seen = new HashSet<Integer>();
 
         for (var selection : selections) {
             requireNonNull(selection, "selection");
-
-            var slot = selection.snapshot().slot;
-            if (slot < 0
-                    || slot >= after.size()
-                    || !seen.add(slot)
-            ) {
-                return Optional.empty();
+            var slot = selection.snapshot().slot();
+            if (slot < 0 || slot >= after.size()) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory selection slot is outside the target inventory"
+                );
             }
 
-            var expected = decode(selection.snapshot().validatedStack());
-            if (expected.isEmpty()
-                    || !same(before.get(slot), expected.orElseThrow())
-            ) {
-                return Optional.empty();
+            if (!seen.add(slot)) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Inventory removal contains a duplicate slot"
+                );
+            }
+
+            var expected = decode(selection.snapshot().stack());
+            if (!expected.successful()) {
+                return PlatformResult.failure(expected.status(), expected.detail());
+            }
+
+            if (!same(before.get(slot), expected.value().orElseThrow())) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory changed before removal could be prepared"
+                );
             }
 
             var stack = after.get(slot);
             if (selection.count() > stack.getCount()) {
-                return Optional.empty();
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory stack no longer contains the requested count"
+                );
             }
 
             if (selection.count() == stack.getCount()) {
@@ -256,12 +361,7 @@ final class MinecraftInventoryStore {
             }
         }
 
-        return Optional.of(mutation(
-                inventory,
-                before,
-                after,
-                Set.copyOf(seen)
-        ));
+        return PlatformResult.success(mutation(inventory, before, after, Set.copyOf(seen)));
     }
 
     private static List<ItemStack> copyInventory(Container inventory) {
@@ -288,32 +388,48 @@ final class MinecraftInventoryStore {
             private boolean committed;
 
             @Override
-            public boolean commit() {
+            public PlatformResult<Void> commit() {
                 synchronized (inventory) {
-                    if (committed || !matchesAffectedSlots(inventory, before, affectedSlots)) {
-                        return false;
+                    if (committed) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_STATE,
+                                "Inventory mutation was already committed"
+                        );
+                    }
+
+                    if (!matchesAffectedSlots(inventory, before, affectedSlots)) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.CONFLICT,
+                                "Inventory changed before commit"
+                        );
                     }
 
                     replace(inventory, after, affectedSlots);
                     committed = true;
-                    return true;
+                    return PlatformResult.success();
                 }
             }
 
             @Override
-            public boolean rollback() {
+            public PlatformResult<Void> rollback() {
                 synchronized (inventory) {
                     if (!committed) {
-                        return true;
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_STATE,
+                                "Inventory mutation has not been committed"
+                        );
                     }
 
                     if (!matchesAffectedSlots(inventory, after, affectedSlots)) {
-                        return false;
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.ROLLBACK_FAILED,
+                                "Inventory changed after commit"
+                        );
                     }
 
                     replace(inventory, before, affectedSlots);
                     committed = false;
-                    return true;
+                    return PlatformResult.success();
                 }
             }
         };
@@ -324,20 +440,12 @@ final class MinecraftInventoryStore {
             List<ItemStack> expected,
             Set<Integer> affectedSlots
     ) {
-        if (inventory.getContainerSize() != expected.size()) {
-            return false;
-        }
-
-        for (var slot : affectedSlots) {
-            if (slot < 0
-                    || slot >= expected.size()
-                    || !same(inventory.getItem(slot), expected.get(slot))
-            ) {
-                return false;
-            }
-        }
-
-        return true;
+        return inventory.getContainerSize() == expected.size() &&
+                affectedSlots.stream()
+                        .noneMatch(slot -> slot < 0
+                                || slot >= expected.size()
+                                || !same(inventory.getItem(slot), expected.get(slot))
+                        );
     }
 
     private static void replace(
@@ -352,7 +460,7 @@ final class MinecraftInventoryStore {
         inventory.setChanged();
     }
 
-    Optional<InventoryMutation> prepareExchange(
+    PlatformResult<InventoryMutation> prepareExchange(
             CellPlayer player,
             List<InventoryItemRequest> removals,
             List<InventoryItemRequest> additions
@@ -361,53 +469,62 @@ final class MinecraftInventoryStore {
         requireNonNull(additions, "additions");
 
         if (removals.isEmpty() && additions.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Inventory exchange requires at least one removal or addition"
+            );
         }
 
-        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(server, player).getInventory();
         var before = copyInventory(inventory);
         var after = copyStacks(before);
 
         for (var request : removals) {
             var parsed = parseItem(request.itemArgument());
             if (parsed.isEmpty()) {
-                return Optional.empty();
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_INPUT,
+                        "Inventory removal item argument is invalid: " + request.itemArgument()
+                );
             }
 
-            if (!removeMatching(
-                    after,
-                    parsed.orElseThrow().createItemStack(1),
-                    request.count()
-            )) {
-                return Optional.empty();
+            if (!removeMatching(after, parsed.orElseThrow().createItemStack(1), request.count())) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory does not contain the requested removal"
+                );
             }
         }
 
         for (var request : additions) {
             var parsed = parseItem(request.itemArgument());
             if (parsed.isEmpty()) {
-                return Optional.empty();
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_INPUT,
+                        "Inventory addition item argument is invalid: " + request.itemArgument()
+                );
             }
 
-            if (!addMatching(
-                    after,
-                    parsed.orElseThrow().createItemStack(1),
-                    request.count()
-            )) {
-                return Optional.empty();
+            if (!addMatching(after, parsed.orElseThrow().createItemStack(1), request.count())) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Inventory does not have space for the requested addition"
+                );
             }
         }
 
         var affected = IntStream.range(0, before.size())
                 .filter(slot -> !same(before.get(slot), after.get(slot)))
                 .boxed()
-                .collect(java.util.stream.Collectors.toSet());
-
+                .collect(Collectors.toSet());
         if (affected.isEmpty()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_STATE,
+                    "Inventory exchange would not change the inventory"
+            );
         }
 
-        return Optional.of(mutation(inventory, before, after, affected));
+        return PlatformResult.success(mutation(inventory, before, after, affected));
     }
 
     Optional<ItemInput> parseItem(String argument) {
@@ -424,7 +541,7 @@ final class MinecraftInventoryStore {
             }
 
             return Optional.of(parsed);
-        } catch (CommandSyntaxException | RuntimeException exception) {
+        } catch (CommandSyntaxException | IllegalArgumentException exception) {
             return Optional.empty();
         }
     }
@@ -529,7 +646,7 @@ final class MinecraftInventoryStore {
                     count,
                     value.substring(0, itemEnd).trim()
             ));
-        } catch (CommandSyntaxException | RuntimeException exception) {
+        } catch (CommandSyntaxException | IllegalArgumentException exception) {
             return Optional.empty();
         }
     }

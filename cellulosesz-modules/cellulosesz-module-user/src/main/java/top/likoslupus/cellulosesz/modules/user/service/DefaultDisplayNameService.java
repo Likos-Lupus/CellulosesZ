@@ -135,7 +135,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
         var current = settings;
         var value = nickname.trim();
 
-        if (!permissions.has(player.nativeHandle(), current.colorPermission())) {
+        if (!permissions.has(player, current.colorPermission())) {
             value = stripFormatting(value);
         }
         return value;

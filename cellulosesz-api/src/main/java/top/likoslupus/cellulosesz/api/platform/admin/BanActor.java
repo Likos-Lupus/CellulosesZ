@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.api.platform.admin;
 
+import java.util.UUID;
 import org.jspecify.annotations.Nullable;
 
-import java.util.UUID;
-
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.*;
 
 public record BanActor(
         @Nullable UUID uuid,

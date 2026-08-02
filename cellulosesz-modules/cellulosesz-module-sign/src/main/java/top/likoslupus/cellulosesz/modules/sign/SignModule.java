@@ -24,10 +24,7 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
-import top.likoslupus.cellulosesz.api.text.TextService;
+import top.likoslupus.cellulosesz.api.text.*;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
@@ -37,7 +34,6 @@ import top.likoslupus.cellulosesz.modules.sign.handler.*;
 import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
@@ -493,12 +489,11 @@ public final class SignModule implements CellulosesZModule {
         var message = cause.getMessage();
         return SignUseResult.failure(
                 "service.sign.execution-failed",
-                Map.of(
-                        "reason",
-                        message == null || message.isBlank()
+                MessageArguments.builder().put(
+                        "reason", message == null || message.isBlank()
                                 ? cause.getClass().getSimpleName()
                                 : message
-                )
+                ).build()
         );
     }
 

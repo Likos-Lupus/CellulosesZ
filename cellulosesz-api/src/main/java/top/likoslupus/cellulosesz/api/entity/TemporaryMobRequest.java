@@ -2,9 +2,10 @@ package top.likoslupus.cellulosesz.api.entity;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public record TemporaryMobRequest(
         CellPlayer shooter,

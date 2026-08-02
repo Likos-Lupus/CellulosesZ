@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
 import java.text.Normalizer;
@@ -77,12 +78,14 @@ public final class PlayerInformationCommandService {
 
     public CompletableFuture<PlayerStateCommandResult> compass(CellPlayer player) {
         return serverThread.submit(() -> {
-            var degrees = normalizeDegrees(locations.currentLocation(player).yaw);
+            var degrees = normalizeDegrees(locations.currentLocation(player).yaw());
             var direction = DIRECTION_KEYS[(int) Math.floor((degrees + 22.5D) / 45.0D) & 7];
 
             return PlayerStateCommandResult.success(
                     "commands.playerstate.compass." + direction,
-                    Map.of("degrees", Math.round(degrees * 10.0D) / 10.0D)
+                    MessageArguments.builder()
+                            .put("degrees", Math.round(degrees * 10.0D) / 10.0D)
+                            .build()
             );
         });
     }
@@ -104,7 +107,7 @@ public final class PlayerInformationCommandService {
                         );
                     }
 
-                    var y = (int) Math.floor(locations.currentLocation(player).y);
+                    var y = (int) Math.floor(locations.currentLocation(player).y());
                     var difference = y - sea.value().orElseThrow();
                     var key = difference > 0
                             ? "commands.playerstate.depth.above"
@@ -114,11 +117,11 @@ public final class PlayerInformationCommandService {
 
                     return PlayerStateCommandResult.success(
                             key,
-                            Map.of(
-                                    "distance", Math.abs(difference),
-                                    "y", y,
-                                    "seaLevel", sea.value().orElseThrow()
-                            )
+                            MessageArguments.builder()
+                                    .put("distance", Math.abs(difference))
+                                    .put("y", y)
+                                    .put("seaLevel", sea.value().orElseThrow())
+                                    .build()
                     );
                 });
     }
@@ -133,7 +136,7 @@ public final class PlayerInformationCommandService {
             ) {
                 return PlayerStateCommandResult.failure(
                         "commands.common.unknown-player",
-                        Map.of("player", target.name())
+                        MessageArguments.builder().put("player", target.name()).build()
                 );
             }
 
@@ -141,34 +144,34 @@ public final class PlayerInformationCommandService {
             var distance = viewer
                     .filter(value -> !value.uuid().equals(target.uuid()))
                     .map(locations::currentLocation)
-                    .filter(value -> value.world.equals(location.world))
+                    .filter(value -> value.world().equals(location.world()))
                     .map(value -> Math.sqrt(
-                            square(value.x - location.x)
-                                    + square(value.y - location.y)
-                                    + square(value.z - location.z)
+                            square(value.x() - location.x())
+                                    + square(value.y() - location.y())
+                                    + square(value.z() - location.z())
                     ));
 
             return PlayerStateCommandResult.success(
                     "commands.playerstate.getpos.result",
-                    Map.ofEntries(
-                            Map.entry("player", target.name()),
-                            Map.entry("world", location.world),
-                            Map.entry("blockX", (int) Math.floor(location.x)),
-                            Map.entry("blockY", (int) Math.floor(location.y)),
-                            Map.entry("blockZ", (int) Math.floor(location.z)),
-                            Map.entry("x", round(location.x)),
-                            Map.entry("y", round(location.y)),
-                            Map.entry("z", round(location.z)),
-                            Map.entry("yaw", round(location.yaw)),
-                            Map.entry("pitch", round(location.pitch)),
-                            Map.entry(
+                    MessageArguments.builder()
+                            .put("player", target.name())
+                            .put("world", location.world())
+                            .put("blockX", (int) Math.floor(location.x()))
+                            .put("blockY", (int) Math.floor(location.y()))
+                            .put("blockZ", (int) Math.floor(location.z()))
+                            .put("x", round(location.x()))
+                            .put("y", round(location.y()))
+                            .put("z", round(location.z()))
+                            .put("yaw", round(location.yaw()))
+                            .put("pitch", round(location.pitch()))
+                            .put(
                                     "distance",
                                     distance
                                             .map(PlayerInformationCommandService::round)
-                                            .map(Object::toString)
+                                            .map(String::valueOf)
                                             .orElse("-")
                             )
-                    )
+                            .build()
             );
         });
     }
@@ -193,7 +196,7 @@ public final class PlayerInformationCommandService {
                                     target,
                                     locations.currentLocation(target)
                             ))
-                            .filter(entry -> entry.location().world.equals(origin.world))
+                            .filter(entry -> entry.location().world().equals(origin.world()))
                             .map(entry -> new NearbyPlayer(
                                     entry.player(),
                                     distanceSquared(origin, entry.location())
@@ -208,29 +211,30 @@ public final class PlayerInformationCommandService {
                             .limit(settings.maximumNearResults())
                             .map(entry -> LocalizedMessage.of(
                                     "commands.playerstate.near-entry",
-                                    Map.of(
-                                            "player",
-                                            displayNames.displayName(entry.player()),
-                                            "distance",
-                                            Math.round(Math.sqrt(entry.distanceSquared()))
-                                    )
+                                    MessageArguments.builder()
+                                            .put("player", displayNames.displayName(entry.player()))
+                                            .put(
+                                                    "distance",
+                                                    Math.round(Math.sqrt(entry.distanceSquared()))
+                                            )
+                                            .build()
                             ))
                             .toList();
 
                     if (rows.isEmpty()) {
                         return PlayerStateCommandResult.success(
                                 "commands.playerstate.near-empty",
-                                Map.of("radius", radius)
+                                MessageArguments.builder().put("radius", radius).build()
                         );
                     }
 
                     var messages = new ArrayList<LocalizedMessage>();
                     messages.add(LocalizedMessage.of(
                             "commands.playerstate.near-header",
-                            Map.of(
-                                    "radius", radius,
-                                    "count", rows.size()
-                            )
+                            MessageArguments.builder()
+                                    .put("radius", radius)
+                                    .put("count", rows.size())
+                                    .build()
                     ));
                     messages.addAll(rows);
                     return PlayerStateCommandResult.success(messages);
@@ -238,9 +242,9 @@ public final class PlayerInformationCommandService {
     }
 
     private static double distanceSquared(CellLocation first, CellLocation second) {
-        return square(first.x - second.x)
-                + square(first.y - second.y)
-                + square(first.z - second.z);
+        return square(first.x() - second.x())
+                + square(first.y() - second.y())
+                + square(first.z() - second.z());
     }
 
     public CompletableFuture<PlayerStateCommandResult> realName(
@@ -273,21 +277,21 @@ public final class PlayerInformationCommandService {
                     if (matches.isEmpty()) {
                         return PlayerStateCommandResult.failure(
                                 "commands.playerstate.realname.none",
-                                Map.of("query", rawQuery)
+                                MessageArguments.builder().put("query", rawQuery).build()
                         );
                     }
 
                     var messages = new ArrayList<LocalizedMessage>();
                     messages.add(LocalizedMessage.of(
                             "commands.playerstate.realname.header",
-                            Map.of("count", matches.size())
+                            MessageArguments.builder().put("count", matches.size()).build()
                     ));
                     matches.forEach(target -> messages.add(LocalizedMessage.of(
                             "commands.playerstate.realname.entry",
-                            Map.of(
-                                    "displayName", displayNames.displayName(target),
-                                    "username", target.name()
-                            )
+                            MessageArguments.builder()
+                                    .put("displayName", displayNames.displayName(target))
+                                    .put("username", target.name())
+                                    .build()
                     )));
                     return PlayerStateCommandResult.success(messages);
                 });
@@ -322,7 +326,7 @@ public final class PlayerInformationCommandService {
                     ) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                Map.of("player", input)
+                                MessageArguments.builder().put("player", input).build()
                         ));
                     }
 
@@ -355,10 +359,10 @@ public final class PlayerInformationCommandService {
         var total = saturatedPlaytime(stored, activeStarted, now);
         return PlayerStateCommandResult.success(
                 "commands.playerstate.playtime",
-                Map.of(
-                        "player", name,
-                        "playtime", duration(total)
-                )
+                MessageArguments.builder()
+                        .put("player", name)
+                        .put("playtime", duration(total))
+                        .build()
         );
     }
 
@@ -398,7 +402,7 @@ public final class PlayerInformationCommandService {
                     if (resolved.optionalUuid().isEmpty()) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                Map.of("player", input)
+                                MessageArguments.builder().put("player", input).build()
                         ));
                     }
 
@@ -408,7 +412,7 @@ public final class PlayerInformationCommandService {
                     if (visibleOnline) {
                         return finish(PlayerStateCommandResult.success(
                                 "commands.playerstate.seen-online",
-                                Map.of("player", resolved.name())
+                                MessageArguments.builder().put("player", resolved.name()).build()
                         ));
                     }
 
@@ -416,27 +420,29 @@ public final class PlayerInformationCommandService {
                                 if (user.timestamps().lastQuit() <= 0L) {
                                     return finish(PlayerStateCommandResult.success(
                                             "commands.playerstate.seen-never",
-                                            Map.of("player", resolved.name())
+                                            MessageArguments.builder()
+                                                    .put("player", resolved.name())
+                                                    .build()
                                     ));
                                 }
 
                                 return finish(PlayerStateCommandResult.success(
                                         "commands.playerstate.seen-offline",
-                                        Map.of(
-                                                "player",
-                                                resolved.name(),
-                                                "timestamp",
-                                                Instant
-                                                        .ofEpochMilli(user.timestamps().lastQuit())
-                                                        .toString(),
-                                                "ago",
-                                                duration(Math.max(
-                                                        0L,
-                                                        System.currentTimeMillis() - user
-                                                                .timestamps()
-                                                                .lastQuit()
-                                                ))
-                                        )
+                                        MessageArguments.builder()
+                                                .put("player", resolved.name())
+                                                .put(
+                                                        "timestamp", Instant
+                                                                .ofEpochMilli(user.timestamps().lastQuit())
+                                                                .toString()
+                                                ).put(
+                                                        "ago",
+                                                        duration(Math.max(
+                                                                0L,
+                                                                System.currentTimeMillis() - user
+                                                                        .timestamps()
+                                                                        .lastQuit()
+                                                        ))
+                                                ).build()
                                 ));
                             })
                             .exceptionally(_ -> PlayerStateCommandResult.failed(
@@ -456,7 +462,7 @@ public final class PlayerInformationCommandService {
                     if (resolved.optionalUuid().isEmpty()) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                Map.of("player", input)
+                                MessageArguments.builder().put("player", input).build()
                         ));
                     }
 
@@ -467,7 +473,7 @@ public final class PlayerInformationCommandService {
                     ) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                Map.of("player", input)
+                                MessageArguments.builder().put("player", input).build()
                         ));
                     }
 
@@ -480,36 +486,36 @@ public final class PlayerInformationCommandService {
 
                                 return finish(PlayerStateCommandResult.success(
                                         "commands.playerstate.whois",
-                                        Map.ofEntries(
-                                                Map.entry("player", resolved.name()),
-                                                Map.entry(
+                                        MessageArguments.builder()
+                                                .put("player", resolved.name())
+                                                .put(
                                                         "uuid",
                                                         showUuid
                                                                 ? uuid.toString()
                                                                 : "-"
-                                                ),
-                                                Map.entry("online", resolved.online().isPresent()),
-                                                Map.entry("afk", user.state().afk()),
-                                                Map.entry(
+                                                )
+                                                .put("online", resolved.online().isPresent())
+                                                .put("afk", user.state().afk())
+                                                .put(
                                                         "firstJoin",
                                                         instantOrUnknown(user.timestamps().firstJoin())
-                                                ),
-                                                Map.entry(
+                                                )
+                                                .put(
                                                         "lastJoin",
                                                         instantOrUnknown(user.timestamps().lastJoin())
-                                                ),
-                                                Map.entry(
+                                                )
+                                                .put(
                                                         "lastQuit",
                                                         instantOrUnknown(user.timestamps().lastQuit())
-                                                ),
-                                                Map.entry("playtime", duration(total)),
-                                                Map.entry(
+                                                )
+                                                .put("playtime", duration(total))
+                                                .put(
                                                         "nickname",
                                                         user.state().nickname() == null
                                                                 ? "-"
                                                                 : user.state().nickname()
                                                 )
-                                        )
+                                                .build()
                                 ));
                             })
                             .exceptionally(_ -> PlayerStateCommandResult.failed(
@@ -518,10 +524,10 @@ public final class PlayerInformationCommandService {
                 });
     }
 
-    private static Object instantOrUnknown(long value) {
+    private static String instantOrUnknown(long value) {
         return value <= 0L
                 ? "unknown"
-                : Instant.ofEpochMilli(value);
+                : Instant.ofEpochMilli(value).toString();
     }
 
     public List<String> visibleOnlineNames(Optional<CellPlayer> viewer) {

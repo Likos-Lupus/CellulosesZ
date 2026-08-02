@@ -5,10 +5,9 @@ import top.likoslupus.cellulosesz.api.item.WorkstationPlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
-
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -48,11 +47,11 @@ public final class WorkstationSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.workstation-opened",
-                        Map.of("workstation", id)
+                        MessageArguments.builder().put("workstation", id).build()
                 )
                 : SignUseResult.failure(
                         "service.sign.workstation-failed",
-                        Map.of("workstation", id)
+                        MessageArguments.builder().put("workstation", id).build()
                 );
     }
 

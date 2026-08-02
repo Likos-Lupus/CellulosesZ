@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
@@ -15,7 +16,6 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
@@ -58,7 +58,9 @@ public final class CellulosesZCommand implements CommandContributor {
                             policy.reply(
                                     LocalizedMessage.of(
                                             "cellulosesz.version",
-                                            Map.of("version", runtime.version())
+                                            MessageArguments.builder()
+                                                    .put("version", runtime.version())
+                                                    .build()
                                     )
                             );
 
@@ -81,7 +83,9 @@ public final class CellulosesZCommand implements CommandContributor {
                                     policy.reply(
                                             LocalizedMessage.of(
                                                     "cellulosesz.version",
-                                                    Map.of("version", runtime.version())
+                                                    MessageArguments.builder()
+                                                            .put("version", runtime.version())
+                                                            .build()
                                             )
                                     );
 
@@ -178,14 +182,18 @@ public final class CellulosesZCommand implements CommandContributor {
                                                     policy.reply(
                                                             LocalizedMessage.of(
                                                                     "cellulosesz.module-row",
-                                                                    Map.of(
-                                                                            "id",
-                                                                            info.id(),
-                                                                            "enabled",
-                                                                            info.enabled(),
-                                                                            "phase",
-                                                                            info.phase().name()
-                                                                    )
+                                                                    MessageArguments.builder()
+                                                                            .put("id", info.id())
+                                                                            .put(
+                                                                                    "enabled",
+                                                                                    info.enabled()
+                                                                            )
+                                                                            .put(
+                                                                                    "phase",
+                                                                                    info.phase()
+                                                                                            .name()
+                                                                            )
+                                                                            .build()
                                                             )
                                                     )
                                             );
@@ -223,11 +231,17 @@ public final class CellulosesZCommand implements CommandContributor {
                                     policy.reply(
                                             LocalizedMessage.of(
                                                     "commands.command.cellulosesz.debug",
-                                                    Map.of(
-                                                            "version", runtime.version(),
-                                                            "modules", runtime.modules().size(),
-                                                            "commands", catalog.commands().size()
-                                                    )
+                                                    MessageArguments.builder()
+                                                            .put("version", runtime.version())
+                                                            .put(
+                                                                    "modules",
+                                                                    runtime.modules().size()
+                                                            )
+                                                            .put(
+                                                                    "commands",
+                                                                    catalog.commands().size()
+                                                            )
+                                                            .build()
                                             )
                                     );
 

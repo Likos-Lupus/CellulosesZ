@@ -22,6 +22,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.ArrayList;
@@ -52,8 +53,8 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     @Override
     public PlatformResult<Void> openInventory(CellPlayer viewer, CellPlayer target) {
         return onServerThread(() -> {
-            var viewerPlayer = MinecraftPlayers.requireOnline(viewer);
-            var targetPlayer = MinecraftPlayers.requireOnline(target);
+            var viewerPlayer = MinecraftPlayers.requireOnline(server, viewer);
+            var targetPlayer = MinecraftPlayers.requireOnline(server, target);
             var mirror = new InventoryMirror(targetPlayer.getInventory(), 54);
 
             viewerPlayer.openMenu(new SimpleMenuProvider(
@@ -72,8 +73,8 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     @Override
     public PlatformResult<Void> openEnderChest(CellPlayer viewer, CellPlayer target) {
         return onServerThread(() -> {
-            var viewerPlayer = MinecraftPlayers.requireOnline(viewer);
-            var targetPlayer = MinecraftPlayers.requireOnline(target);
+            var viewerPlayer = MinecraftPlayers.requireOnline(server, viewer);
+            var targetPlayer = MinecraftPlayers.requireOnline(server, target);
             viewerPlayer.openMenu(new SimpleMenuProvider(
                     (id, inventory, ignored) -> ChestMenu.threeRows(
                             id,
@@ -89,17 +90,12 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
     @Override
     public PlatformResult<List<InventoryItemSnapshot>> inventorySnapshot(CellPlayer player) {
-        return onServerThread(() -> store.snapshot(player)
-                .map(PlatformResult::success)
-                .orElseGet(() -> PlatformResult.failure(
-                        PlatformOperationStatus.INTERNAL_ERROR,
-                        "Inventory snapshot failed"
-                )));
+        return onServerThread(() -> store.snapshot(player));
     }
 
     @Override
     public PlatformResult<Boolean> plainSnapshot(InventoryItemSnapshot snapshot) {
-        return PlatformResult.success(store.plain(requireNonNull(snapshot, "snapshot")));
+        return onServerThread(() -> store.plain(requireNonNull(snapshot, "snapshot")));
     }
 
     @Override
@@ -108,53 +104,42 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
             List<InventoryItemRequest> removals,
             List<InventoryItemRequest> additions
     ) {
-        return onServerThread(() -> store.prepareExchange(player, removals, additions)
-                .map(PlatformResult::success)
-                .orElseGet(() -> PlatformResult.failure(
-                        PlatformOperationStatus.CONFLICT,
-                        "Inventory exchange could not be prepared"
-                )));
+        return onServerThread(() -> store.prepareExchange(player, removals, additions));
     }
 
     @Override
-    public PlatformResult<InventoryGrant> prepareGrant(
+    public PlatformResult<InventoryMutation> prepareGrant(
             CellPlayer player,
-            List<? extends InventoryItemSnapshot> snapshots
+            List<InventoryItemSnapshot> snapshots
     ) {
-        return onServerThread(() -> store.prepareGrant(player, snapshots)
-                .map(PlatformResult::success)
-                .orElseGet(() -> PlatformResult.failure(
-                        PlatformOperationStatus.CONFLICT,
-                        "Inventory grant could not be prepared"
-                )));
+        return onServerThread(() -> store.prepareGrant(player, snapshots));
     }
 
     @Override
     public PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player) {
         return onServerThread(() -> {
             var snapshots = store.snapshot(player);
-            if (snapshots.isEmpty()) {
-                return PlatformResult.failure(
-                        PlatformOperationStatus.INTERNAL_ERROR,
-                        "Inventory snapshot failed"
-                );
+            if (!snapshots.successful()) {
+                return PlatformResult.failure(snapshots.status(), snapshots.detail());
             }
 
             var views = new ArrayList<InventorySlotView>();
-            for (var snapshot : snapshots.orElseThrow()) {
+            for (var snapshot : snapshots.value().orElseThrow()) {
                 var descriptor = store.describe(snapshot);
-                if (descriptor.isEmpty()) {
-                    return PlatformResult.failure(
-                            PlatformOperationStatus.INTERNAL_ERROR,
-                            "Inventory snapshot decode failed"
-                    );
+                if (!descriptor.successful()) {
+                    return PlatformResult.failure(descriptor.status(), descriptor.detail());
+                }
+
+                var plain = store.plain(snapshot);
+                if (!plain.successful()) {
+                    return PlatformResult.failure(plain.status(), plain.detail());
                 }
 
                 views.add(new InventorySlotView(
                         snapshot,
-                        descriptor.orElseThrow(),
-                        slotKind(snapshot.slot),
-                        store.plain(snapshot)
+                        descriptor.value().orElseThrow(),
+                        slotKind(snapshot.slot()),
+                        plain.value().orElseThrow()
                 ));
             }
 
@@ -166,26 +151,26 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     public PlatformResult<InventorySlotView> heldSlot(CellPlayer player) {
         return onServerThread(() -> {
             var snapshot = store.heldSnapshot(player);
-            if (snapshot.isEmpty()) {
-                return PlatformResult.failure(
-                        PlatformOperationStatus.STATE_NOT_ALLOWED,
-                        "Main hand is empty"
-                );
+            if (!snapshot.successful()) {
+                return PlatformResult.failure(snapshot.status(), snapshot.detail());
             }
 
-            var descriptor = store.describe(snapshot.orElseThrow());
-            if (descriptor.isEmpty()) {
-                return PlatformResult.failure(
-                        PlatformOperationStatus.INTERNAL_ERROR,
-                        "Held stack snapshot decode failed"
-                );
+            var value = snapshot.value().orElseThrow();
+            var descriptor = store.describe(value);
+            if (!descriptor.successful()) {
+                return PlatformResult.failure(descriptor.status(), descriptor.detail());
+            }
+
+            var plain = store.plain(value);
+            if (!plain.successful()) {
+                return PlatformResult.failure(plain.status(), plain.detail());
             }
 
             return PlatformResult.success(new InventorySlotView(
-                    snapshot.orElseThrow(),
-                    descriptor.orElseThrow(),
+                    value,
+                    descriptor.value().orElseThrow(),
                     InventorySlotKind.MAIN,
-                    store.plain(snapshot.orElseThrow())
+                    plain.value().orElseThrow()
             ));
         });
     }
@@ -195,25 +180,12 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
             CellPlayer player,
             List<InventoryStackSelection> selections
     ) {
-        return onServerThread(() ->
-                store.prepareRemoval(player, selections)
-                        .map(PlatformResult::success)
-                        .orElseGet(() -> PlatformResult.failure(
-                                PlatformOperationStatus.CONFLICT,
-                                "Inventory changed before removal could be prepared"
-                        ))
-        );
+        return onServerThread(() -> store.prepareRemoval(player, selections));
     }
 
     @Override
     public PlatformResult<ItemDescriptor> describeSnapshot(InventoryItemSnapshot snapshot) {
-        var descriptor = store.describe(requireNonNull(snapshot, "snapshot"));
-        return descriptor
-                .map(PlatformResult::success)
-                .orElseGet(() -> PlatformResult.failure(
-                        PlatformOperationStatus.INVALID_ARGUMENT,
-                        "Inventory snapshot decode failed"
-                ));
+        return onServerThread(() -> store.describe(requireNonNull(snapshot, "snapshot")));
     }
 
     @Override
@@ -233,7 +205,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         }
 
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var held = nativePlayer.getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
@@ -266,7 +238,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     ) {
         requireNonNull(action, "action");
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var inventory = nativePlayer.getInventory();
             var helmet = nativePlayer.getItemBySlot(EquipmentSlot.HEAD);
 
@@ -329,7 +301,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     @Override
     public PlatformResult<ItemStackDetails> heldItemDetails(CellPlayer player) {
         return onServerThread(() -> {
-            var stack = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var stack = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             if (stack.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -361,7 +333,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     @Override
     public PlatformResult<BookDetails> heldBook(CellPlayer player) {
         return onServerThread(() -> details(MinecraftPlayers
-                .requireOnline(player)
+                .requireOnline(server, player)
                 .getMainHandItem()));
     }
 
@@ -369,7 +341,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     public PlatformResult<BookMutationResult> mutateBook(CellPlayer player, BookRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var original = nativePlayer.getMainHandItem();
             var current = details(original);
             if (!current.successful()) {
@@ -466,7 +438,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     }
 
     private PlatformResult<SkullResult> applySkull(SkullRequest request, GameProfile profile) {
-        var target = MinecraftPlayers.requireOnline(request.recipient());
+        var target = MinecraftPlayers.requireOnline(server, request.recipient());
         if (target.hasDisconnected()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -496,12 +468,21 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
         var expected = request.expectedHeld().orElseThrow();
         var currentSnapshot = store.heldSnapshot(request.recipient());
-        if (currentSnapshot.isEmpty()
-                || currentSnapshot.orElseThrow().slot != expected.slot
-                || !currentSnapshot
-                .orElseThrow()
-                .validatedStack()
-                .equals(expected.validatedStack())
+
+        if (!currentSnapshot.successful()) {
+            if (currentSnapshot.status() == PlatformOperationStatus.STATE_NOT_ALLOWED) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "Held item changed while profile resolved"
+                );
+            }
+
+            return PlatformResult.failure(currentSnapshot.status(), currentSnapshot.detail());
+        }
+
+        var currentSnapshotValue = currentSnapshot.value().orElseThrow();
+        if (currentSnapshotValue.slot() != expected.slot()
+                || !currentSnapshotValue.stack().equals(expected.stack())
         ) {
             return PlatformResult.failure(
                     PlatformOperationStatus.CONFLICT,
@@ -510,6 +491,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         }
 
         var current = target.getMainHandItem();
+
         if (!current.is(Items.PLAYER_HEAD)) {
             return PlatformResult.failure(
                     PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -568,9 +550,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         }
 
         var pages = content.pages().stream()
-                .map(page -> Filterable
-                        .passThrough(Component.literal(page.raw()))
-                )
+                .map(page -> Filterable.passThrough(Component.literal(page.raw())))
                 .toList();
         var replacement = original.transmuteCopy(Items.WRITTEN_BOOK);
 
@@ -710,15 +690,35 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     }
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
-        if (!server.requireRunning().isSameThread()) {
+        final var active = server.current();
+        if (active.isEmpty()) {
             return PlatformResult.failure(
-                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    PlatformOperationStatus.NOT_READY,
+                    "Minecraft server is not active"
+            );
+        }
+
+        if (!active.orElseThrow().isSameThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
             );
         }
 
         try {
             return operation.get();
+        } catch (MinecraftPlayerUnavailableException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
+        } catch (IllegalArgumentException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    failure.getMessage() == null
+                            ? "Invalid inventory operation"
+                            : failure.getMessage()
+            );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,

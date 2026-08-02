@@ -8,19 +8,23 @@ import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 
 import static java.util.Objects.requireNonNull;
 
 public final class MinecraftPlayerAudienceService implements PlayerAudienceService {
 
+    private final MinecraftServerHandle server;
     private final ServiceRegistry services;
     private final CellulosesZLogger logger;
 
     public MinecraftPlayerAudienceService(
+            MinecraftServerHandle server,
             ServiceRegistry services,
             CellulosesZLogger logger
     ) {
+        this.server = requireNonNull(server, "server");
         this.services = requireNonNull(services, "services");
         this.logger = requireNonNull(logger, "logger");
     }
@@ -33,7 +37,7 @@ public final class MinecraftPlayerAudienceService implements PlayerAudienceServi
     @Override
     public PlatformResult<Void> send(CellPlayer player, RichText message) {
         try {
-            MinecraftPlayers.requireOnline(player)
+            MinecraftPlayers.requireOnline(server, player)
                     .sendSystemMessage(MinecraftTextAdapter.toComponent(message, logger));
             return PlatformResult.success();
         } catch (IllegalStateException failure) {

@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
@@ -18,7 +19,6 @@ import top.likoslupus.cellulosesz.modules.kit.application.KitCooldown;
 import top.likoslupus.cellulosesz.modules.kit.command.argument.KitCooldownArgument;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -384,10 +384,9 @@ public final class KitCommand implements CommandContributor {
                 false,
                 LocalizedMessage.of(
                         GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
-                        Map.of(
-                                "player",
-                                policy.playerName().orElse("unknown")
-                        )
+                        MessageArguments.builder()
+                                .put("player", policy.playerName().orElse("unknown"))
+                                .build()
                 )
         );
     }

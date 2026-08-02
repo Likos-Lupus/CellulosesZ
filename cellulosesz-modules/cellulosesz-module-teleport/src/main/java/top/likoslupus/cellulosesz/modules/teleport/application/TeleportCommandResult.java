@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.modules.teleport.application;
 
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
 
 import static java.util.Objects.requireNonNull;
 
@@ -25,7 +25,7 @@ public record TeleportCommandResult(
 
     public static TeleportCommandResult success(
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         return new TeleportCommandResult(
                 TeleportCommandStatus.SUCCESS,
@@ -35,7 +35,7 @@ public record TeleportCommandResult(
 
     public static TeleportCommandResult partial(
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         return new TeleportCommandResult(
                 TeleportCommandStatus.PARTIAL_SUCCESS,
@@ -56,7 +56,7 @@ public record TeleportCommandResult(
     public static TeleportCommandResult failure(
             TeleportCommandStatus status,
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         return new TeleportCommandResult(
                 status,

@@ -3,11 +3,11 @@ package top.likoslupus.cellulosesz.modules.playerstate.application;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.List;
-import java.util.Map;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonEmpty;
+import static top.likoslupus.cellulosesz.api.validation.CollectionChecks.requireNonEmpty;
 
 import static java.util.Objects.requireNonNull;
 
@@ -15,17 +15,6 @@ public record PlayerStateCommandResult(
         CommandOutcome.Status status,
         List<LocalizedMessage> messages
 ) {
-
-    public PlayerStateCommandResult(
-            boolean success,
-            List<LocalizedMessage> messages
-    ) {
-        this(
-                success
-                        ? CommandOutcome.Status.SUCCESS
-                        : CommandOutcome.Status.REJECTED, messages
-        );
-    }
 
     public PlayerStateCommandResult {
         requireNonNull(status, "status");
@@ -40,7 +29,7 @@ public record PlayerStateCommandResult(
         );
     }
 
-    public static PlayerStateCommandResult success(String key, Map<String, ?> values) {
+    public static PlayerStateCommandResult success(String key, MessageArguments values) {
         return new PlayerStateCommandResult(
                 CommandOutcome.Status.SUCCESS,
                 List.of(LocalizedMessage.of(key, values))
@@ -58,7 +47,7 @@ public record PlayerStateCommandResult(
         );
     }
 
-    public static PlayerStateCommandResult failure(String key, Map<String, ?> values) {
+    public static PlayerStateCommandResult failure(String key, MessageArguments values) {
         return new PlayerStateCommandResult(
                 CommandOutcome.Status.REJECTED,
                 List.of(LocalizedMessage.of(key, values))
@@ -72,7 +61,7 @@ public record PlayerStateCommandResult(
         );
     }
 
-    public static PlayerStateCommandResult failed(String key, Map<String, ?> values) {
+    public static PlayerStateCommandResult failed(String key, MessageArguments values) {
         return new PlayerStateCommandResult(
                 CommandOutcome.Status.FAILED,
                 List.of(LocalizedMessage.of(key, values))

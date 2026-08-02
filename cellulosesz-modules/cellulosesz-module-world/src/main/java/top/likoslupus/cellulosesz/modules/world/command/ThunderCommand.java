@@ -91,7 +91,7 @@ public final class ThunderCommand implements CommandContributor {
 
                     var ticks = Math.multiplyExact(seconds, 20);
                     return worlds.setThunder(
-                            locations.currentLocation(player.orElseThrow()).world,
+                            locations.currentLocation(player.orElseThrow()).world(),
                             new ThunderRequest(BoolArgumentType.getBool(command, "enabled"), ticks)
                     );
                 }

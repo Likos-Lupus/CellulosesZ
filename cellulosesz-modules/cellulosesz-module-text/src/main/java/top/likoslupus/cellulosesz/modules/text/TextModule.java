@@ -3,10 +3,7 @@ package top.likoslupus.cellulosesz.modules.text;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.*;
-import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
-import top.likoslupus.cellulosesz.api.text.TextService;
+import top.likoslupus.cellulosesz.api.text.*;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.text.application.DefaultTextCommandService;
@@ -15,7 +12,6 @@ import top.likoslupus.cellulosesz.modules.text.command.TextCommand;
 import top.likoslupus.cellulosesz.modules.text.config.TextConfig;
 import top.likoslupus.cellulosesz.modules.text.service.ConfigTextService;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
@@ -82,7 +78,7 @@ public final class TextModule implements CellulosesZModule {
                             renderer.render(
                                     locales.locale(event.player()),
                                     GeneratedMessageKeys.COMMANDS_TEXT_LINE,
-                                    Map.of("line", line)
+                                    MessageArguments.builder().put("line", line).build()
                             )
                     ));
                 }

@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.api.item;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
 
 public record ItemGrantResult(
         int requested,

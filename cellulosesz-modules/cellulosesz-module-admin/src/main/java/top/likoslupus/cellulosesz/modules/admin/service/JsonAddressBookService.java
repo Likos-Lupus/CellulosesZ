@@ -14,14 +14,12 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonEmpty;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonEmpty;
 
 import static java.util.Objects.requireNonNull;
 
-public final class JsonAddressBookService implements
-        AddressBookService,
-        AsyncInitializable,
-        AsyncCloseable {
+public final class JsonAddressBookService
+        implements AddressBookService, AsyncInitializable, AsyncCloseable {
 
     private static final int MAXIMUM_PENDING_MUTATIONS = 4_096;
 

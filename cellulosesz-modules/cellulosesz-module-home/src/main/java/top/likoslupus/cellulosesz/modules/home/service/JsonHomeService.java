@@ -6,7 +6,8 @@ import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
-import top.likoslupus.cellulosesz.modules.home.data.HomeDocument;
+import top.likoslupus.cellulosesz.modules.home.persistence.HomeDocument;
+import top.likoslupus.cellulosesz.modules.home.persistence.HomeMapper;
 
 import java.nio.file.Path;
 import java.util.Locale;
@@ -42,9 +43,7 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
         var key = requireNonNull(uuid, "uuid");
         return operations.submit(
                 key,
-                () -> documentAccepted(key).thenApply(document ->
-                        Map.copyOf(document.homes)
-                )
+                () -> documentAccepted(key).thenApply(HomeMapper::homes)
         );
     }
 
@@ -53,7 +52,7 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
         var document = cache.get(requireNonNull(uuid, "uuid"));
         return document == null
                 ? Map.of()
-                : Map.copyOf(document.homes);
+                : HomeMapper.homes(document);
     }
 
     @Override
@@ -62,9 +61,13 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
         var normalizedName = normalize(name);
         return operations.submit(
                 key,
-                () -> documentAccepted(key).thenApply(document ->
-                        Optional.ofNullable(document.homes.get(normalizedName))
-                )
+                () -> documentAccepted(key)
+                        .thenApply(document ->
+                                Optional.ofNullable(document.homes.get(normalizedName))
+                                        .map(value ->
+                                                HomeMapper.toDomain(value, normalizedName)
+                                        )
+                        )
         );
     }
 
@@ -79,7 +82,7 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
         return mutate(
                 requireNonNull(uuid, "uuid"),
                 candidate -> {
-                    candidate.homes.put(normalizedName, location);
+                    candidate.homes.put(normalizedName, HomeMapper.fromDomain(location));
                     return true;
                 }
         );
@@ -155,9 +158,7 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
     }
 
     private HomeDocument copy(HomeDocument source) {
-        var copy = new HomeDocument(source.uuid);
-        copy.homes.putAll(source.homes);
-        return copy;
+        return HomeMapper.copy(source);
     }
 
     private String normalize(String name) {
@@ -177,10 +178,10 @@ public final class JsonHomeService implements HomeService, AsyncCloseable {
                 .createIfMissing(
                         path(uuid),
                         HomeDocument.class,
-                        () -> new HomeDocument(uuid)
+                        () -> HomeMapper.empty(uuid)
                 )
                 .thenApply(document -> {
-                    if (!document.uuid.equals(uuid)) {
+                    if (!HomeMapper.uuid(document).equals(uuid)) {
                         throw new IllegalArgumentException(
                                 "Home document UUID does not match its file name"
                         );

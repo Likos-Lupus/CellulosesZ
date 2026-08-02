@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.item;
 
-import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
-
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -26,7 +24,7 @@ public final class ItemConfig {
     public int maximumOversizedStack = 127;
     public int maximumDisplayedAliases = 20;
     public Map<String, String> aliases = new LinkedHashMap<>();
-    public Map<String, ItemDescriptor> customItems = new LinkedHashMap<>();
+    public Map<String, CustomItemConfig> customItems = new LinkedHashMap<>();
     public Set<String> blacklist = new LinkedHashSet<>();
 
     public void copyFrom(ItemConfig source) {
@@ -66,9 +64,16 @@ public final class ItemConfig {
         range(maximumDisplayedAliases, 1, 1024, "maximumDisplayedAliases");
     }
 
-    private static void range(int value, int minimum, int maximum, String name) {
+    private static void range(
+            int value,
+            int minimum,
+            int maximum,
+            String name
+    ) {
         if (value < minimum || value > maximum) {
-            throw new IllegalArgumentException(name + " must be between " + minimum + " and " + maximum);
+            throw new IllegalArgumentException(
+                    name + " must be between " + minimum + " and " + maximum
+            );
         }
     }
 

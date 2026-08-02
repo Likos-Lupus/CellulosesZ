@@ -14,6 +14,7 @@ import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -25,7 +26,6 @@ import top.likoslupus.cellulosesz.modules.teleport.command.*;
 import top.likoslupus.cellulosesz.modules.teleport.service.*;
 
 import java.time.Clock;
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.random.RandomGenerator;
@@ -230,7 +230,7 @@ public final class TeleportModule implements CellulosesZModule {
                                 renderer.render(
                                         audience.locale(event.player()),
                                         "service.teleport.back-persistence-failed",
-                                        Map.of()
+                                        MessageArguments.empty()
                                 )
                         ));
                     });

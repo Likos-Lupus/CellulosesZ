@@ -10,8 +10,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class DefaultTeleportRequestService implements TeleportRequestService {
 
@@ -209,7 +210,8 @@ public final class DefaultTeleportRequestService implements TeleportRequestServi
             requestsById.entrySet()
                     .removeIf(entry -> {
                         var request = entry.getValue().request;
-                        return request.requester().equals(player) || request.target().equals(player);
+                        return request.requester().equals(player)
+                                || request.target().equals(player);
                     });
             return before - requestsById.size();
         }

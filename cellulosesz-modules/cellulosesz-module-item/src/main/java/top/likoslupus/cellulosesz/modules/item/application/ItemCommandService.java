@@ -34,9 +34,14 @@ public final class ItemCommandService {
             boolean allowOversized
     ) {
         requireNonNull(player, "player");
-        descriptor = requireNonNull(descriptor, "descriptor").copy();
+        requireNonNull(descriptor, "descriptor");
 
-        if (!items.valid(descriptor)) {
+        var valid = items.valid(descriptor);
+        if (!valid.successful()) {
+            return PlatformResult.failure(valid.status(), valid.detail());
+        }
+
+        if (valid.value().isEmpty() || !valid.value().orElseThrow()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_INPUT,
                     "invalid-item"
@@ -50,7 +55,19 @@ public final class ItemCommandService {
             );
         }
 
-        if (descriptor.count > items.maxStackSize(descriptor) && !allowOversized) {
+        var maximum = items.maxStackSize(descriptor);
+        if (!maximum.successful()) {
+            return PlatformResult.failure(maximum.status(), maximum.detail());
+        }
+
+        if (maximum.value().isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INTERNAL_ERROR,
+                    "missing-max-stack-size"
+            );
+        }
+
+        if (descriptor.count() > maximum.value().orElseThrow() && !allowOversized) {
             return PlatformResult.failure(
                     PlatformOperationStatus.PERMISSION_DENIED,
                     "oversized-stack"

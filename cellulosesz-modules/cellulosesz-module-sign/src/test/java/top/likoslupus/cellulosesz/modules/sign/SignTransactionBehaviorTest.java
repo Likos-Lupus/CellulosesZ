@@ -1,10 +1,14 @@
 package top.likoslupus.cellulosesz.modules.sign;
 
 import org.junit.jupiter.api.Test;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.api.economy.EconomyService;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.item.InventoryMutation;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -13,11 +17,13 @@ import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.modules.sign.handler.SellSignHandler;
 import top.likoslupus.cellulosesz.modules.sign.handler.TradeSignHandler;
 import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -54,7 +60,7 @@ final class SignTransactionBehaviorTest {
             }
         });
 
-        var player = new CellPlayer(UUID.randomUUID(), "tester", new Object());
+        var player = new CellPlayer(UUID.randomUUID(), "tester");
         var first = new CellLocation("minecraft:overworld", 1, 64, 1, 0, 0);
         var second = new CellLocation("minecraft:overworld", 2, 64, 1, 0, 0);
         var raw = List.of("[Balance]", "", "", "");
@@ -93,13 +99,13 @@ final class SignTransactionBehaviorTest {
     private static PermissionService allowAllPermissions() {
         return new PermissionService() {
             @Override
-            public boolean has(Object source, String permission) {
+            public boolean has(CellPlayer source, String permission) {
                 return true;
             }
 
             @Override
             public int intOption(
-                    Object source,
+                    CellPlayer source,
                     String key,
                     int fallback
             ) {
@@ -108,7 +114,7 @@ final class SignTransactionBehaviorTest {
 
             @Override
             public boolean boolOption(
-                    Object source,
+                    CellPlayer source,
                     String key,
                     boolean fallback
             ) {
@@ -116,7 +122,7 @@ final class SignTransactionBehaviorTest {
             }
 
             @Override
-            public Optional<String> stringOption(Object source, String key) {
+            public Optional<String> stringOption(CellPlayer source, String key) {
                 return Optional.empty();
             }
         };
@@ -144,14 +150,20 @@ final class SignTransactionBehaviorTest {
     void tradeUsesOneAtomicExchangeAndDoesNotReportSuccessWhenCommitFails() {
         var mutation = new InventoryMutation() {
             @Override
-            public boolean commit() {
-                return false;
+            public PlatformResult<Void> commit() {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.CONFLICT,
+                        "inventory changed"
+                );
             }
 
             @Override
-            public boolean rollback() {
+            public PlatformResult<Void> rollback() {
                 fail("A failed atomic commit must not require rollback");
-                return false;
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_STATE,
+                        "rollback should not run"
+                );
             }
         };
         var inventory = proxy(
@@ -164,8 +176,9 @@ final class SignTransactionBehaviorTest {
         var items = proxy(
                 ItemService.class,
                 (method, args) -> switch (method.getName()) {
-                    case "parse" -> Optional.of(new ItemDescriptor(String.valueOf(args[0]), 1));
-                    case "valid" -> true;
+                    case "parse" ->
+                            PlatformResult.success(new ItemDescriptor(String.valueOf(args[0]), 1));
+                    case "valid" -> PlatformResult.success(true);
                     case "blacklisted" -> false;
                     case "commandArgument" -> ((ItemDescriptor) args[0]).normalizedItem();
                     default -> defaultValue(method);
@@ -173,7 +186,7 @@ final class SignTransactionBehaviorTest {
         );
         var handler = new TradeSignHandler(items, inventory);
         var context = new SignUseContext(
-                new CellPlayer(UUID.randomUUID(), "trader", new Object()),
+                new CellPlayer(UUID.randomUUID(), "trader"),
                 new CellLocation("minecraft:overworld", 0, 64, 0, 0, 0),
                 true,
                 List.of("[Trade]", "minecraft:stone", "minecraft:diamond", ""),
@@ -212,18 +225,147 @@ final class SignTransactionBehaviorTest {
 
     private static Object defaultValue(Method method) {
         var type = method.getReturnType();
-        if (type == void.class) return Boolean.TRUE;
-        if (type == boolean.class) return false;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == String.class) return "";
-        if (type == Optional.class) return Optional.empty();
-        if (type == List.class) return List.of();
-        if (type == Set.class) return Set.of();
-        if (type == Collection.class) return List.of();
-        if (type == Map.class) return Map.of();
-        if (type == CompletableFuture.class) return CompletableFuture.completedFuture(Boolean.TRUE);
+        if (type == void.class) {
+            return Boolean.TRUE;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == String.class) {
+            return "";
+        }
+        if (type == Optional.class) {
+            return Optional.empty();
+        }
+        if (type == List.class) {
+            return List.of();
+        }
+        if (type == Set.class) {
+            return Set.of();
+        }
+        if (type == Collection.class) {
+            return List.of();
+        }
+        if (type == Map.class) {
+            return Map.of();
+        }
+        if (type == CompletableFuture.class) {
+            return CompletableFuture.completedFuture(Boolean.TRUE);
+        }
         throw new UnsupportedOperationException(method.toString());
+    }
+
+    @Test
+    void sellReportsRollbackFailureSeparatelyFromDepositFailure() {
+        var mutation = new InventoryMutation() {
+            @Override
+            public PlatformResult<Void> commit() {
+                return PlatformResult.success();
+            }
+
+            @Override
+            public PlatformResult<Void> rollback() {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.ROLLBACK_FAILED,
+                        "inventory changed after commit"
+                );
+            }
+        };
+        var inventory = proxy(
+                InventoryPlatformService.class,
+                (method, _) -> method.getName().equals("prepareExchange")
+                        ? PlatformResult.success(mutation)
+                        : defaultValue(method)
+        );
+        var items = proxy(
+                ItemService.class,
+                (method, args) -> switch (method.getName()) {
+                    case "parse" ->
+                            PlatformResult.success(new ItemDescriptor("minecraft:stone", 2));
+                    case "valid" -> PlatformResult.success(true);
+                    case "blacklisted" -> false;
+                    case "commandArgument" -> ((ItemDescriptor) args[0]).normalizedArgument();
+                    default -> defaultValue(method);
+                }
+        );
+        var economy = proxy(
+                EconomyService.class,
+                (method, _) -> switch (method.getName()) {
+                    case "deposit" -> CompletableFuture.completedFuture(TransactionResult.failure(
+                            "economy.deposit-failed",
+                            BigDecimal.TEN,
+                            BigDecimal.ZERO
+                    ));
+                    case "balance" -> BigDecimal.ZERO;
+                    case "format" -> "10";
+                    case "topBalances" -> List.of();
+                    default -> throw new UnsupportedOperationException(method.getName());
+                }
+        );
+        var handler = new SellSignHandler(
+                items,
+                economy,
+                inventory,
+                immediateServerThread(),
+                new NoopLogger()
+        );
+        var context = new SignUseContext(
+                new CellPlayer(UUID.randomUUID(), "seller"),
+                new CellLocation("minecraft:overworld", 0, 64, 0, 0, 0),
+                true,
+                List.of("[Sell]", "2", "minecraft:stone", "10"),
+                false
+        );
+
+        var result = handler.use(context).join();
+
+        assertFalse(result.success());
+        assertEquals("service.sign.sell-rollback-failed", key(result));
+    }
+
+    private static ServerThreadExecutor immediateServerThread() {
+        return new ServerThreadExecutor() {
+            @Override
+            public boolean isServerThread() {
+                return true;
+            }
+
+            @Override
+            public void execute(Runnable task) {
+                task.run();
+            }
+
+            @Override
+            public <T> CompletableFuture<T> submit(Supplier<T> task) {
+                return CompletableFuture.completedFuture(task.get());
+            }
+        };
+    }
+
+    private static final class NoopLogger implements CellulosesZLogger {
+
+        @Override
+        public void warn(String message) {
+        }
+
+        @Override
+        public void error(String message) {
+        }
+
+        @Override
+        public void error(String message, Throwable throwable) {
+        }
+
+        @Override
+        public void info(String message) {
+        }
+
     }
 
     @NullMarked
@@ -237,7 +379,9 @@ final class SignTransactionBehaviorTest {
                 Class<T> type,
                 Supplier<T> defaults
         ) {
-            if (document == null) return CompletableFuture.completedFuture(defaults.get());
+            if (document == null) {
+                return CompletableFuture.completedFuture(defaults.get());
+            }
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
@@ -247,7 +391,9 @@ final class SignTransactionBehaviorTest {
                 Class<T> type,
                 Supplier<T> defaults
         ) {
-            if (document == null) document = defaults.get();
+            if (document == null) {
+                document = defaults.get();
+            }
             return CompletableFuture.completedFuture(type.cast(document));
         }
 

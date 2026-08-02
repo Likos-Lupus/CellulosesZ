@@ -9,7 +9,7 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.RichText;
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
@@ -74,13 +74,13 @@ public final class ItemNameCommand implements CommandContributor {
     }
 
     private static RichText validText(String value) {
-        value = Checks.requireNonBlank(value, "name");
-        value = Checks.requireMaxLength(
+        value = TextChecks.requireNonBlank(value, "name");
+        value = TextChecks.requireMaxLength(
                 value,
                 MAXIMUM_LENGTH,
                 "name"
         );
-        value = Checks.requireNoControlCharacters(value, "name");
+        value = TextChecks.requireNoControlCharacters(value, "name");
 
         return RichText.plain(value);
     }

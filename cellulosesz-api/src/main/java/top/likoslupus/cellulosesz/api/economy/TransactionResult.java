@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.api.economy;
 
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.math.BigDecimal;
-import java.util.Map;
 
 public record TransactionResult(
         boolean success,
@@ -17,16 +17,26 @@ public record TransactionResult(
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(true, LocalizedMessage.of(key), amount, balance);
+        return new TransactionResult(
+                true,
+                LocalizedMessage.of(key),
+                amount,
+                balance
+        );
     }
 
     public static TransactionResult success(
             String key,
-            Map<String, ?> placeholders,
+            MessageArguments placeholders,
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(true, LocalizedMessage.of(key, placeholders), amount, balance);
+        return new TransactionResult(
+                true,
+                LocalizedMessage.of(key, placeholders),
+                amount,
+                balance
+        );
     }
 
     public static TransactionResult failure(
@@ -34,16 +44,26 @@ public record TransactionResult(
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(false, LocalizedMessage.of(key), amount, balance);
+        return new TransactionResult(
+                false,
+                LocalizedMessage.of(key),
+                amount,
+                balance
+        );
     }
 
     public static TransactionResult failure(
             String key,
-            Map<String, ?> placeholders,
+            MessageArguments placeholders,
             BigDecimal amount,
             BigDecimal balance
     ) {
-        return new TransactionResult(false, LocalizedMessage.of(key, placeholders), amount, balance);
+        return new TransactionResult(
+                false,
+                LocalizedMessage.of(key, placeholders),
+                amount,
+                balance
+        );
     }
 
 }

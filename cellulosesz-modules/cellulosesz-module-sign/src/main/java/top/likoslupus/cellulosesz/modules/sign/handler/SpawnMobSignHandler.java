@@ -6,8 +6,7 @@ import top.likoslupus.cellulosesz.api.entity.SpawnMobResult;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
-
-import java.util.Map;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import static java.util.Objects.requireNonNull;
 
@@ -59,11 +58,17 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.spawnmob-success",
-                        Map.of("count", count, "entity", context.line(1))
+                        MessageArguments.builder()
+                                .put("count", count)
+                                .put("entity", context.line(1))
+                                .build()
                 )
                 : SignUseResult.failure(
                         "service.sign.spawnmob-failed",
-                        Map.of("spawned", spawned, "count", count)
+                        MessageArguments.builder()
+                                .put("spawned", spawned)
+                                .put("count", count)
+                                .build()
                 );
     }
 

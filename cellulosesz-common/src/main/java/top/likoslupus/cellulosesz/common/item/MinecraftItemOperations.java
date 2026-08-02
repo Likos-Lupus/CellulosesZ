@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.common.item;
 
 import com.google.gson.Gson;
+import com.google.gson.annotations.SerializedName;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.arguments.item.ItemParser;
@@ -19,10 +20,14 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 
-import java.util.*;
+import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -56,18 +61,35 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     }
 
     @Override
-    public boolean registryReady() {
+    public PlatformResult<Void> registryStatus() {
         try {
             server.requireRunning();
-            return true;
-        } catch (IllegalStateException _) {
-            return false;
+        } catch (IllegalStateException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.NOT_READY,
+                    failure.getMessage() == null
+                            ? "Server is not ready"
+                            : failure.getMessage()
+            );
         }
+        if (!server.serverThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.WRONG_THREAD,
+                    "Registry access requires the server thread"
+            );
+        }
+        return PlatformResult.success();
     }
 
     @Override
-    public Optional<ItemDescriptor> parse(String input) {
-        return inventory.parseDescriptor(input);
+    public PlatformResult<ItemDescriptor> parse(String input) {
+        return onServerThread(() -> inventory.parseDescriptor(input)
+                .map(PlatformResult::success)
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_INPUT,
+                        "Invalid item input"
+                ))
+        );
     }
 
     @Override
@@ -95,17 +117,23 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     }
 
     @Override
-    public boolean validItem(String itemId) {
-        return inventory.parseItem(normalize(itemId)).isPresent();
+    public PlatformResult<Boolean> validItem(String itemId) {
+        return onServerThread(() -> PlatformResult.success(
+                inventory.parseItem(normalize(itemId)).isPresent()
+        ));
     }
 
     @Override
-    public int maxStackSize(String itemId) {
-        return inventory.parseItem(normalize(itemId))
-                .map(input ->
+    public PlatformResult<Integer> maxStackSize(String itemId) {
+        return onServerThread(() -> inventory.parseItem(normalize(itemId))
+                .map(input -> PlatformResult.success(
                         input.createItemStack(1).getMaxStackSize()
-                )
-                .orElse(0);
+                ))
+                .orElseGet(() -> PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_ARGUMENT,
+                        "Unknown item: " + itemId
+                ))
+        );
     }
 
     @Override
@@ -117,27 +145,25 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                     List.of(),
                     List.of(new InventoryItemRequest(
                             argument,
-                            descriptor.count
+                            descriptor.count()
                     ))
             );
 
-            if (prepared.isEmpty()) {
-                return PlatformResult.failure(
-                        PlatformOperationStatus.STATE_NOT_ALLOWED,
-                        "Inventory has insufficient space"
-                );
+            if (!prepared.successful()) {
+                return PlatformResult.failure(prepared.status(), prepared.detail());
             }
 
-            if (!prepared.orElseThrow().commit()) {
+            var committed = prepared.value().orElseThrow().commit();
+            if (!committed.successful()) {
                 return PlatformResult.failure(
-                        PlatformOperationStatus.CONFLICT,
-                        "Inventory changed before grant"
+                        committed.status(),
+                        committed.detail()
                 );
             }
 
             return PlatformResult.success(new ItemGrantResult(
-                    descriptor.count,
-                    descriptor.count
+                    descriptor.count(),
+                    descriptor.count()
             ));
         });
     }
@@ -155,7 +181,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
             }
 
             var template = parsed.orElseThrow().createItemStack(1);
-            var nativeInventory = MinecraftPlayers.requireOnline(player).getInventory();
+            var nativeInventory = MinecraftPlayers.requireOnline(server, player).getInventory();
             var count = IntStream.range(0, nativeInventory.getContainerSize())
                     .mapToObj(nativeInventory::getItem)
                     .filter(stack -> !stack.isEmpty()
@@ -175,31 +201,23 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                     player,
                     List.of(new InventoryItemRequest(
                             descriptor.normalizedArgument(),
-                            descriptor.count
+                            descriptor.count()
                     )),
                     List.of()
             );
 
-            if (prepared.isEmpty()) {
-                return PlatformResult.failure(
-                        PlatformOperationStatus.STATE_NOT_ALLOWED,
-                        "Required item stack is unavailable"
-                );
+            if (!prepared.successful()) {
+                return PlatformResult.failure(prepared.status(), prepared.detail());
             }
 
-            return prepared.orElseThrow().commit()
-                    ? PlatformResult.success()
-                    : PlatformResult.failure(
-                            PlatformOperationStatus.CONFLICT,
-                            "Inventory changed before removal"
-                    );
+            return prepared.value().orElseThrow().commit();
         });
     }
 
     @Override
     public PlatformResult<String> heldItemId(CellPlayer player) {
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             return held.isEmpty()
                     ?
                     PlatformResult.failure(
@@ -214,7 +232,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     public PlatformResult<Void> setHeldName(CellPlayer player, Optional<RichText> name) {
         requireNonNull(name, "name");
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -239,7 +257,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     public PlatformResult<Void> setHeldLore(CellPlayer player, List<RichText> lore) {
         requireNonNull(lore, "lore");
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -271,7 +289,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
             boolean unsafe
     ) {
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -330,7 +348,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     public PlatformResult<Integer> repair(CellPlayer player, RepairScope scope) {
         requireNonNull(scope, "scope");
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             if (scope == RepairScope.HAND) {
                 return PlatformResult.success(repair(nativePlayer.getMainHandItem())
                         ? 1
@@ -352,7 +370,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     public PlatformResult<Void> applyPotion(CellPlayer player, PotionItemRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             if (held.isEmpty()
                     || !POTION_ITEMS.contains(MinecraftItems.id(held))
             ) {
@@ -392,7 +410,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     public PlatformResult<Void> applyFirework(CellPlayer player, FireworkItemRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(server, player).getMainHandItem();
             var itemId = held.isEmpty()
                     ? ""
                     : MinecraftItems.id(held);
@@ -436,12 +454,13 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 );
             }
 
-            var payload = new LinkedHashMap<String, Object>();
-            payload.put("shape", request.shape().orElseThrow().name().toLowerCase(Locale.ROOT));
-            payload.put("colors", request.colors());
-            payload.put("fade_colors", request.fadeColors());
-            payload.put("has_trail", request.trail());
-            payload.put("has_twinkle", request.flicker());
+            var payload = new FireworkExplosionPayload(
+                    request.shape().orElseThrow().name().toLowerCase(Locale.ROOT),
+                    request.colors(),
+                    request.fadeColors(),
+                    request.trail(),
+                    request.flicker()
+            );
             return copyTypedComponent(held, componentId, GSON.toJson(payload));
         });
     }
@@ -544,9 +563,26 @@ public final class MinecraftItemOperations implements ItemPlatformService {
         return true;
     }
 
+    private static String normalize(String value) {
+        var normalized = requireNonNull(value, "value").strip().toLowerCase(Locale.ROOT);
+        return normalized.contains(":")
+                ? normalized
+                : "minecraft:" + normalized;
+    }
+
     private <T> PlatformResult<T> onServerThread(
             Supplier<PlatformResult<T>> operation
     ) {
+        try {
+            server.requireRunning();
+        } catch (IllegalStateException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.NOT_READY,
+                    failure.getMessage() == null
+                            ? "Server is not ready"
+                            : failure.getMessage()
+            );
+        }
         if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
@@ -556,6 +592,18 @@ public final class MinecraftItemOperations implements ItemPlatformService {
 
         try {
             return operation.get();
+        } catch (IllegalArgumentException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    failure.getMessage() == null
+                            ? "Invalid item operation"
+                            : failure.getMessage()
+            );
+        } catch (MinecraftPlayerUnavailableException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,
@@ -564,11 +612,19 @@ public final class MinecraftItemOperations implements ItemPlatformService {
         }
     }
 
-    private static String normalize(String value) {
-        var normalized = requireNonNull(value, "value").strip().toLowerCase(Locale.ROOT);
-        return normalized.contains(":")
-                ? normalized
-                : "minecraft:" + normalized;
+    private record FireworkExplosionPayload(
+            String shape,
+            List<Integer> colors,
+            @SerializedName("fade_colors") List<Integer> fadeColors,
+            @SerializedName("has_trail") boolean trail,
+            @SerializedName("has_twinkle") boolean twinkle
+    ) {
+
+        private FireworkExplosionPayload {
+            colors = List.copyOf(colors);
+            fadeColors = List.copyOf(fadeColors);
+        }
+
     }
 
 }

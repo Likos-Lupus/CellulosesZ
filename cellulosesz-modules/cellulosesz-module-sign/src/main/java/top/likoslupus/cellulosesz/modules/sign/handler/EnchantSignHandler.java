@@ -4,9 +4,9 @@ import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -57,15 +57,17 @@ public final class EnchantSignHandler implements SynchronousSignHandler {
                                 parameters.name(),
                                 parameters.level(),
                                 false
-                        ).successful() ?
+                        ).successful()
+                                ?
                                 SignUseResult.success(
                                         "service.sign.enchant-success",
-                                        Map.of(
-                                                "enchantment", parameters.name(),
-                                                "level", parameters.level()
-                                        )
-                                ) :
-                                SignUseResult.failure("service.sign.enchant-failed")
+                                        MessageArguments.builder()
+                                                .put("enchantment", parameters.name())
+                                                .put("level", parameters.level())
+                                                .build()
+                                )
+                                :
+                                        SignUseResult.failure("service.sign.enchant-failed")
                 )
                 .orElseGet(() -> SignUseResult.failure("service.sign.enchant-format"));
     }

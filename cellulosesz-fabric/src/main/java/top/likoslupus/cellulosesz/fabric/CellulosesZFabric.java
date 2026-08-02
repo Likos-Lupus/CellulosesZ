@@ -115,7 +115,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 VanishPlatformService.class,
-                new FabricVanishPlatformService()
+                new FabricVanishPlatformService(server)
         );
         currentBootstrap.registerService(
                 WorldStatePlatformService.class,
@@ -183,11 +183,12 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         }
 
         if (permissionConfig.provider.opFallback) {
-            backends.add(new MinecraftOpPermissionBackend(permissionConfig.provider.opLevel));
+            backends.add(new MinecraftOpPermissionBackend(current.server(), permissionConfig.provider.opLevel));
         }
 
         if (backends.isEmpty()) {
             backends.add(new MinecraftOpPermissionBackend(
+                    current.server(),
                     current.coreConfig().permissions.opFallbackLevel
             ));
         }

@@ -76,26 +76,27 @@ public final class CellulosesZCommon {
         );
         bootstrap.registerService(
                 ClientLocaleService.class,
-                new MinecraftClientLocaleService()
+                new MinecraftClientLocaleService(server)
         );
         bootstrap.registerService(
                 PlayerAudienceService.class,
                 new MinecraftPlayerAudienceService(
+                        server,
                         bootstrap.serviceRegistry(),
                         bootstrap.logger()
                 )
         );
         bootstrap.registerService(
                 PlayerConnectionService.class,
-                new MinecraftPlayerConnectionService(bootstrap.logger())
+                new MinecraftPlayerConnectionService(server, bootstrap.logger())
         );
         bootstrap.registerService(
                 PlayerLocationPlatformService.class,
-                new MinecraftPlayerLocationService()
+                new MinecraftPlayerLocationService(server)
         );
         bootstrap.registerService(
                 PlayerNetworkService.class,
-                new MinecraftPlayerNetworkService()
+                new MinecraftPlayerNetworkService(server)
         );
         bootstrap.registerService(
                 TeleportOperations.class,

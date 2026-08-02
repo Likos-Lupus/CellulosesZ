@@ -4,46 +4,32 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Optional;
 
+/**
+ * Permission queries for a stable player identity. Backend failures are propagated, not represented
+ * as absence.
+ */
 public interface PermissionService {
 
-    default boolean has(CellPlayer player, String permission) {
-        return has(player.nativeHandle(), permission);
-    }
-
-    boolean has(Object source, String permission);
-
-    default int intOption(
+    boolean has(
             CellPlayer player,
-            String key,
-            int fallback
-    ) {
-        return intOption(player.nativeHandle(), key, fallback);
-    }
+            String permission
+    );
 
     int intOption(
-            Object source,
+            CellPlayer player,
             String key,
             int fallback
     );
 
-    default boolean boolOption(
-            CellPlayer player,
-            String key,
-            boolean fallback
-    ) {
-        return boolOption(player.nativeHandle(), key, fallback);
-    }
-
     boolean boolOption(
-            Object source,
+            CellPlayer player,
             String key,
             boolean fallback
     );
 
-    default Optional<String> stringOption(CellPlayer player, String key) {
-        return stringOption(player.nativeHandle(), key);
-    }
-
-    Optional<String> stringOption(Object source, String key);
+    Optional<String> stringOption(
+            CellPlayer player,
+            String key
+    );
 
 }

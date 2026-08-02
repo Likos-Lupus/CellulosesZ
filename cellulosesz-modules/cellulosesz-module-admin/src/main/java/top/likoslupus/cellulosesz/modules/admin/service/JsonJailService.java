@@ -5,23 +5,25 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.admin.data.JailDocument;
+import top.likoslupus.cellulosesz.modules.admin.persistence.JailDocument;
+import top.likoslupus.cellulosesz.modules.admin.persistence.JailMapper;
 
 import java.nio.file.Path;
 import java.time.Clock;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static java.util.Objects.requireNonNull;
 
@@ -82,27 +84,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
     }
 
     private static JailDocument.JailedEntry toDocument(JailedPlayer value) {
-        var target = new JailDocument.JailedEntry();
-
-        target.uuid = value.uuid().toString();
-        target.name = value.name();
-        target.jail = value.jail();
-        target.reason = value.reason();
-        target.actorName = value.actor();
-        target.createdAt = value.createdAt().toEpochMilli();
-        target.permanent = value.expiration() instanceof Expiration.Permanent;
-        target.expiresAt = value.expiration()
-                .expiresAt()
-                .map(Instant::toEpochMilli)
-                .orElse(0L);
-        target.hasReturnLocation =
-                value.returnLocation().isPresent();
-        value.returnLocation().ifPresent(
-                location -> target.returnLocation = location
-        );
-        target.state = value.state().name();
-
-        return target;
+        return JailMapper.fromDomain(value);
     }
 
     @Override
@@ -120,122 +102,21 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                 })
                 .thenAccept(loaded -> {
                     synchronized (this) {
-                        document = copy(loaded);
+                        document = JailMapper.copy(loaded);
                     }
                 });
     }
 
     private static List<Jail> snapshotJails(JailDocument source) {
-        var result = source.jails
-                .stream()
-                .map(JsonJailService::fromDocument)
-                .collect(Collectors.toCollection(ArrayList::new));
-        return List.copyOf(result);
+        return source.jails.stream()
+                .map(JailMapper::toDomain)
+                .toList();
     }
 
     private static List<JailedPlayer> snapshotJailed(JailDocument source) {
-        var result = source.jailed
-                .stream()
-                .map(JsonJailService::fromDocument)
-                .collect(Collectors.toCollection(ArrayList::new));
-        return List.copyOf(result);
-    }
-
-    private static JailDocument copy(JailDocument source) {
-        var target = new JailDocument();
-
-        source.jails.forEach(value -> {
-            var next = new JailDocument.JailEntry();
-
-            next.name = value.name;
-            next.location = copy(value.location);
-            next.createdBy = value.createdBy;
-            next.createdAt = value.createdAt;
-
-            target.jails.add(next);
-        });
-
-        source.jailed.forEach(value -> {
-            var next = new JailDocument.JailedEntry();
-
-            next.uuid = value.uuid;
-            next.name = value.name;
-            next.jail = value.jail;
-            next.reason = value.reason;
-            next.actorUuid = value.actorUuid;
-            next.actorName = value.actorName;
-            next.createdAt = value.createdAt;
-            next.permanent = value.permanent;
-            next.expiresAt = value.expiresAt;
-            next.returnLocation = copy(value.returnLocation);
-            next.hasReturnLocation = value.hasReturnLocation;
-            next.state = value.state;
-
-            target.jailed.add(next);
-        });
-
-        return target;
-    }
-
-    private static Jail fromDocument(JailDocument.JailEntry value) {
-        return new Jail(
-                validateName(value.name),
-                copy(value.location),
-                requireNonNull(value.createdBy, "createdBy"),
-                Instant.ofEpochMilli(value.createdAt)
-        );
-    }
-
-    private static JailedPlayer fromDocument(JailDocument.JailedEntry value) {
-        var expiration = value.permanent
-                ? Expiration.permanent()
-                : Expiration.at(
-                        Instant.ofEpochMilli(value.expiresAt)
-                );
-
-        var returnLocation = value.hasReturnLocation
-                ? Optional.of(copy(value.returnLocation))
-                : Optional.<CellLocation>empty();
-
-        return new JailedPlayer(
-                UUID.fromString(value.uuid),
-                value.name,
-                validateName(value.jail),
-                value.reason,
-                value.actorName,
-                Instant.ofEpochMilli(value.createdAt),
-                expiration,
-                returnLocation,
-                JailState.valueOf(value.state)
-        );
-    }
-
-    private static CellLocation copy(CellLocation value) {
-        return new CellLocation(
-                value.world,
-                value.x,
-                value.y,
-                value.z,
-                value.yaw,
-                value.pitch
-        );
-    }
-
-    private static String validateName(String input) {
-        var value = requireNonNull(input, "name")
-                .trim()
-                .toLowerCase(Locale.ROOT);
-
-        if (value.isBlank()
-                || value.length() > 32
-                || !value.matches("[a-z0-9_-]+")
-        ) {
-            throw new IllegalArgumentException(
-                    "invalid jail name"
-            );
-        }
-
-        return value;
+        return source.jailed.stream()
+                .map(JailMapper::toDomain)
+                .toList();
     }
 
     @Override
@@ -263,10 +144,65 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
 
                         return AdminResult.success(
                                 "service.admin.jail-set",
-                                Map.of("jail", normalized)
+                                MessageArguments.builder().put("jail", normalized).build()
                         );
                     });
                 });
+    }
+
+    private static String validateName(String input) {
+        var value = requireNonNull(input, "name")
+                .trim()
+                .toLowerCase(Locale.ROOT);
+
+        if (value.isBlank()
+                || value.length() > 32
+                || !value.matches("[a-z0-9_-]+")
+        ) {
+            throw new IllegalArgumentException(
+                    "invalid jail name"
+            );
+        }
+
+        return value;
+    }
+
+    private CompletableFuture<AdminResult> mutateAccepted(
+            Function<JailDocument, AdminResult> operation
+    ) {
+        return persistAccepted(current -> new Mutation<>(
+                current,
+                operation.apply(current)
+        )).exceptionally(_ -> AdminResult.failure(
+                AdminStatus.PERSISTENCE_FAILURE,
+                "service.admin.persistence-failed"
+        ));
+    }
+
+    private static JailDocument.JailEntry toDocument(Jail value) {
+        return JailMapper.fromDomain(value);
+    }
+
+    private <T> CompletableFuture<T> persistAccepted(
+            Function<JailDocument, Mutation<T>> operation
+    ) {
+        JailDocument current;
+        synchronized (this) {
+            current = copy(document);
+        }
+
+        var mutation = operation.apply(current);
+        return storage.save(path, mutation.document()).thenApply(_ -> {
+            synchronized (this) {
+                document = mutation.document();
+            }
+
+            return mutation.result();
+        });
+    }
+
+    private static JailDocument copy(JailDocument source) {
+        return JailMapper.copy(source);
     }
 
     @Override
@@ -284,7 +220,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     return AdminResult.failure(
                             AdminStatus.INVALID_INPUT,
                             "service.admin.jail-in-use",
-                            Map.of("jail", normalized)
+                            MessageArguments.builder().put("jail", normalized).build()
                     );
                 }
 
@@ -294,12 +230,12 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         ?
                         AdminResult.success(
                                 "service.admin.jail-deleted",
-                                Map.of("jail", normalized)
+                                MessageArguments.builder().put("jail", normalized).build()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.jail-not-found",
-                                Map.of("jail", normalized)
+                                MessageArguments.builder().put("jail", normalized).build()
                         );
             });
         });
@@ -367,7 +303,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.player-not-jailed",
-                                Map.of("player", player.name())
+                                MessageArguments.builder().put("player", player.name()).build()
                         )
                 );
             }
@@ -448,21 +384,26 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                 || !config.teleportOnJailRelease()
         ) {
             return removeAccepted(record.uuid())
-                    .thenApply(removed ->
-                            removed
-                                    ?
-                                    AdminResult.success(
-                                            "service.admin.player-unjailed",
-                                            Map.of(
-                                                    "player",
-                                                    player.name()
-                                            )
-                                    )
-                                    : AdminResult.failure(
-                                            AdminStatus.PERSISTENCE_FAILURE,
-                                            "service.admin.persistence-failed"
-                                    )
-                    );
+                    .handle((removed, failure) -> {
+                        if (failure != null) {
+                            return AdminResult.failure(
+                                    AdminStatus.PERSISTENCE_FAILURE,
+                                    "service.admin.persistence-failed"
+                            );
+                        }
+
+                        return removed
+                                ?
+                                AdminResult.success(
+                                        "service.admin.player-unjailed",
+                                        MessageArguments.of("player", player.name())
+                                )
+                                : AdminResult.failure(
+                                        AdminStatus.NOT_FOUND,
+                                        "service.admin.player-not-jailed",
+                                        MessageArguments.of("player", player.name())
+                                );
+                    });
         }
 
         return teleports
@@ -478,27 +419,22 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                         AdminResult.failure(
                                                 AdminStatus.PLATFORM_FAILURE,
                                                 "service.admin.unjail-teleport-failed",
-                                                Map.of(
-                                                        "player",
-                                                        player.name()
-                                                )
+                                                MessageArguments.builder()
+                                                        .put("player", player.name())
+                                                        .build()
                                         )
                                 )
                                 : removeAccepted(record.uuid())
-                                        .thenApply(removed ->
-                                                removed
-                                                        ?
-                                                        AdminResult.success(
-                                                                "service.admin.player-unjailed",
-                                                                Map.of(
-                                                                        "player",
-                                                                        player.name()
-                                                                )
-                                                        )
+                                        .handle((removed, failure) ->
+                                                failure == null && removed
+                                                        ? AdminResult.success(
+                                                        "service.admin.player-unjailed",
+                                                        MessageArguments.of("player", player.name())
+                                                )
                                                         : AdminResult.failure(
                                                                 AdminStatus.ROLLBACK_FAILURE,
                                                                 "service.admin.unjail-remove-failed",
-                                                                Map.of(
+                                                                MessageArguments.of(
                                                                         "player",
                                                                         player.name()
                                                                 )
@@ -511,48 +447,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
         return persistAccepted(current -> new Mutation<>(
                 current,
                 current.jailed.removeIf(value -> value.uuid.equals(uuid.toString()))
-        )).exceptionally(_ -> false);
-    }
-
-    private CompletableFuture<AdminResult> mutateAccepted(
-            Function<JailDocument, AdminResult> operation
-    ) {
-        return persistAccepted(current -> new Mutation<>(
-                current,
-                operation.apply(current)
-        )).exceptionally(_ -> AdminResult.failure(
-                AdminStatus.PERSISTENCE_FAILURE,
-                "service.admin.persistence-failed"
         ));
-    }
-
-    private static JailDocument.JailEntry toDocument(Jail value) {
-        var target = new JailDocument.JailEntry();
-
-        target.name = value.name();
-        target.location = value.location();
-        target.createdBy = value.createdBy();
-        target.createdAt = value.createdAt().toEpochMilli();
-
-        return target;
-    }
-
-    private <T> CompletableFuture<T> persistAccepted(
-            Function<JailDocument, Mutation<T>> operation
-    ) {
-        JailDocument current;
-        synchronized (this) {
-            current = copy(document);
-        }
-
-        var mutation = operation.apply(current);
-        return storage.save(path, mutation.document()).thenApply(_ -> {
-            synchronized (this) {
-                document = mutation.document();
-            }
-
-            return mutation.result();
-        });
     }
 
     private CompletableFuture<AdminResult> jailPlayerAccepted(
@@ -569,7 +464,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     AdminResult.failure(
                             AdminStatus.NOT_FOUND,
                             "service.admin.jail-not-found",
-                            Map.of("jail", jailName)
+                            MessageArguments.builder().put("jail", jailName).build()
                     )
             );
         }
@@ -593,7 +488,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
 
                     return replaceAccepted(value)
                             .thenCompose(saved -> {
-                                if (!saved) {
+                                if (!saved.successful()) {
                                     return completed(
                                             AdminResult.failure(
                                                     AdminStatus.PERSISTENCE_FAILURE,
@@ -612,12 +507,13 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                 return completed(
                                                         AdminResult.success(
                                                                 "service.admin.player-jailed",
-                                                                Map.of(
-                                                                        "player",
-                                                                        player.name(),
-                                                                        "jail",
-                                                                        target.name()
-                                                                )
+                                                                MessageArguments.builder()
+                                                                        .put(
+                                                                                "player",
+                                                                                player.name()
+                                                                        )
+                                                                        .put("jail", target.name())
+                                                                        .build()
                                                         )
                                                 );
                                             }
@@ -626,17 +522,27 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                     player.uuid(),
                                                     previous
                                             ).thenApply(rolledBack ->
-                                                    rolledBack
+                                                    rolledBack.successful()
                                                             ?
                                                             AdminResult.failure(
                                                                     AdminStatus.PLATFORM_FAILURE,
                                                                     "service.admin.jail-teleport-failed",
-                                                                    Map.of("player", player.name())
+                                                                    MessageArguments.builder()
+                                                                            .put(
+                                                                                    "player",
+                                                                                    player.name()
+                                                                            )
+                                                                            .build()
                                                             )
                                                             : AdminResult.failure(
                                                                     AdminStatus.ROLLBACK_FAILURE,
                                                                     "service.admin.jail-rollback-failed",
-                                                                    Map.of("player", player.name())
+                                                                    MessageArguments.builder()
+                                                                            .put(
+                                                                                    "player",
+                                                                                    player.name()
+                                                                            )
+                                                                            .build()
                                                             )
                                             );
                                         });
@@ -655,7 +561,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     AdminResult.failure(
                             AdminStatus.NOT_FOUND,
                             "service.admin.player-not-jailed",
-                            Map.of("player", name)
+                            MessageArguments.builder().put("player", name).build()
                     )
             );
         }
@@ -667,7 +573,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
 
         return replaceAccepted(pending)
                 .thenCompose(saved -> {
-                    if (!saved) {
+                    if (!saved.successful()) {
                         return completed(
                                 AdminResult.failure(
                                         AdminStatus.PERSISTENCE_FAILURE,
@@ -682,7 +588,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         return completed(
                                 AdminResult.success(
                                         "service.admin.unjail-pending",
-                                        Map.of("player", name)
+                                        MessageArguments.builder().put("player", name).build()
                                 )
                         );
                     }
@@ -694,8 +600,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                 });
     }
 
-    private synchronized List<JailedPlayer>
-    jailedPlayersIncludingExpired() {
+    private synchronized List<JailedPlayer> jailedPlayersIncludingExpired() {
         return snapshotJailed(document);
     }
 
@@ -709,15 +614,22 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
         }
     }
 
-    private CompletableFuture<Boolean> replaceAccepted(JailedPlayer record) {
+    private CompletableFuture<PlatformResult<Void>> replaceAccepted(JailedPlayer record) {
         return persistAccepted(current -> {
             current.jailed.removeIf(value -> value.uuid.equals(record.uuid().toString()));
             current.jailed.add(toDocument(record));
             return new Mutation<>(current, true);
-        }).exceptionally(_ -> false);
+        })
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(failure -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        failure.getMessage() == null
+                                ? "Failed to persist jailed player"
+                                : failure.getMessage()
+                ));
     }
 
-    private CompletableFuture<Boolean> restoreAccepted(
+    private CompletableFuture<PlatformResult<Void>> restoreAccepted(
             UUID uuid,
             Optional<JailedPlayer> previous
     ) {
@@ -725,7 +637,14 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
             current.jailed.removeIf(value -> value.uuid.equals(uuid.toString()));
             previous.ifPresent(value -> current.jailed.add(toDocument(value)));
             return new Mutation<>(current, true);
-        }).exceptionally(_ -> false);
+        })
+                .thenApply(_ -> PlatformResult.success())
+                .exceptionally(failure -> PlatformResult.failure(
+                        PlatformOperationStatus.STORAGE_FAILURE,
+                        failure.getMessage() == null
+                                ? "Failed to restore jailed player"
+                                : failure.getMessage()
+                ));
     }
 
     @Override

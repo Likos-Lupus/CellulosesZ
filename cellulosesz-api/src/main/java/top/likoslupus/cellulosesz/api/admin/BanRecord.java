@@ -5,8 +5,11 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static top.likoslupus.cellulosesz.api.validation.ConditionChecks.requireFalse;
+import static top.likoslupus.cellulosesz.api.validation.ConditionChecks.requireTrue;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 /**
  * Immutable player/IP punishment snapshot. Storage DTOs are module-internal.
@@ -30,7 +33,10 @@ public record BanRecord(
         requireNonNull(createdAt, "createdAt");
         requireNonNull(expiration, "expiration");
         requireNonNull(address, "address");
-        requireFalse(ip && (address.isEmpty() || uuid.isPresent()), "IP records require an address and no UUID");
+        requireFalse(
+                ip && (address.isEmpty() || uuid.isPresent()),
+                "IP records require an address and no UUID"
+        );
         requireTrue(
                 ip || (address.isEmpty() && uuid.isPresent()),
                 "Player records require a UUID and no address"
@@ -50,7 +56,16 @@ public record BanRecord(
             Instant createdAt,
             Expiration expiration
     ) {
-        return new BanRecord(Optional.of(uuid), name, reason, actor, createdAt, expiration, false, Optional.empty());
+        return new BanRecord(
+                Optional.of(uuid),
+                name,
+                reason,
+                actor,
+                createdAt,
+                expiration,
+                false,
+                Optional.empty()
+        );
     }
 
     public static BanRecord address(
@@ -61,7 +76,16 @@ public record BanRecord(
             Expiration expiration
     ) {
         var canonical = address.getHostAddress();
-        return new BanRecord(Optional.empty(), canonical, reason, actor, createdAt, expiration, true, Optional.of(address));
+        return new BanRecord(
+                Optional.empty(),
+                canonical,
+                reason,
+                actor,
+                createdAt,
+                expiration,
+                true,
+                Optional.of(address)
+        );
     }
 
     public boolean expired(Instant now) {

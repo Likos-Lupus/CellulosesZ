@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.common.command;
 
 import top.likoslupus.cellulosesz.api.service.Registration;
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -68,8 +68,8 @@ public final class CommandRegistry {
     ) {
 
         public Identity {
-            moduleId = Checks.requireNonBlank(moduleId, "moduleId").trim();
-            registrationId = Checks.requireNonBlank(registrationId, "registrationId").trim();
+            moduleId = TextChecks.requireNonBlank(moduleId, "moduleId").trim();
+            registrationId = TextChecks.requireNonBlank(registrationId, "registrationId").trim();
         }
 
         @Override

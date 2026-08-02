@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
+import top.likoslupus.cellulosesz.modules.warp.persistence.WarpDocument;
+import top.likoslupus.cellulosesz.modules.warp.persistence.WarpMapper;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
@@ -21,11 +23,11 @@ final class JsonWarpServiceReloadTest {
     @Test
     void stagedReloadPublishesOnlyOnCommitAndRollbackRestoresPreviousSnapshot() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(warp("old", 1.0));
+        storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(warp("next", 2.0));
+        storage.loaded = List.of(WarpMapper.fromDomain(warp("next", 2.0)));
         var prepared = service.prepareReload(true).join();
 
         assertEquals(List.of("old"), names(service));
@@ -54,17 +56,17 @@ final class JsonWarpServiceReloadTest {
     }
 
     private static List<String> names(JsonWarpService service) {
-        return service.cachedWarps().stream().map(warp -> warp.name).toList();
+        return service.cachedWarps().stream().map(Warp::name).toList();
     }
 
     @Test
     void stalePreparedReloadCannotOverwriteNewerMutation() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(warp("old", 1.0));
+        storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(warp("next", 2.0));
+        storage.loaded = List.of(WarpMapper.fromDomain(warp("next", 2.0)));
         var prepared = service.prepareReload(false).join();
         service.setWarp(
                 "live",
@@ -84,11 +86,14 @@ final class JsonWarpServiceReloadTest {
     @Test
     void failedPreparationLeavesLiveSnapshotUntouched() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(warp("old", 1.0));
+        storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(warp("duplicate", 1.0), warp("duplicate", 2.0));
+        storage.loaded = List.of(
+                WarpMapper.fromDomain(warp("duplicate", 1.0)),
+                WarpMapper.fromDomain(warp("duplicate", 2.0))
+        );
 
         assertThrows(Exception.class, () -> service.prepareReload(false).join());
         assertEquals(List.of("old"), names(service));
@@ -97,7 +102,7 @@ final class JsonWarpServiceReloadTest {
     private static final class ReloadStorage implements StorageService {
 
         private final Map<Path, Object> saved = new LinkedHashMap<>();
-        private List<Warp> loaded = List.of();
+        private List<WarpDocument> loaded = List.of();
 
         @Override
         public <T> CompletableFuture<T> loadOrDefault(
@@ -135,7 +140,9 @@ final class JsonWarpServiceReloadTest {
 
         @Override
         public <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type) {
-            return CompletableFuture.completedFuture(loaded.stream().map(type::cast).toList());
+            var result = new java.util.ArrayList<T>();
+            loaded.forEach(value -> result.add(type.cast(value)));
+            return CompletableFuture.completedFuture(List.copyOf(result));
         }
 
     }

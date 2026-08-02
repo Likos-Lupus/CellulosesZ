@@ -6,12 +6,12 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -84,7 +84,7 @@ public final class DefaultJailCommandService implements JailCommandService {
             return completed(AdminResult.failure(
                     AdminStatus.NOT_FOUND,
                     "commands.common.unknown-player",
-                    Map.of("player", player)
+                    MessageArguments.builder().put("player", player).build()
             ));
         }
 
@@ -125,7 +125,7 @@ public final class DefaultJailCommandService implements JailCommandService {
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
-                                Map.of("player", player)
+                                MessageArguments.builder().put("player", player).build()
                         ))
                         : jails.unjail(
                                 value.optionalUuid().orElseThrow(),

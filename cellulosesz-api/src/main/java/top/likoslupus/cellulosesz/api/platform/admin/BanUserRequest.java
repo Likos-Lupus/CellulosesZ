@@ -4,9 +4,10 @@ import top.likoslupus.cellulosesz.api.admin.Expiration;
 
 import java.time.Instant;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireMaxLength;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNoControlCharacters;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireMaxLength;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNoControlCharacters;
 
 public record BanUserRequest(
         PlayerProfileId target,

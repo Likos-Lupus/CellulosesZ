@@ -52,7 +52,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        var level = level(destination.world);
+        var level = level(destination.world());
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -61,11 +61,11 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
         }
 
         try {
-            var moved = MinecraftPlayers.requireOnline(player).teleportTo(
+            var moved = MinecraftPlayers.requireOnline(server, player).teleportTo(
                     level.orElseThrow(),
-                    destination.x, destination.y, destination.z,
+                    destination.x(), destination.y(), destination.z(),
                     Set.of(),
-                    destination.yaw, destination.pitch,
+                    destination.yaw(), destination.pitch(),
                     true
             );
             return moved
@@ -91,7 +91,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        var level = level(requested.world);
+        var level = level(requested.world());
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -99,7 +99,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        var base = BlockPos.containing(requested.x, requested.y, requested.z);
+        var base = BlockPos.containing(requested.x(), requested.y(), requested.z());
         for (var offset = 0; offset <= 8; offset++) {
             var up = base.above(offset);
             if (safe(level.orElseThrow(), up)) {
@@ -126,7 +126,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        var level = level(column.world);
+        var level = level(column.world());
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -136,7 +136,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
         var top = level.orElseThrow().getHeightmapPos(
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                BlockPos.containing(column.x, 0.0D, column.z)
+                BlockPos.containing(column.x(), 0.0D, column.z())
         );
 
         for (var offset = 0; offset <= 8; offset++) {
@@ -161,7 +161,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        var level = level(column.world);
+        var level = level(column.world());
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -172,8 +172,8 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
         var current = level.orElseThrow();
         var min = current.getMinY();
         var max = current.getMaxY();
-        var x = (int) Math.floor(column.x);
-        var z = (int) Math.floor(column.z);
+        var x = (int) Math.floor(column.x());
+        var z = (int) Math.floor(column.z());
         for (var y = min + 1; y < max - 1; y++) {
             var candidate = new BlockPos(x, y, z);
             if (safe(current, candidate)) {
@@ -197,7 +197,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
         }
 
         try {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false).getLocation();
             return PlatformResult.success(new CellLocation(
                     nativePlayer.level().dimension().identifier().toString(),
@@ -221,12 +221,12 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
     private static CellLocation at(CellLocation requested, BlockPos feet) {
         return new CellLocation(
-                requested.world,
+                requested.world(),
                 feet.getX() + 0.5D,
                 feet.getY(),
                 feet.getZ() + 0.5D,
-                requested.yaw,
-                requested.pitch
+                requested.yaw(),
+                requested.pitch()
         );
     }
 
@@ -235,12 +235,12 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
     }
 
     private static boolean finite(CellLocation location) {
-        return !location.world.isBlank()
-                && Double.isFinite(location.x)
-                && Double.isFinite(location.y)
-                && Double.isFinite(location.z)
-                && Float.isFinite(location.yaw)
-                && Float.isFinite(location.pitch);
+        return !location.world().isBlank()
+                && Double.isFinite(location.x())
+                && Double.isFinite(location.y())
+                && Double.isFinite(location.z())
+                && Float.isFinite(location.yaw())
+                && Float.isFinite(location.pitch());
     }
 
     private Optional<ServerLevel> level(String world) {
