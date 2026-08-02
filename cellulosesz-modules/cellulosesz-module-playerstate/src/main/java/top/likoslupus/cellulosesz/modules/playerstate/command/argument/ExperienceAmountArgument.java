@@ -11,9 +11,10 @@ import top.likoslupus.cellulosesz.api.playerstate.ExperienceUnit;
 import java.util.Collection;
 import java.util.List;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
 
-public final class ExperienceAmountArgument implements ArgumentType<ExperienceAmountArgument.Value> {
+public final class ExperienceAmountArgument
+        implements ArgumentType<ExperienceAmountArgument.Value> {
 
     private static final DynamicCommandExceptionType INVALID = new DynamicCommandExceptionType(
             value -> new LiteralMessage("Invalid experience amount: " + value)

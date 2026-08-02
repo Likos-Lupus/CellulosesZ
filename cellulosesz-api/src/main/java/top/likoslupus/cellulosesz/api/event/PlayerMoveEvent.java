@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.api.event;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 public final class PlayerMoveEvent extends AbstractCancellableEvent {
 
@@ -16,9 +16,9 @@ public final class PlayerMoveEvent extends AbstractCancellableEvent {
             CellLocation from,
             CellLocation to
     ) {
-        this.player = Objects.requireNonNull(player, "player");
-        this.from = Objects.requireNonNull(from, "from");
-        this.to = Objects.requireNonNull(to, "to");
+        this.player = requireNonNull(player, "player");
+        this.from = requireNonNull(from, "from");
+        this.to = requireNonNull(to, "to");
     }
 
     public CellPlayer player() {
@@ -34,14 +34,14 @@ public final class PlayerMoveEvent extends AbstractCancellableEvent {
     }
 
     public void to(CellLocation to) {
-        this.to = Objects.requireNonNull(to, "to");
+        this.to = requireNonNull(to, "to");
     }
 
     public boolean changedBlock() {
-        return !from.world.equals(to.world)
-                || (int) Math.floor(from.x) != (int) Math.floor(to.x)
-                || (int) Math.floor(from.y) != (int) Math.floor(to.y)
-                || (int) Math.floor(from.z) != (int) Math.floor(to.z);
+        return !from.world().equals(to.world())
+                || (int) Math.floor(from.x()) != (int) Math.floor(to.x())
+                || (int) Math.floor(from.y()) != (int) Math.floor(to.y())
+                || (int) Math.floor(from.z()) != (int) Math.floor(to.z());
     }
 
 }

@@ -59,7 +59,7 @@ public final class BalanceCommand implements CommandContributor {
                                         "player",
                                         StringArgumentType.word()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.economy.balance.other"
                                 ))

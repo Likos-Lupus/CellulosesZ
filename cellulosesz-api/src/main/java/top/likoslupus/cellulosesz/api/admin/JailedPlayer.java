@@ -6,8 +6,9 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 public record JailedPlayer(
         UUID uuid,
@@ -29,21 +30,8 @@ public record JailedPlayer(
         actor = requireNonBlank(actor, "actor").trim();
         requireNonNull(createdAt, "createdAt");
         requireNonNull(expiration, "expiration");
-        returnLocation = requireNonNull(returnLocation, "returnLocation").map(JailedPlayer::copy);
+        requireNonNull(returnLocation, "returnLocation");
         requireNonNull(state, "state");
-    }
-
-    private static CellLocation copy(CellLocation value) {
-        return new CellLocation(
-                value.world,
-                value.x, value.y, value.z,
-                value.yaw, value.pitch
-        );
-    }
-
-    @Override
-    public Optional<CellLocation> returnLocation() {
-        return returnLocation.map(JailedPlayer::copy);
     }
 
     public boolean expired(Instant now) {

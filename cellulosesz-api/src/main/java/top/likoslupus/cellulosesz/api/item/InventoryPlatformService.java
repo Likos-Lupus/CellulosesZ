@@ -22,9 +22,9 @@ public interface InventoryPlatformService {
             List<InventoryItemRequest> additions
     );
 
-    PlatformResult<InventoryGrant> prepareGrant(
+    PlatformResult<InventoryMutation> prepareGrant(
             CellPlayer player,
-            List<? extends InventoryItemSnapshot> snapshots
+            List<InventoryItemSnapshot> snapshots
     );
 
     PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player);

@@ -5,14 +5,14 @@ import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 public final class HealSignHandler implements SynchronousSignHandler {
 
     private final PlayerStateService states;
 
     public HealSignHandler(PlayerStateService states) {
-        this.states = Objects.requireNonNull(states, "states");
+        this.states = requireNonNull(states, "states");
     }
 
     @Override

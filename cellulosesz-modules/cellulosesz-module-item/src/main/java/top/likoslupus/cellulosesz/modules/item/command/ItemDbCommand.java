@@ -102,12 +102,16 @@ public final class ItemDbCommand implements CommandContributor {
                     var item = ItemDescriptorArgument.get(command, "item").normalizedItem();
                     var parsed = items.parse(item);
 
-                    return parsed.isPresent()
-                            ? PlatformResult.success(parsed.orElseThrow().copy())
-                            : PlatformResult.failure(
+                    if (!parsed.successful()) {
+                        return PlatformResult.failure(parsed.status(), parsed.detail());
+                    }
+
+                    return parsed.value()
+                            .<PlatformResult<?>>map(PlatformResult::success)
+                            .orElseGet(() -> PlatformResult.failure(
                                     PlatformOperationStatus.NOT_FOUND,
                                     "unknown-item"
-                            );
+                            ));
                 }
         );
     }

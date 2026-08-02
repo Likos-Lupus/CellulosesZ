@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.world;
 
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 
 import java.util.Optional;
 
@@ -14,7 +14,7 @@ public record EntityRemoveSelector(
     public EntityRemoveSelector {
         requireNonNull(kind, "kind");
         entityId = requireNonNull(entityId, "entityId")
-                .map(value -> Checks.requireNonBlank(value, "entityId").trim());
+                .map(value -> TextChecks.requireNonBlank(value, "entityId").trim());
         if (kind == Kind.ENTITY_TYPE && entityId.isEmpty()) {
             throw new IllegalArgumentException("entityId is required for ENTITY_TYPE selector");
         }

@@ -1,25 +1,23 @@
 package top.likoslupus.cellulosesz.api.command.service;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.UUID;
 
 public interface ConfirmationService {
 
-    String request(
+    <T> ConfirmationToken request(
             UUID uuid,
-            String action,
-            Object payload,
+            ConfirmationKey<T> key,
+            T payload,
             Duration ttl
     );
 
-    <T> Optional<T> consume(
+    <T> ConfirmationConsumeResult<T> consume(
             UUID uuid,
-            String action,
-            String token,
-            Class<T> type
+            ConfirmationKey<T> key,
+            ConfirmationToken token
     );
 
-    void clear(UUID uuid, String action);
+    <T> void clear(UUID uuid, ConfirmationKey<T> key);
 
 }

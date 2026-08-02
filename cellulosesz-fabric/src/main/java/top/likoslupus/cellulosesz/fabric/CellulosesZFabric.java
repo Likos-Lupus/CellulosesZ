@@ -115,7 +115,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 VanishPlatformService.class,
-                new FabricVanishPlatformService()
+                new FabricVanishPlatformService(server)
         );
         currentBootstrap.registerService(
                 WorldStatePlatformService.class,
@@ -150,7 +150,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
                 dispatch,
                 entities,
                 backups,
-                this::permissionBackend
+                () -> permissionBackend(server)
         );
         CellulosesZCommon.initialize(new CommonRuntime(
                 currentBootstrap,
@@ -160,7 +160,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         ));
     }
 
-    private PermissionBackend permissionBackend() {
+    private PermissionBackend permissionBackend(MinecraftServerHandle server) {
         var current = requireNonNull(
                 bootstrap,
                 "CellulosesZBootstrap has not been initialized"
@@ -183,11 +183,15 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         }
 
         if (permissionConfig.provider.opFallback) {
-            backends.add(new MinecraftOpPermissionBackend(permissionConfig.provider.opLevel));
+            backends.add(new MinecraftOpPermissionBackend(
+                    server,
+                    permissionConfig.provider.opLevel
+            ));
         }
 
         if (backends.isEmpty()) {
             backends.add(new MinecraftOpPermissionBackend(
+                    server,
                     current.coreConfig().permissions.opFallbackLevel
             ));
         }

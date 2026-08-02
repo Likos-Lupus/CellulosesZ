@@ -70,7 +70,7 @@ public final class WeatherSignHandler implements SynchronousSignHandler {
                 .count(context.line(2), 1, 86_400)
                 .orElse(300);
         var requestedWorld = context.line(3).isBlank()
-                ? context.location().world
+                ? context.location().world()
                 : context.line(3);
         var world = worldDirectory.resolveLoadedWorld(requestedWorld);
 

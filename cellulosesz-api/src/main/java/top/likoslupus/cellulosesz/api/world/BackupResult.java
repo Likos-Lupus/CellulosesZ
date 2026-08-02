@@ -2,8 +2,9 @@ package top.likoslupus.cellulosesz.api.world;
 
 import java.nio.file.Path;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public record BackupResult(
         Path archive,

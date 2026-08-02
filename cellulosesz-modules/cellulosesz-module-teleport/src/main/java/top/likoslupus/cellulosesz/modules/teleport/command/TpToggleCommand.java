@@ -70,7 +70,7 @@ public final class TpToggleCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.argument("player", EntityArgument.player())
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.teleport.tptoggle.others"
                         ))

@@ -1,6 +1,9 @@
 package top.likoslupus.cellulosesz.core.permission;
 
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 public final class CompositePermissionBackend implements PermissionBackend {
@@ -12,43 +15,55 @@ public final class CompositePermissionBackend implements PermissionBackend {
     }
 
     @Override
-    public boolean has(Object source, String permission) {
-        return backends.stream()
-                .anyMatch(backend -> backend.has(source, permission));
+    public boolean has(CellPlayer player, String permission) {
+        return backends.stream().anyMatch(backend ->
+                backend.has(player, permission)
+        );
     }
 
     @Override
-    public int intOption(Object source, String key, int fallback) {
+    public int intOption(CellPlayer player, String key, int fallback) {
         return backends.stream()
-                .flatMap(backend -> backend.stringOption(source, key).stream())
-                .flatMap(value -> parseInteger(value).stream())
+                .flatMap(backend -> backend.stringOption(player, key).stream())
+                .mapToInt(value -> parseInteger(key, value))
                 .findFirst()
                 .orElse(fallback);
     }
 
-    private Optional<Integer> parseInteger(String value) {
+    private static int parseInteger(String key, String value) {
         try {
-            return Optional.of(Integer.parseInt(value));
-        } catch (NumberFormatException _) {
-            return Optional.empty();
+            return Integer.parseInt(value);
+        } catch (NumberFormatException failure) {
+            throw new IllegalArgumentException(
+                    "Permission option " + key + " is not an integer: " + value,
+                    failure
+            );
         }
     }
 
     @Override
-    public boolean boolOption(Object source, String key, boolean fallback) {
+    public boolean boolOption(CellPlayer player, String key, boolean fallback) {
         return backends.stream()
-                .map(backend -> backend.stringOption(source, key))
-                .filter(Optional::isPresent)
+                .flatMap(backend -> backend.stringOption(player, key).stream())
+                .map(value -> parseBoolean(key, value))
                 .findFirst()
-                .filter(Optional::isPresent)
-                .map(value -> Boolean.parseBoolean(value.get()))
                 .orElse(fallback);
     }
 
+    private static boolean parseBoolean(String key, String value) {
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "true" -> true;
+            case "false" -> false;
+            default -> throw new IllegalArgumentException(
+                    "Permission option " + key + " is not a boolean: " + value
+            );
+        };
+    }
+
     @Override
-    public Optional<String> stringOption(Object source, String key) {
+    public Optional<String> stringOption(CellPlayer player, String key) {
         return backends.stream()
-                .flatMap(backend -> backend.stringOption(source, key).stream())
+                .flatMap(backend -> backend.stringOption(player, key).stream())
                 .findFirst();
     }
 

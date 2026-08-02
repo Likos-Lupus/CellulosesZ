@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.kit.application;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.item.*;
@@ -18,12 +16,16 @@ import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -33,8 +35,7 @@ final class DefaultKitCommandServiceTest {
     private static final UUID OTHER_ID = UUID.fromString("00000000-0000-0000-0000-000000000031");
     private static final CellPlayer SELF = new CellPlayer(
             SELF_ID,
-            "Tester",
-            new Object()
+            "Tester"
     );
 
     @Test
@@ -55,7 +56,7 @@ final class DefaultKitCommandServiceTest {
         var listed = service.list(_ -> false);
 
         assertTrue(listed.success());
-        assertEquals("starter", listed.message().placeholders().get("kits"));
+        assertEquals("starter", textArgument(listed.message(), "kits"));
         assertEquals(List.of("starter"), service.claimableNames(_ -> false));
         assertFalse(service.claim(SELF, "vip", _ -> false).join().success());
         assertTrue(service.claim(SELF, "vip", _ -> true).join().success());
@@ -67,12 +68,18 @@ final class DefaultKitCommandServiceTest {
             String permission,
             long cooldown
     ) {
-        var kit = new KitDefinition();
-        kit.id = id;
-        kit.displayName = id;
-        kit.permission = permission;
-        kit.cooldownSeconds = cooldown;
-        return kit;
+        return new KitDefinition(
+                id,
+                id,
+                permission.isBlank()
+                        ? Optional.empty()
+                        : Optional.of(permission),
+                cooldown == -1
+                        ? Duration.ofSeconds(-1)
+                        : Duration.ofSeconds(cooldown),
+                BigDecimal.ZERO,
+                List.of(new KitItem(0, "stack-default"))
+        );
     }
 
     private static DefaultKitCommandService service(
@@ -103,7 +110,10 @@ final class DefaultKitCommandServiceTest {
             }
 
             @Override
-            public CompletableFuture<ResolvedPlayer> resolve(String input, @Nullable CellPlayer viewer) {
+            public CompletableFuture<ResolvedPlayer> resolve(
+                    String input,
+                    @Nullable CellPlayer viewer
+            ) {
                 return CompletableFuture.completedFuture(resolveValue(input, known));
             }
 
@@ -137,13 +147,26 @@ final class DefaultKitCommandServiceTest {
         };
     }
 
+    private static String textArgument(LocalizedMessage message, String key) {
+        return (
+                (top.likoslupus.cellulosesz.api.text.MessageArgument.Text)
+                        message.placeholders().values().get(key)
+        ).value();
+    }
+
     @Test
     void showUsesStableFullSnapshotDescriptionsAndRejectsInvalidItem() {
         var kits = new FakeKits();
-        var definition = kit("tools", "", 0);
-        definition.items = List.of(
-                new KitItem(9, "stack-nine"),
-                new KitItem(1, "stack-one")
+        var definition = new KitDefinition(
+                "tools",
+                "tools",
+                Optional.empty(),
+                Duration.ZERO,
+                BigDecimal.ZERO,
+                List.of(
+                        new KitItem(9, "stack-nine"),
+                        new KitItem(1, "stack-one")
+                )
         );
         kits.values.add(definition);
 
@@ -153,7 +176,7 @@ final class DefaultKitCommandServiceTest {
         var shown = service.show("tools");
         assertTrue(shown.success());
 
-        var entries = String.valueOf(shown.message().placeholders().get("entries"));
+        var entries = textArgument(shown.message(), "entries");
         assertTrue(entries.indexOf("[1]") < entries.indexOf("[9]"));
 
         inventory.invalidDescription = true;
@@ -179,13 +202,13 @@ final class DefaultKitCommandServiceTest {
                 "daily",
                 new KitCooldown.Seconds(60)
         ).join().success());
-        assertEquals(60L, kits.lastSaved.cooldownSeconds);
+        assertEquals(60L, kits.lastSaved.cooldown().getSeconds());
         assertTrue(service.create(
                 SELF,
                 "once",
                 new KitCooldown.Once()
         ).join().success());
-        assertEquals(-1L, kits.lastSaved.cooldownSeconds);
+        assertEquals(-1L, kits.lastSaved.cooldown().getSeconds());
 
         kits.failSave = true;
         assertFalse(service.create(
@@ -195,7 +218,7 @@ final class DefaultKitCommandServiceTest {
         ).join().success());
         assertTrue(
                 kits.values.stream()
-                        .noneMatch(kit -> kit.id.equals("broken"))
+                        .noneMatch(kit -> kit.id().equals("broken"))
         );
     }
 
@@ -297,7 +320,7 @@ final class DefaultKitCommandServiceTest {
         )).join();
         assertTrue(others.success());
         assertEquals(OTHER_ID, kits.lastReset);
-        assertEquals("Other", others.message().placeholders().get("player"));
+        assertEquals("Other", textArgument(others.message(), "player"));
 
         var unknownService = service(
                 kits,
@@ -338,11 +361,6 @@ final class DefaultKitCommandServiceTest {
         private boolean failReset;
 
         @Override
-        public CompletableFuture<Void> reload() {
-            return CompletableFuture.completedFuture(null);
-        }
-
-        @Override
         public List<KitDefinition> kits() {
             return List.copyOf(values);
         }
@@ -350,7 +368,7 @@ final class DefaultKitCommandServiceTest {
         @Override
         public Optional<KitDefinition> kit(String id) {
             return values.stream()
-                    .filter(kit -> kit.id.equalsIgnoreCase(id))
+                    .filter(kit -> kit.id().equalsIgnoreCase(id))
                     .findFirst();
         }
 
@@ -361,7 +379,7 @@ final class DefaultKitCommandServiceTest {
             }
 
             lastSaved = kit;
-            values.removeIf(existing -> existing.id.equalsIgnoreCase(kit.id));
+            values.removeIf(existing -> existing.id().equalsIgnoreCase(kit.id()));
             values.add(kit);
             return CompletableFuture.completedFuture(null);
         }
@@ -372,13 +390,13 @@ final class DefaultKitCommandServiceTest {
                 return CompletableFuture.failedFuture(new IllegalStateException("delete"));
             }
             return CompletableFuture.completedFuture(
-                    values.removeIf(kit -> kit.id.equalsIgnoreCase(id))
+                    values.removeIf(kit -> kit.id().equalsIgnoreCase(id))
             );
         }
 
         @Override
         public CompletableFuture<KitClaimResult> claim(CellPlayer player, KitDefinition kit) {
-            lastClaimed = kit.id;
+            lastClaimed = kit.id();
             return CompletableFuture.completedFuture(
                     KitClaimResult.success(LocalizedMessage.of("kit.claimed"))
             );
@@ -403,10 +421,60 @@ final class DefaultKitCommandServiceTest {
         private boolean invalidDescription;
 
         @Override
+        public PlatformResult<Void> openInventory(CellPlayer viewer, CellPlayer target) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<Void> openEnderChest(CellPlayer viewer, CellPlayer target) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<List<InventoryItemSnapshot>> inventorySnapshot(CellPlayer player) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<Boolean> plainSnapshot(InventoryItemSnapshot snapshot) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<InventoryMutation> prepareExchange(
+                CellPlayer player,
+                List<InventoryItemRequest> removals,
+                List<InventoryItemRequest> additions
+        ) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<InventoryMutation> prepareGrant(
+                CellPlayer player,
+                List<InventoryItemSnapshot> snapshots
+        ) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public PlatformResult<List<InventorySlotView>> inventorySlots(CellPlayer player) {
             return snapshotFailure
                     ? PlatformResult.failure(PlatformOperationStatus.INTERNAL_ERROR, "snapshot")
                     : PlatformResult.success(slots);
+        }
+
+        @Override
+        public PlatformResult<InventorySlotView> heldSlot(CellPlayer player) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public PlatformResult<InventoryMutation> prepareRemoval(
+                CellPlayer player,
+                List<InventoryStackSelection> selections
+        ) {
+            throw new UnsupportedOperationException();
         }
 
         @Override
@@ -445,7 +513,10 @@ final class DefaultKitCommandServiceTest {
         }
 
         @Override
-        public PlatformResult<BookMutationResult> mutateBook(CellPlayer player, BookRequest request) {
+        public PlatformResult<BookMutationResult> mutateBook(
+                CellPlayer player,
+                BookRequest request
+        ) {
             throw new UnsupportedOperationException();
         }
 

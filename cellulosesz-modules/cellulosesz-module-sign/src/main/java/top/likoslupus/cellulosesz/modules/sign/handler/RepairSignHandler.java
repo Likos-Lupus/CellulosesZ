@@ -5,9 +5,9 @@ import top.likoslupus.cellulosesz.api.item.RepairScope;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -46,7 +46,7 @@ public final class RepairSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.repair-success",
-                        Map.of("count", count)
+                        MessageArguments.builder().put("count", count).build()
                 )
                 : SignUseResult.failure("service.sign.repair-nothing");
     }

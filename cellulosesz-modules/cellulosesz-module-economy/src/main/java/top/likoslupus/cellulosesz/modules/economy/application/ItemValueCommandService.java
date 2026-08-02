@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy.application;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
@@ -8,11 +7,17 @@ import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.economy.WorthService;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.math.BigDecimal;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -38,7 +43,10 @@ public final class ItemValueCommandService {
         this.serverThread = requireNonNull(serverThread, "serverThread");
     }
 
-    public CompletableFuture<EconomyCommandResult> worth(CellPlayer player, WorthSelector selector) {
+    public CompletableFuture<EconomyCommandResult> worth(
+            CellPlayer player,
+            WorthSelector selector
+    ) {
         requireNonNull(player, "player");
         requireNonNull(selector, "selector");
 
@@ -67,7 +75,7 @@ public final class ItemValueCommandService {
             try {
                 quantities.merge(
                         view.descriptor().normalizedItem(),
-                        (long) view.descriptor().count,
+                        (long) view.descriptor().count(),
                         Math::addExact
                 );
             } catch (ArithmeticException failure) {
@@ -86,19 +94,27 @@ public final class ItemValueCommandService {
         for (var entry : quantities.entrySet()) {
             var unit = worths.worth(entry.getKey());
             if (unit.isEmpty()) {
-                messages.add(LocalizedMessage.of("commands.economy.worth-row-missing", Map.of(
-                        "item", entry.getKey(), "count", entry.getValue())));
+                messages.add(LocalizedMessage.of(
+                        "commands.economy.worth-row-missing",
+                        MessageArguments.builder()
+                                .put("item", entry.getKey())
+                                .put("count", entry.getValue())
+                                .build()
+                ));
                 continue;
             }
 
             var line = unit.orElseThrow().multiply(BigDecimal.valueOf(entry.getValue()));
             total = total.add(line);
             found++;
-            messages.add(LocalizedMessage.of("commands.economy.worth-row", Map.of(
-                    "item", entry.getKey(),
-                    "count", entry.getValue(),
-                    "amount", economy.format(line)
-            )));
+            messages.add(LocalizedMessage.of(
+                    "commands.economy.worth-row",
+                    MessageArguments.builder()
+                            .put("item", entry.getKey())
+                            .put("count", entry.getValue())
+                            .put("amount", economy.format(line))
+                            .build()
+            ));
         }
 
         if (found == 0) {
@@ -107,10 +123,10 @@ public final class ItemValueCommandService {
 
         messages.add(LocalizedMessage.of(
                 "commands.economy.worth-total",
-                Map.of(
-                        "found", found,
-                        "total", economy.format(total)
-                )
+                MessageArguments.builder()
+                        .put("found", found)
+                        .put("total", economy.format(total))
+                        .build()
         ));
 
         return EconomyCommandResult.success(messages);
@@ -124,19 +140,16 @@ public final class ItemValueCommandService {
         }
 
         var parsed = items.parse(itemInput);
-        if (parsed.isEmpty()) {
-            return CompletableFuture.completedFuture(EconomyCommandResult.failure(
-                    "commands.economy.sell.invalid-item",
-                    Map.of("item", itemInput)
-            ));
+        if (!parsed.successful()) {
+            return CompletableFuture.completedFuture(itemParseFailure(parsed, itemInput));
         }
 
-        var canonical = parsed.orElseThrow().normalizedItem();
+        var canonical = parsed.value().orElseThrow().normalizedItem();
         var unit = worths.worth(canonical);
         if (unit.isEmpty()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.worth-missing",
-                    Map.of("item", canonical)
+                    MessageArguments.builder().put("item", canonical).build()
             ));
         }
 
@@ -144,20 +157,40 @@ public final class ItemValueCommandService {
         return CompletableFuture.completedFuture(EconomyCommandResult.success(List.of(
                 LocalizedMessage.of(
                         "commands.economy.worth-row",
-                        Map.of(
-                                "item", canonical,
-                                "count", requested,
-                                "amount", economy.format(amount)
-                        )
+                        MessageArguments.builder()
+                                .put("item", canonical)
+                                .put("count", requested)
+                                .put("amount", economy.format(amount))
+                                .build()
                 ),
                 LocalizedMessage.of(
                         "commands.economy.worth-total",
-                        Map.of(
-                                "found", 1,
-                                "total", economy.format(amount)
-                        )
+                        MessageArguments.builder()
+                                .put("found", 1)
+                                .put("total", economy.format(amount))
+                                .build()
                 )
         )));
+    }
+
+    private static EconomyCommandResult itemParseFailure(
+            PlatformResult<?> result,
+            String input
+    ) {
+        var arguments = MessageArguments.builder()
+                .put("item", input)
+                .put("detail", result.detail())
+                .build();
+        return switch (result.status()) {
+            case INVALID_ARGUMENT, INVALID_INPUT, NOT_FOUND -> EconomyCommandResult.failure(
+                    "commands.economy.sell.invalid-item",
+                    arguments
+            );
+            default -> EconomyCommandResult.failed(
+                    "service.economy.persistence-failed",
+                    arguments
+            );
+        };
     }
 
     public CompletableFuture<EconomyCommandResult> sell(
@@ -191,19 +224,23 @@ public final class ItemValueCommandService {
                                 ) {
                                     return CompletableFuture.completedFuture(EconomyCommandResult.success(
                                             "commands.economy.sell.success",
-                                            Map.of(
-                                                    "count", prepared.count(),
-                                                    "amount", economy.format(prepared.total()),
-                                                    "balance", economy.format(outcome.result().balance())
-                                            )
+                                            MessageArguments.builder()
+                                                    .put("count", prepared.count())
+                                                    .put("amount", economy.format(prepared.total()))
+                                                    .put(
+                                                            "balance",
+                                                            economy.format(outcome.result()
+                                                                    .balance())
+                                                    )
+                                                    .build()
                                     ));
                                 }
 
                                 return serverThread
                                         .submit(transaction::rollback)
                                         .thenApply(rolledBack -> {
-                                            if (!rolledBack) {
-                                                return EconomyCommandResult.failure(
+                                            if (!rolledBack.successful()) {
+                                                return EconomyCommandResult.failed(
                                                         "commands.economy.sell.rollback-failed"
                                                 );
                                             }
@@ -215,7 +252,10 @@ public final class ItemValueCommandService {
                                             }
 
                                             return EconomyCommandResult.failure(
-                                                    requireNonNull(outcome.result(), "result").message()
+                                                    requireNonNull(
+                                                            outcome.result(),
+                                                            "result"
+                                                    ).message()
                                             );
                                         });
                             });
@@ -250,14 +290,12 @@ public final class ItemValueCommandService {
                 candidates = List.of(held.value().orElseThrow());
             }
             case ITEM -> {
-                var parsed = items.parse(itemInput.orElseThrow());
-                if (parsed.isEmpty()) {
-                    return SalePreparation.failure(EconomyCommandResult.failure(
-                            "commands.economy.sell.invalid-item",
-                            Map.of("item", itemInput.orElseThrow())
-                    ));
+                var input = itemInput.orElseThrow();
+                var parsed = items.parse(input);
+                if (!parsed.successful()) {
+                    return SalePreparation.failure(itemParseFailure(parsed, input));
                 }
-                var canonical = parsed.orElseThrow().normalizedItem();
+                var canonical = parsed.value().orElseThrow().normalizedItem();
 
                 candidates = all.stream()
                         .filter(view -> view.descriptor().normalizedItem().equals(canonical))
@@ -266,7 +304,9 @@ public final class ItemValueCommandService {
             default -> candidates = all;
         }
 
-        var remaining = selector == SellSelector.ALL ? Integer.MAX_VALUE : requested;
+        var remaining = selector == SellSelector.ALL
+                ? Integer.MAX_VALUE
+                : requested;
         var selections = new ArrayList<InventoryStackSelection>();
         var total = BigDecimal.ZERO;
         var count = 0;
@@ -279,12 +319,16 @@ public final class ItemValueCommandService {
             }
 
             var worth = worths.worth(view.descriptor().normalizedItem());
-            if (worth.isEmpty()) continue;
+            if (worth.isEmpty()) {
+                continue;
+            }
 
             var selected = selector == SellSelector.ALL
-                    ? view.descriptor().count
-                    : Math.min(remaining, view.descriptor().count);
-            if (selected <= 0) continue;
+                    ? view.descriptor().count()
+                    : Math.min(remaining, view.descriptor().count());
+            if (selected <= 0) {
+                continue;
+            }
 
             selections.add(new InventoryStackSelection(view.snapshot(), selected));
             total = total.add(worth.orElseThrow().multiply(BigDecimal.valueOf(selected)));
@@ -309,18 +353,18 @@ public final class ItemValueCommandService {
                     selector == SellSelector.ITEM
                             ? "commands.economy.worth-missing"
                             : "commands.economy.sell.no-sellable-items",
-                    itemInput.<Map<String, Object>>map(item -> Map.of("item", item))
-                            .orElseGet(Map::of)
+                    itemInput.map(item -> MessageArguments.of("item", item))
+                            .orElseGet(MessageArguments::empty)
             ));
         }
 
         if (selector != SellSelector.ALL && remaining > 0) {
             return SalePreparation.failure(EconomyCommandResult.failure(
                     "commands.economy.sell.not-enough",
-                    Map.of(
-                            "requested", requested,
-                            "available", requested - remaining
-                    )
+                    MessageArguments.builder()
+                            .put("requested", requested)
+                            .put("available", requested - remaining)
+                            .build()
             ));
         }
 
@@ -332,9 +376,11 @@ public final class ItemValueCommandService {
         }
 
         var mutation = prepared.value().orElseThrow();
-        if (!mutation.commit()) {
-            return SalePreparation.failure(EconomyCommandResult.failure(
-                    "commands.economy.sell.inventory-changed"
+        var committed = mutation.commit();
+        if (!committed.successful()) {
+            return SalePreparation.failure(EconomyCommandResult.failed(
+                    "commands.economy.sell.inventory-changed",
+                    MessageArguments.of("detail", committed.detail())
             ));
         }
 
@@ -343,49 +389,42 @@ public final class ItemValueCommandService {
 
     public CompletableFuture<EconomyCommandResult> setWorth(String input, BigDecimal amount) {
         var parsed = items.parse(input);
-        if (parsed.isEmpty()) {
-            return CompletableFuture.completedFuture(EconomyCommandResult.failure(
-                    "commands.economy.sell.invalid-item",
-                    Map.of("item", input)
-            ));
+        if (!parsed.successful()) {
+            return CompletableFuture.completedFuture(itemParseFailure(parsed, input));
         }
 
-        var canonical = parsed.orElseThrow().normalizedItem();
+        var canonical = parsed.value().orElseThrow().normalizedItem();
         return worths
                 .setWorth(canonical, amount)
                 .thenApply(_ -> EconomyCommandResult.success(
                         "commands.economy.set-worth-command.reply.set-worth",
-                        Map.of(
-                                "item", canonical,
-                                "amount", amount.stripTrailingZeros().toPlainString()
-                        )
+                        MessageArguments.builder()
+                                .put("item", canonical)
+                                .put("amount", amount.stripTrailingZeros().toPlainString())
+                                .build()
                 ));
     }
 
     public CompletableFuture<EconomyCommandResult> removeWorth(String input) {
         var parsed = items.parse(input);
-        if (parsed.isEmpty()) {
-            return CompletableFuture.completedFuture(EconomyCommandResult.failure(
-                    "commands.economy.sell.invalid-item", Map.of("item", input)
-            ));
+        if (!parsed.successful()) {
+            return CompletableFuture.completedFuture(itemParseFailure(parsed, input));
         }
 
-        var canonical = parsed.orElseThrow().normalizedItem();
+        var canonical = parsed.value().orElseThrow().normalizedItem();
         return worths
                 .removeWorth(canonical)
                 .thenApply(removed ->
-                        removed ? EconomyCommandResult.success(
+                        removed
+                                ? EconomyCommandResult.success(
                                 "commands.economy.worth-removed",
-                                Map.of("item", canonical)
-                        ) : EconomyCommandResult.failure(
-                                "commands.economy.worth-missing",
-                                Map.of("item", canonical)
+                                MessageArguments.builder().put("item", canonical).build()
                         )
+                                : EconomyCommandResult.failure(
+                                        "commands.economy.worth-missing",
+                                        MessageArguments.builder().put("item", canonical).build()
+                                )
                 );
-    }
-
-    public Set<String> itemNames() {
-        return items.names();
     }
 
     public enum SellSelector {
@@ -422,7 +461,8 @@ public final class ItemValueCommandService {
                 BigDecimal total,
                 int count
         ) {
-            return new SalePreparation(Optional.of(mutation),
+            return new SalePreparation(
+                    Optional.of(mutation),
                     total,
                     count,
                     Optional.empty()
@@ -430,7 +470,8 @@ public final class ItemValueCommandService {
         }
 
         static SalePreparation failure(EconomyCommandResult result) {
-            return new SalePreparation(Optional.empty(),
+            return new SalePreparation(
+                    Optional.empty(),
                     BigDecimal.ZERO,
                     0,
                     Optional.of(result)

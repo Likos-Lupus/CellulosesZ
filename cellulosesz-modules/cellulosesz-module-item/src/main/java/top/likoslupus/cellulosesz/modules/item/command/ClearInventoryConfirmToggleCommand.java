@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.modules.item.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
@@ -16,6 +15,7 @@ import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -116,7 +116,7 @@ public final class ClearInventoryConfirmToggleCommand implements CommandContribu
                             .thenApply(_ -> {
                                 confirmations.clear(
                                         currentPlayer.uuid(),
-                                        "clearinventory"
+                                        ClearInventoryCommand.CONFIRMATION_KEY
                                 );
                                 return PlatformResult.success();
                             })

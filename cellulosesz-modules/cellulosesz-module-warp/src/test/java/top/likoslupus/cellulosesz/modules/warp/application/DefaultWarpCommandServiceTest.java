@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.warp.application;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
@@ -15,7 +13,9 @@ import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
+import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +23,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -31,8 +33,7 @@ final class DefaultWarpCommandServiceTest {
     private static final UUID PLAYER_ID = UUID.fromString("00000000-0000-0000-0000-000000000020");
     private static final CellPlayer PLAYER = new CellPlayer(
             PLAYER_ID,
-            "Tester",
-            new Object()
+            "Tester"
     );
     private static final CellLocation LOCATION = new CellLocation(
             "minecraft:overworld",
@@ -73,13 +74,16 @@ final class DefaultWarpCommandServiceTest {
         ).join();
 
         assertTrue(pageOne.success());
-        assertEquals("Alpha", pageOne.message().placeholders().get("warps"));
+        assertEquals("Alpha", textArgument(pageOne.message(), "warps"));
 
         assertTrue(pageTwo.success());
-        assertEquals("Charlie", pageTwo.message().placeholders().get("warps"));
+        assertEquals("Charlie", textArgument(pageTwo.message(), "warps"));
 
         assertFalse(tooHigh.success());
-        assertEquals(GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE, tooHigh.message().key());
+        assertEquals(
+                GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
+                tooHigh.message().key()
+        );
     }
 
     private static Warp warp(
@@ -87,10 +91,16 @@ final class DefaultWarpCommandServiceTest {
             String display,
             String permission
     ) {
-        var warp = new Warp(name, LOCATION);
-        warp.displayName = display;
-        warp.cost = permission;
-        return warp;
+        return new Warp(
+                name,
+                display,
+                permission.isBlank()
+                        ? BigDecimal.ZERO
+                        : BigDecimal.ONE,
+                LOCATION,
+                Optional.empty(),
+                Instant.EPOCH
+        );
     }
 
     private static DefaultWarpCommandService service(
@@ -109,6 +119,16 @@ final class DefaultWarpCommandServiceTest {
                 new ImmediateExecutor(),
                 config
         );
+    }
+
+    private static String textArgument(
+            top.likoslupus.cellulosesz.api.text.LocalizedMessage message,
+            String key
+    ) {
+        return (
+                (top.likoslupus.cellulosesz.api.text.MessageArgument.Text)
+                        message.placeholders().values().get(key)
+        ).value();
     }
 
     @NullMarked
@@ -135,7 +155,10 @@ final class DefaultWarpCommandServiceTest {
             }
 
             @Override
-            public CompletableFuture<ResolvedPlayer> resolve(String input, @Nullable CellPlayer viewer) {
+            public CompletableFuture<ResolvedPlayer> resolve(
+                    String input,
+                    @Nullable CellPlayer viewer
+            ) {
                 return CompletableFuture.completedFuture(resolveKnown(input, viewer));
             }
         };
@@ -241,7 +264,10 @@ final class DefaultWarpCommandServiceTest {
                 _ -> true
         ).join();
         assertFalse(exceptional.success());
-        assertEquals(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED, exceptional.message().key());
+        assertEquals(
+                GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED,
+                exceptional.message().key()
+        );
         assertEquals(0, cooldowns.starts.get());
 
         var offline = service(
@@ -338,14 +364,14 @@ final class DefaultWarpCommandServiceTest {
             return fail
                     ? CompletableFuture.failedFuture(new IllegalStateException("load"))
                     : CompletableFuture.completedFuture(values.stream()
-                            .filter(w -> w.name.equalsIgnoreCase(name))
+                            .filter(w -> w.name().equalsIgnoreCase(name))
                             .findFirst());
         }
 
         @Override
         public Optional<Warp> cachedWarp(String name) {
             return values.stream()
-                    .filter(w -> w.name.equalsIgnoreCase(name))
+                    .filter(w -> w.name().equalsIgnoreCase(name))
                     .findFirst();
         }
 
@@ -362,7 +388,7 @@ final class DefaultWarpCommandServiceTest {
             lastCreator = creator;
             var created = new Warp(name, location);
 
-            values.removeIf(w -> w.name.equalsIgnoreCase(name));
+            values.removeIf(w -> w.name().equalsIgnoreCase(name));
             values.add(created);
             return CompletableFuture.completedFuture(created);
         }
@@ -371,19 +397,15 @@ final class DefaultWarpCommandServiceTest {
         public CompletableFuture<Boolean> deleteWarp(String name) {
             return fail
                     ? CompletableFuture.failedFuture(new IllegalStateException("delete"))
-                    : CompletableFuture.completedFuture(values.removeIf(w -> w.name.equalsIgnoreCase(name)));
+                    : CompletableFuture.completedFuture(values.removeIf(w -> w.name()
+                            .equalsIgnoreCase(name)));
         }
 
         @Override
         public Optional<String> requiredPermission(Warp warp) {
-            return warp.cost.isBlank()
+            return warp.cost().signum() == 0
                     ? Optional.empty()
-                    : Optional.of(warp.cost);
-        }
-
-        @Override
-        public CompletableFuture<Void> reload() {
-            return CompletableFuture.completedFuture(null);
+                    : Optional.of("warp." + warp.name());
         }
 
     }
@@ -421,7 +443,10 @@ final class DefaultWarpCommandServiceTest {
                     : CompletableFuture.completedFuture(
                             successful
                                     ? TeleportResult.success(target)
-                                    : TeleportResult.failed(top.likoslupus.cellulosesz.api.teleport.TeleportStatus.PLATFORM_FAILURE, "service.teleport.failed")
+                                    : TeleportResult.failed(
+                                            top.likoslupus.cellulosesz.api.teleport.TeleportStatus.PLATFORM_FAILURE,
+                                            "service.teleport.failed"
+                                    )
                     );
         }
 

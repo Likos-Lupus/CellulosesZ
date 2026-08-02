@@ -7,9 +7,9 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -31,10 +31,12 @@ public final class ModuleEnabledCommandMiddleware implements CommandMiddleware {
         if (!"unknown".equals(moduleId) && !context.moduleEnabled(moduleId)) {
             policy.error(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMON_MODULE_DISABLED,
-                    Map.of("module", moduleId)
+                    MessageArguments.builder().put("module", moduleId).build()
             ));
+
             return CompletableFuture.completedFuture(CommandOutcome.rejected());
         }
+
         return continuation.proceed();
     }
 

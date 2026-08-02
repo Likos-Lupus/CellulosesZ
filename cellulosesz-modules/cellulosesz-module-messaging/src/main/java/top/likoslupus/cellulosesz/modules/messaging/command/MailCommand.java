@@ -268,7 +268,7 @@ public final class MailCommand implements CommandContributor {
                         )
                 )
                 .then(Commands.literal("sendall")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.messaging.mail.sendall"
                         ))

@@ -48,7 +48,7 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
         var requestedWorld = context.line(1).isBlank()
-                ? context.location().world
+                ? context.location().world()
                 : context.line(1);
         var world = worlds.resolveLoadedWorld(requestedWorld);
 

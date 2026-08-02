@@ -5,9 +5,9 @@ import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
@@ -54,7 +54,9 @@ public final class GameModeSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.gamemode-success",
-                        Map.of("mode", mode.orElseThrow().name().toLowerCase(Locale.ROOT))
+                        MessageArguments.builder()
+                                .put("mode", mode.orElseThrow().name().toLowerCase(Locale.ROOT))
+                                .build()
                 )
                 : SignUseResult.failure("service.sign.gamemode-failed");
     }

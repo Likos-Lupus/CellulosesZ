@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.core.permission;
 
+import java.util.UUID;
+
 record PermissionCacheKey(
-        int sourceIdentity,
+        UUID playerId,
         String key,
         String type
 ) {

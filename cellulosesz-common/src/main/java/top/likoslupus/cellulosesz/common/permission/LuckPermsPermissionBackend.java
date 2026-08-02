@@ -3,17 +3,14 @@ package top.likoslupus.cellulosesz.common.permission;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.user.User;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 
 import java.util.Optional;
-import java.util.UUID;
 
 import static java.util.Objects.requireNonNull;
 
-/** Direct, optional LuckPerms API adapter. */
+/** Direct, optional LuckPerms API adapter using stable player UUIDs. */
 public final class LuckPermsPermissionBackend implements PermissionBackend {
 
     private final LuckPerms luckPerms;
@@ -27,38 +24,32 @@ public final class LuckPermsPermissionBackend implements PermissionBackend {
     }
 
     @Override
-    public boolean has(Object source, String permission) {
+    public boolean has(CellPlayer player, String permission) {
         if (permission.isBlank()) {
             return true;
         }
-        return user(source)
-                .map(value -> value.getCachedData()
-                        .getPermissionData()
-                        .checkPermission(permission)
-                        .asBoolean())
-                .orElse(false);
+        return user(player)
+                .getCachedData()
+                .getPermissionData()
+                .checkPermission(permission)
+                .asBoolean();
     }
 
     @Override
-    public Optional<String> stringOption(Object source, String key) {
-        return user(source)
-                .map(User::getCachedData)
-                .map(cached -> cached.getMetaData().getMetaValue(key));
+    public Optional<String> stringOption(CellPlayer player, String key) {
+        return Optional.ofNullable(
+                user(player).getCachedData().getMetaData().getMetaValue(key)
+        );
     }
 
-    private Optional<User> user(Object source) {
-        return uuid(source).map(luckPerms.getUserManager()::getUser);
-    }
-
-    private static Optional<UUID> uuid(Object source) {
-        return switch (source) {
-            case UUID uuid -> Optional.of(uuid);
-            case CellPlayer player -> Optional.of(player.uuid());
-            case ServerPlayer player -> Optional.of(player.getUUID());
-            case CommandSourceStack stack when stack.getEntity() instanceof ServerPlayer player ->
-                    Optional.of(player.getUUID());
-            default -> Optional.empty();
-        };
+    private User user(CellPlayer player) {
+        var user = luckPerms.getUserManager().getUser(player.uuid());
+        if (user == null) {
+            throw new IllegalStateException(
+                    "LuckPerms user is not loaded: " + player.uuid()
+            );
+        }
+        return user;
     }
 
 }

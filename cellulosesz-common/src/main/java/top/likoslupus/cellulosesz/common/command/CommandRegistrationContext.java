@@ -7,7 +7,6 @@ import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
@@ -27,7 +26,10 @@ public interface CommandRegistrationContext {
 
     ServiceRegistry services();
 
-    PermissionService permissions();
+    boolean hasPermission(
+            CommandSourceStack source,
+            String permission
+    );
 
     boolean moduleEnabled(String moduleId);
 

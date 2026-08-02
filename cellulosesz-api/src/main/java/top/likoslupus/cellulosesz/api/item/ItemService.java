@@ -1,25 +1,25 @@
 package top.likoslupus.cellulosesz.api.item;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 
-import java.util.Optional;
-
+/** Item application service that preserves validation and platform failure states. */
 public interface ItemService {
 
-    Optional<ItemDescriptor> parse(String input);
+    PlatformResult<ItemDescriptor> parse(String input);
 
-    boolean valid(ItemDescriptor item);
+    PlatformResult<Boolean> valid(ItemDescriptor item);
 
     boolean blacklisted(ItemDescriptor item);
 
-    int maxStackSize(ItemDescriptor item);
+    PlatformResult<Integer> maxStackSize(ItemDescriptor item);
 
-    boolean give(CellPlayer player, ItemDescriptor item);
+    PlatformResult<ItemGrantResult> give(CellPlayer player, ItemDescriptor item);
 
-    int count(CellPlayer player, ItemDescriptor item);
+    PlatformResult<Integer> count(CellPlayer player, ItemDescriptor item);
 
-    boolean take(CellPlayer player, ItemDescriptor item);
+    PlatformResult<Void> take(CellPlayer player, ItemDescriptor item);
 
-    Optional<String> heldItemId(CellPlayer player);
+    PlatformResult<String> heldItemId(CellPlayer player);
 
 }

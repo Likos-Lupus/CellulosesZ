@@ -56,7 +56,7 @@ public final class TpoCommand implements CommandContributor {
                             );
                         })
                         .then(Commands.argument("second", EntityArgument.player())
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source, "cellulosesz.teleport.tpo.others"
                                 ))
                                 .executes(command -> {

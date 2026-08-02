@@ -3,8 +3,11 @@ package top.likoslupus.cellulosesz.api.item;
 import java.util.List;
 import java.util.Optional;
 
+import static top.likoslupus.cellulosesz.api.validation.CollectionChecks.requireNonEmpty;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public record FireworkItemRequest(
         Operation operation,

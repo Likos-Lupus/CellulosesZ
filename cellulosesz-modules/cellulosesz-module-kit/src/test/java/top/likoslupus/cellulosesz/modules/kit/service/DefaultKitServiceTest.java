@@ -11,9 +11,13 @@ import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
+import top.likoslupus.cellulosesz.modules.kit.persistence.KitDocument;
+import top.likoslupus.cellulosesz.modules.kit.persistence.KitMapper;
 
 import java.lang.reflect.Proxy;
+import java.math.BigDecimal;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -26,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class DefaultKitServiceTest {
 
     @Test
-    void savePublishesOnlyAfterPersistenceAndDoesNotLeakMutableDefinitions() {
+    void savePublishesOnlyAfterPersistenceAndKeepsImmutableDefinition() {
         var storage = new DelayedStorage();
         var config = new KitConfig();
 
@@ -45,14 +49,17 @@ final class DefaultKitServiceTest {
         var save = service.save(definition);
         assertTrue(service.kit("daily").isEmpty(), "unpersisted kit must not be visible");
 
-        definition.displayName = "mutated by caller";
         storage.completeSave();
         save.join();
 
         var published = service.kit("daily").orElseThrow();
-        assertEquals("Daily", published.displayName);
-        published.displayName = "mutated returned copy";
-        assertEquals("Daily", service.kit("daily").orElseThrow().displayName);
+        assertSame(definition, published);
+        assertEquals("Daily", published.displayName());
+        assertThrows(
+                UnsupportedOperationException.class, () -> published.items().add(
+                        new KitItem(1, "{id:\"minecraft:dirt\",count:1}")
+                )
+        );
     }
 
     private static InventoryPlatformService noopInventory() {
@@ -97,12 +104,14 @@ final class DefaultKitServiceTest {
     }
 
     private static KitDefinition kit(String id, String displayName) {
-        var definition = new KitDefinition();
-        definition.id = id;
-        definition.displayName = displayName;
-        definition.permission = "cellulosesz.kit." + id;
-        definition.items.add(new KitItem(0, "{id:\"minecraft:stone\",count:1}"));
-        return definition;
+        return new KitDefinition(
+                id,
+                displayName,
+                Optional.of("cellulosesz.kit." + id),
+                Duration.ZERO,
+                BigDecimal.ZERO,
+                List.of(new KitItem(0, "{id:\"minecraft:stone\",count:1}"))
+        );
     }
 
     @Test
@@ -130,19 +139,23 @@ final class DefaultKitServiceTest {
     @Test
     void stagedReloadPublishesOnlyOnCommitAndRollbackRestoresPreviousSnapshot() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(kit("old", "Old"));
+        storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
+
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(kit("next", "Next"));
-        var prepared = service.prepareReload(false, true).join();
+        storage.loaded = List.of(KitMapper.fromDomain(kit("next", "Next")));
+        var prepared = service.prepareReload(
+                false,
+                true
+        ).join();
 
-        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+        assertEquals(List.of("old"), service.kits().stream().map(KitDefinition::id).toList());
         prepared.commit().toCompletableFuture().join();
-        assertEquals(List.of("next"), service.kits().stream().map(kit -> kit.id).toList());
+        assertEquals(List.of("next"), service.kits().stream().map(KitDefinition::id).toList());
 
         prepared.rollback().toCompletableFuture().join();
-        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+        assertEquals(List.of("old"), service.kits().stream().map(KitDefinition::id).toList());
     }
 
     private static DefaultKitService service(StorageService storage) {
@@ -162,12 +175,15 @@ final class DefaultKitServiceTest {
     @Test
     void stalePreparedReloadCannotOverwriteNewerDefinitionMutation() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(kit("old", "Old"));
+        storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(kit("next", "Next"));
-        var prepared = service.prepareReload(false, false).join();
+        storage.loaded = List.of(KitMapper.fromDomain(kit("next", "Next")));
+        var prepared = service.prepareReload(
+                false,
+                false
+        ).join();
         service.save(kit("live", "Live")).join();
 
         assertThrows(Exception.class, () -> prepared.commit().toCompletableFuture().join());
@@ -178,14 +194,20 @@ final class DefaultKitServiceTest {
     @Test
     void failedPreparationLeavesLiveSnapshotUntouched() {
         var storage = new ReloadStorage();
-        storage.loaded = List.of(kit("old", "Old"));
+        storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
         var service = service(storage);
         service.initialize().join();
 
-        storage.loaded = List.of(kit("duplicate", "First"), kit("duplicate", "Second"));
+        storage.loaded = List.of(
+                KitMapper.fromDomain(kit("duplicate", "First")),
+                KitMapper.fromDomain(kit("duplicate", "Second"))
+        );
 
-        assertThrows(Exception.class, () -> service.prepareReload(false, false).join());
-        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+        assertThrows(
+                Exception.class,
+                () -> service.prepareReload(false, false).join()
+        );
+        assertEquals(List.of("old"), service.kits().stream().map(KitDefinition::id).toList());
     }
 
     @NullMarked
@@ -255,7 +277,7 @@ final class DefaultKitServiceTest {
     private static final class ReloadStorage implements StorageService {
 
         private final Map<Path, Object> saved = new LinkedHashMap<>();
-        private List<KitDefinition> loaded = List.of();
+        private List<KitDocument> loaded = List.of();
 
         @Override
         public <T> CompletableFuture<T> loadOrDefault(
@@ -293,7 +315,9 @@ final class DefaultKitServiceTest {
 
         @Override
         public <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type) {
-            return CompletableFuture.completedFuture(loaded.stream().map(type::cast).toList());
+            var result = new ArrayList<T>();
+            loaded.forEach(value -> result.add(type.cast(value)));
+            return CompletableFuture.completedFuture(List.copyOf(result));
         }
 
     }
@@ -314,6 +338,11 @@ final class DefaultKitServiceTest {
         @Override
         public Optional<CellUser> cached(UUID uuid) {
             return Optional.empty();
+        }
+
+        @Override
+        public Collection<CellUser> cachedUsers() {
+            return List.of();
         }
 
         @Override

@@ -266,7 +266,13 @@ public final class PowerToolCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var held = items.heldItemId(currentPlayer);
 
-                    if (held.isEmpty()) {
+                    if (!held.successful()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(held.status(), held.detail())
+                        );
+                    }
+
+                    if (held.value().isEmpty()) {
                         return CompletableFuture.completedFuture(
                                 PlatformResult.failure(
                                         PlatformOperationStatus.INVALID_STATE,
@@ -277,7 +283,7 @@ public final class PowerToolCommand implements CommandContributor {
 
                     return operation.apply(
                             currentPlayer.uuid(),
-                            held.orElseThrow()
+                            held.value().orElseThrow()
                     );
                 }
         );
@@ -314,7 +320,13 @@ public final class PowerToolCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var held = items.heldItemId(currentPlayer);
 
-                    if (held.isEmpty()) {
+                    if (!held.successful()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(held.status(), held.detail())
+                        );
+                    }
+
+                    if (held.value().isEmpty()) {
                         return CompletableFuture.completedFuture(
                                 PlatformResult.failure(
                                         PlatformOperationStatus.INVALID_STATE,
@@ -325,7 +337,7 @@ public final class PowerToolCommand implements CommandContributor {
 
                     return operation.apply(
                             currentPlayer.uuid(),
-                            held.orElseThrow()
+                            held.value().orElseThrow()
                     );
                 }
         );

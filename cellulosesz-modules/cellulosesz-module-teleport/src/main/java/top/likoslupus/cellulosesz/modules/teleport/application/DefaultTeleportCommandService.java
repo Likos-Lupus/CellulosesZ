@@ -7,12 +7,12 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -143,13 +143,13 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 .submit(() -> {
                     var current = locations.currentLocation(actor);
                     var worldId = world.isEmpty()
-                            ? Optional.of(current.world)
+                            ? Optional.of(current.world())
                             : worlds.resolveLoadedWorld(world.orElseThrow());
 
                     return worldId.map(value -> new CellLocation(
                             value,
                             x, y, z,
-                            current.yaw, current.pitch
+                            current.yaw(), current.pitch()
                     ));
                 })
                 .thenCompose(destination -> destination.isEmpty()
@@ -227,19 +227,19 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                                     ?
                                     TeleportCommandResult.success(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
-                                            Map.of(
-                                                    "success", counts[0],
-                                                    "blocked", counts[1],
-                                                    "failed", counts[2]
-                                            )
+                                            MessageArguments.builder()
+                                                    .put("success", counts[0])
+                                                    .put("blocked", counts[1])
+                                                    .put("failed", counts[2])
+                                                    .build()
                                     )
                                     : TeleportCommandResult.partial(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
-                                            Map.of(
-                                                    "success", counts[0],
-                                                    "blocked", counts[1],
-                                                    "failed", counts[2]
-                                            )
+                                            MessageArguments.builder()
+                                                    .put("success", counts[0])
+                                                    .put("blocked", counts[1])
+                                                    .put("failed", counts[2])
+                                                    .build()
                                     )
                             );
                 });
@@ -253,8 +253,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 ? CompletableFuture.completedFuture(true)
                 : users
                         .load(player.uuid())
-                        .thenApply(user -> user.preferences().teleportRequests())
-                        .exceptionally(_ -> false);
+                        .thenApply(user -> user.preferences().teleportRequests());
     }
 
     @Override
@@ -266,7 +265,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
-                                Map.of("player", target)
+                                MessageArguments.of("player", target)
                         ));
                     }
 
@@ -278,7 +277,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 NOT_FOUND,
                                 "commands.teleport.offline-location-missing",
-                                Map.of("player", resolved.name())
+                                MessageArguments.of("player", resolved.name())
                         ));
                     }
 
@@ -404,7 +403,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         return completed(failure(
                 NOT_FOUND,
                 "commands.common.player-offline",
-                Map.of("player", name)
+                MessageArguments.of("player", name)
         ));
     }
 
@@ -427,7 +426,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 BLOCKED,
                                 "commands.teleport.request.blocked",
-                                Map.of("player", mover.name())
+                                MessageArguments.of("player", mover.name())
                         ));
                     }
 
@@ -449,7 +448,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
     private static TeleportCommandResult failure(
             TeleportCommandStatus status,
             String key,
-            Map<String, ?> values
+            MessageArguments values
     ) {
         return TeleportCommandResult.failure(status, key, values);
     }

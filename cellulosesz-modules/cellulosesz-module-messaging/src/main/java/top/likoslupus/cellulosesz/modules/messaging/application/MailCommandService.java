@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -81,7 +82,7 @@ public final class MailCommandService {
                     if (page > pages) {
                         return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                                 "commands.common.page-out-of-range",
-                                Map.of("pages", pages)
+                                MessageArguments.builder().put("pages", pages).build()
                         )));
                     }
 
@@ -95,13 +96,11 @@ public final class MailCommandService {
 
                     response.add(LocalizedMessage.of(
                             "commands.messaging.mail-page-header",
-                            Map.of(
-                                    "page", page,
-                                    "pages", pages,
+                            MessageArguments.builder().put("page", page).put("pages", pages).put(
                                     "unread", messages.stream()
                                             .filter(message -> !message.read())
                                             .count()
-                            )
+                            ).build()
                     ));
 
                     var formatter = dateFormatter();
@@ -109,18 +108,16 @@ public final class MailCommandService {
                     selected.forEach(message -> {
                         response.add(LocalizedMessage.of(
                                 "commands.messaging.mail-entry",
-                                Map.of(
-                                        "id",
-                                        message.id(),
-                                        "unread",
-                                        !message.read(),
-                                        "time",
-                                        formatter.format(Instant.ofEpochMilli(message.sentAt())),
-                                        "sender",
-                                        message.fromName(),
-                                        "message",
-                                        message.message()
-                                )
+                                MessageArguments.builder()
+                                        .put("id", message.id())
+                                        .put("unread", !message.read())
+                                        .put(
+                                                "time",
+                                                formatter.format(Instant.ofEpochMilli(message.sentAt()))
+                                        )
+                                        .put("sender", message.fromName())
+                                        .put("message", message.message())
+                                        .build()
                         ));
                         if (!message.read()) {
                             readIds.add(message.id());
@@ -144,7 +141,7 @@ public final class MailCommandService {
         return mail.unreadCount(recipient)
                 .thenApply(count -> Result.success(LocalizedMessage.of(
                         "commands.messaging.mail-unread",
-                        Map.of("count", count)
+                        MessageArguments.builder().put("count", count).build()
                 )));
     }
 
@@ -155,11 +152,11 @@ public final class MailCommandService {
                                 ?
                                 Result.success(LocalizedMessage.of(
                                         "commands.messaging.mail-deleted",
-                                        Map.of("id", id)
+                                        MessageArguments.builder().put("id", id).build()
                                 ))
                                 : Result.failure(LocalizedMessage.of(
                                         "commands.messaging.mail-not-found",
-                                        Map.of("id", id)
+                                        MessageArguments.builder().put("id", id).build()
                                 ))
                 );
     }
@@ -167,7 +164,7 @@ public final class MailCommandService {
     public CompletableFuture<Result> clear(UUID recipient) {
         return mail.clear(recipient).thenApply(count -> Result.success(LocalizedMessage.of(
                 "commands.messaging.mail-cleared",
-                Map.of("count", count)
+                MessageArguments.builder().put("count", count).build()
         )));
     }
 
@@ -193,7 +190,7 @@ public final class MailCommandService {
                     if (target.optionalUuid().isEmpty()) {
                         return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                                 "commands.common.player-not-found",
-                                Map.of("player", targetToken)
+                                MessageArguments.builder().put("player", targetToken).build()
                         )));
                     }
 
@@ -216,7 +213,9 @@ public final class MailCommandService {
                     } catch (RuntimeException _) {
                         return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                                 "commands.messaging.mail-invalid-duration",
-                                Map.of("maximum", config.maximumTemporaryMailSeconds)
+                                MessageArguments.builder()
+                                        .put("maximum", config.maximumTemporaryMailSeconds)
+                                        .build()
                         )));
                     }
 
@@ -249,7 +248,9 @@ public final class MailCommandService {
                                     ).handle((ignored, _) ->
                                             Result.success(LocalizedMessage.of(
                                                     "commands.messaging.mail-sent",
-                                                    Map.of("player", target.name())
+                                                    MessageArguments.builder()
+                                                            .put("player", target.name())
+                                                            .build()
                                             ))
                                     )
                             );
@@ -264,7 +265,7 @@ public final class MailCommandService {
         if (body.length() > config.maxMessageLength) {
             return Optional.of(LocalizedMessage.of(
                     "commands.messaging.message-too-long",
-                    Map.of("maximum", config.maxMessageLength)
+                    MessageArguments.builder().put("maximum", config.maxMessageLength).build()
             ));
         }
 
@@ -300,10 +301,10 @@ public final class MailCommandService {
         if (recipients.size() > config.maxSendAllRecipients) {
             return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                     "commands.messaging.mail-sendall-too-many",
-                    Map.of(
-                            "count", recipients.size(),
-                            "maximum", config.maxSendAllRecipients
-                    )
+                    MessageArguments.builder()
+                            .put("count", recipients.size())
+                            .put("maximum", config.maxSendAllRecipients)
+                            .build()
             )));
         }
 
@@ -341,7 +342,7 @@ public final class MailCommandService {
                 )
                 .thenApply(count -> Result.success(LocalizedMessage.of(
                         "commands.messaging.mail-sent-all",
-                        Map.of("count", count)
+                        MessageArguments.builder().put("count", count).build()
                 )));
     }
 

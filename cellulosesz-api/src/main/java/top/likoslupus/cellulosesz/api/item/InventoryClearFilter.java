@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.item;
 
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 
 import java.util.Optional;
 
@@ -14,7 +14,7 @@ public record InventoryClearFilter(
     public InventoryClearFilter {
         requireNonNull(kind, "kind");
         itemId = requireNonNull(itemId, "itemId")
-                .map(value -> Checks.requireNonBlank(value, "itemId").trim());
+                .map(value -> TextChecks.requireNonBlank(value, "itemId").trim());
         if (kind == Kind.ITEM && itemId.isEmpty()) {
             throw new IllegalArgumentException("itemId is required for ITEM filter");
         }

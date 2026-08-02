@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.teleport;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
 
 public record TeleportOptions(
         boolean safe,
@@ -27,7 +27,13 @@ public record TeleportOptions(
     }
 
     public TeleportOptions withSafe(boolean value) {
-        return new TeleportOptions(value, rememberBack, allowCrossWorld, keepVehicle, warmupSeconds);
+        return new TeleportOptions(
+                value,
+                rememberBack,
+                allowCrossWorld,
+                keepVehicle,
+                warmupSeconds
+        );
     }
 
 }

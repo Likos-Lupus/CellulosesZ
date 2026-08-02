@@ -11,9 +11,7 @@ public interface HomeService {
 
     CompletableFuture<Map<String, CellLocation>> homes(UUID uuid);
 
-    default Map<String, CellLocation> cachedHomes(UUID uuid) {
-        return Map.of();
-    }
+    Map<String, CellLocation> cachedHomes(UUID uuid);
 
     CompletableFuture<Optional<CellLocation>> home(
             UUID uuid,

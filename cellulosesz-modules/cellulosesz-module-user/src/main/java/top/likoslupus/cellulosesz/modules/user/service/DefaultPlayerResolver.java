@@ -162,7 +162,7 @@ public final class DefaultPlayerResolver implements PlayerResolver {
         }
 
         if (viewer.uuid().equals(resolved.uuid())
-                || permissions.has(viewer.nativeHandle(), SEE_VANISHED)
+                || permissions.has(viewer, SEE_VANISHED)
         ) {
             return resolved;
         }

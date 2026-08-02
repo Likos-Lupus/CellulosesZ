@@ -126,7 +126,7 @@ public final class CondenseCommand implements CommandContributor {
                             .filter(InventorySlotView::plain)
                             .collect(Collectors.toMap(
                                     slot -> slot.descriptor().normalizedItem(),
-                                    slot -> slot.descriptor().count,
+                                    slot -> slot.descriptor().count(),
                                     Integer::sum,
                                     HashMap::new
                             ));
@@ -178,15 +178,20 @@ public final class CondenseCommand implements CommandContributor {
                     );
 
                     if (!mutation.successful()
-                            || mutation.value().isEmpty()) {
-                        return mutation;
+                            || mutation.value().isEmpty()
+                    ) {
+                        return PlatformResult.failure(
+                                mutation.status(),
+                                mutation.detail()
+                        );
                     }
 
-                    return mutation.value().orElseThrow().commit()
+                    var committed = mutation.value().orElseThrow().commit();
+                    return committed.successful()
                             ? PlatformResult.success(conversions)
                             : PlatformResult.failure(
-                                    PlatformOperationStatus.CONFLICT,
-                                    "inventory-conflict"
+                                    committed.status(),
+                                    committed.detail()
                             );
                 }
         );

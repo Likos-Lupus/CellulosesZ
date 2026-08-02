@@ -1,6 +1,4 @@
-package top.likoslupus.cellulosesz.modules.admin.data;
-
-import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+package top.likoslupus.cellulosesz.modules.admin.persistence;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,11 +11,7 @@ public final class JailDocument {
     public static final class JailEntry {
 
         public String name = "";
-        public CellLocation location = new CellLocation(
-                "minecraft:overworld",
-                0, 64, 0,
-                0, 0
-        );
+        public LocationDocument location = new LocationDocument();
         public String createdBy = "";
         public long createdAt;
 
@@ -34,11 +28,7 @@ public final class JailDocument {
         public long createdAt;
         public boolean permanent;
         public long expiresAt;
-        public CellLocation returnLocation = new CellLocation(
-                "minecraft:overworld",
-                0, 64, 0,
-                0, 0
-        );
+        public LocationDocument returnLocation = new LocationDocument();
         public boolean hasReturnLocation;
         public String state = "ACTIVE";
 

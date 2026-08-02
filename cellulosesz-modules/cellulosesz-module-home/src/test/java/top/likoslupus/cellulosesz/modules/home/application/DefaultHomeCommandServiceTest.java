@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.home.application;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
@@ -20,6 +18,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,8 +28,7 @@ final class DefaultHomeCommandServiceTest {
     private static final UUID UUID_ONE = UUID.fromString("00000000-0000-0000-0000-000000000010");
     private static final CellPlayer PLAYER = new CellPlayer(
             UUID_ONE,
-            "Tester",
-            new Object()
+            "Tester"
     );
     private static final CellLocation LOCATION = new CellLocation(
             "minecraft:overworld",
@@ -119,7 +118,10 @@ final class DefaultHomeCommandServiceTest {
             }
 
             @Override
-            public CompletableFuture<ResolvedPlayer> resolve(String input, @Nullable CellPlayer viewer) {
+            public CompletableFuture<ResolvedPlayer> resolve(
+                    String input,
+                    @Nullable CellPlayer viewer
+            ) {
                 return CompletableFuture.completedFuture(resolveKnown(input, viewer));
             }
         };
@@ -377,7 +379,10 @@ final class DefaultHomeCommandServiceTest {
 
             return CompletableFuture.completedFuture(succeed
                     ? TeleportResult.success(target)
-                    : TeleportResult.failed(top.likoslupus.cellulosesz.api.teleport.TeleportStatus.PLATFORM_FAILURE, "service.teleport.failed"));
+                    : TeleportResult.failed(
+                            top.likoslupus.cellulosesz.api.teleport.TeleportStatus.PLATFORM_FAILURE,
+                            "service.teleport.failed"
+                    ));
         }
 
         @Override

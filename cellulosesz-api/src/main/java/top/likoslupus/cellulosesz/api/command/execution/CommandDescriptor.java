@@ -2,8 +2,9 @@ package top.likoslupus.cellulosesz.api.command.execution;
 
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 public record CommandDescriptor(
         String moduleId,
@@ -16,7 +17,7 @@ public record CommandDescriptor(
         moduleId = requireNonBlank(moduleId, "moduleId");
         canonicalName = requireNonBlank(canonicalName, "canonicalName");
         permission = requireNonNull(permission, "permission").trim();
-        requiredSourceKind = requireNonNull(requiredSourceKind, "requiredSourceKind");
+        requireNonNull(requiredSourceKind, "requiredSourceKind");
     }
 
 }

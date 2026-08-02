@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.core.concurrent;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 

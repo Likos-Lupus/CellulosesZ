@@ -6,7 +6,9 @@ import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
-import top.likoslupus.cellulosesz.modules.messaging.data.MailDocument;
+import top.likoslupus.cellulosesz.modules.messaging.persistence.MailDocument;
+import top.likoslupus.cellulosesz.modules.messaging.persistence.MailMapper;
+import top.likoslupus.cellulosesz.modules.messaging.persistence.MailMessageDocument;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -60,8 +62,8 @@ public final class JsonMailService implements MailService, AsyncInitializable {
             requireNonNull(messages, "messages");
 
             messages.forEach(message -> {
-                requireNonNull(message, "message");
-                if (!message.toUuid().equals(uuid)) {
+                var domain = MailMapper.toDomain(requireNonNull(message, "message"));
+                if (!domain.toUuid().equals(uuid)) {
                     throw new IllegalArgumentException("Mail recipient mismatch");
                 }
             });
@@ -113,6 +115,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
                                     recipient.toString(),
                                     List.of()
                             ).stream()
+                            .map(MailMapper::toDomain)
                             .sorted(Comparator.comparingLong(MailMessage::sentAt).reversed())
                             .toList();
                 },
@@ -132,6 +135,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
                                     recipient.toString(),
                                     List.of()
                             ).stream()
+                            .map(MailMapper::toDomain)
                             .filter(message -> !message.read())
                             .count();
                 },
@@ -148,9 +152,10 @@ public final class JsonMailService implements MailService, AsyncInitializable {
             var messages = inboxMutable(recipient);
             IntStream.range(0, messages.size())
                     .forEach(index -> {
-                        var message = messages.get(index);
+                        var persisted = messages.get(index);
+                        var message = MailMapper.toDomain(persisted);
                         if (ids.contains(message.id()) && !message.read()) {
-                            messages.set(index, message.withRead(true));
+                            messages.set(index, MailMapper.fromDomain(message.withRead(true)));
                         }
                     });
             return Boolean.TRUE;
@@ -165,7 +170,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
 
         return mutate(() ->
                 inboxMutable(recipient).removeIf(message ->
-                        message.id().equals(messageId)
+                        MailMapper.toDomain(message).id().equals(messageId)
                 )
         );
     }
@@ -195,7 +200,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
             var entry = iterator.next();
             var before = entry.getValue().size();
 
-            entry.getValue().removeIf(message -> message.expired(now));
+            entry.getValue().removeIf(message -> MailMapper.toDomain(message).expired(now));
             removed += before - entry.getValue().size();
 
             if (entry.getValue().isEmpty()) {
@@ -212,7 +217,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
 
     private void add(MailMessage message) {
         var messages = inboxMutable(message.toUuid());
-        messages.add(message);
+        messages.add(MailMapper.fromDomain(message));
 
         var maximum = config.maxMailPerPlayer;
         while (messages.size() > maximum) {
@@ -244,7 +249,10 @@ public final class JsonMailService implements MailService, AsyncInitializable {
                                 .handle((_, failure) -> {
                                     if (failure != null) {
                                         document = snapshot;
-                                        throw new IllegalStateException("Unable to persist mail data", failure);
+                                        throw new IllegalStateException(
+                                                "Unable to persist mail data",
+                                                failure
+                                        );
                                     }
                                     return result;
                                 });
@@ -255,7 +263,7 @@ public final class JsonMailService implements MailService, AsyncInitializable {
         }
     }
 
-    private ArrayList<MailMessage> inboxMutable(UUID recipient) {
+    private ArrayList<MailMessageDocument> inboxMutable(UUID recipient) {
         var existing = document.inboxes.computeIfAbsent(
                 recipient.toString(),
                 _ -> new ArrayList<>()

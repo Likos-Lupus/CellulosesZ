@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
@@ -16,9 +17,7 @@ import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -75,7 +74,7 @@ public final class ChatCommandService {
                 .submit(() -> deliver(
                         players.onlinePlayers(),
                         "messaging.broadcast",
-                        Map.of("message", message)
+                        MessageArguments.of("message", message)
                 ))
                 .thenApply(counts -> deliveryResult(
                         "commands.messaging.broadcast-result",
@@ -91,7 +90,7 @@ public final class ChatCommandService {
         if (message.length() > config.maxMessageLength) {
             return Optional.of(MessageResult.failure(
                     "commands.messaging.message-too-long",
-                    Map.of("maximum", config.maxMessageLength)
+                    MessageArguments.builder().put("maximum", config.maxMessageLength).build()
             ));
         }
 
@@ -101,7 +100,7 @@ public final class ChatCommandService {
     private Counts deliver(
             List<CellPlayer> recipients,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         var sent = 0;
         var failed = 0;
@@ -120,17 +119,19 @@ public final class ChatCommandService {
     }
 
     private MessageResult deliveryResult(String key, Counts counts) {
-        return deliveryResult(key, counts, Map.of());
+        return deliveryResult(key, counts, MessageArguments.empty());
     }
 
     private MessageResult deliveryResult(
             String key,
             Counts counts,
-            Map<String, ?> extra
+            MessageArguments extra
     ) {
-        var values = new LinkedHashMap<String, Object>(extra);
-        values.put("sent", counts.sent());
-        values.put("failed", counts.failed());
+        var values = MessageArguments.builder()
+                .putAll(extra)
+                .put("sent", counts.sent())
+                .put("failed", counts.failed())
+                .build();
         return counts.sent() > 0
                 ? MessageResult.success(key, values)
                 : MessageResult.failure(key, values);
@@ -151,32 +152,42 @@ public final class ChatCommandService {
 
                     var world = resolution.worldId().orElseThrow();
                     var recipients = players.onlinePlayers().stream()
-                            .filter(player -> locations.currentLocation(player).world.equals(world))
+                            .filter(player -> locations.currentLocation(player)
+                                    .world()
+                                    .equals(world))
                             .toList();
 
                     return new WorldDelivery(
                             resolution,
-                            deliver(recipients, "messaging.broadcast", Map.of("message", message))
+                            deliver(
+                                    recipients,
+                                    "messaging.broadcast",
+                                    MessageArguments.of("message", message)
+                            )
                     );
                 })
                 .thenApply(result -> switch (result.resolution().status()) {
                     case NOT_FOUND -> MessageResult.failure(
                             "commands.messaging.broadcast-world-command.world",
-                            Map.of("world", input)
+                            MessageArguments.builder().put("world", input).build()
                     );
                     case AMBIGUOUS -> MessageResult.failure(
                             "commands.messaging.broadcast-world-command.ambiguous",
-                            Map.of(
-                                    "world",
-                                    input,
-                                    "candidates",
-                                    String.join(", ", result.resolution().candidates())
-                            )
+                            MessageArguments.builder()
+                                    .put("world", input)
+                                    .put(
+                                            "candidates",
+                                            String.join(", ", result.resolution().candidates())
+                                    )
+                                    .build()
                     );
                     case RESOLVED -> deliveryResult(
                             "commands.messaging.broadcast-world-result",
                             result.counts(),
-                            Map.of("world", result.resolution().worldId().orElseThrow())
+                            MessageArguments.of(
+                                    "world",
+                                    result.resolution().worldId().orElseThrow()
+                            )
                     );
                 });
     }
@@ -206,7 +217,10 @@ public final class ChatCommandService {
                     return deliver(
                             recipients,
                             "messaging.helpop",
-                            Map.of("sender", senderName, "message", message)
+                            MessageArguments.builder()
+                                    .put("sender", senderName)
+                                    .put("message", message)
+                                    .build()
                     );
                 })
                 .thenApply(counts -> counts.sent() == 0
@@ -229,10 +243,10 @@ public final class ChatCommandService {
                     return deliver(
                             recipients,
                             "messaging.me",
-                            Map.of(
-                                    "player", displayNames.displayName(actor),
-                                    "action", action
-                            )
+                            MessageArguments.builder()
+                                    .put("player", displayNames.displayName(actor))
+                                    .put("action", action)
+                                    .build()
                     );
                 })
                 .thenApply(counts -> deliveryResult("commands.messaging.me-result", counts));
@@ -245,32 +259,31 @@ public final class ChatCommandService {
     }
 
     public CompletableFuture<MessageResult> list(Optional<CellPlayer> viewer) {
-        return serverThread
-                .submit(() -> {
-                    var visible = players.onlinePlayers().stream()
-                            .filter(player ->
-                                    viewer.map(current -> canSee(current, player))
-                                            .orElse(true)
-                            )
-                            .limit(100)
-                            .toList();
-                    var text = RichText.empty();
+        return serverThread.submit(() -> {
+            var visible = players.onlinePlayers().stream()
+                    .filter(player ->
+                            viewer.map(current -> canSee(current, player))
+                                    .orElse(true)
+                    )
+                    .limit(100)
+                    .toList();
+            var text = RichText.empty();
 
-                    for (int i = 0; i < visible.size(); i++) {
-                        if (i > 0) {
-                            text = text.append(RichText.plain(", "));
-                        }
-                        text = text.append(displayNames.displayName(visible.get(i)));
-                    }
+            for (int i = 0; i < visible.size(); i++) {
+                if (i > 0) {
+                    text = text.append(RichText.plain(", "));
+                }
+                text = text.append(displayNames.displayName(visible.get(i)));
+            }
 
-                    return MessageResult.success(
-                            "player.list",
-                            Map.of(
-                                    "count", visible.size(),
-                                    "players", text
-                            )
-                    );
-                });
+            return MessageResult.success(
+                    "player.list",
+                    MessageArguments.builder()
+                            .put("count", visible.size())
+                            .put("players", text)
+                            .build()
+            );
+        });
     }
 
     public List<String> worldNames() {

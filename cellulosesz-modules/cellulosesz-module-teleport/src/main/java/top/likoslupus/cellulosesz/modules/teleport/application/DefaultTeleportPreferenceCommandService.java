@@ -2,10 +2,10 @@ package top.likoslupus.cellulosesz.modules.teleport.application;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -49,12 +49,11 @@ public final class DefaultTeleportPreferenceCommandService
                 )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-auto-command.reply.changed",
-                        Map.of(
-                                "state",
-                                enabled
+                        MessageArguments.builder().put(
+                                "state", enabled
                                         ? "on"
                                         : "off"
-                        )
+                        ).build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
                         PERSISTENCE_FAILURE,
@@ -79,7 +78,9 @@ public final class DefaultTeleportPreferenceCommandService
                         CompletableFuture.completedFuture(TeleportCommandResult.failure(
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
-                                Map.of("player", target.orElseThrow())
+                                MessageArguments.builder()
+                                        .put("player", target.orElseThrow())
+                                        .build()
                         ))
                         : update(
                                 resolved.optionalUuid().orElseThrow(),
@@ -109,12 +110,11 @@ public final class DefaultTeleportPreferenceCommandService
                 )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-toggle-command.reply.changed",
-                        Map.of(
-                                "player", name,
+                        MessageArguments.builder().put("player", name).put(
                                 "state", enabled
                                         ? "on"
                                         : "off"
-                        )
+                        ).build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
                         PERSISTENCE_FAILURE,

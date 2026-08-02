@@ -10,7 +10,9 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.api.command.service.ConfirmationToken;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
@@ -28,13 +30,18 @@ import java.time.Duration;
 import java.util.*;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
 public final class ClearInventoryCommand implements CommandContributor {
 
-    private static final String ACTION = "clearinventory";
+    static final ConfirmationKey<ClearPayload> CONFIRMATION_KEY = new ConfirmationKey<>(
+            "clearinventory",
+            ClearPayload.class
+    );
 
     private final InventoryPlatformService inventory;
     private final ItemService items;
@@ -109,7 +116,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
             var count = Math.min(
                     remaining,
-                    slot.descriptor().count
+                    slot.descriptor().count()
             );
 
             if (count > 0) {
@@ -184,7 +191,7 @@ public final class ClearInventoryCommand implements CommandContributor {
             CommandDescriptor descriptor
     ) {
         var branch = Commands.literal("all")
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.clearinventory.all"
                 ))
@@ -225,7 +232,7 @@ public final class ClearInventoryCommand implements CommandContributor {
         );
 
         parent.then(Commands.literal("equipment")
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.clearinventory.armor"
                 ))
@@ -310,13 +317,12 @@ public final class ClearInventoryCommand implements CommandContributor {
                     var currentActor = actor.orElseThrow();
                     var payload = confirmations.consume(
                             currentActor.uuid(),
-                            ACTION,
-                            StringArgumentType.getString(command, "token"),
-                            ClearPayload.class
+                            CONFIRMATION_KEY,
+                            new ConfirmationToken(StringArgumentType.getString(command, "token"))
                     );
 
-                    if (payload.isEmpty()
-                            || !payload.orElseThrow()
+                    if (!payload.consumed()
+                            || !payload.payload().orElseThrow()
                             .actor()
                             .equals(currentActor.uuid())
                     ) {
@@ -326,7 +332,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                         );
                     }
 
-                    var value = payload.orElseThrow();
+                    var value = payload.payload().orElseThrow();
                     var resolved = value.targets()
                             .stream()
                             .map(players::onlinePlayer)
@@ -395,7 +401,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
                     var filtered = targets.stream()
                             .filter(value -> !permissions.has(
-                                    value.nativeHandle(),
+                                    value,
                                     "cellulosesz.command.clearinventory.exempt"
                             ))
                             .sorted(Comparator.comparing(CellPlayer::uuid))
@@ -443,13 +449,13 @@ public final class ClearInventoryCommand implements CommandContributor {
 
                         var token = confirmations.request(
                                 currentActor.uuid(),
-                                ACTION,
+                                CONFIRMATION_KEY,
                                 payload,
                                 Duration.ofSeconds(config.clearConfirmationTtlSeconds())
                         );
 
                         return PlatformResult.partial(
-                                token,
+                                token.value(),
                                 "confirmation-required"
                         );
                     }
@@ -570,25 +576,34 @@ public final class ClearInventoryCommand implements CommandContributor {
         var committed = new ArrayList<Plan>();
 
         for (var plan : plans) {
-            if (!plan.mutation().commit()) {
-                var rollbackFailures = committed.stream()
-                        .filter(value -> !value.mutation().rollback())
-                        .count();
+            var commit = plan.mutation().commit();
+            if (!commit.successful()) {
+                var rollbackFailures = new ArrayList<String>();
+                for (var committedPlan : committed) {
+                    var rollback = committedPlan.mutation().rollback();
+                    if (!rollback.successful()) {
+                        rollbackFailures.add(
+                                committedPlan.player().uuid() + ": " + rollback.detail()
+                        );
+                    }
+                }
 
                 return PlatformResult.failure(
-                        rollbackFailures == 0
-                                ? PlatformOperationStatus.CONFLICT
+                        rollbackFailures.isEmpty()
+                                ? commit.status()
                                 : PlatformOperationStatus.ROLLBACK_FAILED,
-                        rollbackFailures == 0
-                                ? "inventory-conflict"
-                                : "rollback-failed"
+                        rollbackFailures.isEmpty()
+                                ? commit.detail()
+                                : "Commit failed (" + commit.detail()
+                                        + "); rollback failures: "
+                                        + String.join("; ", rollbackFailures)
                 );
             }
 
             committed.add(plan);
         }
 
-        confirmations.clear(actor.uuid(), ACTION);
+        confirmations.clear(actor.uuid(), CONFIRMATION_KEY);
 
         return PlatformResult.success(new ClearSummary(
                 committed.size(),
@@ -629,7 +644,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                         Target.self()
                 ))
                 .then(Commands.literal("player")
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.command.clearinventory.others"
                         ))
@@ -710,7 +725,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
     }
 
-    private record ClearPayload(
+    record ClearPayload(
             UUID actor,
             List<UUID> targets,
             InventoryClearFilter filter,
@@ -718,7 +733,7 @@ public final class ClearInventoryCommand implements CommandContributor {
             long issuedAt
     ) {
 
-        private ClearPayload {
+        ClearPayload {
             requireNonNull(actor, "actor");
             targets = List.copyOf(targets);
             requireNonNull(filter, "filter");

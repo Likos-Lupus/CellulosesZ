@@ -7,10 +7,9 @@ import top.likoslupus.cellulosesz.api.service.Registration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

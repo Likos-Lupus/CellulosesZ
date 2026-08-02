@@ -59,7 +59,7 @@ public final class RestCommand implements CommandContributor {
                                         "player",
                                         EntityArgument.player()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.command.rest.others"
                                 ))

@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.api.user;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -18,9 +17,7 @@ public interface UserService {
 
     Optional<CellUser> cached(UUID uuid);
 
-    default Collection<CellUser> cachedUsers() {
-        return List.of();
-    }
+    Collection<CellUser> cachedUsers();
 
     Optional<UUID> findUuidByName(String name);
 

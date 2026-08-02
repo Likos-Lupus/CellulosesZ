@@ -1,12 +1,15 @@
 package top.likoslupus.cellulosesz.modules.economy.application;
 
+import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.api.command.service.ConfirmationToken;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
@@ -23,7 +26,10 @@ import static java.util.Objects.requireNonNull;
 
 public final class PaymentCommandService {
 
-    private static final String CONFIRM_ACTION = "economy.pay";
+    private static final ConfirmationKey<PendingPayment> CONFIRMATION_KEY = new ConfirmationKey<>(
+            "economy.pay",
+            PendingPayment.class
+    );
     private static final Duration CONFIRM_TTL = Duration.ofSeconds(30);
 
     private final EconomyService economy;
@@ -64,7 +70,9 @@ public final class PaymentCommandService {
         if (amount.compareTo(snapshot.minimumPayment()) < 0) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.pay-command.error.payment-amount-cannot-less-than",
-                    Map.of("minimum_amount", economy.format(snapshot.minimumPayment()))
+                    MessageArguments.builder()
+                            .put("minimum_amount", economy.format(snapshot.minimumPayment()))
+                            .build()
             ));
         }
 
@@ -77,7 +85,7 @@ public final class PaymentCommandService {
         if (targetTokens.size() > snapshot.maximumRecipients()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.pay-too-many",
-                    Map.of("maximum", snapshot.maximumRecipients())
+                    MessageArguments.builder().put("maximum", snapshot.maximumRecipients()).build()
             ));
         }
         return resolveTargets(sender, targetTokens)
@@ -135,7 +143,7 @@ public final class PaymentCommandService {
             if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.abstract-economy-command.error.player-not-found",
-                        Map.of("player", target.name())
+                        MessageArguments.builder().put("player", target.name()).build()
                 ));
             }
 
@@ -151,7 +159,7 @@ public final class PaymentCommandService {
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-offline-denied",
-                        Map.of("player", target.name())
+                        MessageArguments.builder().put("player", target.name()).build()
                 ));
             }
         }
@@ -205,7 +213,7 @@ public final class PaymentCommandService {
             if (!recipient.preferences().payments()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-command.error.player-not-accepting-payments",
-                        Map.of("player", target.name())
+                        MessageArguments.builder().put("player", target.name()).build()
                 ));
             }
 
@@ -214,7 +222,7 @@ public final class PaymentCommandService {
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-ignored",
-                        Map.of("player", target.name())
+                        MessageArguments.builder().put("player", target.name()).build()
                 ));
             }
         }
@@ -246,32 +254,37 @@ public final class PaymentCommandService {
             if (token.isEmpty()) {
                 var generated = confirmations.request(
                         sender.uuid(),
-                        CONFIRM_ACTION,
+                        CONFIRMATION_KEY,
                         payload,
                         CONFIRM_TTL
                 );
                 return CompletableFuture.completedFuture(EconomyCommandResult.success(
                         "commands.economy.pay-confirm-required",
-                        Map.of(
-                                "player", resolved.stream()
-                                        .map(ResolvedPlayer::name)
-                                        .sorted(String.CASE_INSENSITIVE_ORDER)
-                                        .toList(),
-                                "amount", economy.format(total),
-                                "token", generated,
-                                "seconds", CONFIRM_TTL.toSeconds()
-                        )
+                        MessageArguments.builder()
+                                .put(
+                                        "player",
+                                        String.join(
+                                                ", ",
+                                                resolved.stream()
+                                                        .map(ResolvedPlayer::name)
+                                                        .sorted(String.CASE_INSENSITIVE_ORDER)
+                                                        .toList()
+                                        )
+                                )
+                                .put("amount", economy.format(total))
+                                .put("token", generated.value())
+                                .put("seconds", CONFIRM_TTL.toSeconds())
+                                .build()
                 ));
             }
 
             var confirmed = confirmations.consume(
                     sender.uuid(),
-                    CONFIRM_ACTION,
-                    token.orElseThrow(),
-                    PendingPayment.class
+                    CONFIRMATION_KEY,
+                    new ConfirmationToken(token.orElseThrow())
             );
-            if (confirmed.isEmpty()
-                    || !confirmed.orElseThrow().equals(payload)
+            if (!confirmed.consumed()
+                    || !confirmed.payload().orElseThrow().equals(payload)
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-confirm-invalid"
@@ -306,20 +319,20 @@ public final class PaymentCommandService {
                                     messages.render(
                                             audiences.locale(player),
                                             "commands.economy.pay-received",
-                                            Map.of(
-                                                    "player", sender.name(),
-                                                    "amount", economy.format(amount)
-                                            )
+                                            MessageArguments.builder()
+                                                    .put("player", sender.name())
+                                                    .put("amount", economy.format(amount))
+                                                    .build()
                                     )
                             ))
                     );
                     return EconomyCommandResult.success(
                             "commands.economy.pay-command.reply.paid-current-balance",
-                            Map.of(
-                                    "recipients", names,
-                                    "amount", economy.format(total),
-                                    "balance", economy.format(transaction.balance())
-                            )
+                            MessageArguments.builder()
+                                    .put("recipients", String.join(", ", names))
+                                    .put("amount", economy.format(total))
+                                    .put("balance", economy.format(transaction.balance()))
+                                    .build()
                     );
                 });
     }
@@ -358,7 +371,7 @@ public final class PaymentCommandService {
                         }
                 )
                 .thenApply(enabled -> {
-                    confirmations.clear(uuid, CONFIRM_ACTION);
+                    confirmations.clear(uuid, CONFIRMATION_KEY);
                     return EconomyCommandResult.success(
                             enabled
                                     ? "commands.economy.pay-confirm-enabled"

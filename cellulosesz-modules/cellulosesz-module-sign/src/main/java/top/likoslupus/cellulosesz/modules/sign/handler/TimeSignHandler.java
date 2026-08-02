@@ -51,7 +51,7 @@ public final class TimeSignHandler implements SynchronousSignHandler {
         }
 
         var requestedWorld = context.line(2).isBlank()
-                ? context.location().world
+                ? context.location().world()
                 : context.line(2);
         var world = worldDirectory.resolveLoadedWorld(requestedWorld);
 

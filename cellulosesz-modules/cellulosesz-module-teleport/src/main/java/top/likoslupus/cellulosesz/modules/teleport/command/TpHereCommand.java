@@ -64,7 +64,7 @@ public final class TpHereCommand implements CommandContributor {
                                             actor,
                                             targetName,
                                             override,
-                                            context.permissions().has(
+                                            context.hasPermission(
                                                     command.getSource(), permission + ".bypass"
                                             )
                                     )

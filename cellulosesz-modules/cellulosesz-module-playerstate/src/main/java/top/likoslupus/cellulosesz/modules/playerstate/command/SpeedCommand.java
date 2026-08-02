@@ -90,7 +90,7 @@ public final class SpeedCommand implements CommandContributor {
                 .forEach(type -> {
                     var typeName = type.name().toLowerCase(Locale.ROOT);
                     root.then(Commands.literal(typeName)
-                            .requires(source -> context.permissions().has(
+                            .requires(source -> context.hasPermission(
                                     source,
                                     "cellulosesz.playerstate.speed." + typeName
                             ))
@@ -112,7 +112,7 @@ public final class SpeedCommand implements CommandContributor {
                                                                     EntityArgument.player()
                                                             )
                                                             .requires(source ->
-                                                                    context.permissions().has(
+                                                                    context.hasPermission(
                                                                             source,
                                                                             "cellulosesz.playerstate.speed.others"
                                                                     )

@@ -8,6 +8,8 @@ import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.*;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.modules.user.persistence.UserDocument;
+import top.likoslupus.cellulosesz.modules.user.persistence.UserMapper;
 
 import java.nio.file.Path;
 import java.time.Clock;
@@ -73,15 +75,17 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     @Override
     public CompletableFuture<Void> initialize() {
         return storage
-                .loadDirectory(usersDirectory, CellUser.class)
-                .thenAccept(documents -> documents.forEach(user -> {
-                    validate(user, user.uuid());
-                    knownUuids.add(user.uuid());
+                .loadDirectory(usersDirectory, UserDocument.class)
+                .thenAccept(documents -> documents.stream()
+                        .map(UserMapper::toDomain)
+                        .forEach(user -> {
+                            validate(user, user.uuid());
+                            knownUuids.add(user.uuid());
 
-                    if (user.lastKnownName() != null) {
-                        nameCache.remember(user.uuid(), user.lastKnownName());
-                    }
-                }));
+                            if (user.lastKnownName() != null) {
+                                nameCache.remember(user.uuid(), user.lastKnownName());
+                            }
+                        }));
     }
 
     private static void validate(CellUser user, UUID expectedUuid) {
@@ -201,7 +205,7 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
                     validate(update.user(), key);
 
                     return storage
-                            .save(userPath(key), update.user())
+                            .save(userPath(key), UserMapper.fromDomain(update.user()))
                             .thenApply(_ -> {
                                 publish(key, update.user());
                                 // FIXME: result() is nullable
@@ -221,7 +225,7 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
         var user = users.get(uuid);
         return user == null
                 ? CompletableFuture.completedFuture(null)
-                : storage.save(userPath(uuid), user);
+                : storage.save(userPath(uuid), UserMapper.fromDomain(user));
     }
 
     @Override
@@ -285,9 +289,10 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
 
         return storage.createIfMissing(
                         userPath(uuid),
-                        CellUser.class,
-                        () -> create(uuid)
+                        UserDocument.class,
+                        () -> UserMapper.fromDomain(create(uuid))
                 )
+                .thenApply(UserMapper::toDomain)
                 .thenApply(user -> {
                     validate(user, uuid);
                     var normalized = user.timestamps().activeSessionStartedAt() == null

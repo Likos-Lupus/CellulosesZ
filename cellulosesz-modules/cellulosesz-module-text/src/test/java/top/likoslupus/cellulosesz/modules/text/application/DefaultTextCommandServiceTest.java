@@ -1,12 +1,14 @@
 package top.likoslupus.cellulosesz.modules.text.application;
 
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
+import top.likoslupus.cellulosesz.api.text.MessageArgument;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.List;
 import java.util.Set;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -21,12 +23,20 @@ final class DefaultTextCommandServiceTest {
 
         assertTrue(first.success());
         assertEquals(3, first.messages().size());
-        assertEquals("line-1", first.messages().get(1).placeholders().get("line"));
-        assertEquals("line-2", first.messages().get(2).placeholders().get("line"));
+        assertEquals("line-1", text(first.messages().get(1).placeholders(), "line"));
+        assertEquals("line-2", text(first.messages().get(2).placeholders(), "line"));
         assertTrue(second.success());
-        assertEquals("line-3", second.messages().get(1).placeholders().get("line"));
-        assertEquals(2, second.messages().get(0).placeholders().get("page"));
-        assertEquals(2, second.messages().get(0).placeholders().get("pages"));
+        assertEquals("line-3", text(second.messages().get(1).placeholders(), "line"));
+        assertEquals(2, number(second.messages().get(0).placeholders(), "page"));
+        assertEquals(2, number(second.messages().get(0).placeholders(), "pages"));
+    }
+
+    private static String text(MessageArguments arguments, String key) {
+        return ((MessageArgument.Text) arguments.values().get(key)).value();
+    }
+
+    private static int number(MessageArguments arguments, String key) {
+        return ((MessageArgument.Number) arguments.values().get(key)).value().intValueExact();
     }
 
     @Test
@@ -53,7 +63,7 @@ final class DefaultTextCommandServiceTest {
         var page = service.custom("guide", 9);
 
         assertTrue(section.success());
-        assertEquals("line-3", section.messages().get(1).placeholders().get("line"));
+        assertEquals("line-3", text(section.messages().get(1).placeholders(), "line"));
         assertFalse(missing.success());
         assertEquals(
                 GeneratedMessageKeys.COMMANDS_TEXT_CUSTOM_MISSING,

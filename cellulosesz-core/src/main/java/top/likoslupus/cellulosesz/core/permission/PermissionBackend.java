@@ -1,16 +1,18 @@
 package top.likoslupus.cellulosesz.core.permission;
 
+import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+
 import java.util.Optional;
 
 public interface PermissionBackend {
 
     boolean has(
-            Object source,
+            CellPlayer player,
             String permission
     );
 
     default int intOption(
-            Object source,
+            CellPlayer player,
             String key,
             int fallback
     ) {
@@ -18,7 +20,7 @@ public interface PermissionBackend {
     }
 
     default boolean boolOption(
-            Object source,
+            CellPlayer player,
             String key,
             boolean fallback
     ) {
@@ -26,7 +28,7 @@ public interface PermissionBackend {
     }
 
     default Optional<String> stringOption(
-            Object source,
+            CellPlayer player,
             String key
     ) {
         return Optional.empty();

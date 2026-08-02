@@ -49,7 +49,7 @@ public final class IceCommand implements CommandContributor {
                                         "player",
                                         EntityArgument.player()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.command.ice.others"
                                 ))

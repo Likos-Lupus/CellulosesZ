@@ -6,12 +6,12 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.admin.*;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
 
 import java.net.InetAddress;
 import java.time.Clock;
-import java.util.Map;
 import java.util.UUID;
 
 import static java.util.Objects.requireNonNull;
@@ -63,7 +63,7 @@ public final class DefaultBanService implements BanService {
             return AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "service.admin.ban-failed",
-                    Map.of("player", targetName)
+                    MessageArguments.builder().put("player", targetName).build()
             );
         }
 
@@ -71,7 +71,7 @@ public final class DefaultBanService implements BanService {
             return failure(
                     result,
                     "service.admin.ban-failed",
-                    Map.of("player", targetName)
+                    MessageArguments.of("player", targetName)
             );
         }
 
@@ -79,13 +79,16 @@ public final class DefaultBanService implements BanService {
                 BanDisconnectRequest.user(targetId, reason)
         );
 
-        return disconnected.status().successful() ? AdminResult.success(
-                "service.admin.ban-success",
-                Map.of("player", targetName)
-        ) : AdminResult.partial(
-                "service.admin.ban-success",
-                Map.of("player", targetName)
-        );
+        return disconnected.status().successful()
+                ?
+                AdminResult.success(
+                        "service.admin.ban-success",
+                        MessageArguments.builder().put("player", targetName).build()
+                )
+                : AdminResult.partial(
+                        "service.admin.ban-success",
+                        MessageArguments.builder().put("player", targetName).build()
+                );
     }
 
     @Override
@@ -95,14 +98,17 @@ public final class DefaultBanService implements BanService {
             AdminActor actor
     ) {
         var result = platform.pardonUser(new PlayerProfileId(targetId, targetName));
-        return result.status().successful() ? AdminResult.success(
-                "service.admin.unban-success",
-                Map.of("player", targetName)
-        ) : failure(
-                result,
-                "service.admin.unban-failed",
-                Map.of("player", targetName)
-        );
+        return result.status().successful()
+                ?
+                AdminResult.success(
+                        "service.admin.unban-success",
+                        MessageArguments.builder().put("player", targetName).build()
+                )
+                : failure(
+                        result,
+                        "service.admin.unban-failed",
+                        MessageArguments.of("player", targetName)
+                );
     }
 
     @Override
@@ -126,7 +132,7 @@ public final class DefaultBanService implements BanService {
             return AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "service.admin.ban-ip-failed",
-                    Map.of("address", canonical)
+                    MessageArguments.builder().put("address", canonical).build()
             );
         }
 
@@ -134,7 +140,7 @@ public final class DefaultBanService implements BanService {
             return failure(
                     result,
                     "service.admin.ban-ip-failed",
-                    Map.of("address", canonical)
+                    MessageArguments.of("address", canonical)
             );
         }
 
@@ -142,13 +148,16 @@ public final class DefaultBanService implements BanService {
                 BanDisconnectRequest.address(target, reason)
         );
 
-        return disconnected.status().successful() ? AdminResult.success(
-                "service.admin.ban-ip-success",
-                Map.of("address", canonical)
-        ) : AdminResult.partial(
-                "service.admin.ban-ip-success",
-                Map.of("address", canonical)
-        );
+        return disconnected.status().successful()
+                ?
+                AdminResult.success(
+                        "service.admin.ban-ip-success",
+                        MessageArguments.builder().put("address", canonical).build()
+                )
+                : AdminResult.partial(
+                        "service.admin.ban-ip-success",
+                        MessageArguments.builder().put("address", canonical).build()
+                );
     }
 
     @Override
@@ -156,27 +165,33 @@ public final class DefaultBanService implements BanService {
         var canonical = IpAddresses.canonical(target);
         var result = platform.pardonIp(target);
 
-        return result.status().successful() ? AdminResult.success(
-                "service.admin.unban-ip-success",
-                Map.of("address", canonical)
-        ) : failure(
-                result,
-                "service.admin.unban-ip-failed",
-                Map.of("address", canonical)
-        );
+        return result.status().successful()
+                ?
+                AdminResult.success(
+                        "service.admin.unban-ip-success",
+                        MessageArguments.builder().put("address", canonical).build()
+                )
+                : failure(
+                        result,
+                        "service.admin.unban-ip-failed",
+                        MessageArguments.of("address", canonical)
+                );
     }
 
     @Override
     public AdminResult kick(CellPlayer target, String reason) {
         var result = connections.disconnect(target, RichText.plain(reason));
-        return result.successful() ? AdminResult.success(
-                "service.admin.kick-success",
-                Map.of("player", target.name())
-        ) : AdminResult.failure(
-                AdminStatus.PLATFORM_FAILURE,
-                "service.admin.kick-failed",
-                Map.of("player", target.name())
-        );
+        return result.successful()
+                ?
+                AdminResult.success(
+                        "service.admin.kick-success",
+                        MessageArguments.builder().put("player", target.name()).build()
+                )
+                : AdminResult.failure(
+                        AdminStatus.PLATFORM_FAILURE,
+                        "service.admin.kick-failed",
+                        MessageArguments.builder().put("player", target.name()).build()
+                );
     }
 
     private static BanActor toPlatform(AdminActor actor) {
@@ -189,7 +204,7 @@ public final class DefaultBanService implements BanService {
     private static AdminResult failure(
             BanPlatformResult result,
             String key,
-            Map<String, ?> placeholders
+            MessageArguments placeholders
     ) {
         var status = switch (result.status()) {
             case ALREADY_BANNED -> AdminStatus.ALREADY_EXISTS;

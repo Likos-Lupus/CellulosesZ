@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.api.platform.admin;
 
-import org.jspecify.annotations.Nullable;
-
 import java.net.InetAddress;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
+
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireMaxLength;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNoControlCharacters;
 
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireMaxLength;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNoControlCharacters;
 
 public record BanDisconnectRequest(
         @Nullable UUID userId,

@@ -23,6 +23,7 @@ import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 import top.likoslupus.cellulosesz.fabric.mixin.BaseSpawnerAccessor;
@@ -122,7 +123,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -188,7 +189,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -298,7 +299,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
                 return PlatformResult.failure(
@@ -342,7 +343,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     ) {
         requireNonNull(type, "type");
         return onServerThread(() -> {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
                 return PlatformResult.failure(
@@ -445,7 +446,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
         return onServerThread(() -> {
             var level = MinecraftWorlds.findLoaded(
                     server.requireRunning(),
-                    request.location().world
+                    request.location().world()
             );
             if (level.isEmpty()) {
                 return PlatformResult.failure(
@@ -468,9 +469,9 @@ public final class FabricWorldOperations implements WorldPlatformService {
             }
 
             bolt.moveTo(
-                    request.location().x,
-                    request.location().y,
-                    request.location().z
+                    request.location().x(),
+                    request.location().y(),
+                    request.location().z()
             );
             bolt.setVisualOnly(request.visualOnly());
 
@@ -483,12 +484,12 @@ public final class FabricWorldOperations implements WorldPlatformService {
 
             if (request.additionalDamage() > 0.0D) {
                 var box = new AABB(
-                        request.location().x - 1.5D,
-                        request.location().y - 1.0D,
-                        request.location().z - 1.5D,
-                        request.location().x + 1.5D,
-                        request.location().y + 4.0D,
-                        request.location().z + 1.5D
+                        request.location().x() - 1.5D,
+                        request.location().y() - 1.0D,
+                        request.location().z() - 1.5D,
+                        request.location().x() + 1.5D,
+                        request.location().y() + 4.0D,
+                        request.location().z() + 1.5D
                 );
 
                 targetLevel.getEntitiesOfClass(LivingEntity.class, box)
@@ -523,13 +524,18 @@ public final class FabricWorldOperations implements WorldPlatformService {
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         if (!server.serverThread()) {
             return PlatformResult.failure(
-                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
             );
         }
 
         try {
             return operation.get();
+        } catch (MinecraftPlayerUnavailableException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,

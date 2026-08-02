@@ -59,7 +59,7 @@ public final class FeedCommand implements CommandContributor {
                                         "player",
                                         EntityArgument.player()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.playerstate.feed.other"
                                 ))

@@ -2,8 +2,9 @@ package top.likoslupus.cellulosesz.api.platform.admin;
 
 import org.jspecify.annotations.Nullable;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public record BanPlatformResult(
         BanPlatformStatus status,

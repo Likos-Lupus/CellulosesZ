@@ -84,7 +84,7 @@ public final class PWeatherCommand implements CommandContributor {
                                         "player",
                                         EntityArgument.player()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.playerstate.pweather.others"
                                 ))

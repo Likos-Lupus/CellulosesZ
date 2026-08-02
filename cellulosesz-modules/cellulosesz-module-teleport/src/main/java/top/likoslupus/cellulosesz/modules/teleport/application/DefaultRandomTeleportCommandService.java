@@ -4,10 +4,10 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
@@ -71,7 +71,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                 .submit(() -> locations.currentLocation(actor.orElseThrow()))
                 .thenCompose(location -> saveCenter(
                         resolved.orElseThrow(),
-                        new Coordinates(location.x, location.z)
+                        new Coordinates(location.x(), location.z())
                 ));
     }
 
@@ -97,8 +97,11 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                 .submit(() -> {
                     var location = locations.currentLocation(player);
                     return new WorldAndResult(
-                            location.world,
-                            random.randomLocation(location.world, settings.settings(location.world))
+                            location.world(),
+                            random.randomLocation(
+                                    location.world(),
+                                    settings.settings(location.world())
+                            )
                     );
                 })
                 .thenCompose(value -> {
@@ -173,12 +176,14 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                     minimum
                             ? "commands.teleport.set-tpr-command.reply.minrange"
                             : "commands.teleport.set-tpr-command.reply.maxrange",
-                    Map.of(
-                            "world", resolved.orElseThrow(),
-                            "radius", minimum
-                                    ? current.minRadius()
-                                    : current.maxRadius()
-                    )
+                    MessageArguments.builder()
+                            .put("world", resolved.orElseThrow())
+                            .put(
+                                    "radius",
+                                    minimum
+                                            ? current.minRadius()
+                                            : current.maxRadius()
+                            ).build()
             ));
         }
 
@@ -201,10 +206,10 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                         minimum
                                 ? "commands.teleport.set-tpr-command.reply.minrange"
                                 : "commands.teleport.set-tpr-command.reply.maxrange",
-                        Map.of(
-                                "world", resolved.orElseThrow(),
-                                "radius", value
-                        )
+                        MessageArguments.builder()
+                                .put("world", resolved.orElseThrow())
+                                .put("radius", value)
+                                .build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
                         PERSISTENCE_FAILURE,
@@ -228,11 +233,11 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                 )
                 .thenApply(_ -> TeleportCommandResult.success(
                         "commands.teleport.set-tpr-command.reply.center",
-                        Map.of(
-                                "world", world,
-                                "x", coordinates.x(),
-                                "z", coordinates.z()
-                        )
+                        MessageArguments.builder()
+                                .put("world", world)
+                                .put("x", coordinates.x())
+                                .put("z", coordinates.z())
+                                .build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
                         PERSISTENCE_FAILURE,

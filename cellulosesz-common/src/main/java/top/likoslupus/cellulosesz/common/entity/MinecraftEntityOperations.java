@@ -16,6 +16,7 @@ import top.likoslupus.cellulosesz.api.entity.*;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 
@@ -123,7 +124,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
                 );
             }
 
-            var anchor = MinecraftPlayers.requireOnline(request.anchor());
+            var anchor = MinecraftPlayers.requireOnline(server, request.anchor());
             var level = anchor.level();
             var base = anchor.blockPosition().relative(anchor.getDirection(), 2);
             if (!level.hasChunkAt(base)
@@ -193,7 +194,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
     public PlatformResult<ProjectileLaunchResult> launchProjectile(ProjectileRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var shooter = MinecraftPlayers.requireOnline(request.shooter());
+            var shooter = MinecraftPlayers.requireOnline(server, request.shooter());
             var level = shooter.level();
             var entity = createProjectile(level, request.type());
 
@@ -255,7 +256,10 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
     public PlatformResult<TntBurstResult> spawnTnt(TntBurstRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = MinecraftWorlds.findLoaded(server.requireRunning(), request.center().world);
+            var level = MinecraftWorlds.findLoaded(
+                    server.requireRunning(),
+                    request.center().world()
+            );
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -270,9 +274,9 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
                 var radius = request.amount() == 1
                         ? 0.0D
                         : request.spread() * ((index % 5) / 4.0D);
-                var x = request.center().x + Math.cos(angle) * radius;
-                var y = request.center().y + request.height();
-                var z = request.center().z + Math.sin(angle) * radius;
+                var x = request.center().x() + Math.cos(angle) * radius;
+                var y = request.center().y() + request.height();
+                var z = request.center().z() + Math.sin(angle) * radius;
                 var position = BlockPos.containing(x, y, z);
 
                 if (!targetLevel.hasChunkAt(position)
@@ -323,7 +327,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
     public PlatformResult<TemporaryMobResult> launchTemporaryMob(TemporaryMobRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var shooter = MinecraftPlayers.requireOnline(request.shooter());
+            var shooter = MinecraftPlayers.requireOnline(server, request.shooter());
             var level = shooter.level();
             var entity = (Entity) switch (request.type()) {
                 case BEE -> EntityType.BEE.create(level, EntitySpawnReason.COMMAND);
@@ -494,13 +498,18 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         if (!server.serverThread()) {
             return PlatformResult.failure(
-                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
             );
         }
 
         try {
             return operation.get();
+        } catch (MinecraftPlayerUnavailableException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,

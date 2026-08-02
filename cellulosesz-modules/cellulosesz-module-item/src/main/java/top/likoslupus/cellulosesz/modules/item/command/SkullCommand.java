@@ -62,10 +62,10 @@ public final class SkullCommand implements CommandContributor {
                                 EntityArgument.player()
                         )
                         .requires(source ->
-                                context.permissions().has(
+                                context.hasPermission(
                                         source,
                                         "cellulosesz.command.skull.others"
-                                ) && context.permissions().has(
+                                ) && context.hasPermission(
                                         source,
                                         "cellulosesz.command.skull.spawn.others"
                                 )
@@ -77,7 +77,7 @@ public final class SkullCommand implements CommandContributor {
                         )));
 
         var root = Commands.literal("skull")
-                .requires(source -> context.permissions().has(
+                .requires(source -> context.hasPermission(
                         source,
                         "cellulosesz.command.skull"
                 ))

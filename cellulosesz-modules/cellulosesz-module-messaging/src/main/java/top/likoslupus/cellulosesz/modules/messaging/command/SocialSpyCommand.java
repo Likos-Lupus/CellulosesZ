@@ -64,7 +64,7 @@ public final class SocialSpyCommand implements CommandContributor {
                         ))
                 )
                 .then(Commands.argument("player", StringArgumentType.word())
-                        .requires(source -> context.permissions().has(
+                        .requires(source -> context.hasPermission(
                                 source,
                                 "cellulosesz.messaging.socialspy.others"
                         ))

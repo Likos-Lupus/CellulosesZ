@@ -44,7 +44,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
         }
 
         try {
-            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(server, player);
             FabricDisplayNameBridge.displayName(
                     player.uuid(),
                     MinecraftTextAdapter.toComponent(displayName, logger)
@@ -69,7 +69,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
         }
 
         try {
-            return refresh(MinecraftPlayers.requireOnline(player));
+            return refresh(MinecraftPlayers.requireOnline(server, player));
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,

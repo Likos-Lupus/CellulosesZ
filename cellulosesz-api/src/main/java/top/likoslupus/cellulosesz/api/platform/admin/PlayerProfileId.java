@@ -2,8 +2,9 @@ package top.likoslupus.cellulosesz.api.platform.admin;
 
 import java.util.UUID;
 
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.*;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public record PlayerProfileId(
         UUID uuid,

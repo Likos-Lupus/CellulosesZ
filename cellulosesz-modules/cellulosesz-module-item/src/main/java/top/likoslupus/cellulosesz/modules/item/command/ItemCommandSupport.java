@@ -8,11 +8,11 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -70,13 +70,16 @@ final class ItemCommandSupport {
                 result.successful(),
                 LocalizedMessage.of(
                         key,
-                        Map.of(
-                                "command", command,
-                                "status", result.status().name().toLowerCase(),
-                                "detail", result.detail().isBlank()
-                                        ? "-"
-                                        : result.detail()
-                        )
+                        MessageArguments.builder()
+                                .put("command", command)
+                                .put("status", result.status().name().toLowerCase())
+                                .put(
+                                        "detail",
+                                        result.detail().isBlank()
+                                                ? "-"
+                                                : result.detail()
+                                )
+                                .build()
                 )
         );
 

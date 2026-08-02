@@ -4,8 +4,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Optional;
 
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public record EntityRemovalRequest(
         EntityRemoveSelector selector,

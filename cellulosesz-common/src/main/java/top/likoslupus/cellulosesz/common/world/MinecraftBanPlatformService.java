@@ -2,8 +2,12 @@ package top.likoslupus.cellulosesz.common.world;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.players.*;
+import net.minecraft.server.players.IpBanListEntry;
+import net.minecraft.server.players.NameAndId;
+import net.minecraft.server.players.UserBanListEntry;
 import top.likoslupus.cellulosesz.api.platform.admin.*;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.io.IOException;
@@ -58,12 +62,17 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
             );
         }
 
-        if (!save(bans)) {
-            rollbackAddedUserBan(bans, target);
-            return BanPlatformResult.failure(
-                    BanPlatformStatus.PERSISTENCE_FAILURE,
-                    "Minecraft could not persist the user ban list"
-            );
+        try {
+            bans.save();
+        } catch (IOException failure) {
+            bans.remove(target);
+            try {
+                bans.save();
+            } catch (IOException rollbackFailure) {
+                return persistenceFailure("user ban", failure, rollbackFailure);
+            }
+
+            return persistenceFailure("user ban", failure, null);
         }
 
         return BanPlatformResult.success();
@@ -96,12 +105,17 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
             );
         }
 
-        if (!save(bans)) {
-            rollbackRemovedUserBan(bans, previous);
-            return BanPlatformResult.failure(
-                    BanPlatformStatus.PERSISTENCE_FAILURE,
-                    "Minecraft could not persist the user ban list"
-            );
+        try {
+            bans.save();
+        } catch (IOException failure) {
+            bans.add(previous);
+            try {
+                bans.save();
+            } catch (IOException rollbackFailure) {
+                return persistenceFailure("user pardon", failure, rollbackFailure);
+            }
+
+            return persistenceFailure("user pardon", failure, null);
         }
 
         return BanPlatformResult.success();
@@ -140,12 +154,17 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
             );
         }
 
-        if (!save(bans)) {
-            rollbackAddedIpBan(bans, address);
-            return BanPlatformResult.failure(
-                    BanPlatformStatus.PERSISTENCE_FAILURE,
-                    "Minecraft could not persist the IP ban list"
-            );
+        try {
+            bans.save();
+        } catch (IOException failure) {
+            bans.remove(address);
+            try {
+                bans.save();
+            } catch (IOException rollbackFailure) {
+                return persistenceFailure("IP ban", failure, rollbackFailure);
+            }
+
+            return persistenceFailure("IP ban", failure, null);
         }
 
         return BanPlatformResult.success();
@@ -178,31 +197,60 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
             );
         }
 
-        if (!save(bans)) {
-            rollbackRemovedIpBan(bans, previous);
-            return BanPlatformResult.failure(
-                    BanPlatformStatus.PERSISTENCE_FAILURE,
-                    "Minecraft could not persist the IP ban list"
-            );
+        try {
+            bans.save();
+        } catch (IOException failure) {
+            bans.add(previous);
+            try {
+                bans.save();
+            } catch (IOException rollbackFailure) {
+                return persistenceFailure("IP pardon", failure, rollbackFailure);
+            }
+
+            return persistenceFailure("IP pardon", failure, null);
         }
 
         return BanPlatformResult.success();
     }
 
     @Override
-    public boolean isUserBanned(PlayerProfileId target) {
+    public PlatformResult<Boolean> isUserBanned(PlayerProfileId target) {
         var active = activeServer();
-        return active != null
-                && active.isSameThread()
-                && active.getPlayerList().getBans().get(nameAndId(target)) != null;
+
+        if (active == null) {
+            return PlatformResult.failure(PlatformOperationStatus.NOT_READY, "Server is not ready");
+        }
+
+        if (!active.isSameThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.WRONG_THREAD,
+                    "Ban queries require the server thread"
+            );
+        }
+
+        return PlatformResult.success(
+                active.getPlayerList().getBans().get(nameAndId(target)) != null
+        );
     }
 
     @Override
-    public boolean isIpBanned(InetAddress address) {
+    public PlatformResult<Boolean> isIpBanned(InetAddress address) {
         var active = activeServer();
-        return active != null
-                && active.isSameThread()
-                && active.getPlayerList().getIpBans().get(canonical(address)) != null;
+
+        if (active == null) {
+            return PlatformResult.failure(PlatformOperationStatus.NOT_READY, "Server is not ready");
+        }
+
+        if (!active.isSameThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.WRONG_THREAD,
+                    "Ban queries require the server thread"
+            );
+        }
+
+        return PlatformResult.success(
+                active.getPlayerList().getIpBans().get(canonical(address)) != null
+        );
     }
 
     @Override
@@ -245,36 +293,12 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
                 : Component.literal(reason);
     }
 
-    private static void rollbackRemovedIpBan(IpBanList bans, IpBanListEntry previous) {
-        bans.add(previous);
-        save(bans);
-    }
-
     private static String canonical(InetAddress address) {
         var value = requireNonNull(address, "address").getHostAddress().toLowerCase(Locale.ROOT);
         var zone = value.indexOf('%');
         return zone < 0
                 ? value
                 : value.substring(0, zone);
-    }
-
-    private static boolean save(IpBanList bans) {
-        try {
-            bans.save();
-            return true;
-        } catch (IOException _) {
-            return false;
-        }
-    }
-
-    private static void rollbackAddedIpBan(IpBanList bans, String address) {
-        bans.remove(address);
-        save(bans);
-    }
-
-    private static void rollbackRemovedUserBan(UserBanList bans, UserBanListEntry previous) {
-        bans.add(previous);
-        save(bans);
     }
 
     private @Nullable MinecraftServer activeServer() {
@@ -319,18 +343,30 @@ public final class MinecraftBanPlatformService implements BanPlatformService {
                 : reason;
     }
 
-    private static boolean save(UserBanList bans) {
-        try {
-            bans.save();
-            return true;
-        } catch (IOException _) {
-            return false;
-        }
-    }
+    private static BanPlatformResult persistenceFailure(
+            String operation,
+            IOException failure,
+            @Nullable IOException rollbackFailure
+    ) {
+        var detail = "Minecraft could not persist the " + operation + ": "
+                + failure.getClass().getSimpleName()
+                + (
+                failure.getMessage() == null
+                        ? ""
+                        : " (" + failure.getMessage() + ")"
+        );
 
-    private static void rollbackAddedUserBan(UserBanList bans, NameAndId target) {
-        bans.remove(target);
-        save(bans);
+        if (rollbackFailure != null) {
+            detail += "; rollback persistence also failed: "
+                    + rollbackFailure.getClass().getSimpleName()
+                    + (
+                    rollbackFailure.getMessage() == null
+                            ? ""
+                            : " (" + rollbackFailure.getMessage() + ")"
+            );
+        }
+
+        return BanPlatformResult.failure(BanPlatformStatus.PERSISTENCE_FAILURE, detail);
     }
 
 }

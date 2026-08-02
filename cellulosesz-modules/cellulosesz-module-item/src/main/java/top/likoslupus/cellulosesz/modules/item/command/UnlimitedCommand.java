@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.modules.item.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
@@ -15,6 +14,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -109,7 +109,13 @@ public final class UnlimitedCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var held = items.heldItemId(currentPlayer);
 
-                    if (held.isEmpty()) {
+                    if (!held.successful()) {
+                        return CompletableFuture.completedFuture(
+                                PlatformResult.failure(held.status(), held.detail())
+                        );
+                    }
+
+                    if (held.value().isEmpty()) {
                         return CompletableFuture.completedFuture(
                                 PlatformResult.failure(
                                         PlatformOperationStatus.INVALID_STATE,
@@ -118,13 +124,14 @@ public final class UnlimitedCommand implements CommandContributor {
                         );
                     }
 
-                    var item = held.orElseThrow();
-                    var enabled = requested == null ?
+                    var item = held.value().orElseThrow();
+                    var enabled = requested == null
+                            ?
                             !automation.unlimited(
                                     currentPlayer.uuid(),
                                     item
-                            ) :
-                            requested;
+                            )
+                            : requested;
 
                     return automation
                             .setUnlimited(

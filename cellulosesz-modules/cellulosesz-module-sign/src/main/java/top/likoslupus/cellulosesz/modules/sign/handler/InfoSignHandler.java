@@ -3,17 +3,17 @@ package top.likoslupus.cellulosesz.modules.sign.handler;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.TextService;
 
-import java.util.Map;
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 public final class InfoSignHandler implements SynchronousSignHandler {
 
     private final TextService texts;
 
     public InfoSignHandler(TextService texts) {
-        this.texts = Objects.requireNonNull(texts, "texts");
+        this.texts = requireNonNull(texts, "texts");
     }
 
     @Override
@@ -31,7 +31,10 @@ public final class InfoSignHandler implements SynchronousSignHandler {
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
         return SignHandlerSupport.textPage(texts, context)
-                .map(value -> SignUseResult.success("service.sign.info", Map.of("text", value)))
+                .map(value -> SignUseResult.success(
+                        "service.sign.info",
+                        MessageArguments.builder().put("text", value).build()
+                ))
                 .orElseGet(() -> SignUseResult.failure("service.sign.info-format"));
     }
 

@@ -6,9 +6,9 @@ import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 
-import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 import static java.util.Objects.requireNonNull;
@@ -44,7 +44,7 @@ public final class WarpSignHandler implements CellSignHandler {
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure(
                         "service.sign.warp-not-found",
-                        Map.of("warp", name)
+                        MessageArguments.builder().put("warp", name).build()
                 );
     }
 
@@ -61,14 +61,14 @@ public final class WarpSignHandler implements CellSignHandler {
             if (warp.isEmpty()) {
                 return CompletableFuture.completedFuture(SignUseResult.failure(
                         "service.sign.warp-not-found",
-                        Map.of("warp", name)
+                        MessageArguments.builder().put("warp", name).build()
                 ));
             }
 
             var value = warp.orElseThrow();
             var requiredPermission = warps.requiredPermission(value);
             if (requiredPermission.isPresent()
-                    && !permissions.has(context.player().nativeHandle(), requiredPermission.orElseThrow())
+                    && !permissions.has(context.player(), requiredPermission.orElseThrow())
             ) {
                 return CompletableFuture.completedFuture(SignUseResult.failure(
                         "service.sign.warp-no-permission"
@@ -77,15 +77,19 @@ public final class WarpSignHandler implements CellSignHandler {
 
             return teleports.teleport(
                             context.player(),
-                            value.location,
+                            value.location(),
                             TeleportOptions.defaults().withSafe(true).withWarmup(0)
                     )
-                    .thenApply(result -> result.success() ?
+                    .thenApply(result -> result.success()
+                            ?
                             SignUseResult.success(
                                     "service.sign.warp-success",
-                                    Map.of("warp", value.displayName)
-                            ) :
-                            SignUseResult.failure(result.message()));
+                                    MessageArguments.builder()
+                                            .put("warp", value.displayName())
+                                            .build()
+                            )
+                            :
+                                    SignUseResult.failure(result.message()));
         });
     }
 

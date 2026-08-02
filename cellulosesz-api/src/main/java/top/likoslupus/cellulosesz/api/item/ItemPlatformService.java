@@ -13,9 +13,9 @@ import java.util.Set;
  */
 public interface ItemPlatformService {
 
-    boolean registryReady();
+    PlatformResult<Void> registryStatus();
 
-    Optional<ItemDescriptor> parse(String input);
+    PlatformResult<ItemDescriptor> parse(String input);
 
     Set<String> itemIds();
 
@@ -23,9 +23,9 @@ public interface ItemPlatformService {
 
     Set<String> potionEffectIds();
 
-    boolean validItem(String itemId);
+    PlatformResult<Boolean> validItem(String itemId);
 
-    int maxStackSize(String itemId);
+    PlatformResult<Integer> maxStackSize(String itemId);
 
     PlatformResult<ItemGrantResult> grant(CellPlayer player, ItemDescriptor descriptor);
 

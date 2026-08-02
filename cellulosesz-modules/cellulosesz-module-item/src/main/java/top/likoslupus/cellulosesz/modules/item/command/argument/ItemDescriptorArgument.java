@@ -73,12 +73,21 @@ public final class ItemDescriptorArgument implements ArgumentType<ItemDescriptor
         } catch (CommandSyntaxException vanillaFailure) {
             reader.setCursor(start);
             var fallback = items.parse(reader.readUnquotedString());
-            if (fallback.isEmpty() || !items.valid(fallback.orElseThrow())) {
+            if (!fallback.successful() || fallback.value().isEmpty()) {
                 reader.setCursor(start);
                 throw INVALID.createWithContext(reader);
             }
 
-            return fallback.orElseThrow().copy();
+            var valid = items.valid(fallback.value().orElseThrow());
+            if (!valid.successful()
+                    || valid.value().isEmpty()
+                    || !valid.value().orElseThrow()
+            ) {
+                reader.setCursor(start);
+                throw INVALID.createWithContext(reader);
+            }
+
+            return fallback.value().orElseThrow();
         }
     }
 

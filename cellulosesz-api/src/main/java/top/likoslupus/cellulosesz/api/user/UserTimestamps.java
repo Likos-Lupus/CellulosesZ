@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.api.user;
 
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
 
 public record UserTimestamps(
         long firstJoin,
@@ -36,27 +36,69 @@ public record UserTimestamps(
     }
 
     public UserTimestamps withFirstJoin(long value) {
-        return new UserTimestamps(value, lastJoin, lastQuit, playTimeMillis, lastActivityAt, activeSessionStartedAt);
+        return new UserTimestamps(
+                value,
+                lastJoin,
+                lastQuit,
+                playTimeMillis,
+                lastActivityAt,
+                activeSessionStartedAt
+        );
     }
 
     public UserTimestamps withLastJoin(long value) {
-        return new UserTimestamps(firstJoin, value, lastQuit, playTimeMillis, lastActivityAt, activeSessionStartedAt);
+        return new UserTimestamps(
+                firstJoin,
+                value,
+                lastQuit,
+                playTimeMillis,
+                lastActivityAt,
+                activeSessionStartedAt
+        );
     }
 
     public UserTimestamps withLastQuit(long value) {
-        return new UserTimestamps(firstJoin, lastJoin, value, playTimeMillis, lastActivityAt, activeSessionStartedAt);
+        return new UserTimestamps(
+                firstJoin,
+                lastJoin,
+                value,
+                playTimeMillis,
+                lastActivityAt,
+                activeSessionStartedAt
+        );
     }
 
     public UserTimestamps withPlayTimeMillis(long value) {
-        return new UserTimestamps(firstJoin, lastJoin, lastQuit, value, lastActivityAt, activeSessionStartedAt);
+        return new UserTimestamps(
+                firstJoin,
+                lastJoin,
+                lastQuit,
+                value,
+                lastActivityAt,
+                activeSessionStartedAt
+        );
     }
 
     public UserTimestamps withLastActivityAt(long value) {
-        return new UserTimestamps(firstJoin, lastJoin, lastQuit, playTimeMillis, value, activeSessionStartedAt);
+        return new UserTimestamps(
+                firstJoin,
+                lastJoin,
+                lastQuit,
+                playTimeMillis,
+                value,
+                activeSessionStartedAt
+        );
     }
 
     public UserTimestamps withActiveSessionStartedAt(@Nullable Long value) {
-        return new UserTimestamps(firstJoin, lastJoin, lastQuit, playTimeMillis, lastActivityAt, value);
+        return new UserTimestamps(
+                firstJoin,
+                lastJoin,
+                lastQuit,
+                playTimeMillis,
+                lastActivityAt,
+                value
+        );
     }
 
 }

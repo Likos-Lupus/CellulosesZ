@@ -67,7 +67,7 @@ public final class PlaytimeCommand implements CommandContributor {
                                         "player",
                                         StringArgumentType.word()
                                 )
-                                .requires(source -> context.permissions().has(
+                                .requires(source -> context.hasPermission(
                                         source,
                                         "cellulosesz.playerstate.playtime.others"
                                 ))

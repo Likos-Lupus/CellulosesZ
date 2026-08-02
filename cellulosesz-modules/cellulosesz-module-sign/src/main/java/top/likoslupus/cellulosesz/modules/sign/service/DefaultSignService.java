@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.sign.*;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.sign.SignConfig;
 import top.likoslupus.cellulosesz.modules.sign.data.SignDocument;
@@ -169,12 +170,12 @@ public final class DefaultSignService implements SignService, AsyncInitializable
 
         for (var record : records) {
             if (!permissions.has(
-                    player.nativeHandle(),
+                    player,
                     permission("break", record.type)
             )) {
                 return completedMutation(SignUseResult.failure(
                         "service.sign.break-no-permission",
-                        Map.of("sign", record.type)
+                        MessageArguments.builder().put("sign", record.type).build()
                 ));
             }
         }
@@ -193,7 +194,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                     next,
                     SignUseResult.success(
                             "service.sign.break-success",
-                            Map.of("count", records.size())
+                            MessageArguments.builder().put("count", records.size()).build()
                     )
             );
         });
@@ -229,12 +230,12 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         }
 
         if (!permissions.has(
-                player.nativeHandle(),
+                player,
                 permission("use", stored.type)
         )) {
             return completedUse(SignUseResult.failure(
                     "service.sign.no-permission",
-                    Map.of("sign", handler.id())
+                    MessageArguments.builder().put("sign", handler.id()).build()
             ));
         }
 
@@ -284,7 +285,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
 
     private String key(CellLocation location, boolean front) {
         var c = coordinates(location);
-        return location.world + ":" + c[0] + ":" + c[1] + ":" + c[2] + ":" + (
+        return location.world() + ":" + c[0] + ":" + c[1] + ":" + c[2] + ":" + (
                 front
                         ? "front"
                         : "back"
@@ -338,7 +339,9 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                         if (saveFailure != null) {
                             prepared.complete(SignMutationCommits.completed(SignUseResult.failure(
                                     "service.sign.save-failed",
-                                    Map.of("reason", safeReason(unwrap(saveFailure)))
+                                    MessageArguments.builder()
+                                            .put("reason", safeReason(unwrap(saveFailure)))
+                                            .build()
                             )));
 
                             operation.complete(null);
@@ -378,12 +381,11 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                                                 } else {
                                                     commit.finish(SignUseResult.failure(
                                                             "service.sign.platform-rollback-failed",
-                                                            Map.of(
-                                                                    "reason",
-                                                                    safeReason(unwrap(
+                                                            MessageArguments.builder().put(
+                                                                    "reason", safeReason(unwrap(
                                                                             rollbackFailure
                                                                     ))
-                                                            )
+                                                            ).build()
                                                     ));
                                                 }
 
@@ -406,9 +408,9 @@ public final class DefaultSignService implements SignService, AsyncInitializable
 
     private int[] coordinates(CellLocation location) {
         return new int[]{
-                floor(location.x),
-                floor(location.y),
-                floor(location.z)
+                floor(location.x()),
+                floor(location.y()),
+                floor(location.z())
         };
     }
 
@@ -508,9 +510,11 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                 return completedMutation(SignUseResult.failure("service.sign.changed"));
             }
 
-            if (!permissions.has(player.nativeHandle(), permission("edit", existing.type))) {
+            if (!permissions.has(player, permission("edit", existing.type))) {
                 return completedMutation(SignUseResult.failure(
-                        "service.sign.edit-no-permission", Map.of("sign", existing.type)));
+                        "service.sign.edit-no-permission",
+                        MessageArguments.builder().put("sign", existing.type).build()
+                ));
             }
 
             var expectedRevision = revision;
@@ -534,12 +538,12 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         var action = creating || existing == null
                 ? "create"
                 : "edit";
-        if (!permissions.has(player.nativeHandle(), permission(action, id))) {
+        if (!permissions.has(player, permission(action, id))) {
             return completedMutation(SignUseResult.failure(
                     action.equals("create")
                             ? "service.sign.create-no-permission"
                             : "service.sign.edit-no-permission",
-                    Map.of("sign", handler.id())
+                    MessageArguments.builder().put("sign", handler.id()).build()
             ));
         }
 
@@ -549,12 +553,12 @@ public final class DefaultSignService implements SignService, AsyncInitializable
             }
 
             if (!existing.type.equals(id) && !permissions.has(
-                    player.nativeHandle(),
+                    player,
                     permission("edit", existing.type)
             )) {
                 return completedMutation(SignUseResult.failure(
                         "service.sign.edit-no-permission",
-                        Map.of("sign", existing.type)
+                        MessageArguments.builder().put("sign", existing.type).build()
                 ));
             }
         }
@@ -580,7 +584,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
 
         var coordinates = coordinates(location);
         var record = new StoredSign(
-                location.world,
+                location.world(),
                 coordinates[0], coordinates[1], coordinates[2],
                 front,
                 id,
@@ -592,7 +596,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                 creating
                         ? "service.sign.create-success"
                         : "service.sign.edit-success",
-                Map.of("sign", handler.id())
+                MessageArguments.builder().put("sign", handler.id()).build()
         );
 
         return SignMutationExecution.handled(enqueueMutation(() -> {
@@ -623,7 +627,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         var c = coordinates(location);
         return new CooldownKey(
                 player,
-                location.world,
+                location.world(),
                 c[0],
                 c[1],
                 c[2],
@@ -642,7 +646,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
     private SignUseResult executionFailure(Throwable exception) {
         return SignUseResult.failure(
                 "service.sign.execution-failed",
-                Map.of("reason", safeReason(exception))
+                MessageArguments.builder().put("reason", safeReason(exception)).build()
         );
     }
 

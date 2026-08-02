@@ -2,8 +2,11 @@ package top.likoslupus.cellulosesz.modules.playerstate.application;
 
 import top.likoslupus.cellulosesz.modules.playerstate.config.PlayerStateConfig;
 
+import static top.likoslupus.cellulosesz.api.validation.ConditionChecks.requireFalse;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.*;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireLessThan;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public record PlayerStateCommandSettings(
         int defaultNearRadius,
@@ -23,7 +26,10 @@ public record PlayerStateCommandSettings(
 ) {
 
     public PlayerStateCommandSettings {
-        requireFalse(defaultNearRadius <= 0 || maximumNearRadius < defaultNearRadius, "near radius configuration is invalid");
+        requireFalse(
+                defaultNearRadius <= 0 || maximumNearRadius < defaultNearRadius,
+                "near radius configuration is invalid"
+        );
         requirePositive(maximumNearResults, "maximumNearResults");
         requireFinite(minimumSpeed, "minimumSpeed");
         requireFinite(maximumSpeed, "maximumSpeed");

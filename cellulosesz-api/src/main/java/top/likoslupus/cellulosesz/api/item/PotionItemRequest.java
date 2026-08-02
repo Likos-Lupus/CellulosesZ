@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.api.item;
 
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 
 import java.util.Optional;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
 
 public record PotionItemRequest(
         Optional<String> effectId,
@@ -14,11 +14,13 @@ public record PotionItemRequest(
 ) {
 
     public PotionItemRequest {
-        effectId = effectId.map(value -> Checks.requireNonBlank(value, "effectId").trim());
+        effectId = effectId.map(value -> TextChecks.requireNonBlank(value, "effectId").trim());
         requireNonNegative(durationSeconds, "durationSeconds");
         requireNonNegative(amplifier, "amplifier");
         if (effectId.isEmpty() && (durationSeconds != 0 || amplifier != 0)) {
-            throw new IllegalArgumentException("clear potion request must use zero duration and amplifier");
+            throw new IllegalArgumentException(
+                    "clear potion request must use zero duration and amplifier"
+            );
         }
     }
 
@@ -32,7 +34,7 @@ public record PotionItemRequest(
             int amplifier
     ) {
         return new PotionItemRequest(
-                Optional.of(Checks.requireNonBlank(effectId, "effectId")),
+                Optional.of(TextChecks.requireNonBlank(effectId, "effectId")),
                 requirePositive(durationSeconds, "durationSeconds"),
                 amplifier
         );

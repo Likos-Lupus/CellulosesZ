@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.modules.sign.handler;
 
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 
 import java.math.BigDecimal;
@@ -15,11 +17,15 @@ abstract class AbstractTradeSignHandler {
         this.items = items;
     }
 
-    protected Optional<ItemDescriptor> item(SignUseContext context) {
+    protected PlatformResult<ItemDescriptor> item(SignUseContext context) {
         var count = context.line(1);
         var descriptor = context.line(2);
-
-        if (count.isBlank() || descriptor.isBlank()) return Optional.empty();
+        if (count.isBlank() || descriptor.isBlank()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_INPUT,
+                    "Trade sign item and count must not be blank"
+            );
+        }
         return items.parse(descriptor + " " + count);
     }
 

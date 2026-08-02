@@ -4,17 +4,18 @@ import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+
+import static java.util.Objects.requireNonNull;
 
 public final class MailSignHandler implements CellSignHandler {
 
     private final MailService mail;
 
     public MailSignHandler(MailService mail) {
-        this.mail = Objects.requireNonNull(mail, "mail");
+        this.mail = requireNonNull(mail, "mail");
     }
 
     @Override
@@ -31,7 +32,10 @@ public final class MailSignHandler implements CellSignHandler {
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
         return mail.unreadCount(context.player().uuid())
-                .thenApply(unread -> SignUseResult.success("service.sign.mail", Map.of("unread", unread)));
+                .thenApply(unread -> SignUseResult.success(
+                        "service.sign.mail",
+                        MessageArguments.builder().put("unread", unread).build()
+                ));
     }
 
 }

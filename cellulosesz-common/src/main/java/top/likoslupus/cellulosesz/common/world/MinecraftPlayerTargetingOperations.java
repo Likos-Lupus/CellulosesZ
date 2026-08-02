@@ -32,7 +32,7 @@ public final class MinecraftPlayerTargetingOperations implements PlayerTargeting
             );
         }
 
-        var nativePlayer = MinecraftPlayers.requireOnline(player);
+        var nativePlayer = MinecraftPlayers.requireOnline(server, player);
         var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
         if (!(hit instanceof BlockHitResult blockHit)
                 || hit.getType() != HitResult.Type.BLOCK

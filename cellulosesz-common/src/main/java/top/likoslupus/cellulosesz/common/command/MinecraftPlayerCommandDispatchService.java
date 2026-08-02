@@ -95,7 +95,7 @@ public final class MinecraftPlayerCommandDispatchService implements PlayerComman
             );
         }
 
-        var nativePlayer = MinecraftPlayers.requireOnline(request.target());
+        var nativePlayer = MinecraftPlayers.requireOnline(server, request.target());
         stack.push(frame);
         tickExecutions.put(request.target().uuid(), targetExecutions + 1);
 

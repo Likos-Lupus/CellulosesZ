@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.api.sign;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 public record SignUseResult(
         boolean handled,
@@ -24,7 +24,7 @@ public record SignUseResult(
         return new SignUseResult(true, true, LocalizedMessage.of(key));
     }
 
-    public static SignUseResult success(String key, Map<String, ?> placeholders) {
+    public static SignUseResult success(String key, MessageArguments placeholders) {
         return new SignUseResult(true, true, LocalizedMessage.of(key, placeholders));
     }
 
@@ -36,7 +36,7 @@ public record SignUseResult(
         return new SignUseResult(true, false, LocalizedMessage.of(key));
     }
 
-    public static SignUseResult failure(String key, Map<String, ?> placeholders) {
+    public static SignUseResult failure(String key, MessageArguments placeholders) {
         return new SignUseResult(true, false, LocalizedMessage.of(key, placeholders));
     }
 

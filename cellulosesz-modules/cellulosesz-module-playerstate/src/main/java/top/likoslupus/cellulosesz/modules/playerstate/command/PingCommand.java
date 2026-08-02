@@ -4,14 +4,14 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 
 import java.util.List;
-import java.util.Map;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
 
 public final class PingCommand implements CommandContributor {
 
@@ -77,10 +77,9 @@ public final class PingCommand implements CommandContributor {
                                             policy.reply(
                                                     LocalizedMessage.of(
                                                             "commands.playerstate.ping.echo",
-                                                            Map.of(
-                                                                    "message",
-                                                                    message
-                                                            )
+                                                            MessageArguments.builder()
+                                                                    .put("message", message)
+                                                                    .build()
                                                     )
                                             );
 

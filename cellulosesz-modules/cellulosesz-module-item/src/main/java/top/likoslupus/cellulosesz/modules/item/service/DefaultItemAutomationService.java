@@ -12,14 +12,16 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
-import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.api.validation.TextChecks;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNoControlCharacters;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -188,11 +190,11 @@ public final class DefaultItemAutomationService implements ItemAutomationService
         }
 
         var held = items.heldItemId(player);
-        if (held.isEmpty()) {
+        if (!held.successful() || held.value().isEmpty()) {
             return false;
         }
 
-        var commands = powerTool(player.uuid(), held.orElseThrow());
+        var commands = powerTool(player.uuid(), held.value().orElseThrow());
         if (commands.isEmpty()) {
             return false;
         }
@@ -330,7 +332,7 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     private String normalizeCommand(String command) {
         var normalized = requireNonBlank(command, "command").trim();
-        normalized = Checks.requireMaxLength(normalized, 512, "command");
+        normalized = TextChecks.requireMaxLength(normalized, 512, "command");
         requireNoControlCharacters(normalized, "command");
 
         if (normalized.startsWith("c:")) {

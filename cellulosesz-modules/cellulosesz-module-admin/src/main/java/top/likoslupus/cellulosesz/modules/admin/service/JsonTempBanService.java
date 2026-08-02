@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
@@ -21,7 +22,10 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 
@@ -190,7 +194,7 @@ public final class JsonTempBanService
 
                 return AdminResult.success(
                         "service.admin.temp-ban-success",
-                        Map.of("player", name)
+                        MessageArguments.builder().put("player", name).build()
                 );
             }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
                     ? completed(result)
@@ -235,7 +239,7 @@ public final class JsonTempBanService
 
                 return AdminResult.success(
                         "service.admin.temp-ban-ip-success",
-                        Map.of("address", canonical)
+                        MessageArguments.builder().put("address", canonical).build()
                 );
             }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
                     ? completed(result)
@@ -264,12 +268,12 @@ public final class JsonTempBanService
                         ?
                         AdminResult.success(
                                 "service.admin.temp-unban-success",
-                                Map.of("player", name)
+                                MessageArguments.builder().put("player", name).build()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.temp-ban-not-found",
-                                Map.of("player", name)
+                                MessageArguments.builder().put("player", name).build()
                         )
         ));
     }
@@ -285,12 +289,12 @@ public final class JsonTempBanService
                             ?
                             AdminResult.success(
                                     "service.admin.temp-unban-ip-success",
-                                    Map.of("address", canonical)
+                                    MessageArguments.builder().put("address", canonical).build()
                             )
                             : AdminResult.failure(
                                     AdminStatus.NOT_FOUND,
                                     "service.admin.temp-ban-ip-not-found",
-                                    Map.of("address", canonical)
+                                    MessageArguments.builder().put("address", canonical).build()
                             )
             );
         });
@@ -493,7 +497,7 @@ public final class JsonTempBanService
         return renderer.render(
                 audience.locale(player),
                 "service.admin.temp-ban-kick",
-                Map.of("reason", reason)
+                MessageArguments.builder().put("reason", reason).build()
         );
     }
 

@@ -4,16 +4,16 @@ import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.sign.SignUseContext;
 import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Map;
-import java.util.Objects;
+import static java.util.Objects.requireNonNull;
 
 public final class BalanceSignHandler implements SynchronousSignHandler {
 
     private final EconomyService economy;
 
     public BalanceSignHandler(EconomyService economy) {
-        this.economy = Objects.requireNonNull(economy, "economy");
+        this.economy = requireNonNull(economy, "economy");
     }
 
     @Override
@@ -30,7 +30,9 @@ public final class BalanceSignHandler implements SynchronousSignHandler {
     public SignUseResult useSynchronously(SignUseContext context) {
         return SignUseResult.success(
                 "service.sign.balance",
-                Map.of("balance", economy.format(economy.balance(context.player().uuid())))
+                MessageArguments.builder()
+                        .put("balance", economy.format(economy.balance(context.player().uuid())))
+                        .build()
         );
     }
 

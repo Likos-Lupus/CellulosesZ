@@ -4,8 +4,9 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
 import java.util.List;
 
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
 
 public record SignSnapshot(
         CellLocation location,

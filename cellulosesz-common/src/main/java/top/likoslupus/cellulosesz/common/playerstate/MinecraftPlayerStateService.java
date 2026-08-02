@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.playerstate.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.function.Supplier;
@@ -32,7 +33,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Integer> seaLevel(CellPlayer player) {
         return onServerThread(() ->
-                PlatformResult.success(MinecraftPlayers.requireOnline(player)
+                PlatformResult.success(MinecraftPlayers.requireOnline(server, player)
                         .level()
                         .getSeaLevel())
         );
@@ -41,7 +42,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<ExperienceSnapshot> experience(CellPlayer player) {
         return onServerThread(() ->
-                PlatformResult.success(snapshot(MinecraftPlayers.requireOnline(player)))
+                PlatformResult.success(snapshot(MinecraftPlayers.requireOnline(server, player)))
         );
     }
 
@@ -53,7 +54,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         requireNonNull(request, "request");
 
         return onServerThread(() -> {
-            var targetPlayer = MinecraftPlayers.requireOnline(player);
+            var targetPlayer = MinecraftPlayers.requireOnline(server, player);
             var current = (long) Math.max(0, targetPlayer.totalExperience);
 
             final long target;
@@ -114,7 +115,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     public PlatformResult<Void> resetRest(CellPlayer player) {
         return onServerThread(() -> {
             MinecraftPlayers
-                    .requireOnline(player)
+                    .requireOnline(server, player)
                     .resetStat(Stats.CUSTOM.get(Stats.TIME_SINCE_REST));
             return PlatformResult.success();
         });
@@ -123,14 +124,16 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Boolean> flying(CellPlayer player) {
         return onServerThread(() ->
-                PlatformResult.success(MinecraftPlayers.requireOnline(player).getAbilities().flying)
+                PlatformResult.success(MinecraftPlayers
+                        .requireOnline(server, player)
+                        .getAbilities().flying)
         );
     }
 
     @Override
     public PlatformResult<BooleanStateChange> setFlying(CellPlayer player, boolean enabled) {
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var abilities = target.getAbilities();
             var previous = abilities.flying;
 
@@ -147,7 +150,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         return onServerThread(() ->
                 PlatformResult.success(
                         MinecraftPlayers
-                                .requireOnline(player)
+                                .requireOnline(server, player)
                                 .getAbilities().invulnerable
                 )
         );
@@ -156,7 +159,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<BooleanStateChange> setInvulnerable(CellPlayer player, boolean enabled) {
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var abilities = target.getAbilities();
             var previous = abilities.invulnerable;
 
@@ -170,7 +173,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Void> heal(CellPlayer player) {
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             target.setHealth(target.getMaxHealth());
             target.clearFire();
             return PlatformResult.success();
@@ -180,7 +183,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Void> feed(CellPlayer player) {
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             target.getFoodData().setFoodLevel(20);
             target.getFoodData().setSaturation(20.0F);
             return PlatformResult.success();
@@ -192,7 +195,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         return onServerThread(() ->
                 PlatformResult.success(fromMinecraft(
                         MinecraftPlayers
-                                .requireOnline(player)
+                                .requireOnline(server, player)
                                 .gameMode()
                 ))
         );
@@ -202,14 +205,16 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     public PlatformResult<GameModeChange> setGameMode(CellPlayer player, GameModeKind mode) {
         requireNonNull(mode, "mode");
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var previous = fromMinecraft(target.gameMode());
+
             if (!target.setGameMode(toMinecraft(mode))) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
                         "Game mode change was rejected"
                 );
             }
+
             return PlatformResult.success(new GameModeChange(
                     previous,
                     fromMinecraft(target.gameMode())
@@ -229,8 +234,9 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
                     "Movement speed must be finite and within range"
             );
         }
+
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var abilities = target.getAbilities();
             var previousNative = type == MovementSpeedType.FLY
                     ? abilities.getFlyingSpeed()
@@ -257,10 +263,9 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         requireNonNull(setting, "setting");
 
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var level = target.level();
-
-            var applied = (Record) switch (setting) {
+            var applied = (PersonalTimeSetting) switch (setting) {
                 case PersonalTimeSetting.Fixed fixed ->
                         new PersonalTimeSetting.Fixed(Math.floorMod(fixed.ticks(), 24_000L));
                 case PersonalTimeSetting.Relative relative ->
@@ -270,10 +275,10 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
                         ));
                 case PersonalTimeSetting.Reset _ -> new PersonalTimeSetting.Reset();
             };
+
             var ticks = applied instanceof PersonalTimeSetting.Fixed(long ticks1)
                     ? ticks1
                     : level.getDayTime();
-
             target.connection.send(new ClientboundSetTimePacket(
                     level.getGameTime(),
                     ticks,
@@ -292,7 +297,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         requireNonNull(setting, "setting");
 
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             switch (setting) {
                 case RESET -> restoreWorldWeather(target);
 
@@ -356,7 +361,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         }
 
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             target.setRemainingFireTicks(ticks);
             return PlatformResult.success(target.getRemainingFireTicks());
         });
@@ -365,7 +370,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Void> extinguish(CellPlayer player) {
         return onServerThread(() -> {
-            MinecraftPlayers.requireOnline(player).clearFire();
+            MinecraftPlayers.requireOnline(server, player).clearFire();
             return PlatformResult.success();
         });
     }
@@ -373,7 +378,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
     @Override
     public PlatformResult<Integer> freeze(CellPlayer player) {
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             var ticks = target.getTicksRequiredToFreeze();
 
             target.setTicksFrozen(ticks);
@@ -386,7 +391,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         requireNonNull(kind, "kind");
 
         return onServerThread(() -> {
-            var target = MinecraftPlayers.requireOnline(player);
+            var target = MinecraftPlayers.requireOnline(server, player);
             if (!target.isAlive()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -511,18 +516,29 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         var current = server.current();
-        if (current.isEmpty() || !current.orElseThrow().isSameThread()) {
+        if (current.isEmpty()) {
             return PlatformResult.failure(
-                    PlatformOperationStatus.STATE_NOT_ALLOWED,
-                    "Operation requires the running server thread"
+                    PlatformOperationStatus.NOT_READY,
+                    "Minecraft server is not active"
+            );
+        }
+        if (!current.orElseThrow().isSameThread()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.WRONG_THREAD,
+                    "Operation requires the server thread"
             );
         }
 
         try {
             return operation.get();
-        } catch (IllegalStateException failure) {
+        } catch (MinecraftPlayerUnavailableException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,
+                    failure.getMessage()
+            );
+        } catch (IllegalStateException failure) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_STATE,
                     failure.getMessage() == null
                             ? failure.getClass().getSimpleName()
                             : failure.getMessage()

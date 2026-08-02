@@ -1,30 +1,48 @@
 package top.likoslupus.cellulosesz.api.warp;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
-public final class Warp {
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
 
-    public String name = "";
-    public String displayName = "";
-    public String cost = "0.00";
-    public CellLocation location = new CellLocation();
-    public @Nullable UUID createdBy;
-    public long createdAt;
+import static java.util.Objects.requireNonNull;
 
-    public Warp() {
+/** Immutable warp value. */
+public record Warp(
+        String name,
+        String displayName,
+        BigDecimal cost,
+        CellLocation location,
+        Optional<UUID> createdBy,
+        Instant createdAt
+) {
+
+    public Warp(String name, CellLocation location) {
+        this(
+                name,
+                name,
+                BigDecimal.ZERO,
+                location,
+                Optional.empty(),
+                Instant.now()
+        );
     }
 
-    public Warp(
-            String name,
-            CellLocation location
-    ) {
-        this.name = name;
-        this.displayName = name;
-        this.location = location;
-        this.createdAt = System.currentTimeMillis();
+    public Warp {
+        name = requireNonBlank(requireNonNull(name, "name").trim(), "name");
+        displayName = requireNonBlank(
+                requireNonNull(displayName, "displayName").trim(),
+                "displayName"
+        );
+        cost = requireNonNegative(requireNonNull(cost, "cost"), "cost");
+        requireNonNull(location, "location");
+        requireNonNull(createdBy, "createdBy");
+        requireNonNull(createdAt, "createdAt");
     }
 
 }

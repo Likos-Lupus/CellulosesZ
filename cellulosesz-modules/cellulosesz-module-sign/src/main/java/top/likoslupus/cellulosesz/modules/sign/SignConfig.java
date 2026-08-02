@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.modules.sign;
 
 import java.util.Locale;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
 
 import static java.util.Objects.requireNonNull;
 

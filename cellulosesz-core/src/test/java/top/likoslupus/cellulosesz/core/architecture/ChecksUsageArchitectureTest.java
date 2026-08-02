@@ -7,9 +7,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import static java.util.Objects.requireNonNull;
 
 final class ChecksUsageArchitectureTest {
 
@@ -18,12 +19,27 @@ final class ChecksUsageArchitectureTest {
         var root = projectRoot();
         var api = root.resolve("cellulosesz-api/src/main/java");
         var usageCount = 0;
+
         for (var source : javaSources(api)) {
             var text = Files.readString(source);
-            usageCount += occurrences(text, "Checks.require");
-            assertFalse(text.matches("(?s).*private\\s+static.*(requirePositive|validateNonNegative|requireRange).*"), source.toString());
+            usageCount += occurrences(text, "TextChecks.require");
+            usageCount += occurrences(text, "CollectionChecks.require");
+            usageCount += occurrences(text, "NumericChecks.require");
+            usageCount += occurrences(text, "RangeChecks.require");
+            usageCount += occurrences(text, "ConditionChecks.require");
+            assertFalse(text.contains("validation.Checks"), source.toString());
+            assertFalse(
+                    text.matches(
+                            "(?s).*private\\s+static.*(requirePositive|validateNonNegative|requireRange).*"
+                    ),
+                    source.toString()
+            );
         }
-        assertTrue(usageCount >= 40, "expected broad production use of Checks");
+
+        assertTrue(
+                usageCount >= 40,
+                "expected broad production use of focused validation utilities"
+        );
     }
 
     private static Path projectRoot() {

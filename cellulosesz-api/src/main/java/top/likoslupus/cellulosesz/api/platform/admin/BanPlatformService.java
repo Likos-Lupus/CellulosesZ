@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.api.platform.admin;
 
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+
 import java.net.InetAddress;
 
 public interface BanPlatformService {
@@ -12,9 +14,9 @@ public interface BanPlatformService {
 
     BanPlatformResult pardonIp(InetAddress address);
 
-    boolean isUserBanned(PlayerProfileId target);
+    PlatformResult<Boolean> isUserBanned(PlayerProfileId target);
 
-    boolean isIpBanned(InetAddress address);
+    PlatformResult<Boolean> isIpBanned(InetAddress address);
 
     BanPlatformResult disconnectMatchingPlayers(BanDisconnectRequest request);
 

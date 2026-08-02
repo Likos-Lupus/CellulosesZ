@@ -4,11 +4,13 @@ import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
+import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -39,7 +41,7 @@ public final class DefaultItemService implements ItemService {
         this.aliases = configuration.aliases();
         this.customItems = configuration.customItems();
         this.blacklist = configuration.blacklist();
-        this.registryValidated = platform.registryReady();
+        this.registryValidated = platform.registryStatus().successful();
     }
 
     public PreparedConfiguration prepareConfiguration(ItemConfig config) {
@@ -59,7 +61,7 @@ public final class DefaultItemService implements ItemService {
                 throw new IllegalArgumentException("Invalid item alias: " + alias);
             }
 
-            if (platform.registryReady() && platform.parse(value).isEmpty()) {
+            if (platform.registryStatus().successful() && !platform.parse(value).successful()) {
                 throw new IllegalArgumentException("Invalid item alias target: " + alias);
             }
 
@@ -69,29 +71,35 @@ public final class DefaultItemService implements ItemService {
         });
 
         var customCopy = new LinkedHashMap<String, ItemDescriptor>();
-        requireNonNull(snapshot.customItems, "customItems").forEach((name, item) -> {
+        requireNonNull(snapshot.customItems, "customItems").forEach((name, configured) -> {
             var key = key(name);
-            requireNonNull(item, "custom item");
+            requireNonNull(configured, "custom item");
+            var descriptor = new ItemDescriptor(
+                    requireNonNull(configured.item, "custom item id"),
+                    configured.count,
+                    configured.argument == null
+                            ? configured.item
+                            : configured.argument
+            );
 
-            var copy = item.copy();
-            if (key.isBlank() || !validDescriptorShape(copy, snapshot.maxCommandCount)) {
+            if (key.isBlank() || !validDescriptorShape(descriptor, snapshot.maxCommandCount)) {
                 throw new IllegalArgumentException("Invalid custom item: " + name);
             }
 
-            if (platform.registryReady()) {
-                var parsed = platform.parse(copy.normalizedArgument());
-                if (parsed.isEmpty()) {
+            if (platform.registryStatus().successful()) {
+                var parsed = platform.parse(descriptor.normalizedArgument());
+                if (!parsed.successful() || parsed.value().isEmpty()) {
                     throw new IllegalArgumentException("Invalid custom item: " + name);
                 }
 
-                copy = new ItemDescriptor(
-                        parsed.orElseThrow().normalizedItem(),
-                        copy.count,
-                        parsed.orElseThrow().normalizedArgument()
+                descriptor = new ItemDescriptor(
+                        parsed.value().orElseThrow().normalizedItem(),
+                        descriptor.count(),
+                        parsed.value().orElseThrow().normalizedArgument()
                 );
             }
 
-            if (customCopy.put(key, copy) != null) {
+            if (customCopy.put(key, descriptor) != null) {
                 throw new IllegalArgumentException("Duplicate custom item: " + name);
             }
         });
@@ -119,17 +127,13 @@ public final class DefaultItemService implements ItemService {
     }
 
     private static boolean validDescriptorShape(ItemDescriptor item, int maxCommandCount) {
-        if (item.count <= 0
-                || item.count > Math.max(1, maxCommandCount)
+        if (item.count() <= 0
+                || item.count() > Math.max(1, maxCommandCount)
         ) {
             return false;
         }
 
-        try {
-            return !item.normalizedItem().isBlank() && !item.normalizedArgument().isBlank();
-        } catch (RuntimeException _) {
-            return false;
-        }
+        return !item.normalizedItem().isBlank() && !item.normalizedArgument().isBlank();
     }
 
     private static String normalizeId(String value) {
@@ -141,53 +145,62 @@ public final class DefaultItemService implements ItemService {
 
     /** Validates startup-staged item inputs at the first registry-aware command boundary. */
     public synchronized void validateRegistryInputs() {
-        if (registryValidated || !platform.registryReady()) {
+        if (registryValidated || !platform.registryStatus().successful()) {
             return;
         }
+
         configure(prepareConfiguration(config));
     }
 
     @Override
-    public Optional<ItemDescriptor> parse(String input) {
+    public PlatformResult<ItemDescriptor> parse(String input) {
         if (input.isBlank()) {
-            return Optional.empty();
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_INPUT,
+                    "Item input must not be blank"
+            );
         }
 
         var value = input.trim();
         var tokenEnd = aliasEnd(value);
         var token = value.substring(0, tokenEnd);
         var custom = customItems.get(key(token));
+
         if (custom != null) {
             var tail = value.substring(tokenEnd).trim();
-            var requested = custom.count;
-
+            var requested = custom.count();
             if (!tail.isEmpty()) {
                 try {
                     requested = Integer.parseInt(tail);
-                } catch (NumberFormatException _) {
-                    return Optional.empty();
+                } catch (NumberFormatException failure) {
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.INVALID_INPUT,
+                            "Invalid item count: " + tail
+                    );
                 }
             }
 
-            var result = new ItemDescriptor(
-                    custom.normalizedItem(),
-                    requested,
-                    custom.normalizedArgument()
-            );
-
-            return validDescriptorShape(result)
-                    ? Optional.of(result)
-                    : Optional.empty();
+            try {
+                return PlatformResult.success(new ItemDescriptor(
+                        custom.normalizedItem(),
+                        requested,
+                        custom.normalizedArgument()
+                ));
+            } catch (IllegalArgumentException failure) {
+                return PlatformResult.failure(
+                        PlatformOperationStatus.INVALID_INPUT,
+                        failure.getMessage() == null
+                                ? "Invalid item input"
+                                : failure.getMessage()
+                );
+            }
         }
 
         var alias = aliases.get(key(token));
         if (alias != null) {
             value = alias + value.substring(tokenEnd);
         }
-
-        return platform.parse(value)
-                .filter(this::validDescriptorShape)
-                .map(ItemDescriptor::copy);
+        return platform.parse(value);
     }
 
     private static int aliasEnd(String input) {
@@ -201,61 +214,67 @@ public final class DefaultItemService implements ItemService {
         return input.length();
     }
 
+    @Override
+    public PlatformResult<Boolean> valid(ItemDescriptor item) {
+        requireNonNull(item, "item");
+        if (!validDescriptorShape(item)) {
+            return PlatformResult.success(false);
+        }
+
+        var parsed = platform.parse(item.normalizedArgument());
+        if (!parsed.successful() || parsed.value().isEmpty()) {
+            return PlatformResult.failure(parsed.status(), parsed.detail());
+        }
+
+        return PlatformResult.success(
+                parsed.value().orElseThrow().normalizedItem().equals(item.normalizedItem())
+        );
+    }
+
     private boolean validDescriptorShape(ItemDescriptor item) {
         return validDescriptorShape(item, config.maxCommandCount);
     }
 
     @Override
-    public boolean valid(ItemDescriptor item) {
-        if (!validDescriptorShape(item)) {
-            return false;
-        }
-
-        var parsed = platform.parse(item.normalizedArgument());
-        return parsed.isPresent()
-                && parsed.orElseThrow().normalizedItem().equals(item.normalizedItem());
-    }
-
-    @Override
     public boolean blacklisted(ItemDescriptor item) {
-        return blacklist.contains(item.normalizedItem());
+        return blacklist.contains(requireNonNull(item, "item").normalizedItem());
     }
 
     @Override
-    public int maxStackSize(ItemDescriptor item) {
-        return Math.max(1, platform.maxStackSize(item.normalizedItem()));
+    public PlatformResult<Integer> maxStackSize(ItemDescriptor item) {
+        requireNonNull(item, "item");
+        return platform.maxStackSize(item.normalizedItem());
     }
 
     @Override
-    public boolean give(CellPlayer player, ItemDescriptor item) {
-        return valid(item)
-                && item.count <= config.maxCommandCount
-                && platform.grant(player, item.copy()).successful();
-    }
-
-    @Override
-    public int count(CellPlayer player, ItemDescriptor item) {
-        if (!valid(item)) {
-            return 0;
+    public PlatformResult<top.likoslupus.cellulosesz.api.item.ItemGrantResult> give(
+            CellPlayer player,
+            ItemDescriptor item
+    ) {
+        requireNonNull(item, "item");
+        if (item.count() > config.maxCommandCount) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.INVALID_ARGUMENT,
+                    "Item count exceeds configured command maximum"
+            );
         }
 
-        var result = platform.count(player, item.copy());
-        return result.successful() && result.value().isPresent()
-                ? result.value().orElseThrow()
-                : 0;
+        return platform.grant(player, item);
     }
 
     @Override
-    public boolean take(CellPlayer player, ItemDescriptor item) {
-        return valid(item) && platform.take(player, item.copy()).successful();
+    public PlatformResult<Integer> count(CellPlayer player, ItemDescriptor item) {
+        return platform.count(player, requireNonNull(item, "item"));
     }
 
     @Override
-    public Optional<String> heldItemId(CellPlayer player) {
-        var result = platform.heldItemId(player);
-        return result.successful()
-                ? result.value()
-                : Optional.empty();
+    public PlatformResult<Void> take(CellPlayer player, ItemDescriptor item) {
+        return platform.take(player, requireNonNull(item, "item"));
+    }
+
+    @Override
+    public PlatformResult<String> heldItemId(CellPlayer player) {
+        return platform.heldItemId(player);
     }
 
     public record PreparedConfiguration(
