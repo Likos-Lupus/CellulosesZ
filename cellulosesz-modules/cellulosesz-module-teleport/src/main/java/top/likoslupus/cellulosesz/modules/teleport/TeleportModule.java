@@ -6,9 +6,7 @@ import top.likoslupus.cellulosesz.api.event.PlayerDamageEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerDeathEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerMoveEvent;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
@@ -28,6 +26,8 @@ import top.likoslupus.cellulosesz.modules.teleport.service.*;
 
 import java.time.Clock;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.random.RandomGenerator;
 import org.jspecify.annotations.Nullable;
 
@@ -44,6 +44,7 @@ import static java.util.Objects.requireNonNull;
 public final class TeleportModule implements CellulosesZModule {
 
     private @Nullable TeleportConfig config;
+    private @Nullable TeleportRuntimeSettings runtimeSettings;
     private @Nullable TeleportRequestService requests;
     private @Nullable OfflineLocationService offlineLocations;
     private @Nullable RandomTeleportSettingsService randomSettings;
@@ -62,12 +63,16 @@ public final class TeleportModule implements CellulosesZModule {
                 "module.teleport",
                 TeleportConfig.class
         ).validatedCopy();
+        runtimeSettings = new TeleportRuntimeSettings(config);
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var current = requireNonNull(config, "TeleportConfig has not been initialized");
+        var settings = requireNonNull(
+                runtimeSettings,
+                "TeleportRuntimeSettings has not been initialized"
+        );
         var storage = context.services().require(StorageService.class);
         var locations = context.services().require(PlayerLocationPlatformService.class);
         var operations = context.services().require(TeleportOperations.class);
@@ -114,7 +119,7 @@ public final class TeleportModule implements CellulosesZModule {
                 operations,
                 worlds,
                 RandomGenerator.getDefault(),
-                current.randomTeleport.attempts
+                settings
         );
         var commandService = new DefaultTeleportCommandService(
                 players,
@@ -126,7 +131,7 @@ public final class TeleportModule implements CellulosesZModule {
                 worlds,
                 users,
                 serverThread,
-                current.maximumBulkTargets
+                settings
         );
         var requestCommands = new DefaultTeleportRequestCommandService(
                 teleports,
@@ -139,9 +144,7 @@ public final class TeleportModule implements CellulosesZModule {
                 renderer,
                 serverThread,
                 context.services().optional(VanishService.class),
-                current.requests.timeoutSeconds,
-                current.warmup.defaultSeconds,
-                current.requests.maximumBulkTargets
+                settings
         );
         var preferenceCommands = new DefaultTeleportPreferenceCommandService(users, resolver);
         var randomCommands = new DefaultRandomTeleportCommandService(
@@ -151,7 +154,7 @@ public final class TeleportModule implements CellulosesZModule {
                 locations,
                 worlds,
                 serverThread,
-                current.warmup.defaultSeconds
+                settings
         );
 
         context.services().register(BackLocationService.class, backLocations);
@@ -426,27 +429,47 @@ public final class TeleportModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var next = context
-                .configs()
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "TeleportConfig has not been initialized");
+        var candidate = reload.configs()
                 .require("module.teleport", TeleportConfig.class)
                 .validatedCopy();
-        requireNonNull(config, "TeleportConfig has not been initialized").copyFrom(next);
-        scheduleRequestExpiry(context);
+
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    requireNonNull(
+                            runtimeSettings,
+                            "TeleportRuntimeSettings has not been initialized"
+                    ).configure(candidate);
+                    scheduleRequestExpiry(context);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    requireNonNull(
+                            runtimeSettings,
+                            "TeleportRuntimeSettings has not been initialized"
+                    ).configure(previous);
+                    scheduleRequestExpiry(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     private void scheduleRequestExpiry(ModuleContext context) {
         if (requestExpiryTask != null) {
             requestExpiryTask.close();
         }
-        requestExpiryTask = context.scheduler().syncRepeating(
+        requestExpiryTask = context.scope().own(context.scheduler().syncRepeating(
                 () -> requireNonNull(
                         requests,
                         "TeleportRequestService has not been initialized"
                 ).clearExpired(),
                 20L,
                 20L
-        );
+        ));
     }
 
 }

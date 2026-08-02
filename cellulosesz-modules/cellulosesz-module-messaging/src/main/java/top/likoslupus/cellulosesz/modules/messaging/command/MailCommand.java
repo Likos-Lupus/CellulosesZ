@@ -8,6 +8,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
@@ -110,7 +111,10 @@ public final class MailCommand implements CommandContributor {
                                 "message"
                         )
                 ),
-                MailCommand::respond
+                (policy, result) -> {
+                    respond(policy, result);
+                    return CommandOutcome.fromSuccess(result.success());
+                }
         );
     }
 
@@ -140,7 +144,10 @@ public final class MailCommand implements CommandContributor {
                                         )
                                 )
                         ),
-                MailCommand::respond
+                (policy, result) -> {
+                    respond(policy, result);
+                    return CommandOutcome.fromSuccess(result.success());
+                }
         );
     }
 
@@ -303,7 +310,10 @@ public final class MailCommand implements CommandContributor {
                                                             )
                                                     );
                                                 },
-                                                MailCommand::respond
+                                                (policy, result) -> {
+                                                    respond(policy, result);
+                                                    return CommandOutcome.fromSuccess(result.success());
+                                                }
                                         ))
                         )
                 );

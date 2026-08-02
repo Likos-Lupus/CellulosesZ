@@ -6,6 +6,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
@@ -16,7 +17,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-import top.likoslupus.cellulosesz.modules.sign.SignConfig;
+import top.likoslupus.cellulosesz.modules.sign.SignRuntimeSettings;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -30,14 +31,14 @@ public final class EditSignCommand implements CommandContributor {
     private final SignPlatformService platform;
     private final SignService signs;
     private final ServerThreadExecutor serverThread;
-    private final SignConfig config;
+    private final SignRuntimeSettings config;
     private final Map<UUID, Clipboard> clipboards = new ConcurrentHashMap<>();
 
     public EditSignCommand(
             SignPlatformService platform,
             SignService signs,
             ServerThreadExecutor serverThread,
-            SignConfig config
+            SignRuntimeSettings config
     ) {
         this.platform = requireNonNull(platform, "platform");
         this.signs = requireNonNull(signs, "signs");
@@ -53,7 +54,9 @@ public final class EditSignCommand implements CommandContributor {
     }
 
     private static String side(boolean front) {
-        return front ? "front" : "back";
+        return front
+                ? "front"
+                : "back";
     }
 
     @Override
@@ -101,8 +104,14 @@ public final class EditSignCommand implements CommandContributor {
                                                 policy -> set(
                                                         policy,
                                                         target(policy),
-                                                        IntegerArgumentType.getInteger(command, "line") - 1,
-                                                        StringArgumentType.getString(command, "text")
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "line"
+                                                        ) - 1,
+                                                        StringArgumentType.getString(
+                                                                command,
+                                                                "text"
+                                                        )
                                                 )
                                         )))));
 
@@ -153,7 +162,10 @@ public final class EditSignCommand implements CommandContributor {
                 descriptor,
                 "edit sign",
                 operation,
-                SignCommandSupport::respond
+                (policy, result) -> {
+                    SignCommandSupport.respond(policy, result);
+                    return CommandOutcome.fromPlatformStatus(result.status());
+                }
         );
     }
 
@@ -163,7 +175,7 @@ public final class EditSignCommand implements CommandContributor {
             return PlatformResult.failure(PlatformOperationStatus.INVALID_SOURCE, "player-only");
         }
 
-        return platform.target(player.orElseThrow(), config.editTargetDistance);
+        return platform.target(player.orElseThrow(), config.editTargetDistance());
     }
 
     private PlatformResult<?> copy(
@@ -249,7 +261,7 @@ public final class EditSignCommand implements CommandContributor {
             MinecraftCommandPolicyContext policy,
             String text
     ) {
-        if (text.codePointCount(0, text.length()) > config.editMaximumLineLength) {
+        if (text.codePointCount(0, text.length()) > config.editMaximumLineLength()) {
             return Optional.of(PlatformResult.failure(
                     PlatformOperationStatus.INVALID_INPUT,
                     "line-too-long"

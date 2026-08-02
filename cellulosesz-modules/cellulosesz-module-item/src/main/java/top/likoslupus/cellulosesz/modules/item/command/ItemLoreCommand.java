@@ -12,7 +12,7 @@ import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.api.validation.Checks;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
 
 import java.util.Arrays;
@@ -26,11 +26,11 @@ public final class ItemLoreCommand implements CommandContributor {
     private static final int MAXIMUM_TOTAL_LENGTH = 2048;
 
     private final ItemCommandService service;
-    private final ItemConfig config;
+    private final ItemRuntimeSettings config;
 
     public ItemLoreCommand(
             ItemCommandService service,
-            ItemConfig config
+            ItemRuntimeSettings config
     ) {
         this.service = requireNonNull(service, "service");
         this.config = requireNonNull(config, "config");
@@ -91,10 +91,10 @@ public final class ItemLoreCommand implements CommandContributor {
         );
 
         var lines = Arrays.stream(text.split("\\\\n", -1))
-                .limit(config.maxLoreLines + 1L)
+                .limit(config.maxLoreLines() + 1L)
                 .toList();
 
-        if (lines.size() > config.maxLoreLines) {
+        if (lines.size() > config.maxLoreLines()) {
             throw new IllegalArgumentException(
                     "lore line count exceeds configured maximum"
             );

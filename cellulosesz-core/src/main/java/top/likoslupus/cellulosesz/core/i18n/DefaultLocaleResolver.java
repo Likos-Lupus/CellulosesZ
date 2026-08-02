@@ -12,8 +12,7 @@ import static java.util.Objects.requireNonNull;
 public final class DefaultLocaleResolver implements LocaleResolver {
 
     private final ClientLocaleService clients;
-    private volatile String defaultLocale;
-    private volatile boolean useClientLocale;
+    private volatile Settings settings;
 
     public DefaultLocaleResolver(
             ClientLocaleService clients,
@@ -25,8 +24,7 @@ public final class DefaultLocaleResolver implements LocaleResolver {
     }
 
     public void configure(String defaultLocale, boolean useClientLocale) {
-        this.defaultLocale = normalize(defaultLocale);
-        this.useClientLocale = useClientLocale;
+        settings = new Settings(normalize(defaultLocale), useClientLocale);
     }
 
     private String normalize(String locale) {
@@ -40,19 +38,27 @@ public final class DefaultLocaleResolver implements LocaleResolver {
 
     @Override
     public String locale(CellPlayer player) {
-        if (!useClientLocale) {
-            return defaultLocale;
+        var current = settings;
+        if (!current.useClientLocale()) {
+            return current.defaultLocale();
         }
 
         var locale = clients.clientLocale(player);
         return locale.isBlank()
-                ? defaultLocale
+                ? current.defaultLocale()
                 : normalize(locale);
     }
 
     @Override
     public String consoleLocale() {
-        return defaultLocale;
+        return settings.defaultLocale();
+    }
+
+    private record Settings(
+            String defaultLocale,
+            boolean useClientLocale
+    ) {
+
     }
 
 }

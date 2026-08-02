@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
 import java.util.List;
@@ -22,12 +22,12 @@ public final class MoreCommand implements CommandContributor {
 
     private final InventoryCommandService service;
     private final InventoryPlatformService inventory;
-    private final ItemConfig config;
+    private final ItemRuntimeSettings config;
 
     public MoreCommand(
             InventoryCommandService service,
             InventoryPlatformService inventory,
-            ItemConfig config
+            ItemRuntimeSettings config
     ) {
         this.service = requireNonNull(service, "service");
         this.inventory = requireNonNull(inventory, "inventory");
@@ -52,7 +52,7 @@ public final class MoreCommand implements CommandContributor {
                                         "amount",
                                         IntegerArgumentType.integer(
                                                 1,
-                                                config.maximumOversizedStack
+                                                config.maximumOversizedStack()
                                         )
                                 )
                                 .executes(command -> execute(
@@ -136,8 +136,8 @@ public final class MoreCommand implements CommandContributor {
                     }
 
                     var maximum = policy.hasPermission("cellulosesz.command.more.oversized")
-                            && config.allowOversizedStacks
-                            ? config.maximumOversizedStack
+                            && config.allowOversizedStacks()
+                            ? config.maximumOversizedStack()
                             : 64;
 
                     return service.more(

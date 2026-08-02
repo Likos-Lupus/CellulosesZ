@@ -5,6 +5,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -92,10 +93,10 @@ final class MessagingCommandSupport {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) -> policy.respond(
-                        result.success(),
-                        result.message()
-                )
+                (policy, result) -> {
+                    policy.respond(result.success(), result.message());
+                    return CommandOutcome.fromStatus(result.status());
+                }
         );
     }
 

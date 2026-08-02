@@ -13,10 +13,13 @@ import top.likoslupus.cellulosesz.modules.user.UserConfig;
 
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
+
 import org.jspecify.annotations.Nullable;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultDisplayNameService implements DisplayNameService {
 
@@ -29,7 +32,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
     private final PermissionService permissions;
     private final MessageRenderer renderer;
     private final LocaleResolver locales;
-    private final UserConfig config;
+    private volatile Settings settings;
 
     public DefaultDisplayNameService(
             DisplayNamePlatformService platform,
@@ -40,13 +43,62 @@ public final class DefaultDisplayNameService implements DisplayNameService {
             LocaleResolver locales,
             UserConfig config
     ) {
-        this.platform = platform;
-        this.players = players;
-        this.users = users;
-        this.permissions = permissions;
-        this.renderer = renderer;
-        this.locales = locales;
-        this.config = config;
+        this.platform = requireNonNull(platform, "platform");
+        this.players = requireNonNull(players, "players");
+        this.users = requireNonNull(users, "users");
+        this.permissions = requireNonNull(permissions, "permissions");
+        this.renderer = requireNonNull(renderer, "renderer");
+        this.locales = requireNonNull(locales, "locales");
+        this.settings = Settings.from(config);
+    }
+
+    public void validateConfiguration(UserConfig candidate) {
+        Settings.from(candidate);
+    }
+
+    public void configure(UserConfig candidate) {
+        settings = Settings.from(candidate);
+    }
+
+    private record Settings(
+            String nicknamePrefix,
+            int minLength,
+            int maxLength,
+            Pattern allowedPattern,
+            Set<String> blacklist,
+            String colorPermission
+    ) {
+
+        private static Settings from(UserConfig source) {
+            var display = requireNonNull(
+                    requireNonNull(source, "config").displayName,
+                    "config.displayName"
+            );
+            if (display.minLength < 0 || display.maxLength < display.minLength) {
+                throw new IllegalArgumentException("Invalid display-name length range");
+            }
+
+            var blacklist = requireNonNull(display.blacklist, "displayName.blacklist")
+                    .stream()
+                    .map(value -> requireNonNull(value, "blacklist entry")
+                            .trim()
+                            .toLowerCase(Locale.ROOT))
+                    .filter(value -> !value.isEmpty())
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+            return new Settings(
+                    requireNonNull(display.nicknamePrefix, "displayName.nicknamePrefix"),
+                    display.minLength,
+                    display.maxLength,
+                    Pattern.compile(requireNonNull(
+                            display.allowedPattern,
+                            "displayName.allowedPattern"
+                    )),
+                    blacklist,
+                    requireNonNull(display.colorPermission, "displayName.colorPermission")
+            );
+        }
+
     }
 
     @Override
@@ -69,27 +121,21 @@ public final class DefaultDisplayNameService implements DisplayNameService {
 
     @Override
     public boolean validNickname(CellPlayer player, String nickname) {
+        var current = settings;
         var plain = stripFormatting(nickname).trim();
-        if (plain.length() < config.displayName.minLength
-                || plain.length() > config.displayName.maxLength
-                || config.displayName.blacklist.stream()
-                .map(value -> value.toLowerCase(Locale.ROOT))
-                .anyMatch(value -> value.equals(plain.toLowerCase(Locale.ROOT)))
-        ) {
-            return false;
-        }
-
-        try {
-            return Pattern.compile(config.displayName.allowedPattern).matcher(plain).matches();
-        } catch (PatternSyntaxException _) {
-            return false;
-        }
+        var normalized = plain.toLowerCase(Locale.ROOT);
+        return plain.length() >= current.minLength()
+                && plain.length() <= current.maxLength()
+                && !current.blacklist().contains(normalized)
+                && current.allowedPattern().matcher(plain).matches();
     }
 
     @Override
     public String sanitizeNickname(CellPlayer player, String nickname) {
+        var current = settings;
         var value = nickname.trim();
-        if (!permissions.has(player.nativeHandle(), config.displayName.colorPermission)) {
+
+        if (!permissions.has(player.nativeHandle(), current.colorPermission())) {
             value = stripFormatting(value);
         }
         return value;
@@ -118,6 +164,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
             return RichText.plain(fallbackName);
         }
 
+        var current = settings;
         var value = nickname.orElseThrow();
         var safe = online == null
                 ? value
@@ -125,7 +172,8 @@ public final class DefaultDisplayNameService implements DisplayNameService {
         var locale = online == null
                 ? locales.consoleLocale()
                 : locales.locale(online);
-        return renderer.renderInline(locale, config.displayName.nicknamePrefix + safe);
+
+        return renderer.renderInline(locale, current.nicknamePrefix() + safe);
     }
 
     private String stripFormatting(String value) {

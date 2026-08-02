@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.modules.warp.application;
 
-import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
@@ -21,10 +21,12 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultWarpCommandService implements WarpCommandService {
 
@@ -65,11 +67,13 @@ public final class DefaultWarpCommandService implements WarpCommandService {
         return warps.warps()
                 .handle((available, failure) -> {
                     if (failure != null) {
-                        return failure(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                        return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
                     }
 
                     var visible = available.stream()
-                            .filter(warp -> !current.hideNoPermission() || allowed(warp, hasPermission))
+                            .filter(warp -> !current.hideNoPermission()
+                                    || allowed(warp, hasPermission)
+                            )
                             .sorted(Comparator.comparing(warp -> warp.name))
                             .toList();
                     if (visible.isEmpty()) {
@@ -124,7 +128,11 @@ public final class DefaultWarpCommandService implements WarpCommandService {
             if (!remaining.isZero()) {
                 var seconds = Math.max(
                         1L,
-                        remaining.toSeconds() + (remaining.toMillisPart() > 0 ? 1 : 0)
+                        remaining.toSeconds() + (
+                                remaining.toMillisPart() > 0
+                                        ? 1
+                                        : 0
+                        )
                 );
                 return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                         GeneratedMessageKeys.COMMANDS_WARP_COOLDOWN,
@@ -143,7 +151,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
         return loaded
                 .handle((found, loadFailure) -> {
                     if (loadFailure != null) {
-                        return CompletableFuture.completedFuture(failure(
+                        return CompletableFuture.completedFuture(failed(
                                 GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED
                         ));
                     }
@@ -196,10 +204,12 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             ).online())
                             .thenCompose(online -> {
                                 if (online.isEmpty()) {
-                                    return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                            GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
-                                            Map.of("player", request.playerName())
-                                    )));
+                                    return CompletableFuture.completedFuture(failure(
+                                            LocalizedMessage.of(
+                                                    GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                                    Map.of("player", request.playerName())
+                                            )
+                                    ));
                                 }
 
                                 return serverThread
@@ -213,7 +223,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                                         )));
                             });
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED));
     }
 
     @Override
@@ -228,7 +238,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
             return warps.deleteWarp(name)
                     .handle((deleted, failure) -> {
                         if (failure != null) {
-                            return failure(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                            return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
                         }
 
                         if (!deleted) {
@@ -252,13 +262,15 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     public CompletableFuture<Result> info(String rawName) {
         var name = rawName.trim();
         var invalid = validateName(name);
-        if (invalid != null) return CompletableFuture.completedFuture(failure(invalid));
+        if (invalid != null) {
+            return CompletableFuture.completedFuture(failure(invalid));
+        }
 
         try {
             return warps.warp(name)
                     .handle((warp, failure) -> {
                         if (failure != null) {
-                            return failure(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                            return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
                         }
 
                         if (warp.isEmpty()) {
@@ -337,6 +349,10 @@ public final class DefaultWarpCommandService implements WarpCommandService {
         ));
     }
 
+    private Result failure(String key) {
+        return failure(LocalizedMessage.of(key));
+    }
+
     private CompletableFuture<Result> teleportLoaded(
             Request request,
             Warp warp,
@@ -386,11 +402,11 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                                 ));
                             });
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
     }
 
-    private Result failure(String key) {
-        return failure(LocalizedMessage.of(key));
+    private Result failed(String key) {
+        return new Result(CommandOutcome.Status.FAILED, LocalizedMessage.of(key));
     }
 
     private boolean allowed(Warp warp, Predicate<String> hasPermission) {
@@ -409,6 +425,10 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
     private Result success(LocalizedMessage message) {
         return new Result(true, message);
+    }
+
+    public void validateConfiguration(WarpConfig candidate) {
+        Snapshot.from(candidate);
     }
 
     private record Snapshot(

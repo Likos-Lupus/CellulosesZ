@@ -4,6 +4,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
@@ -71,10 +72,29 @@ final class TeleportCommandResults {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) -> policy.respond(
-                        result.success(),
-                        result.message()
-                )
+                (policy, result) -> {
+                    policy.respond(result.success(), result.message());
+                    return switch (result.status()) {
+                        case SUCCESS -> CommandOutcome.success();
+                        case PARTIAL_SUCCESS -> CommandOutcome.partial();
+                        case PERSISTENCE_FAILURE,
+                             PLATFORM_FAILURE,
+                             BACK_PERSISTENCE_FAILURE,
+                             ROLLBACK_FAILURE -> CommandOutcome.failed();
+                        case NOT_FOUND,
+                             BLOCKED,
+                             AMBIGUOUS,
+                             INVALID_INPUT,
+                             REQUEST_CHANGED,
+                             UNSAFE_DESTINATION,
+                             CROSS_WORLD_DISABLED,
+                             CANCELLED_MOVE,
+                             CANCELLED_DAMAGE,
+                             CANCELLED_DEATH,
+                             CANCELLED_DISCONNECT,
+                             CANCELLED_REPLACED -> CommandOutcome.rejected();
+                    };
+                }
         );
     }
 

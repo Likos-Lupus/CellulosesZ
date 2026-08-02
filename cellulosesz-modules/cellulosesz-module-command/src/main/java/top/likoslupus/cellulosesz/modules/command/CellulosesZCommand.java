@@ -4,6 +4,7 @@ import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
@@ -132,6 +133,7 @@ public final class CellulosesZCommand implements CommandContributor {
                                                 )
                                         );
                                     }
+                                    return CommandOutcome.fromSuccess(success);
                                 }
                         ))
                 )
@@ -177,9 +179,12 @@ public final class CellulosesZCommand implements CommandContributor {
                                                             LocalizedMessage.of(
                                                                     "cellulosesz.module-row",
                                                                     Map.of(
-                                                                            "id", info.id(),
-                                                                            "enabled", info.enabled(),
-                                                                            "phase", info.phase().name()
+                                                                            "id",
+                                                                            info.id(),
+                                                                            "enabled",
+                                                                            info.enabled(),
+                                                                            "phase",
+                                                                            info.phase().name()
                                                                     )
                                                             )
                                                     )

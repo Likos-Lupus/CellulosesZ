@@ -9,8 +9,6 @@ import java.util.concurrent.CompletableFuture;
 
 public interface KitService {
 
-    CompletableFuture<Void> reload();
-
     List<KitDefinition> kits();
 
     Optional<KitDefinition> kit(String id);

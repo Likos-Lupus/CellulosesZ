@@ -4,9 +4,7 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -28,6 +26,8 @@ import top.likoslupus.cellulosesz.modules.messaging.command.*;
 import top.likoslupus.cellulosesz.modules.messaging.service.DefaultPrivateMessageService;
 import top.likoslupus.cellulosesz.modules.messaging.service.JsonMailService;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -65,7 +65,6 @@ public final class MessagingModule implements CellulosesZModule {
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var current = requireNonNull(config, "MessagingConfig has not been initialized");
         var users = context.services().require(UserService.class);
@@ -245,24 +244,70 @@ public final class MessagingModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var current = requireNonNull(config, "MessagingConfig has not been initialized");
-        current.copyFrom(context.configs().require("module.messaging", MessagingConfig.class));
-        requireNonNull(mail, "MailService has not been initialized");
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(
+                config,
+                "MessagingConfig has not been initialized"
+        );
+        var candidate = reload.configs().require(
+                "module.messaging",
+                MessagingConfig.class
+        ).validatedCopy();
+        var service = (JsonMailService) requireNonNull(
+                mail,
+                "MailService has not been initialized"
+        );
+        var chat = requireNonNull(
+                chatCommands,
+                "ChatCommandService has not been initialized"
+        );
+        var privateMessages = requireNonNull(
+                privateMessageCommands,
+                "PrivateMessageCommandService has not been initialized"
+        );
+        var mailCommandsService = requireNonNull(
+                mailCommands,
+                "MailCommandService has not been initialized"
+        );
 
-        ((JsonMailService) mail).configure(current);
-        scheduleMailSweep(context);
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    service.configure(candidate);
+                    chat.configure(candidate);
+                    privateMessages.configure(candidate);
+                    mailCommandsService.configure(candidate);
+                    scheduleMailSweep(context);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    service.configure(previous);
+                    chat.configure(previous);
+                    privateMessages.configure(previous);
+                    mailCommandsService.configure(previous);
+                    scheduleMailSweep(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     private void scheduleMailSweep(ModuleContext context) {
-        var service = requireNonNull(mail, "MailService has not been initialized");
-        var current = requireNonNull(config, "MessagingConfig has not been initialized");
+        var service = requireNonNull(
+                mail,
+                "MailService has not been initialized"
+        );
+        var current = requireNonNull(
+                config,
+                "MessagingConfig has not been initialized"
+        );
         if (mailSweep != null) {
             mailSweep.close();
         }
 
         final long period = Math.multiplyExact(current.expiredMailSweepSeconds, 20L);
-        mailSweep = context.scheduler().syncRepeating(
+        mailSweep = context.scope().own(context.scheduler().syncRepeating(
                 () -> service
                         .purgeExpired(System.currentTimeMillis())
                         .whenComplete((_, failure) -> {
@@ -275,7 +320,7 @@ public final class MessagingModule implements CellulosesZModule {
                         }),
                 20L,
                 period
-        );
+        ));
     }
 
 }

@@ -7,8 +7,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
+import top.likoslupus.cellulosesz.api.teleport.TeleportResult;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -20,13 +21,13 @@ public final class JailEnforcementService {
     private final JailService jails;
     private final PlayerLocationPlatformService locations;
     private final TeleportService teleports;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     public JailEnforcementService(
             JailService jails,
             PlayerLocationPlatformService locations,
             TeleportService teleports,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.jails = requireNonNull(jails, "jails");
         this.locations = requireNonNull(locations, "locations");
@@ -41,13 +42,14 @@ public final class JailEnforcementService {
         ) {
             return CompletableFuture.completedFuture(true);
         }
+
         return teleports
                 .teleport(
                         player,
                         jail.orElseThrow().location(),
                         TeleportOptions.defaults().withoutBackMemory()
                 )
-                .thenApply(result -> result.success());
+                .thenApply(TeleportResult::success);
     }
 
     public Optional<Jail> activeJail(CellPlayer player) {
@@ -57,12 +59,15 @@ public final class JailEnforcementService {
     }
 
     public boolean inside(CellLocation jail, CellLocation actual) {
-        if (!jail.world.equals(actual.world)) return false;
+        if (!jail.world.equals(actual.world)) {
+            return false;
+        }
 
         var dx = jail.x - actual.x;
         var dy = jail.y - actual.y;
         var dz = jail.z - actual.z;
-        var radius = config.jailConfinementRadius;
+        var radius = config.jailConfinementRadius();
+
         return dx * dx + dy * dy + dz * dz <= radius * radius;
     }
 

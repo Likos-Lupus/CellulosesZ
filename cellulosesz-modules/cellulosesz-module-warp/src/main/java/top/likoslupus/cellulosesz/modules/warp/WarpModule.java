@@ -3,9 +3,7 @@ package top.likoslupus.cellulosesz.modules.warp;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -17,6 +15,7 @@ import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
 import top.likoslupus.cellulosesz.modules.warp.command.WarpCommand;
 import top.likoslupus.cellulosesz.modules.warp.service.JsonWarpService;
 
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -32,7 +31,7 @@ import static java.util.Objects.requireNonNull;
 public final class WarpModule implements CellulosesZModule {
 
     private @Nullable WarpConfig config;
-    private @Nullable WarpService warps;
+    private @Nullable JsonWarpService warps;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -54,14 +53,8 @@ public final class WarpModule implements CellulosesZModule {
 
         warps = new JsonWarpService(storage, root.resolve("warps"), config);
 
-        context.services().register(
-                WarpService.class,
-                warps
-        );
-        context.services().register(
-                JsonWarpService.class,
-                (JsonWarpService) warps
-        );
+        context.services().register(WarpService.class, warps);
+        context.services().register(JsonWarpService.class, warps);
         context.services().register(
                 WarpCommandService.class,
                 new DefaultWarpCommandService(
@@ -84,22 +77,26 @@ public final class WarpModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        config = context.configs().require("module.warp", WarpConfig.class);
-        context.services().require(WarpCommandService.class).configure(requireNonNull(
-                config,
-                "WarpConfig has not been initialized"
-        ));
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "WarpConfig has not been initialized");
+        var candidate = reload.configs().require("module.warp", WarpConfig.class);
+        var commandService = (DefaultWarpCommandService) context.services()
+                .require(WarpCommandService.class);
+        commandService.validateConfiguration(candidate);
 
-        requireNonNull(warps, "WarpService has not been initialized");
-        warps.reload().whenComplete((_, failure) -> {
-            if (failure != null) {
-                context.logger().error(
-                        "Failed to reload warp data; retaining the previous snapshot",
-                        failure
-                );
-            }
-        });
+        var service = requireNonNull(warps, "WarpService has not been initialized");
+        return service.prepareReload(candidate.perWarpPermission)
+                .thenApply(staged -> PreparedReloads.of(
+                        () -> staged.commit().thenRun(() -> {
+                            commandService.configure(candidate);
+                            config = candidate;
+                        }),
+                        () -> staged.rollback().thenRun(() -> {
+                            commandService.configure(previous);
+                            config = previous;
+                        })
+                ));
     }
 
 }

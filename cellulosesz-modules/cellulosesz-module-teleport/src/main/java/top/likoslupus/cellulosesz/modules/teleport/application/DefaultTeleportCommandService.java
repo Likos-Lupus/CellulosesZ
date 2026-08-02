@@ -10,13 +10,13 @@ import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
+import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.*;
 
 import static java.util.Objects.requireNonNull;
@@ -32,7 +32,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
     private final WorldDirectory worlds;
     private final UserService users;
     private final ServerThreadExecutor serverThread;
-    private final int maximumBulkTargets;
+    private final TeleportRuntimeSettings settings;
 
     public DefaultTeleportCommandService(
             PlayerDirectory players,
@@ -44,7 +44,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
             WorldDirectory worlds,
             UserService users,
             ServerThreadExecutor serverThread,
-            int maximumBulkTargets
+            TeleportRuntimeSettings settings
     ) {
         this.players = requireNonNull(players, "players");
         this.resolver = requireNonNull(resolver, "resolver");
@@ -55,7 +55,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         this.worlds = requireNonNull(worlds, "worlds");
         this.users = requireNonNull(users, "users");
         this.serverThread = requireNonNull(serverThread, "serverThread");
-        this.maximumBulkTargets = requirePositive(maximumBulkTargets, "maximumBulkTargets");
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
@@ -187,7 +187,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         var target = destination.orElseThrow();
         var candidates = players.onlinePlayers().stream()
                 .filter(player -> !player.uuid().equals(target.uuid()))
-                .limit(maximumBulkTargets).toList();
+                .limit(settings.maximumBulkTargets()).toList();
 
         return serverThread
                 .submit(() -> locations.currentLocation(target))

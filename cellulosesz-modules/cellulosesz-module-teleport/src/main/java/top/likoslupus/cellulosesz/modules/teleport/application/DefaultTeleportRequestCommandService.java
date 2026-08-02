@@ -10,14 +10,13 @@ import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 import static top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandStatus.*;
 
 import static java.util.Objects.requireNonNull;
@@ -34,9 +33,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
     private final MessageRenderer renderer;
     private final ServerThreadExecutor serverThread;
     private final Optional<VanishService> vanish;
-    private final int timeoutSeconds;
-    private final int warmupSeconds;
-    private final int maximumBulkTargets;
+    private final TeleportRuntimeSettings settings;
 
     public DefaultTeleportRequestCommandService(
             TeleportService teleports,
@@ -49,9 +46,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
             MessageRenderer renderer,
             ServerThreadExecutor serverThread,
             Optional<VanishService> vanish,
-            int timeoutSeconds,
-            int warmupSeconds,
-            int maximumBulkTargets
+            TeleportRuntimeSettings settings
     ) {
         this.teleports = requireNonNull(teleports, "teleports");
         this.requests = requireNonNull(requests, "requests");
@@ -63,9 +58,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
         this.renderer = requireNonNull(renderer, "renderer");
         this.serverThread = requireNonNull(serverThread, "serverThread");
         this.vanish = requireNonNull(vanish, "vanish");
-        this.timeoutSeconds = requirePositive(timeoutSeconds, "timeoutSeconds");
-        this.warmupSeconds = requireNonNegative(warmupSeconds, "warmupSeconds");
-        this.maximumBulkTargets = requirePositive(maximumBulkTargets, "maximumBulkTargets");
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
@@ -106,7 +99,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             requester,
                             target.orElseThrow(),
                             type,
-                            timeoutSeconds
+                            settings.requestTimeoutSeconds()
                     );
                     if (!creation.created()) {
                         return completed(failure(
@@ -123,7 +116,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                     : "commands.teleport.request.received-tpahere",
                             Map.of(
                                     "player", requester.name(),
-                                    "seconds", timeoutSeconds,
+                                    "seconds", settings.requestTimeoutSeconds(),
                                     "request", creation.request().id()
                             )
                     );
@@ -162,7 +155,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                         .map(service -> service.canSee(requester, player.uuid()))
                         .orElse(true)
                 )
-                .limit(maximumBulkTargets)
+                .limit(settings.requestMaximumBulkTargets())
                 .toList();
         var counts = new int[4];
 
@@ -180,7 +173,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                         requester,
                                         target,
                                         TeleportRequestType.TARGET_TO_REQUESTER,
-                                        timeoutSeconds
+                                        settings.requestTimeoutSeconds()
                                 );
                                 if (!creation.created()) {
                                     counts[2]++;
@@ -193,7 +186,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                         "commands.teleport.request.received-tpahere",
                                         Map.of(
                                                 "player", requester.name(),
-                                                "seconds", timeoutSeconds,
+                                                "seconds", settings.requestTimeoutSeconds(),
                                                 "request", creation.request().id()
                                         )
                                 );
@@ -280,7 +273,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             .thenCompose(destination -> teleports.teleport(
                                     mover,
                                     destination,
-                                    TeleportOptions.defaults().withWarmup(warmupSeconds)
+                                    TeleportOptions.defaults().withWarmup(settings.warmupSeconds())
                             ))
                             .handle((result, throwable) -> {
                                 if (throwable != null || !result.success()) {

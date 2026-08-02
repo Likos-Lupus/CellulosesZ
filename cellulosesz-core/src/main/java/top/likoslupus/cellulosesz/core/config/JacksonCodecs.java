@@ -39,14 +39,16 @@ public final class JacksonCodecs {
     }
 
     public static void writeYaml(Path path, Object value) throws IOException {
-        writeAtomically(path, output ->
-                YAML.writerWithDefaultPrettyPrinter().writeValue(output, value)
+        writeAtomically(
+                path,
+                output -> YAML.writerWithDefaultPrettyPrinter().writeValue(output, value)
         );
     }
 
     private static void writeAtomically(Path path, StreamWriter writer) throws IOException {
         var target = path.toAbsolutePath().normalize();
         var parent = target.getParent();
+
         if (parent == null) {
             throw new IOException("Document path has no parent: " + target);
         }
@@ -54,6 +56,7 @@ public final class JacksonCodecs {
         Files.createDirectories(parent);
         var temporary = Files.createTempFile(parent, "." + target.getFileName() + ".", ".tmp");
         var moved = false;
+
         try {
             try (
                     var output = Files.newOutputStream(
@@ -82,6 +85,7 @@ public final class JacksonCodecs {
             } catch (AtomicMoveNotSupportedException ignored) {
                 Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
             }
+
             moved = true;
             forceDirectory(parent);
         } finally {
@@ -95,7 +99,8 @@ public final class JacksonCodecs {
         try (var channel = FileChannel.open(directory, StandardOpenOption.READ)) {
             channel.force(true);
         } catch (IOException | UnsupportedOperationException _) {
-            // The data file itself has already been forced. Some filesystems do not allow opening directories.
+            // The data file itself has already been forced. Some filesystems do not allow opening
+            // directories.
         }
     }
 
@@ -119,9 +124,22 @@ public final class JacksonCodecs {
         return JSON.writeValueAsString(value);
     }
 
+    public static <T> T deepCopy(T value, Class<T> type) {
+        try {
+            var encoded = JSON.writeValueAsBytes(value);
+            return JSON.readValue(encoded, type);
+        } catch (RuntimeException exception) {
+            throw new IllegalStateException(
+                    "Failed to deep-copy configuration type " + type.getName(),
+                    exception
+            );
+        }
+    }
+
     public static void writeJson(Path path, Object value) throws IOException {
-        writeAtomically(path, output ->
-                JSON.writerWithDefaultPrettyPrinter().writeValue(output, value)
+        writeAtomically(
+                path,
+                output -> JSON.writerWithDefaultPrettyPrinter().writeValue(output, value)
         );
     }
 

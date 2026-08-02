@@ -4,13 +4,14 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
+import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.modules.command.middleware.*;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
@@ -28,6 +29,7 @@ import static java.util.Objects.requireNonNull;
 public final class CommandModule implements CellulosesZModule {
 
     private @Nullable CommandConfig config;
+    private @Nullable Registration auditRegistration;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -48,17 +50,23 @@ public final class CommandModule implements CellulosesZModule {
                 .replaceDisabledCommands(current.disabledCommands);
         var middlewares = context.middlewares();
 
-        middlewares.addMiddleware(new SourceKindCommandMiddleware());
-        middlewares.addMiddleware(new ModuleEnabledCommandMiddleware(context));
-        middlewares.addMiddleware(new PermissionCommandMiddleware());
-        middlewares.addMiddleware(new CommandCostMiddleware(
-                context.services().require(CommandCostService.class),
-                context.services().require(ServerThreadExecutor.class)
+        context.scope().own(middlewares.addMiddleware(
+                new SourceKindCommandMiddleware(),
+                context.moduleId()
         ));
-
-        if (current.auditCommands) {
-            middlewares.addMiddleware(new AuditCommandMiddleware(context.logger()));
-        }
+        context.scope().own(middlewares.addMiddleware(
+                new ModuleEnabledCommandMiddleware(context),
+                context.moduleId()
+        ));
+        context.scope().own(middlewares.addMiddleware(
+                new PermissionCommandMiddleware(),
+                context.moduleId()
+        ));
+        context.scope().own(middlewares.addMiddleware(
+                new CommandCostMiddleware(context.services().require(CommandCostService.class)),
+                context.moduleId()
+        ));
+        setAuditEnabled(context, current.auditCommands);
     }
 
     @Override
@@ -75,14 +83,49 @@ public final class CommandModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        config = validate(context.configs().require(
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "CommandConfig has not been initialized");
+        var candidate = validate(reload.configs().require(
                 "module.command",
                 CommandConfig.class
         ));
-        context.services()
-                .require(CommandAvailabilityService.class)
-                .replaceDisabledCommands(requireNonNull(config, "config").disabledCommands);
+        var availability = context.services().require(CommandAvailabilityService.class);
+
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    availability.replaceDisabledCommands(candidate.disabledCommands);
+                    setAuditEnabled(context, candidate.auditCommands);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    availability.replaceDisabledCommands(previous.disabledCommands);
+                    setAuditEnabled(context, previous.auditCommands);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
+    }
+
+    private void setAuditEnabled(ModuleContext context, boolean enabled) {
+        var current = auditRegistration;
+        if (!enabled) {
+            if (current != null) {
+                current.close();
+                auditRegistration = null;
+            }
+            return;
+        }
+
+        if (current != null && !current.closed()) {
+            return;
+        }
+
+        auditRegistration = context.scope().own(context.middlewares().addMiddleware(
+                new AuditCommandMiddleware(context.logger()),
+                context.moduleId()
+        ));
     }
 
     private static CommandConfig validate(CommandConfig config) {

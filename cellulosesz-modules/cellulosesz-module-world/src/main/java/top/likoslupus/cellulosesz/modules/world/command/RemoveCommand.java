@@ -13,7 +13,7 @@ import top.likoslupus.cellulosesz.api.world.EntityRemovalRequest;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.command.argument.EntityRemoveSelectorArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,11 +23,11 @@ import static java.util.Objects.requireNonNull;
 public final class RemoveCommand implements CommandContributor {
 
     private final EntityRemovalPlatformService service;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public RemoveCommand(
             EntityRemovalPlatformService service,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.service = requireNonNull(service, "service");
         this.config = requireNonNull(config, "config");
@@ -45,7 +45,7 @@ public final class RemoveCommand implements CommandContributor {
                         context,
                         command,
                         descriptor,
-                        config.defaultRemoveRadius
+                        config.defaultRemoveRadius()
                 ))
                 .then(Commands.argument("radius", IntegerArgumentType.integer(1, 4_096))
                         .executes(command -> execute(

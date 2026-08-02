@@ -29,6 +29,4 @@ public interface WarpService {
 
     Optional<String> requiredPermission(Warp warp);
 
-    CompletableFuture<Void> reload();
-
 }

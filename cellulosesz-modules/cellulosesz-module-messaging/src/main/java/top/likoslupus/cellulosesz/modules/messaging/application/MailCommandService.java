@@ -34,7 +34,7 @@ public final class MailCommandService {
     private final DisplayNameService displayNames;
     private final MessageRenderer renderer;
     private final PrivateMessageService privateMessages;
-    private final MessagingConfig config;
+    private volatile MessagingConfig config;
 
     public MailCommandService(
             MailService mail,
@@ -57,17 +57,27 @@ public final class MailCommandService {
         this.displayNames = requireNonNull(displayNames, "displayNames");
         this.renderer = requireNonNull(renderer, "renderer");
         this.privateMessages = requireNonNull(privateMessages, "privateMessages");
-        this.config = requireNonNull(config, "config");
+        this.config = requireNonNull(config, "config").validatedCopy();
+    }
+
+    public void configure(MessagingConfig config) {
+        this.config = requireNonNull(config, "config").validatedCopy();
     }
 
     public CompletableFuture<Result> read(UUID recipient, int page) {
-        return mail.inbox(recipient)
+        return mail
+                .inbox(recipient)
                 .thenCompose(messages -> {
                     if (messages.isEmpty()) {
-                        return CompletableFuture.completedFuture(Result.success(LocalizedMessage.of("commands.messaging.mail-empty")));
+                        return CompletableFuture.completedFuture(Result.success(LocalizedMessage.of(
+                                "commands.messaging.mail-empty"
+                        )));
                     }
 
-                    var pages = Math.toIntExact(((long) messages.size() + config.mailPageSize - 1L) / config.mailPageSize);
+                    var pages = Math.toIntExact(
+                            ((long) messages.size() + config.mailPageSize - 1L)
+                                    / config.mailPageSize
+                    );
                     if (page > pages) {
                         return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                                 "commands.common.page-out-of-range",
@@ -100,11 +110,16 @@ public final class MailCommandService {
                         response.add(LocalizedMessage.of(
                                 "commands.messaging.mail-entry",
                                 Map.of(
-                                        "id", message.id(),
-                                        "unread", !message.read(),
-                                        "time", formatter.format(Instant.ofEpochMilli(message.sentAt())),
-                                        "sender", message.fromName(),
-                                        "message", message.message()
+                                        "id",
+                                        message.id(),
+                                        "unread",
+                                        !message.read(),
+                                        "time",
+                                        formatter.format(Instant.ofEpochMilli(message.sentAt())),
+                                        "sender",
+                                        message.fromName(),
+                                        "message",
+                                        message.message()
                                 )
                         ));
                         if (!message.read()) {
@@ -114,7 +129,8 @@ public final class MailCommandService {
 
                     return readIds.isEmpty()
                             ? CompletableFuture.completedFuture(new Result(true, response))
-                            : mail.markRead(recipient, readIds)
+                            : mail
+                                    .markRead(recipient, readIds)
                                     .thenApply(_ -> new Result(true, response));
                 });
     }
@@ -135,13 +151,17 @@ public final class MailCommandService {
     public CompletableFuture<Result> delete(UUID recipient, UUID id) {
         return mail.delete(recipient, id)
                 .thenApply(removed ->
-                        removed ? Result.success(LocalizedMessage.of(
-                                "commands.messaging.mail-deleted",
-                                Map.of("id", id)
-                        )) : Result.failure(LocalizedMessage.of(
-                                "commands.messaging.mail-not-found",
-                                Map.of("id", id)
-                        )));
+                        removed
+                                ?
+                                Result.success(LocalizedMessage.of(
+                                        "commands.messaging.mail-deleted",
+                                        Map.of("id", id)
+                                ))
+                                : Result.failure(LocalizedMessage.of(
+                                        "commands.messaging.mail-not-found",
+                                        Map.of("id", id)
+                                ))
+                );
     }
 
     public CompletableFuture<Result> clear(UUID recipient) {
@@ -182,9 +202,14 @@ public final class MailCommandService {
                     try {
                         expiresAt = duration
                                 .map(value -> {
-                                    if (value.compareTo(Duration.ofSeconds(config.maximumTemporaryMailSeconds)) > 0) {
-                                        throw new IllegalArgumentException("duration exceeds maximum");
+                                    if (value.compareTo(Duration.ofSeconds(config.maximumTemporaryMailSeconds))
+                                            > 0
+                                    ) {
+                                        throw new IllegalArgumentException(
+                                                "duration exceeds maximum"
+                                        );
                                     }
+
                                     return Math.addExact(now, value.toMillis());
                                 })
                                 .orElse(null);
@@ -209,14 +234,17 @@ public final class MailCommandService {
                             expiresAt,
                             false
                     );
-                    return mail.send(message)
+
+                    return mail
+                            .send(message)
                             .thenCompose(_ -> notifyOnline(recipient))
                             .thenCompose(_ ->
                                     privateMessages.broadcastSpy(
                                             senderName,
                                             "mail:" + target.name(),
                                             body,
-                                            sender.map(value -> Set.of(value.uuid(), recipient))
+                                            sender
+                                                    .map(value -> Set.of(value.uuid(), recipient))
                                                     .orElseGet(() -> Set.of(recipient))
                                     ).handle((ignored, _) ->
                                             Result.success(LocalizedMessage.of(
@@ -232,12 +260,14 @@ public final class MailCommandService {
         if (body.isBlank()) {
             return Optional.of(LocalizedMessage.of("service.messaging.empty-message"));
         }
+
         if (body.length() > config.maxMessageLength) {
             return Optional.of(LocalizedMessage.of(
                     "commands.messaging.message-too-long",
                     Map.of("maximum", config.maxMessageLength)
             ));
         }
+
         return Optional.empty();
     }
 
@@ -247,7 +277,10 @@ public final class MailCommandService {
                     players.onlinePlayer(recipient)
                             .ifPresent(player -> audiences.send(
                                     player,
-                                    renderer.render(audiences.locale(player), "messaging.mail-received")
+                                    renderer.render(
+                                            audiences.locale(player),
+                                            "messaging.mail-received"
+                                    )
                             ));
                     return Boolean.TRUE;
                 })
@@ -279,24 +312,29 @@ public final class MailCommandService {
                 .map(displayNames::plainDisplayName)
                 .orElse("console");
         return mail
-                .sendAll(recipients, recipient ->
-                        new MailMessage(
-                                UUID.randomUUID(),
-                                sender.map(CellPlayer::uuid).orElse(null),
-                                senderName,
-                                recipient,
-                                body,
-                                now,
-                                null,
-                                false
-                        )
+                .sendAll(
+                        recipients,
+                        recipient ->
+                                new MailMessage(
+                                        UUID.randomUUID(),
+                                        sender.map(CellPlayer::uuid).orElse(null),
+                                        senderName,
+                                        recipient,
+                                        body,
+                                        now,
+                                        null,
+                                        false
+                                )
                 )
                 .thenCompose(count ->
                         serverThread.submit(() -> {
                             players.onlinePlayers().forEach(player ->
                                     audiences.send(
                                             player,
-                                            renderer.render(audiences.locale(player), "messaging.mail-received")
+                                            renderer.render(
+                                                    audiences.locale(player),
+                                                    "messaging.mail-received"
+                                            )
                                     ));
                             return count;
                         })

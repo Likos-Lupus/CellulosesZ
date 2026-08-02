@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.modules.home.application;
 
-import org.jspecify.annotations.Nullable;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.home.HomeService;
@@ -20,10 +20,12 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultHomeCommandService implements HomeCommandService {
 
@@ -59,8 +61,9 @@ public final class DefaultHomeCommandService implements HomeCommandService {
     public CompletableFuture<Result> list(UUID playerUuid) {
         return homes.homes(playerUuid).handle((known, failure) -> {
             if (failure != null) {
-                return failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
             }
+
             if (known.isEmpty()) {
                 return success(GeneratedMessageKeys.COMMANDS_HOME_LIST_EMPTY);
             }
@@ -81,7 +84,15 @@ public final class DefaultHomeCommandService implements HomeCommandService {
             var remaining = cooldowns.remaining(request.playerUuid(), COOLDOWN_KEY);
 
             if (!remaining.isZero()) {
-                var seconds = Math.max(1L, remaining.toSeconds() + (remaining.toMillisPart() > 0 ? 1 : 0));
+                var seconds = Math.max(
+                        1L,
+                        remaining.toSeconds() + (
+                                remaining.toMillisPart() > 0
+                                        ? 1
+                                        : 0
+                        )
+                );
+
                 return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                         GeneratedMessageKeys.COMMANDS_HOME_COOLDOWN,
                         Map.of("seconds", seconds)
@@ -92,7 +103,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.home(request.playerUuid(), name)
                 .handle((location, loadFailure) -> {
                     if (loadFailure != null) {
-                        return CompletableFuture.completedFuture(failure(
+                        return CompletableFuture.completedFuture(failed(
                                 GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED
                         ));
                     }
@@ -121,7 +132,10 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.homes(request.playerUuid())
                 .thenCompose(existing -> {
                     var key = name.toLowerCase(Locale.ROOT);
-                    if (!existing.containsKey(key) && existing.size() >= current.maxHomes() && !bypassLimit) {
+                    if (!existing.containsKey(key)
+                            && existing.size() >= current.maxHomes()
+                            && !bypassLimit
+                    ) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                                 GeneratedMessageKeys.COMMANDS_HOME_SET_HOME_COMMAND_ERROR_REACHED_HOME_LIMIT,
                                 Map.of("limit", current.maxHomes())
@@ -133,13 +147,17 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                             )
                             .thenCompose(online -> {
                                 if (online.isEmpty()) {
-                                    return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                            GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
-                                            Map.of("player", request.playerName())
-                                    )));
+                                    return CompletableFuture.completedFuture(failure(
+                                            LocalizedMessage.of(
+                                                    GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                                    Map.of("player", request.playerName())
+                                            )));
                                 }
 
-                                return serverThread.submit(() -> locations.currentLocation(online.orElseThrow()))
+                                return serverThread
+                                        .submit(() ->
+                                                locations.currentLocation(online.orElseThrow())
+                                        )
                                         .thenCompose(location ->
                                                 homes.setHome(request.playerUuid(), name, location)
                                         )
@@ -149,13 +167,14 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                                         )));
                             });
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED));
     }
 
     @Override
     public CompletableFuture<Result> delete(UUID playerUuid, String rawName) {
         var name = rawName.trim();
         var invalid = validateName(name);
+
         if (invalid != null) {
             return CompletableFuture.completedFuture(failure(invalid));
         }
@@ -163,7 +182,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.deleteHome(playerUuid, name)
                 .handle((deleted, failure) -> {
                     if (failure != null) {
-                        return failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                        return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
                     }
 
                     if (!deleted) {
@@ -201,7 +220,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.renameHomeDetailed(playerUuid, oldName, newName)
                 .handle((status, failure) -> {
                     if (failure != null) {
-                        return failure(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                        return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
                     }
 
                     return switch (status) {
@@ -264,13 +283,18 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                 : trimmed;
     }
 
+    private Result failure(LocalizedMessage message) {
+        return new Result(false, message);
+    }
+
     private CompletableFuture<Result> teleportLoaded(
             Request request,
             String name,
             CellLocation location,
             Snapshot current
     ) {
-        return serverThread.submit(() ->
+        return serverThread
+                .submit(() ->
                         players.resolveKnown(
                                 request.playerUuid(),
                                 null
@@ -286,9 +310,12 @@ public final class DefaultHomeCommandService implements HomeCommandService {
 
                     var options = TeleportOptions.defaults()
                             .withSafe(current.safe())
-                            .withWarmup(request.bypassWarmup() ? 0 : current.warmupSeconds());
+                            .withWarmup(request.bypassWarmup()
+                                    ? 0
+                                    : current.warmupSeconds());
 
-                    return serverThread.submit(() -> teleports.teleport(
+                    return serverThread
+                            .submit(() -> teleports.teleport(
                                     online.orElseThrow(),
                                     location,
                                     options
@@ -313,11 +340,11 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                                 ));
                             });
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
     }
 
-    private Result failure(String key) {
-        return failure(LocalizedMessage.of(key));
+    private Result failed(String key) {
+        return new Result(CommandOutcome.Status.FAILED, LocalizedMessage.of(key));
     }
 
     private Result success(String key) {
@@ -328,8 +355,8 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return new Result(true, message);
     }
 
-    private Result failure(LocalizedMessage message) {
-        return new Result(false, message);
+    private Result failure(String key) {
+        return failure(LocalizedMessage.of(key));
     }
 
     private record Snapshot(

@@ -7,7 +7,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -16,11 +16,11 @@ import static java.util.Objects.requireNonNull;
 public final class BreakCommand implements CommandContributor {
 
     private final WorldPlatformService worlds;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public BreakCommand(
             WorldPlatformService worlds,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.config = requireNonNull(config, "config");
@@ -50,7 +50,7 @@ public final class BreakCommand implements CommandContributor {
                                     return player
                                             .<PlatformResult<?>>map(value -> worlds.breakTarget(
                                                     value,
-                                                    config.targetDistance,
+                                                    config.targetDistance(),
                                                     policy.hasPermission(
                                                             "cellulosesz.command.break.unbreakable")
                                             ))

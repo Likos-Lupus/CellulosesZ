@@ -12,9 +12,7 @@ import top.likoslupus.cellulosesz.api.event.SignEditEvent;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
@@ -40,7 +38,9 @@ import top.likoslupus.cellulosesz.modules.sign.service.DefaultSignService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 
@@ -69,6 +69,7 @@ import static java.util.Objects.requireNonNull;
 public final class SignModule implements CellulosesZModule {
 
     private @Nullable SignConfig config;
+    private @Nullable SignRuntimeSettings runtimeSettings;
     private @Nullable DefaultSignService signs;
     private @Nullable EditSignCommand editSign;
 
@@ -80,12 +81,11 @@ public final class SignModule implements CellulosesZModule {
                 "modules/sign.yml",
                 SignConfig::new
         );
-        config = context.configs().require("module.sign", SignConfig.class);
-        requireNonNull(config, "SignConfig has not been initialized").validate();
+        config = context.configs().require("module.sign", SignConfig.class).validatedCopy();
+        runtimeSettings = new SignRuntimeSettings(config);
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var permissions = context.services().require(PermissionService.class);
         var storage = context.services().require(StorageService.class);
@@ -351,7 +351,7 @@ public final class SignModule implements CellulosesZModule {
                 context.services().require(SignPlatformService.class),
                 requireNonNull(signs, "SignService has not been initialized"),
                 context.services().require(ServerThreadExecutor.class),
-                requireNonNull(config, "SignConfig has not been initialized")
+                requireNonNull(runtimeSettings, "SignRuntimeSettings has not been initialized")
         );
         context.scope().own(context.services().require(CommandRegistry.class).register(
                 "editsign",
@@ -366,11 +366,33 @@ public final class SignModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var candidate = context.configs().require("module.sign", SignConfig.class);
-        candidate.validate();
-        requireNonNull(signs, "SignService has not been initialized").configure(candidate);
-        config = candidate;
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previous = requireNonNull(config, "SignConfig has not been initialized");
+        var candidate = reload.configs()
+                .require("module.sign", SignConfig.class)
+                .validatedCopy();
+        var service = requireNonNull(signs, "SignService has not been initialized");
+
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    service.configure(candidate);
+                    requireNonNull(
+                            runtimeSettings,
+                            "SignRuntimeSettings has not been initialized"
+                    ).configure(candidate);
+                    config = candidate;
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    service.configure(previous);
+                    requireNonNull(
+                            runtimeSettings,
+                            "SignRuntimeSettings has not been initialized"
+                    ).configure(previous);
+                    config = previous;
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     private void completeMutation(

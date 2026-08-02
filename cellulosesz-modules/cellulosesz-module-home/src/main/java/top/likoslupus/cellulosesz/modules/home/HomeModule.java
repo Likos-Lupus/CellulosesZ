@@ -4,9 +4,7 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.home.HomeService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -17,6 +15,8 @@ import top.likoslupus.cellulosesz.modules.home.application.HomeCommandService;
 import top.likoslupus.cellulosesz.modules.home.command.HomeCommand;
 import top.likoslupus.cellulosesz.modules.home.service.JsonHomeService;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -75,11 +75,23 @@ public final class HomeModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        config = context.configs().require("module.home", HomeConfig.class);
-        context.services()
-                .require(HomeCommandService.class)
-                .configure(requireNonNull(config, "HomeConfig has not been initialized"));
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "HomeConfig has not been initialized");
+        var candidate = reload.configs().require("module.home", HomeConfig.class);
+        var service = context.services().require(HomeCommandService.class);
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    service.configure(candidate);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    service.configure(previous);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
 }

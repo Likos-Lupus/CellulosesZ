@@ -15,7 +15,7 @@ import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
 import java.util.ArrayList;
@@ -31,13 +31,13 @@ public final class CondenseCommand implements CommandContributor {
     private final ItemService items;
     private final InventoryPlatformService inventory;
     private final RecipePlatformService recipes;
-    private final ItemConfig config;
+    private final ItemRuntimeSettings config;
 
     public CondenseCommand(
             ItemService items,
             InventoryPlatformService inventory,
             RecipePlatformService recipes,
-            ItemConfig config
+            ItemRuntimeSettings config
     ) {
         this.items = requireNonNull(items, "items");
         this.inventory = requireNonNull(inventory, "inventory");
@@ -117,7 +117,7 @@ public final class CondenseCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var rules = recipes.compressionRules(
                             filter,
-                            config.maximumCondenseRules
+                            config.maximumCondenseRules()
                     );
                     var slots = inventory.inventorySlots(currentPlayer);
 
@@ -143,7 +143,7 @@ public final class CondenseCommand implements CommandContributor {
 
                     for (var rule : rules.value().orElseThrow()) {
                         var batches = Math.min(
-                                config.maximumCondenseBatches,
+                                config.maximumCondenseBatches(),
                                 counts.getOrDefault(
                                         rule.inputItem(),
                                         0

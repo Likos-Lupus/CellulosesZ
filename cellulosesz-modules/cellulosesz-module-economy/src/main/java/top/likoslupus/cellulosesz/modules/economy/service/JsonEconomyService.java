@@ -4,6 +4,8 @@ import top.likoslupus.cellulosesz.api.economy.*;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
+import top.likoslupus.cellulosesz.api.module.PreparedReloads;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
@@ -100,11 +102,37 @@ public final class JsonEconomyService
         return amount.setScale(snapshot.scale(), RoundingMode.HALF_UP);
     }
 
-    public synchronized void configure(EconomyConfig candidate) {
+    public synchronized void validateConfiguration(EconomyConfig candidate) {
+        validateDocument(document, ConfigSnapshot.from(candidate));
+    }
+
+    public synchronized PreparedModuleReload prepareConfiguration(EconomyConfig candidate) {
         var replacement = ConfigSnapshot.from(candidate);
         validateDocument(document, replacement);
-        config = replacement;
-        invalidateTop();
+
+        var previousConfig = config;
+        var previousTop = cachedTop;
+        var previousTopAt = cachedTopAt;
+        return PreparedReloads.of(
+                () -> {
+                    synchronized (JsonEconomyService.this) {
+                        validateDocument(document, replacement);
+                        config = replacement;
+                        invalidateTop();
+                    }
+
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    synchronized (JsonEconomyService.this) {
+                        config = previousConfig;
+                        cachedTop = previousTop;
+                        cachedTopAt = previousTopAt;
+                    }
+
+                    return CompletableFuture.completedFuture(null);
+                }
+        );
     }
 
     private void invalidateTop() {

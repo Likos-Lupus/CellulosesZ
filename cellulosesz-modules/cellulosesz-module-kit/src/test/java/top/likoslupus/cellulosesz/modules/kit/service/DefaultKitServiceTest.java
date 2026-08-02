@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.kit.service;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
@@ -16,13 +14,12 @@ import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -130,6 +127,67 @@ final class DefaultKitServiceTest {
         assertTrue(service.kit("daily").isEmpty());
     }
 
+    @Test
+    void stagedReloadPublishesOnlyOnCommitAndRollbackRestoresPreviousSnapshot() {
+        var storage = new ReloadStorage();
+        storage.loaded = List.of(kit("old", "Old"));
+        var service = service(storage);
+        service.initialize().join();
+
+        storage.loaded = List.of(kit("next", "Next"));
+        var prepared = service.prepareReload(false, true).join();
+
+        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+        prepared.commit().toCompletableFuture().join();
+        assertEquals(List.of("next"), service.kits().stream().map(kit -> kit.id).toList());
+
+        prepared.rollback().toCompletableFuture().join();
+        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+    }
+
+    private static DefaultKitService service(StorageService storage) {
+        var config = new KitConfig();
+        config.createStarterKitWhenEmpty = false;
+        return new DefaultKitService(
+                storage,
+                new NoopUsers(),
+                noopInventory(),
+                immediateServerThread(),
+                Optional.empty(),
+                config,
+                Path.of("kits")
+        );
+    }
+
+    @Test
+    void stalePreparedReloadCannotOverwriteNewerDefinitionMutation() {
+        var storage = new ReloadStorage();
+        storage.loaded = List.of(kit("old", "Old"));
+        var service = service(storage);
+        service.initialize().join();
+
+        storage.loaded = List.of(kit("next", "Next"));
+        var prepared = service.prepareReload(false, false).join();
+        service.save(kit("live", "Live")).join();
+
+        assertThrows(Exception.class, () -> prepared.commit().toCompletableFuture().join());
+        assertTrue(service.kit("live").isPresent());
+        assertTrue(service.kit("next").isEmpty());
+    }
+
+    @Test
+    void failedPreparationLeavesLiveSnapshotUntouched() {
+        var storage = new ReloadStorage();
+        storage.loaded = List.of(kit("old", "Old"));
+        var service = service(storage);
+        service.initialize().join();
+
+        storage.loaded = List.of(kit("duplicate", "First"), kit("duplicate", "Second"));
+
+        assertThrows(Exception.class, () -> service.prepareReload(false, false).join());
+        assertEquals(List.of("old"), service.kits().stream().map(kit -> kit.id).toList());
+    }
+
     @NullMarked
     private static final class DelayedStorage implements StorageService {
 
@@ -194,6 +252,53 @@ final class DefaultKitServiceTest {
     }
 
     @NullMarked
+    private static final class ReloadStorage implements StorageService {
+
+        private final Map<Path, Object> saved = new LinkedHashMap<>();
+        private List<KitDefinition> loaded = List.of();
+
+        @Override
+        public <T> CompletableFuture<T> loadOrDefault(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
+            return CompletableFuture.completedFuture(defaultSupplier.get());
+        }
+
+        @Override
+        public <T> CompletableFuture<T> createIfMissing(
+                Path path,
+                Class<T> type,
+                Supplier<T> defaultSupplier
+        ) {
+            return CompletableFuture.completedFuture(defaultSupplier.get());
+        }
+
+        @Override
+        public <T> CompletableFuture<Void> save(Path path, T value) {
+            saved.put(path, value);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletableFuture<Boolean> exists(Path path) {
+            return CompletableFuture.completedFuture(saved.containsKey(path));
+        }
+
+        @Override
+        public CompletableFuture<Boolean> delete(Path path) {
+            return CompletableFuture.completedFuture(saved.remove(path) != null);
+        }
+
+        @Override
+        public <T> CompletableFuture<List<T>> loadDirectory(Path directory, Class<T> type) {
+            return CompletableFuture.completedFuture(loaded.stream().map(type::cast).toList());
+        }
+
+    }
+
+    @NullMarked
     private static final class NoopUsers implements UserService {
 
         @Override
@@ -222,7 +327,10 @@ final class DefaultKitServiceTest {
         }
 
         @Override
-        public <T> CompletableFuture<T> update(UUID uuid, Function<CellUser, UserUpdate<T>> mutation) {
+        public <T> CompletableFuture<T> update(
+                UUID uuid,
+                Function<CellUser, UserUpdate<T>> mutation
+        ) {
             return CompletableFuture.failedFuture(new UnsupportedOperationException());
         }
 

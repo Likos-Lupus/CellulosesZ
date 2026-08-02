@@ -5,9 +5,7 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -16,6 +14,9 @@ import top.likoslupus.cellulosesz.modules.kit.application.DefaultKitCommandServi
 import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.command.KitCommand;
 import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 import org.jspecify.annotations.Nullable;
 
@@ -33,7 +34,7 @@ import static java.util.Objects.requireNonNull;
 public final class KitModule implements CellulosesZModule {
 
     private @Nullable KitConfig config;
-    private @Nullable KitService kits;
+    private @Nullable DefaultKitService kits;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -67,10 +68,7 @@ public final class KitModule implements CellulosesZModule {
                 root
         );
         context.services().register(KitService.class, kits);
-        context.services().register(
-                DefaultKitService.class,
-                (DefaultKitService) kits
-        );
+        context.services().register(DefaultKitService.class, kits);
         context.services().register(
                 KitCommandService.class,
                 new DefaultKitCommandService(
@@ -90,10 +88,23 @@ public final class KitModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        if (kits != null) {
-            kits.reload();
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previous = requireNonNull(config, "KitConfig has not been initialized");
+        var candidate = reload.configs().require("module.kit", KitConfig.class);
+        if (candidate.pageSize <= 0) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException(
+                    "Kit pageSize must be positive"
+            ));
         }
+
+        var service = requireNonNull(kits, "KitService has not been initialized");
+        return service.prepareReload(
+                candidate.createStarterKitWhenEmpty,
+                candidate.chargeKitCost
+        ).thenApply(staged -> PreparedReloads.of(
+                () -> staged.commit().thenRun(() -> config = candidate),
+                () -> staged.rollback().thenRun(() -> config = previous)
+        ));
     }
 
 }

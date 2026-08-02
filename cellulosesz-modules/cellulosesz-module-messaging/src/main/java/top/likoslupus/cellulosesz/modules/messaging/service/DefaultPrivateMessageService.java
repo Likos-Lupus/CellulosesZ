@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
@@ -15,6 +14,7 @@ import top.likoslupus.cellulosesz.api.user.UserUpdate;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -78,46 +78,56 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
 
                     return updateReplyTargets(sender.uuid(), target.uuid())
                             .thenCompose(updated ->
-                                    updated ? deliver(
-                                            sender.uuid(),
-                                            target.uuid(),
-                                            message
-                                    ) : CompletableFuture.completedFuture(MessageResult.failure(
-                                            "service.messaging.persistence-failed"
-                                    )));
+                                    updated
+                                            ?
+                                            deliver(
+                                                    sender.uuid(),
+                                                    target.uuid(),
+                                                    message
+                                            )
+                                            : CompletableFuture.completedFuture(MessageResult.failure(
+                                                    "service.messaging.persistence-failed"
+                                            )));
                 })
-                .exceptionally(_ -> MessageResult.failure(
+                .exceptionally(_ -> MessageResult.failed(
                         "service.messaging.persistence-failed"
                 ));
     }
 
     private CompletableFuture<Boolean> updateReplyTargets(UUID sender, UUID target) {
         return users
-                .update(sender, user -> {
-                    var previous = user.preferences().outgoingReplyTarget();
-                    return UserUpdate.of(
-                            user.withPreferences(user.preferences().withOutgoingReplyTarget(target)),
-                            previous
-                    );
-                })
-                .thenCompose(previousOutgoing ->
-                        users.update(
-                                        target,
-                                        user -> {
-                                            var previous = user.preferences().incomingReplyTarget();
-                                            return UserUpdate.of(
-                                                    user.withPreferences(user.preferences().withIncomingReplyTarget(sender)),
-                                                    previous
-                                            );
-                                        }
+                .update(
+                        sender,
+                        user -> {
+                            var previous = user.preferences().outgoingReplyTarget();
+                            return UserUpdate.of(
+                                    user.withPreferences(user
+                                            .preferences()
+                                            .withOutgoingReplyTarget(target)),
+                                    previous
+                            );
+                        }
+                )
+                .thenCompose(previousOutgoing -> users
+                        .update(
+                                target,
+                                user -> {
+                                    var previous = user.preferences().incomingReplyTarget();
+                                    return UserUpdate.of(
+                                            user.withPreferences(user
+                                                    .preferences()
+                                                    .withIncomingReplyTarget(sender)),
+                                            previous
+                                    );
+                                }
+                        )
+                        .handle((previousIncoming, failure) ->
+                                new TargetUpdate(
+                                        (UUID) previousOutgoing,
+                                        (UUID) previousIncoming,
+                                        failure
                                 )
-                                .handle((previousIncoming, failure) ->
-                                        new TargetUpdate(
-                                                (UUID) previousOutgoing,
-                                                (UUID) previousIncoming,
-                                                failure
-                                        )
-                                )
+                        )
                 )
                 .thenCompose(update -> {
                     if (update.failure() == null) {
@@ -125,12 +135,17 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                     }
 
                     return users
-                            .updateVoid(sender, user ->
-                                    target.equals(user.preferences().outgoingReplyTarget()) ?
-                                            user.withPreferences(user.preferences().withOutgoingReplyTarget(
-                                                    update.previousOutgoing()
-                                            ))
-                                            : user
+                            .updateVoid(
+                                    sender,
+                                    user ->
+                                            target.equals(user.preferences().outgoingReplyTarget())
+                                                    ?
+                                                    user.withPreferences(user
+                                                            .preferences()
+                                                            .withOutgoingReplyTarget(
+                                                                    update.previousOutgoing()
+                                                            ))
+                                                    : user
                             )
                             .handle((_, rollbackFailure) -> {
                                 if (rollbackFailure != null) {
@@ -187,16 +202,19 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                     ));
                 })
                 .thenCompose(names ->
-                        names.isEmpty() ? CompletableFuture.completedFuture(MessageResult.failure(
-                                "service.messaging.player-offline"
-                        )) : broadcastSpy(
-                                names.orElseThrow().sender(),
-                                names.orElseThrow().target(),
-                                message,
-                                Set.of(senderUuid, targetUuid)
-                        ).handle((_, _) ->
-                                MessageResult.success("service.messaging.sent")
-                        )
+                        names.isEmpty()
+                                ?
+                                CompletableFuture.completedFuture(MessageResult.failure(
+                                        "service.messaging.player-offline"
+                                ))
+                                : broadcastSpy(
+                                        names.orElseThrow().sender(),
+                                        names.orElseThrow().target(),
+                                        message,
+                                        Set.of(senderUuid, targetUuid)
+                                ).handle((_, _) ->
+                                        MessageResult.success("service.messaging.sent")
+                                )
                 );
     }
 
@@ -279,7 +297,10 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
         return serverThread
                 .submit(() -> players.onlinePlayers().stream()
                         .filter(player -> !excludedSnapshot.contains(player.uuid()))
-                        .filter(player -> permissions.has(player, "cellulosesz.messaging.socialspy"))
+                        .filter(player -> permissions.has(
+                                player,
+                                "cellulosesz.messaging.socialspy"
+                        ))
                         .toList()
                 )
                 .thenCompose(candidates -> {

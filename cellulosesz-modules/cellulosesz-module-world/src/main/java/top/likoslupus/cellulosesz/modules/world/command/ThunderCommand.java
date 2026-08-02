@@ -14,7 +14,7 @@ import top.likoslupus.cellulosesz.api.world.ThunderRequest;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -24,12 +24,12 @@ public final class ThunderCommand implements CommandContributor {
 
     private final WorldPlatformService worlds;
     private final PlayerLocationPlatformService locations;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public ThunderCommand(
             WorldPlatformService worlds,
             PlayerLocationPlatformService locations,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.locations = requireNonNull(locations, "locations");
@@ -48,7 +48,7 @@ public final class ThunderCommand implements CommandContributor {
                         context,
                         command,
                         descriptor,
-                        config.defaultWeatherSeconds
+                        config.defaultWeatherSeconds()
                 ))
                 .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 107_374_182))
                         .executes(command -> execute(

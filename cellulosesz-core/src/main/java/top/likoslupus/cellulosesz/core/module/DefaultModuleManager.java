@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.core.module;
 
 import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
+import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
+import top.likoslupus.cellulosesz.api.config.ConfigSnapshot;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.*;
@@ -15,6 +17,9 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import org.jspecify.annotations.Nullable;
@@ -34,6 +39,7 @@ public final class DefaultModuleManager {
     private final ModuleDependencySorter sorter = new ModuleDependencySorter();
     private final Map<String, ModuleDescriptor> descriptors = new LinkedHashMap<>();
     private final Map<String, LoadedModule> loaded = new LinkedHashMap<>();
+    private final AtomicBoolean reloadPrepared = new AtomicBoolean();
     private @Nullable ModulesConfig modulesConfig;
     private @Nullable Registration modulesConfigRegistration;
     private boolean serverStarting;
@@ -60,16 +66,23 @@ public final class DefaultModuleManager {
         this.logger = requireNonNull(logger, "logger");
     }
 
+    private static <T> CompletableFuture<T> invoke(
+            Supplier<? extends CompletionStage<T>> action
+    ) {
+        try {
+            return requireNonNull(action.get(), "stage").toCompletableFuture();
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+    }
+
     public CompletableFuture<Void> loadAsync() {
         try {
             var scanned = scanner.scan();
             descriptors.clear();
-            scanned.forEach(descriptor -> {
-                var previous = descriptors.putIfAbsent(
-                        descriptor.id(),
-                        descriptor
-                );
 
+            scanned.forEach(descriptor -> {
+                var previous = descriptors.putIfAbsent(descriptor.id(), descriptor);
                 if (previous != null) {
                     throw new ModuleLoadException("Duplicate module id: %s (%s, %s)".formatted(
                             descriptor.id(),
@@ -86,15 +99,12 @@ public final class DefaultModuleManager {
                     () -> defaultModulesConfig(scanned),
                     "core"
             );
-            modulesConfig = configs.require(
-                    "modules",
-                    ModulesConfig.class
-            );
+            modulesConfig = copyModulesConfig(configs.require("modules", ModulesConfig.class));
         } catch (RuntimeException failure) {
             return CompletableFuture.failedFuture(failure);
         }
 
-        return reconcileModulesAsync(false)
+        return reconcileInitialModules()
                 .thenRun(() -> logger.info(
                         "Loaded %d CellulosesZ module(s).".formatted(activeCount())
                 ));
@@ -106,36 +116,34 @@ public final class DefaultModuleManager {
                 descriptor.id(),
                 descriptor.enabledByDefault()
         ));
+
         return config;
     }
 
-    private CompletableFuture<Void> reconcileModulesAsync(boolean reloadUnchanged) {
+    private static ModulesConfig copyModulesConfig(ModulesConfig source) {
+        var copy = new ModulesConfig();
+        copy.modules.putAll(source.modules);
+
+        return copy;
+    }
+
+    private CompletableFuture<Void> reconcileInitialModules() {
         final ReconcilePlan plan;
         try {
-            plan = planReconciliation();
+            plan = planReconciliation(desiredEnabledIds(requireModulesConfig()));
         } catch (RuntimeException failure) {
             return CompletableFuture.failedFuture(failure);
         }
 
         return unloadPlanned(plan.unloadOrder(), false)
-                .thenCompose(_ -> loadPlanned(plan.loadOrder()))
-                .thenRun(() -> {
-                    if (reloadUnchanged) {
-                        plan.unchanged().forEach(this::reloadActiveModule);
-                    }
-                });
+                .thenCompose(_ -> loadPlanned(plan.loadOrder()));
     }
 
     private int activeCount() {
-        synchronized (this) {
-            return (int) loaded.values().stream()
-                    .filter(entry -> entry.state == ModuleState.ACTIVE)
-                    .count();
-        }
+        return activeIds().size();
     }
 
-    private ReconcilePlan planReconciliation() {
-        var desired = desiredEnabledIds();
+    private ReconcilePlan planReconciliation(Set<String> desired) {
         validateDesiredGraph(desired);
 
         Set<String> current;
@@ -143,7 +151,6 @@ public final class DefaultModuleManager {
         synchronized (this) {
             current = new LinkedHashSet<>();
             currentEntries = new LinkedHashMap<>();
-
             loaded.forEach((id, value) -> {
                 if (value.state == ModuleState.ACTIVE) {
                     current.add(id);
@@ -154,11 +161,9 @@ public final class DefaultModuleManager {
 
         var restart = current.stream()
                 .filter(desired::contains)
-                .filter(id -> !currentEntries.get(id)
-                        .optionalAvailability.equals(
-                                optionalAvailability(descriptors.get(id), desired)
-                        )
-                )
+                .filter(id -> !currentEntries.get(id).optionalAvailability.equals(
+                        optionalAvailability(descriptors.get(id), desired)
+                ))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         expandRequiredDependents(restart, current, desired);
 
@@ -194,9 +199,7 @@ public final class DefaultModuleManager {
                         .toList()
         );
         var loadOrder = desiredSorted.stream()
-                .filter(descriptor ->
-                        toEnable.contains(descriptor.id())
-                )
+                .filter(descriptor -> toEnable.contains(descriptor.id()))
                 .toList();
         var unchangedOrder = desiredSorted.stream()
                 .map(ModuleDescriptor::id)
@@ -210,54 +213,7 @@ public final class DefaultModuleManager {
         );
     }
 
-    private CompletableFuture<Void> unloadPlanned(
-            List<String> ids,
-            boolean serverShutdown
-    ) {
-        var failures = new ArrayList<Throwable>();
-        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
-        for (var id : ids) {
-            chain = chain
-                    .thenCompose(_ -> unloadModuleAsync(id, serverShutdown)
-                            .handle((_, failure) -> {
-                                if (failure != null) {
-                                    failures.add(unwrap(failure));
-                                }
-                                return (Void) null;
-                            })
-                    );
-        }
-        return chain.thenCompose(_ -> aggregateFailures("Module unload failed", failures));
-    }
-
-    private CompletableFuture<Void> loadPlanned(List<ModuleDescriptor> order) {
-        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
-        for (var descriptor : order) {
-            chain = chain.thenCompose(_ -> loadModuleAsync(descriptor));
-        }
-        return chain;
-    }
-
-    private void reloadActiveModule(String id) {
-        LoadedModule entry;
-        synchronized (this) {
-            entry = loaded.get(id);
-        }
-
-        if (entry == null || entry.state != ModuleState.ACTIVE) {
-            return;
-        }
-
-        runPhase(
-                entry.descriptor,
-                "reload",
-                () -> entry.module.onReload(entry.context)
-        );
-    }
-
-    private Set<String> desiredEnabledIds() {
-        var config = requireModulesConfig();
-
+    private Set<String> desiredEnabledIds(ModulesConfig config) {
         config.modules.keySet().stream()
                 .filter(id -> !descriptors.containsKey(id))
                 .forEach(id -> logger.warn("Ignoring unknown module id in modules.yml: " + id));
@@ -268,6 +224,48 @@ public final class DefaultModuleManager {
                         descriptor.enabledByDefault()
                 ))
                 .map(ModuleDescriptor::id)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private ModulesConfig requireModulesConfig() {
+        return requireNonNull(modulesConfig, "ModulesConfig has not been initialized");
+    }
+
+    private CompletableFuture<Void> unloadPlanned(
+            List<String> ids,
+            boolean serverShutdown
+    ) {
+        var failures = new ArrayList<Throwable>();
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (var id : ids) {
+            chain = chain.thenCompose(_ -> unloadModuleAsync(id, serverShutdown)
+                    .handle((_, failure) -> {
+                        if (failure != null) {
+                            failures.add(unwrap(failure));
+                        }
+                        return (Void) null;
+                    })
+            );
+        }
+
+        return chain.thenCompose(_ -> aggregateFailures("Module unload failed", failures));
+    }
+
+    private CompletableFuture<Void> loadPlanned(List<ModuleDescriptor> order) {
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (var descriptor : order) {
+            chain = chain.thenCompose(_ -> loadModuleAsync(descriptor));
+        }
+
+        return chain;
+    }
+
+    private synchronized Set<String> activeIds() {
+        return loaded.entrySet().stream()
+                .filter(entry ->
+                        entry.getValue().state == ModuleState.ACTIVE
+                )
+                .map(Map.Entry::getKey)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
@@ -282,12 +280,7 @@ public final class DefaultModuleManager {
                 }
             });
         });
-
-        sorter.sort(
-                desired.stream()
-                        .map(descriptors::get)
-                        .toList()
-        );
+        sorter.sort(desired.stream().map(descriptors::get).toList());
     }
 
     private Map<String, Boolean> optionalAvailability(
@@ -298,6 +291,7 @@ public final class DefaultModuleManager {
         descriptor.optional().forEach(optional ->
                 availability.put(optional, desired.contains(optional))
         );
+
         return Map.copyOf(availability);
     }
 
@@ -313,6 +307,7 @@ public final class DefaultModuleManager {
                 if (!current.contains(descriptor.id()) || !desired.contains(descriptor.id())) {
                     continue;
                 }
+
                 if (descriptor.requires().stream().anyMatch(restart::contains)
                         && restart.add(descriptor.id())
                 ) {
@@ -326,9 +321,7 @@ public final class DefaultModuleManager {
         final LoadedModule entry;
         synchronized (this) {
             entry = loaded.get(id);
-            if (entry == null
-                    || entry.state == ModuleState.UNLOADED
-            ) {
+            if (entry == null || entry.state == ModuleState.UNLOADED) {
                 return CompletableFuture.completedFuture(null);
             }
 
@@ -363,9 +356,7 @@ public final class DefaultModuleManager {
                     }
 
                     logger.info("Unloaded module: " + id);
-                    if (capturedHookFailure == null
-                            && closeFailure == null
-                    ) {
+                    if (capturedHookFailure == null && closeFailure == null) {
                         return (Void) null;
                     }
 
@@ -384,11 +375,10 @@ public final class DefaultModuleManager {
 
     private static Throwable unwrap(Throwable failure) {
         var current = failure;
-        while (current instanceof CompletionException
-                && current.getCause() != null
-        ) {
+        while (current instanceof CompletionException && current.getCause() != null) {
             current = current.getCause();
         }
+
         return current;
     }
 
@@ -402,6 +392,7 @@ public final class DefaultModuleManager {
 
         var aggregate = new IllegalStateException(message);
         failures.forEach(aggregate::addSuppressed);
+
         return CompletableFuture.failedFuture(aggregate);
     }
 
@@ -515,6 +506,11 @@ public final class DefaultModuleManager {
                 .exceptionallyCompose(failure -> failLoad(entry, unwrap(failure)));
     }
 
+    public synchronized boolean moduleEnabled(String moduleId) {
+        var entry = loaded.get(moduleId);
+        return entry != null && entry.state == ModuleState.ACTIVE;
+    }
+
     private void runPhase(
             ModuleDescriptor descriptor,
             String phase,
@@ -528,16 +524,6 @@ public final class DefaultModuleManager {
                     failure
             );
         }
-    }
-
-    private ModulesConfig requireModulesConfig() {
-        return requireNonNull(modulesConfig, "ModulesConfig has not been initialized");
-    }
-
-    public synchronized boolean moduleEnabled(String moduleId) {
-        var entry = loaded.get(moduleId);
-        return entry != null
-                && entry.state == ModuleState.ACTIVE;
     }
 
     private CompletableFuture<Void> failLoad(LoadedModule entry, Throwable failure) {
@@ -581,34 +567,276 @@ public final class DefaultModuleManager {
             });
         }
 
-        return chain
-                .exceptionallyCompose(failure -> CompletableFuture.failedFuture(
-                        new ModuleLoadException(
-                                "Module %s failed during initialize".formatted(descriptor.id()),
-                                unwrap(failure)
-                        )
-                ));
+        return chain.exceptionallyCompose(failure -> CompletableFuture.failedFuture(
+                new ModuleLoadException(
+                        "Module %s failed during initialize".formatted(descriptor.id()),
+                        unwrap(failure)
+                )
+        ));
     }
 
-    public CompletableFuture<Void> onReloadAsync() {
+    public CompletionStage<PreparedModuleReload> prepareReload(ConfigSnapshot candidateConfigs) {
+        requireNonNull(candidateConfigs, "candidateConfigs");
+        synchronized (this) {
+            if (serverStopping) {
+                return CompletableFuture.failedFuture(new IllegalStateException(
+                        "Module manager is stopping"
+                ));
+            }
+        }
+
+        if (!reloadPrepared.compareAndSet(false, true)) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "A module reload is already prepared"
+            ));
+        }
+
+        final ModulesConfig candidate;
+        final ModulesConfig previous;
+        final ReconcilePlan plan;
+        final Set<String> previousActive;
+        final Set<String> candidateEnabled;
         try {
-            modulesConfig = configs.require("modules", ModulesConfig.class);
+            candidate = copyModulesConfig(candidateConfigs.require("modules", ModulesConfig.class));
+            previous = copyModulesConfig(requireModulesConfig());
+            candidateEnabled = desiredEnabledIds(candidate);
+            plan = planReconciliation(candidateEnabled);
+            previousActive = activeIds();
         } catch (RuntimeException failure) {
+            reloadPrepared.set(false);
             return CompletableFuture.failedFuture(failure);
         }
 
-        return reconcileModulesAsync(true);
+        var execution = new ReloadExecution(
+                previous,
+                candidate,
+                previousActive,
+                candidateEnabled,
+                plan
+        );
+
+        CompletableFuture<Void> prepareChain = CompletableFuture.completedFuture(null);
+        for (var id : plan.unchanged()) {
+            prepareChain = prepareChain.thenCompose(_ -> prepareUnchanged(
+                    execution,
+                    id,
+                    candidateConfigs
+            ));
+        }
+
+        return prepareChain
+                .thenApply(_ -> PreparedReloads.of(
+                        () -> commitReload(execution)
+                                .whenComplete((_, failure) -> {
+                                    if (failure == null) {
+                                        reloadPrepared.set(false);
+                                    }
+                                }),
+                        () -> rollbackReload(execution)
+                                .whenComplete((_, _) -> reloadPrepared.set(false))
+                ))
+                .exceptionallyCompose(failure -> rollbackPrepared(execution.prepared)
+                        .handle((_, rollbackFailure) -> {
+                            reloadPrepared.set(false);
+                            var original = unwrap(failure);
+                            if (rollbackFailure != null) {
+                                original.addSuppressed(unwrap(rollbackFailure));
+                            }
+                            throw new CompletionException(original);
+                        })
+                );
+    }
+
+    private CompletableFuture<Void> prepareUnchanged(
+            ReloadExecution execution,
+            String id,
+            ConfigSnapshot candidateConfigs
+    ) {
+        final LoadedModule entry;
+        synchronized (this) {
+            entry = loaded.get(id);
+        }
+
+        if (entry == null || entry.state != ModuleState.ACTIVE) {
+            return CompletableFuture.failedFuture(new ModuleLoadException(
+                    "Module became unavailable while reload was being prepared: " + id
+            ));
+        }
+
+        try {
+            return requireNonNull(
+                    entry.module.prepareReload(new DefaultModuleReloadContext(
+                            entry.context,
+                            candidateConfigs,
+                            execution.candidateEnabled::contains
+                    )),
+                    "module prepare stage"
+            )
+                    .thenAccept(prepared -> execution.prepared.add(new PreparedEntry(
+                            id,
+                            requireNonNull(prepared, "prepared module reload")
+                    )))
+                    .toCompletableFuture();
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(new ModuleLoadException(
+                    "Module %s failed during reload prepare".formatted(id),
+                    failure
+            ));
+        }
+    }
+
+    private CompletableFuture<Void> commitReload(ReloadExecution execution) {
+        CompletableFuture<Void> chain = onServerThread(() -> {
+            synchronized (this) {
+                modulesConfig = copyModulesConfig(execution.candidateConfig);
+            }
+            return CompletableFuture.completedFuture(null);
+        });
+
+        for (var id : execution.plan.unloadOrder()) {
+            chain = chain.thenCompose(_ -> onServerThread(() -> unloadModuleAsync(
+                            id,
+                            false
+                    ))
+                            .whenComplete((_, _) -> {
+                                if (!moduleEnabled(id)) {
+                                    execution.unloaded.add(id);
+                                }
+                            })
+            );
+        }
+
+        for (var descriptor : execution.plan.loadOrder()) {
+            chain = chain.thenCompose(_ -> onServerThread(() -> loadModuleAsync(descriptor))
+                    .thenRun(() -> execution.loaded.add(descriptor.id()))
+            );
+        }
+
+        for (var prepared : execution.prepared) {
+            chain = chain.thenCompose(_ -> onServerThread(() -> {
+                execution.commitAttempted.add(prepared.id());
+                return prepared.transaction().commit();
+            }));
+        }
+
+        return chain;
+    }
+
+    private CompletableFuture<Void> rollbackReload(ReloadExecution execution) {
+        synchronized (this) {
+            modulesConfig = copyModulesConfig(execution.previousConfig);
+        }
+
+        var failures = new ArrayList<Throwable>();
+        return rollbackPrepared(execution.prepared)
+                .handle((_, failure) -> {
+                    if (failure != null) {
+                        failures.add(unwrap(failure));
+                    }
+                    return (Void) null;
+                })
+                .thenCompose(_ -> rollbackLoadedModules(execution, failures))
+                .thenCompose(_ -> restorePreviousModules(execution, failures))
+                .thenCompose(_ -> aggregateFailures(
+                        "Module reload rollback failed",
+                        failures
+                ));
+    }
+
+    private CompletableFuture<Void> rollbackPrepared(List<PreparedEntry> prepared) {
+        var failures = new ArrayList<Throwable>();
+
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (int index = prepared.size() - 1; index >= 0; index--) {
+            var transaction = prepared.get(index).transaction();
+            chain = chain.thenCompose(_ -> onServerThread(transaction::rollback)
+                    .handle((_, failure) -> {
+                        if (failure != null) {
+                            failures.add(unwrap(failure));
+                        }
+                        return (Void) null;
+                    })
+            );
+        }
+
+        return chain.thenCompose(_ -> aggregateFailures(
+                "Prepared module rollback failed",
+                failures
+        ));
+    }
+
+    private CompletableFuture<Void> rollbackLoadedModules(
+            ReloadExecution execution,
+            List<Throwable> failures
+    ) {
+        var ids = new ArrayList<>(execution.loaded);
+        Collections.reverse(ids);
+
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (var id : ids) {
+            chain = chain.thenCompose(_ ->
+                    onServerThread(() -> unloadModuleAsync(id, false))
+                            .handle((_, failure) -> {
+                                if (failure != null) {
+                                    failures.add(unwrap(failure));
+                                }
+                                return (Void) null;
+                            })
+            );
+        }
+        return chain;
+    }
+
+    private CompletableFuture<Void> restorePreviousModules(
+            ReloadExecution execution,
+            List<Throwable> failures
+    ) {
+        var active = activeIds();
+        var missing = new LinkedHashSet<>(execution.previousActive);
+
+        missing.removeAll(active);
+        var order = sorter.sort(
+                missing.stream()
+                        .map(descriptors::get)
+                        .toList()
+        );
+
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (var descriptor : order) {
+            chain = chain.thenCompose(_ ->
+                    onServerThread(() -> loadModuleAsync(descriptor))
+                            .handle((_, failure) -> {
+                                if (failure != null) {
+                                    failures.add(unwrap(failure));
+                                }
+                                return (Void) null;
+                            })
+            );
+        }
+
+        return chain;
+    }
+
+    private <T> CompletableFuture<T> onServerThread(
+            Supplier<? extends CompletionStage<T>> action
+    ) {
+        var executor = services.optional(ServerThreadExecutor.class);
+        if (executor.isEmpty()) {
+            return invoke(action);
+        }
+
+        return executor.orElseThrow()
+                .submit(() -> requireNonNull(action.get(), "server-thread stage"))
+                .thenCompose(CompletionStage::toCompletableFuture);
     }
 
     public void onServerStarting() {
         serverStarting = true;
-        activeInDependencyOrder().forEach(entry ->
-                runPhase(
-                        entry.descriptor,
-                        "server-starting",
-                        () -> entry.module.onServerStarting(entry.context)
-                )
-        );
+        activeInDependencyOrder().forEach(entry -> runPhase(
+                entry.descriptor,
+                "server-starting",
+                () -> entry.module.onServerStarting(entry.context)
+        ));
     }
 
     private List<LoadedModule> activeInDependencyOrder() {
@@ -633,13 +861,11 @@ public final class DefaultModuleManager {
 
     public void onServerStarted() {
         serverStarted = true;
-        activeInDependencyOrder().forEach(entry ->
-                runPhase(
-                        entry.descriptor,
-                        "server-started",
-                        () -> entry.module.onServerStarted(entry.context)
-                )
-        );
+        activeInDependencyOrder().forEach(entry -> runPhase(
+                entry.descriptor,
+                "server-started",
+                () -> entry.module.onServerStarted(entry.context)
+        ));
     }
 
     public CompletableFuture<Void> onServerStoppingAsync() {
@@ -702,6 +928,41 @@ public final class DefaultModuleManager {
             List<ModuleDescriptor> loadOrder,
             List<String> unchanged
     ) {
+
+    }
+
+    private record PreparedEntry(
+            String id,
+            PreparedModuleReload transaction
+    ) {
+
+    }
+
+    private static final class ReloadExecution {
+
+        private final ModulesConfig previousConfig;
+        private final ModulesConfig candidateConfig;
+        private final Set<String> previousActive;
+        private final Set<String> candidateEnabled;
+        private final ReconcilePlan plan;
+        private final List<PreparedEntry> prepared = new ArrayList<>();
+        private final List<String> unloaded = new ArrayList<>();
+        private final List<String> loaded = new ArrayList<>();
+        private final List<String> commitAttempted = new ArrayList<>();
+
+        private ReloadExecution(
+                ModulesConfig previousConfig,
+                ModulesConfig candidateConfig,
+                Set<String> previousActive,
+                Set<String> candidateEnabled,
+                ReconcilePlan plan
+        ) {
+            this.previousConfig = previousConfig;
+            this.candidateConfig = candidateConfig;
+            this.previousActive = Set.copyOf(previousActive);
+            this.candidateEnabled = Set.copyOf(candidateEnabled);
+            this.plan = plan;
+        }
 
     }
 

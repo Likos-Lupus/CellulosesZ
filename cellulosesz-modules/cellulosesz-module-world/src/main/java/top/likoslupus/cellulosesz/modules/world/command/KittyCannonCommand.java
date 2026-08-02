@@ -9,7 +9,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -18,11 +18,11 @@ import static java.util.Objects.requireNonNull;
 public final class KittyCannonCommand implements CommandContributor {
 
     private final EntityPlatformService entities;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public KittyCannonCommand(
             EntityPlatformService entities,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
         this.config = requireNonNull(config, "config");
@@ -54,9 +54,9 @@ public final class KittyCannonCommand implements CommandContributor {
                                                     new TemporaryMobRequest(
                                                             value,
                                                             TemporaryMobType.CAT,
-                                                            config.temporaryMobSpeed,
-                                                            config.temporaryMobLifetimeTicks,
-                                                            config.temporaryMobExplosionPower,
+                                                            config.temporaryMobSpeed(),
+                                                            config.temporaryMobLifetimeTicks(),
+                                                            config.temporaryMobExplosionPower(),
                                                             false
                                                     )
                                             ))

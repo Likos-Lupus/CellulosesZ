@@ -6,7 +6,7 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
 
 import java.net.InetAddress;
@@ -27,7 +27,7 @@ public final class DefaultBanCommandService implements BanCommandService {
     private final PlayerNetworkService networks;
     private final AddressBookService addresses;
     private final ServerThreadExecutor serverThread;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     public DefaultBanCommandService(
             BanService bans,
@@ -37,7 +37,7 @@ public final class DefaultBanCommandService implements BanCommandService {
             PlayerNetworkService networks,
             AddressBookService addresses,
             ServerThreadExecutor serverThread,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.bans = requireNonNull(bans, "bans");
         this.temporary = requireNonNull(temporary, "temporary");
@@ -84,17 +84,19 @@ public final class DefaultBanCommandService implements BanCommandService {
                                     actor
                             ))
                             .thenCompose(permanent ->
-                                    temporary.unban(
+                                    temporary
+                                            .unban(
                                                     value.uuid(),
                                                     value.name(),
                                                     actor
                                             )
-                                            .thenApply(temp -> permanent.success() || temp.success() ?
+                                            .thenApply(temp -> permanent.success() || temp.success()
+                                                    ?
                                                     AdminResult.success(
                                                             "service.admin.unban-success",
                                                             Map.of("player", value.name())
-                                                    ) :
-                                                    permanent
+                                                    )
+                                                    : permanent
                                             )
                             );
                 });
@@ -123,12 +125,13 @@ public final class DefaultBanCommandService implements BanCommandService {
         return serverThread
                 .submit(() -> bans.unbanIp(address, actor))
                 .thenCompose(permanent -> temporary.unbanIp(address, actor)
-                        .thenApply(temp -> permanent.success() || temp.success() ?
+                        .thenApply(temp -> permanent.success() || temp.success()
+                                ?
                                 AdminResult.success(
                                         "service.admin.unban-ip-success",
                                         Map.of("address", IpAddresses.canonical(address))
-                                ) :
-                                permanent
+                                )
+                                : permanent
                         )
                 );
     }
@@ -239,9 +242,10 @@ public final class DefaultBanCommandService implements BanCommandService {
         var value = input.trim();
 
         if (value.isBlank()) {
-            value = config.defaultReason;
+            value = config.defaultReason();
         }
-        if (value.length() > config.maximumReasonLength
+
+        if (value.length() > config.maximumReasonLength()
                 || value.chars().anyMatch(Character::isISOControl)
         ) {
             throw new IllegalArgumentException("invalid reason");

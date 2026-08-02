@@ -6,7 +6,6 @@ import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
@@ -21,15 +20,17 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.*;
+import org.jspecify.annotations.Nullable;
+
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public final class ClearInventoryCommand implements CommandContributor {
 
@@ -41,7 +42,7 @@ public final class ClearInventoryCommand implements CommandContributor {
     private final ConfirmationService confirmations;
     private final PermissionService permissions;
     private final PlayerDirectory players;
-    private final ItemConfig config;
+    private final ItemRuntimeSettings config;
     private final Clock clock;
 
     public ClearInventoryCommand(
@@ -51,7 +52,7 @@ public final class ClearInventoryCommand implements CommandContributor {
             ConfirmationService confirmations,
             PermissionService permissions,
             PlayerDirectory players,
-            ItemConfig config,
+            ItemRuntimeSettings config,
             Clock clock
     ) {
         this.inventory = requireNonNull(inventory, "inventory");
@@ -68,11 +69,12 @@ public final class ClearInventoryCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             @Nullable Target fixedTarget
     ) {
-        return fixedTarget == null ?
+        return fixedTarget == null
+                ?
                 Target.player(
                         PlayerNameArgument.get(command, "player")
-                ) :
-                fixedTarget;
+                )
+                : fixedTarget;
     }
 
     private static List<InventoryStackSelection> select(
@@ -386,7 +388,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                         );
                     }
 
-                    if (targets.size() > config.clearMaximumTargets) {
+                    if (targets.size() > config.clearMaximumTargets()) {
                         return PlatformResult.failure(
                                 PlatformOperationStatus.INVALID_INPUT,
                                 "too-many-targets"
@@ -419,15 +421,20 @@ public final class ClearInventoryCommand implements CommandContributor {
                     }
 
                     var total = estimate(filtered, filter, amount);
-                    var needsConfirmation = actor.isPresent() &&
+                    var needsConfirmation = actor.isPresent()
+                            &&
                             users.cached(actor.orElseThrow().uuid())
-                                    .map(user -> user.preferences()
-                                            .confirmInventoryClears())
-                                    .orElse(true) && (
-                            target.kind() == TargetKind.ALL
-                                    || filtered.size() > 1
-                                    || filter.kind() != InventoryClearFilter.Kind.ITEM
-                                    || total >= config.clearLargeRemovalThreshold);
+                                    .map(user ->
+                                            user.preferences().confirmInventoryClears()
+                                    )
+                                    .orElse(true)
+                            &&
+                            (
+                                    target.kind() == TargetKind.ALL
+                                            || filtered.size() > 1
+                                            || filter.kind() != InventoryClearFilter.Kind.ITEM
+                                            || total >= config.clearLargeRemovalThreshold()
+                            );
 
                     if (!confirmed
                             && needsConfirmation
@@ -450,9 +457,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                                 currentActor.uuid(),
                                 ACTION,
                                 payload,
-                                Duration.ofSeconds(
-                                        config.clearConfirmationTtlSeconds
-                                )
+                                Duration.ofSeconds(config.clearConfirmationTtlSeconds())
                         );
 
                         return PlatformResult.partial(

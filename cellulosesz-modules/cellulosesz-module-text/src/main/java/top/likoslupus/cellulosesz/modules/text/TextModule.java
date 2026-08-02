@@ -2,9 +2,7 @@ package top.likoslupus.cellulosesz.modules.text;
 
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
@@ -18,6 +16,8 @@ import top.likoslupus.cellulosesz.modules.text.config.TextConfig;
 import top.likoslupus.cellulosesz.modules.text.service.ConfigTextService;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -98,10 +98,23 @@ public final class TextModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        config = context.configs().require("module.text", TextConfig.class);
-        requireNonNull(texts, "TextService has not been initialized")
-                .configure(requireNonNull(config, "TextConfig has not been initialized"));
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previous = requireNonNull(config, "TextConfig has not been initialized");
+        var candidate = reload.configs().require("module.text", TextConfig.class);
+        var service = requireNonNull(texts, "TextService has not been initialized");
+
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    service.configure(candidate);
+                    config = candidate;
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    service.configure(previous);
+                    config = previous;
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
 }

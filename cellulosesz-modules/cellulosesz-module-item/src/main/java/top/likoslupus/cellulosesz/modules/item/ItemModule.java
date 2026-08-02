@@ -3,9 +3,7 @@ package top.likoslupus.cellulosesz.modules.item;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.*;
 import top.likoslupus.cellulosesz.api.item.*;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
@@ -22,6 +20,8 @@ import top.likoslupus.cellulosesz.modules.item.service.DefaultItemService;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -37,6 +37,7 @@ import static java.util.Objects.requireNonNull;
 public final class ItemModule implements CellulosesZModule {
 
     private @Nullable ItemConfig config;
+    private @Nullable ItemRuntimeSettings runtimeSettings;
     private @Nullable ItemService items;
     private @Nullable ItemAutomationService automation;
 
@@ -48,8 +49,10 @@ public final class ItemModule implements CellulosesZModule {
                 "modules/item.yml",
                 ItemConfig::new
         );
-        config = context.configs().require("module.item", ItemConfig.class);
-        requireNonNull(config, "ItemConfig has not been initialized").validate();
+        var initial = context.configs().require("module.item", ItemConfig.class);
+        initial.validate();
+        config = copy(initial);
+        runtimeSettings = new ItemRuntimeSettings(config);
     }
 
     @Override
@@ -96,8 +99,8 @@ public final class ItemModule implements CellulosesZModule {
                 "ItemAutomationService has not been initialized"
         );
         var loadedConfig = requireNonNull(
-                config,
-                "ItemConfig has not been initialized"
+                runtimeSettings,
+                "ItemRuntimeSettings has not been initialized"
         );
 
         var itemCommands = new ItemCommandService(loadedItems, itemPlatform);
@@ -247,25 +250,48 @@ public final class ItemModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var current = requireNonNull(config, "ItemConfig has not been initialized");
-        var candidate = context.configs().require("module.item", ItemConfig.class);
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previous = requireNonNull(config, "ItemConfig has not been initialized");
+        var loaded = reload.configs().require("module.item", ItemConfig.class);
+        loaded.validate();
 
-        candidate.validate();
-        current.copyFrom(candidate);
+        var candidate = copy(loaded);
+        var itemService = (DefaultItemService) requireNonNull(
+                items,
+                "ItemService has not been initialized"
+        );
+        var automationService = (DefaultItemAutomationService) requireNonNull(
+                automation,
+                "ItemAutomationService has not been initialized"
+        );
 
-        (
-                (DefaultItemService) requireNonNull(
-                        items,
-                        "ItemService has not been initialized"
-                )
-        ).configure(current);
-        (
-                (DefaultItemAutomationService) requireNonNull(
-                        automation,
-                        "ItemAutomationService has not been initialized"
-                )
-        ).configure(current);
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    itemService.configure(candidate);
+                    try {
+                        automationService.configure(candidate);
+                    } catch (RuntimeException failure) {
+                        itemService.configure(previous);
+                        throw failure;
+                    }
+                    requireNonNull(
+                            runtimeSettings,
+                            "ItemRuntimeSettings has not been initialized"
+                    ).configure(candidate);
+                    config = candidate;
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    itemService.configure(previous);
+                    automationService.configure(previous);
+                    requireNonNull(
+                            runtimeSettings,
+                            "ItemRuntimeSettings has not been initialized"
+                    ).configure(previous);
+                    config = previous;
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     private static void track(
@@ -436,6 +462,13 @@ public final class ItemModule implements CellulosesZModule {
             WorkstationKind kind
     ) {
         return new WorkstationCommand(service, root, aliases, kind);
+    }
+
+    private static ItemConfig copy(ItemConfig source) {
+        var copy = new ItemConfig();
+        copy.copyFrom(source);
+        copy.validate();
+        return copy;
     }
 
 }

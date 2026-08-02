@@ -4,6 +4,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
@@ -80,10 +81,10 @@ final class PlayerStateCommandSupport {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) -> policy.respondAll(
-                        result.success(),
-                        result.messages()
-                )
+                (policy, result) -> {
+                    policy.respondAll(result.success(), result.messages());
+                    return CommandOutcome.fromStatus(result.status());
+                }
         );
     }
 

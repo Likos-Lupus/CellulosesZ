@@ -4,6 +4,7 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -44,16 +45,16 @@ final class ItemCommandSupport {
             String audit,
             Function<MinecraftCommandPolicyContext, PlatformResult<?>> operation
     ) {
-        return CommandExecutions.sync(
+        return CommandExecutions.syncOutcome(
                 registration,
                 command,
                 descriptor,
                 audit,
-                policy -> respond(
-                        policy,
-                        descriptor.canonicalName(),
-                        operation.apply(policy)
-                )
+                policy -> {
+                    var result = operation.apply(policy);
+                    respond(policy, descriptor.canonicalName(), result);
+                    return CommandOutcome.fromPlatformStatus(result.status());
+                }
         );
     }
 
@@ -80,7 +81,9 @@ final class ItemCommandSupport {
                 )
         );
 
-        return result.successful() ? 1 : 0;
+        return result.successful()
+                ? 1
+                : 0;
     }
 
     static <T> int async(
@@ -99,11 +102,10 @@ final class ItemCommandSupport {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) -> respond(
-                        policy,
-                        descriptor.canonicalName(),
-                        result
-                )
+                (policy, result) -> {
+                    respond(policy, descriptor.canonicalName(), result);
+                    return CommandOutcome.fromPlatformStatus(result.status());
+                }
         );
     }
 

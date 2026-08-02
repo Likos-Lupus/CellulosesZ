@@ -13,8 +13,9 @@ import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultItemService implements ItemService {
 
@@ -35,12 +36,14 @@ public final class DefaultItemService implements ItemService {
     }
 
     public void configure(ItemConfig config) {
-        requireNonNull(config, "config");
-        requirePositive(config.maxCommandCount, "maxCommandCount");
-        requirePositive(config.maxLoreLines, "maxLoreLines");
+        var snapshot = new ItemConfig();
+        snapshot.copyFrom(requireNonNull(config, "config"));
+        snapshot.validate();
+        requirePositive(snapshot.maxCommandCount, "maxCommandCount");
+        requirePositive(snapshot.maxLoreLines, "maxLoreLines");
 
         var aliasCopy = new LinkedHashMap<String, String>();
-        requireNonNull(config.aliases, "aliases")
+        requireNonNull(snapshot.aliases, "aliases")
                 .forEach((alias, item) -> {
                     var key = key(alias);
                     var normalized = normalizeId(item);
@@ -55,7 +58,7 @@ public final class DefaultItemService implements ItemService {
                 });
 
         var customCopy = new LinkedHashMap<String, ItemDescriptor>();
-        requireNonNull(config.customItems, "customItems")
+        requireNonNull(snapshot.customItems, "customItems")
                 .forEach((name, item) -> {
                     var key = key(name);
                     requireNonNull(item, "custom item");
@@ -71,7 +74,7 @@ public final class DefaultItemService implements ItemService {
                 });
 
         var blacklistCopy = new LinkedHashSet<String>();
-        requireNonNull(config.blacklist, "blacklist")
+        requireNonNull(snapshot.blacklist, "blacklist")
                 .forEach(item -> {
                     var normalized = normalizeId(item);
                     if (!ID_PATTERN.matcher(normalized).matches()) {
@@ -81,7 +84,7 @@ public final class DefaultItemService implements ItemService {
                     blacklistCopy.add(normalized);
                 });
 
-        this.config = config;
+        this.config = snapshot;
         this.aliases = Map.copyOf(aliasCopy);
         this.customItems = Map.copyOf(customCopy);
         this.blacklist = Set.copyOf(blacklistCopy);
@@ -145,7 +148,9 @@ public final class DefaultItemService implements ItemService {
                 } else if (current == '\\') {
                     escaped = true;
                 } else {
-                    if (current == quote) quote = '\0';
+                    if (current == quote) {
+                        quote = '\0';
+                    }
                 }
                 continue;
             }
@@ -169,7 +174,9 @@ public final class DefaultItemService implements ItemService {
             String input,
             Map<String, Object> output
     ) {
-        if (input.isBlank()) return true;
+        if (input.isBlank()) {
+            return true;
+        }
 
         for (var entry : splitTopLevel(input, ',')) {
             var equals = topLevelIndex(entry, '=');
@@ -279,7 +286,9 @@ public final class DefaultItemService implements ItemService {
                 } else if (current == '\\') {
                     escaped = true;
                 } else {
-                    if (current == quote) quote = '\0';
+                    if (current == quote) {
+                        quote = '\0';
+                    }
                 }
                 continue;
             }
@@ -291,7 +300,9 @@ public final class DefaultItemService implements ItemService {
             } else if (current == '}' || current == ']' || current == ')') {
                 depth--;
             } else {
-                if (current == target && depth == 0) return index;
+                if (current == target && depth == 0) {
+                    return index;
+                }
             }
         }
 
@@ -300,7 +311,9 @@ public final class DefaultItemService implements ItemService {
 
     @Override
     public Optional<ItemDescriptor> parse(String input) {
-        if (input.isBlank()) return Optional.empty();
+        if (input.isBlank()) {
+            return Optional.empty();
+        }
 
         var value = input.trim();
         var firstEnd = firstTokenEnd(value);
@@ -311,7 +324,9 @@ public final class DefaultItemService implements ItemService {
             var result = custom.copy();
             var tail = value.substring(firstEnd).trim();
             if (!tail.isEmpty()) {
-                if (!INTEGER_PATTERN.matcher(tail).matches()) return Optional.empty();
+                if (!INTEGER_PATTERN.matcher(tail).matches()) {
+                    return Optional.empty();
+                }
 
                 try {
                     result.count = Integer.parseInt(tail);
@@ -372,7 +387,9 @@ public final class DefaultItemService implements ItemService {
                     return Optional.empty();
                 }
 
-                tail = whitespace < 0 ? "" : tail.substring(whitespace).trim();
+                tail = whitespace < 0
+                        ? ""
+                        : tail.substring(whitespace).trim();
             }
         }
 

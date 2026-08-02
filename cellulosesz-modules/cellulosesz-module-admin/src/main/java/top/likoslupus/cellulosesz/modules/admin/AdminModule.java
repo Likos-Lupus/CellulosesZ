@@ -6,9 +6,7 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
 import top.likoslupus.cellulosesz.api.player.*;
@@ -23,12 +21,15 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.modules.admin.application.*;
 import top.likoslupus.cellulosesz.modules.admin.command.*;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.service.*;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -44,6 +45,7 @@ import static java.util.Objects.requireNonNull;
 public final class AdminModule implements CellulosesZModule {
 
     private @Nullable AdminConfig config;
+    private @Nullable AdminRuntimeSettings runtimeSettings;
     private @Nullable TempBanService tempBans;
     private @Nullable MuteService mutes;
     private @Nullable JailService jails;
@@ -63,11 +65,19 @@ public final class AdminModule implements CellulosesZModule {
         config = context.configs()
                 .require("module.admin", AdminConfig.class)
                 .validatedCopy();
+        runtimeSettings = new AdminRuntimeSettings(config);
     }
 
     @Override
     public void registerServices(ModuleContext context) {
-        var current = requireNonNull(config, "AdminConfig has not been initialized");
+        var current = requireNonNull(
+                config,
+                "AdminConfig has not been initialized"
+        );
+        var settings = requireNonNull(
+                runtimeSettings,
+                "AdminRuntimeSettings has not been initialized"
+        );
         var clock = Clock.systemUTC();
         var storage = context.services().require(StorageService.class);
         var players = context.services().require(PlayerDirectory.class);
@@ -103,7 +113,7 @@ public final class AdminModule implements CellulosesZModule {
                 renderer,
                 serverThread,
                 clock,
-                current.tempBanKickOnlinePlayers
+                settings
         );
         jails = new JsonJailService(
                 storage,
@@ -113,9 +123,9 @@ public final class AdminModule implements CellulosesZModule {
                 teleports,
                 serverThread,
                 clock,
-                current
+                settings
         );
-        enforcement = new JailEnforcementService(jails, locations, teleports, current);
+        enforcement = new JailEnforcementService(jails, locations, teleports, settings);
 
         var banCommands = new DefaultBanCommandService(
                 bans,
@@ -125,7 +135,7 @@ public final class AdminModule implements CellulosesZModule {
                 networks,
                 addresses,
                 serverThread,
-                current
+                settings
         );
         var moderation = new DefaultModerationCommandService(
                 bans,
@@ -135,7 +145,7 @@ public final class AdminModule implements CellulosesZModule {
                 permissions,
                 serverThread,
                 clock,
-                current
+                settings
         );
         var jailCommands = new DefaultJailCommandService(
                 jails,
@@ -144,14 +154,14 @@ public final class AdminModule implements CellulosesZModule {
                 locations,
                 serverThread,
                 clock,
-                current
+                settings
         );
         var controls = new DefaultPlayerControlCommandService(
                 players,
                 context.services().require(PlayerStatePlatformService.class),
                 permissions,
                 context.services().require(PlayerCommandDispatchService.class),
-                current
+                settings
         );
 
         context.services().register(BanService.class, bans);
@@ -424,21 +434,33 @@ public final class AdminModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var next = context.configs()
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "AdminConfig has not been initialized");
+        var candidate = reload.configs()
                 .require("module.admin", AdminConfig.class)
                 .validatedCopy();
 
-        requireNonNull(
-                config,
-                "AdminConfig has not been initialized"
-        ).copyFrom(next);
-        requireNonNull(
-                mutePolicy,
-                "MuteCommandMiddleware has not been initialized"
-        ).configure(next);
-
-        schedule(context);
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    requireNonNull(runtimeSettings, "AdminRuntimeSettings has not been initialized")
+                            .configure(candidate);
+                    requireNonNull(mutePolicy, "MuteCommandMiddleware has not been initialized")
+                            .configure(candidate);
+                    schedule(context);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    requireNonNull(runtimeSettings, "AdminRuntimeSettings has not been initialized")
+                            .configure(previous);
+                    requireNonNull(mutePolicy, "MuteCommandMiddleware has not been initialized")
+                            .configure(previous);
+                    schedule(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     private void schedule(ModuleContext context) {
@@ -447,13 +469,13 @@ public final class AdminModule implements CellulosesZModule {
         }
 
         var seconds = requireNonNull(
-                config,
-                "AdminConfig has not been initialized"
-        ).jailedPlayerCheckSeconds;
+                runtimeSettings,
+                "AdminRuntimeSettings has not been initialized"
+        ).jailedPlayerCheckSeconds();
 
         var period = Math.multiplyExact(seconds, 20L);
 
-        maintenance = context.scheduler().syncRepeating(
+        maintenance = context.scope().own(context.scheduler().syncRepeating(
                 () -> {
                     requireNonNull(tempBans, "TempBanService has not been initialized")
                             .purgeExpired()
@@ -510,7 +532,7 @@ public final class AdminModule implements CellulosesZModule {
                 },
                 20L,
                 period
-        );
+        ));
     }
 
     private static Duration maximumDuration(long seconds) {

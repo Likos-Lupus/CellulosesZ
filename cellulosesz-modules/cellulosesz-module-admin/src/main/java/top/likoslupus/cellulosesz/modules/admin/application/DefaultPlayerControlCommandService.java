@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.KillKind;
 import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.util.Map;
 import java.util.Optional;
@@ -25,14 +25,14 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
     private final PlayerStatePlatformService states;
     private final PermissionService permissions;
     private final PlayerCommandDispatchService dispatch;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     public DefaultPlayerControlCommandService(
             PlayerDirectory players,
             PlayerStatePlatformService states,
             PermissionService permissions,
             PlayerCommandDispatchService dispatch,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.players = requireNonNull(players, "players");
         this.states = requireNonNull(states, "states");
@@ -55,14 +55,15 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "commands.admin.burn.invalid-seconds",
-                    Map.of("maximum", config.maximumBurnSeconds)
+                    Map.of("maximum", config.maximumBurnSeconds())
             ));
         }
 
         var result = seconds == 0
                 ? states.extinguish(target.orElseThrow())
                 : states.setFireTicks(target.orElseThrow(), ticks);
-        return completed(result.successful() ?
+        return completed(result.successful()
+                ?
                 AdminResult.success(
                         seconds == 0
                                 ? "commands.admin.burn.extinguished"
@@ -71,8 +72,8 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                                 "player", target.orElseThrow().name(),
                                 "seconds", seconds
                         )
-                ) :
-                AdminResult.failure(
+                )
+                : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "service.admin.platform-failed"
                 )
@@ -93,12 +94,13 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         }
 
         var result = states.extinguish(value.orElseThrow());
-        return completed(result.successful() ?
+        return completed(result.successful()
+                ?
                 AdminResult.success(
                         "commands.admin.ext.success",
                         Map.of("player", value.orElseThrow().name())
-                ) :
-                AdminResult.failure(
+                )
+                : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "service.admin.platform-failed"
                 )
@@ -107,7 +109,10 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
 
     @Override
     public CompletableFuture<AdminResult> ice(Optional<CellPlayer> actor, Optional<String> target) {
-        var value = target.flatMap(players::onlinePlayer).or(() -> actor);
+        var value = target
+                .flatMap(players::onlinePlayer)
+                .or(() -> actor);
+
         if (value.isEmpty()) {
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
@@ -116,12 +121,13 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         }
 
         var result = states.freeze(value.orElseThrow());
-        return completed(result.successful() ?
+        return completed(result.successful()
+                ?
                 AdminResult.success(
                         "commands.admin.ice.success",
                         Map.of("player", value.orElseThrow().name())
-                ) :
-                AdminResult.failure(
+                )
+                : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "service.admin.platform-failed"
                 ));
@@ -147,12 +153,13 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 KillKind.ADMIN,
                 force
         );
-        return completed(result.successful() ?
+        return completed(result.successful()
+                ?
                 AdminResult.success(
                         "commands.admin.kill.success",
                         Map.of("player", target.orElseThrow().name())
-                ) :
-                AdminResult.failure(
+                )
+                : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "commands.admin.kill.failed",
                         Map.of("player", target.orElseThrow().name())
@@ -188,7 +195,10 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(notFound(player));
         }
 
-        if (actor.uuid().filter(target.orElseThrow().uuid()::equals).isPresent()) {
+        if (actor.uuid()
+                .filter(target.orElseThrow().uuid()::equals)
+                .isPresent()
+        ) {
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "commands.admin.sudo.self"
@@ -209,7 +219,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         }
 
         if (value.isBlank()
-                || value.length() > config.sudoMaximumCommandLength
+                || value.length() > config.sudoMaximumCommandLength()
                 || value.chars().anyMatch(Character::isISOControl)
         ) {
             return completed(AdminResult.failure(
@@ -237,15 +247,16 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 CommandDispatchOrigin.SUDO,
                 value
         ));
-        return completed(result.successful() ?
+        return completed(result.successful()
+                ?
                 AdminResult.success(
                         "commands.admin.sudo.success",
                         Map.of(
                                 "player", target.orElseThrow().name(),
                                 "result", result.commandResult()
                         )
-                ) :
-                AdminResult.failure(
+                )
+                : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "commands.admin.sudo.failed",
                         Map.of("player", target.orElseThrow().name())

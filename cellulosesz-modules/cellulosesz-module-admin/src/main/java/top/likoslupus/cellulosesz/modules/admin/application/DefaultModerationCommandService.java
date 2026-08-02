@@ -5,7 +5,7 @@ import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -24,7 +24,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
     private final PermissionService permissions;
     private final ServerThreadExecutor serverThread;
     private final Clock clock;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     public DefaultModerationCommandService(
             BanService bans,
@@ -34,7 +34,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
             PermissionService permissions,
             ServerThreadExecutor serverThread,
             Clock clock,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.bans = requireNonNull(bans, "bans");
         this.mutes = requireNonNull(mutes, "mutes");
@@ -135,12 +135,12 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         clock.instant(),
                         duration.orElseThrow()
                 );
-            } else if (config.defaultMuteSeconds <= 0) {
+            } else if (config.defaultMuteSeconds() <= 0) {
                 expiration = Expiration.permanent();
             } else {
                 expiration = Expiration.after(
                         clock.instant(),
-                        Duration.ofSeconds(config.defaultMuteSeconds)
+                        Duration.ofSeconds(config.defaultMuteSeconds())
                 );
             }
 
@@ -160,13 +160,14 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         player,
                         actor.uuid().flatMap(players::onlinePlayer).orElse(null)
                 )
-                .thenCompose(value -> value.optionalUuid().isEmpty() ?
+                .thenCompose(value -> value.optionalUuid().isEmpty()
+                        ?
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
                                 Map.of("player", player)
-                        )) :
-                        mutes.unmute(
+                        ))
+                        : mutes.unmute(
                                 value.optionalUuid().orElseThrow(),
                                 value.name(),
                                 actor
@@ -182,9 +183,10 @@ public final class DefaultModerationCommandService implements ModerationCommandS
         var value = input.trim();
 
         if (value.isBlank()) {
-            value = config.defaultReason;
+            value = config.defaultReason();
         }
-        if (value.length() > config.maximumReasonLength
+
+        if (value.length() > config.maximumReasonLength()
                 || value.chars().anyMatch(Character::isISOControl)
         ) {
             throw new IllegalArgumentException("invalid reason");

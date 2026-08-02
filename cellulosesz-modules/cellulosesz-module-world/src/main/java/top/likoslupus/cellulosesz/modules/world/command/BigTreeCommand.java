@@ -12,7 +12,7 @@ import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.command.argument.TreeTypeArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Set;
@@ -28,11 +28,11 @@ public final class BigTreeCommand implements CommandContributor {
             TreeType.DARK_OAK
     );
     private final WorldPlatformService worlds;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public BigTreeCommand(
             WorldPlatformService worlds,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.config = requireNonNull(config, "config");
@@ -87,7 +87,7 @@ public final class BigTreeCommand implements CommandContributor {
                     return player
                             .<PlatformResult<?>>map(value -> worlds.generateTree(
                                     value,
-                                    config.treeTargetDistance,
+                                    config.treeTargetDistance(),
                                     type
                             ))
                             .orElseGet(() -> PlatformResult.failure(

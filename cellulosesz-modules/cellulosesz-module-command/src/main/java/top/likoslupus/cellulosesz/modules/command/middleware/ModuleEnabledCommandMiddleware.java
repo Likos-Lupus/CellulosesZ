@@ -3,12 +3,15 @@ package top.likoslupus.cellulosesz.modules.command.middleware;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 public final class ModuleEnabledCommandMiddleware implements CommandMiddleware {
 
@@ -19,7 +22,7 @@ public final class ModuleEnabledCommandMiddleware implements CommandMiddleware {
     }
 
     @Override
-    public int invoke(
+    public CompletionStage<CommandOutcome> invoke(
             CommandDescriptor descriptor,
             CommandPolicyContext policy,
             CommandContinuation continuation
@@ -30,7 +33,7 @@ public final class ModuleEnabledCommandMiddleware implements CommandMiddleware {
                     GeneratedMessageKeys.COMMON_MODULE_DISABLED,
                     Map.of("module", moduleId)
             ));
-            return 0;
+            return CompletableFuture.completedFuture(CommandOutcome.rejected());
         }
         return continuation.proceed();
     }

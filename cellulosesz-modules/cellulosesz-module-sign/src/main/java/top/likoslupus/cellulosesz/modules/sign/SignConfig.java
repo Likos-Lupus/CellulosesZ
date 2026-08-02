@@ -14,6 +14,47 @@ public final class SignConfig {
     public Interaction interaction = new Interaction();
     public Signs signs = new Signs();
 
+    public SignConfig validatedCopy() {
+        var copy = new SignConfig();
+        copy.copyFrom(this);
+        copy.validate();
+        return copy;
+    }
+
+    public void copyFrom(SignConfig source) {
+        requireNonNull(source, "source").validate();
+        enabled = source.enabled;
+        editTargetDistance = source.editTargetDistance;
+        editMaximumLineLength = source.editMaximumLineLength;
+        interaction = new Interaction();
+        interaction.cooldownTicks = source.interaction.cooldownTicks;
+        signs = new Signs();
+        signs.warp = source.signs.warp;
+        signs.buy = source.signs.buy;
+        signs.sell = source.signs.sell;
+        signs.kit = source.signs.kit;
+        signs.balance = source.signs.balance;
+        signs.free = source.signs.free;
+        signs.trade = source.signs.trade;
+        signs.enchant = source.signs.enchant;
+        signs.repair = source.signs.repair;
+        signs.gamemode = source.signs.gamemode;
+        signs.heal = source.signs.heal;
+        signs.info = source.signs.info;
+        signs.mail = source.signs.mail;
+        signs.randomteleport = source.signs.randomteleport;
+        signs.anvil = source.signs.anvil;
+        signs.cartography = source.signs.cartography;
+        signs.disposal = source.signs.disposal;
+        signs.grindstone = source.signs.grindstone;
+        signs.loom = source.signs.loom;
+        signs.smithing = source.signs.smithing;
+        signs.workbench = source.signs.workbench;
+        signs.spawnmob = source.signs.spawnmob;
+        signs.time = source.signs.time;
+        signs.weather = source.signs.weather;
+    }
+
     public void validate() {
         requireInRange(
                 editTargetDistance,

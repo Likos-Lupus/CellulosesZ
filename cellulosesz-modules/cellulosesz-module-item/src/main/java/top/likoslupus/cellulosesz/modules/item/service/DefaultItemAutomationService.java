@@ -19,8 +19,9 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static java.util.Objects.requireNonNull;
 import static top.likoslupus.cellulosesz.api.validation.Checks.*;
+
+import static java.util.Objects.requireNonNull;
 
 public final class DefaultItemAutomationService implements ItemAutomationService {
 
@@ -48,8 +49,11 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     }
 
     public void configure(ItemConfig config) {
-        this.config = requireNonNull(config, "config");
-        requirePositive(config.unlimitedMinimum, "unlimitedMinimum");
+        var snapshot = new ItemConfig();
+        snapshot.copyFrom(requireNonNull(config, "config"));
+        snapshot.validate();
+        requirePositive(snapshot.unlimitedMinimum, "unlimitedMinimum");
+        this.config = snapshot;
     }
 
     @Override
@@ -92,13 +96,17 @@ public final class DefaultItemAutomationService implements ItemAutomationService
         var item = normalize(itemId);
         var value = normalizeCommand(command);
 
-        return updateTools(uuid, tools -> {
-            var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
-            if (!commands.contains(value)) {
-                commands.add(value);
-            }
-            tools.put(item, List.copyOf(commands));
-        });
+        return updateTools(
+                uuid,
+                tools -> {
+                    var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
+                    if (!commands.contains(value)) {
+                        commands.add(value);
+                    }
+
+                    tools.put(item, List.copyOf(commands));
+                }
+        );
     }
 
     @Override
@@ -111,20 +119,23 @@ public final class DefaultItemAutomationService implements ItemAutomationService
         var value = normalizeCommand(command);
 
         return users
-                .update(uuid, user -> {
-                    var tools = mutableTools(user.state().powerToolCommands());
-                    var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
-                    var removed = commands.remove(value);
+                .update(
+                        uuid,
+                        user -> {
+                            var tools = mutableTools(user.state().powerToolCommands());
+                            var commands = new ArrayList<>(tools.getOrDefault(item, List.of()));
+                            var removed = commands.remove(value);
 
-                    if (commands.isEmpty()) {
-                        tools.remove(item);
-                    } else {
-                        tools.put(item, List.copyOf(commands));
-                    }
+                            if (commands.isEmpty()) {
+                                tools.remove(item);
+                            } else {
+                                tools.put(item, List.copyOf(commands));
+                            }
 
-                    var updated = user.withState(user.state().withPowerToolCommands(tools));
-                    return UserUpdate.of(updated, PlatformResult.success(removed));
-                })
+                            var updated = user.withState(user.state().withPowerToolCommands(tools));
+                            return UserUpdate.of(updated, PlatformResult.success(removed));
+                        }
+                )
                 .exceptionally(_ -> PlatformResult.failure(
                         PlatformOperationStatus.STORAGE_FAILURE,
                         "user-save-failed"
@@ -146,7 +157,8 @@ public final class DefaultItemAutomationService implements ItemAutomationService
             UUID uuid,
             Consumer<Map<String, List<String>>> mutation
     ) {
-        return users.updateVoid(
+        return users
+                .updateVoid(
                         uuid,
                         user -> {
                             var tools = mutableTools(user.state().powerToolCommands());
@@ -223,7 +235,10 @@ public final class DefaultItemAutomationService implements ItemAutomationService
     }
 
     @Override
-    public CompletableFuture<PlatformResult<Void>> setPowerToolsEnabled(UUID uuid, boolean enabled) {
+    public CompletableFuture<PlatformResult<Void>> setPowerToolsEnabled(
+            UUID uuid,
+            boolean enabled
+    ) {
         return users
                 .updateVoid(
                         uuid,

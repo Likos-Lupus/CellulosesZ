@@ -7,12 +7,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.text.application.TextCommandService;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.IntFunction;
 import java.util.function.Supplier;
 
@@ -199,7 +201,9 @@ public final class TextCommand implements CommandContributor {
                             result.messages()
                     );
 
-                    return result.success() ? 1 : 0;
+                    return CompletableFuture.completedFuture(
+                            CommandOutcome.fromSuccess(result.success())
+                    );
                 }
         );
     }

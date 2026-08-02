@@ -132,6 +132,13 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
 
     @Override
     public CompletableFuture<CellUser> loadFromPlayer(CellPlayer player) {
+        return loadFromPlayer(player, true);
+    }
+
+    public CompletableFuture<CellUser> loadFromPlayer(
+            CellPlayer player,
+            boolean updateNameCache
+    ) {
         requireNonNull(player, "player");
         return update(
                 player.uuid(),
@@ -141,17 +148,17 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
                     var firstJoin = timestamps.firstJoin() <= 0
                             ? now
                             : timestamps.firstJoin();
-                    var updated = user
-                            .withLastKnownName(player.name())
-                            .withTimestamps(new UserTimestamps(
-                                    firstJoin,
-                                    now,
-                                    timestamps.lastQuit(),
-                                    timestamps.playTimeMillis(),
-                                    now,
-                                    now
-                            ));
-
+                    var updated = user.withTimestamps(new UserTimestamps(
+                            firstJoin,
+                            now,
+                            timestamps.lastQuit(),
+                            timestamps.playTimeMillis(),
+                            now,
+                            now
+                    ));
+                    if (updateNameCache) {
+                        updated = updated.withLastKnownName(player.name());
+                    }
                     return UserUpdate.of(updated, updated);
                 }
         );

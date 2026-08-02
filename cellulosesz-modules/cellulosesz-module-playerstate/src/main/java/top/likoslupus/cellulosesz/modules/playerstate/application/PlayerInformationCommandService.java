@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.playerstate.application;
 
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
@@ -18,6 +17,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -161,10 +161,12 @@ public final class PlayerInformationCommandService {
                             Map.entry("z", round(location.z)),
                             Map.entry("yaw", round(location.yaw)),
                             Map.entry("pitch", round(location.pitch)),
-                            Map.entry("distance", distance
-                                    .map(PlayerInformationCommandService::round)
-                                    .map(Object::toString)
-                                    .orElse("-")
+                            Map.entry(
+                                    "distance",
+                                    distance
+                                            .map(PlayerInformationCommandService::round)
+                                            .map(Object::toString)
+                                            .orElse("-")
                             )
                     )
             );
@@ -198,7 +200,8 @@ public final class PlayerInformationCommandService {
                             ))
                             .filter(entry -> entry.distanceSquared() <= maximumSquared)
                             .sorted(Comparator.comparingDouble(NearbyPlayer::distanceSquared)
-                                    .thenComparing(entry -> entry.player().name(),
+                                    .thenComparing(
+                                            entry -> entry.player().name(),
                                             String.CASE_INSENSITIVE_ORDER
                                     )
                             )
@@ -206,8 +209,10 @@ public final class PlayerInformationCommandService {
                             .map(entry -> LocalizedMessage.of(
                                     "commands.playerstate.near-entry",
                                     Map.of(
-                                            "player", displayNames.displayName(entry.player()),
-                                            "distance", Math.round(Math.sqrt(entry.distanceSquared()))
+                                            "player",
+                                            displayNames.displayName(entry.player()),
+                                            "distance",
+                                            Math.round(Math.sqrt(entry.distanceSquared()))
                                     )
                             ))
                             .toList();
@@ -309,7 +314,11 @@ public final class PlayerInformationCommandService {
                     if (resolved.optionalUuid().isEmpty()
                             || resolved.vanished()
                             && viewer.isPresent()
-                            && !vanish.canSee(viewer.orElseThrow(), resolved.optionalUuid().orElseThrow())
+                            &&
+                            !vanish.canSee(
+                                    viewer.orElseThrow(),
+                                    resolved.optionalUuid().orElseThrow()
+                            )
                     ) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
@@ -325,7 +334,7 @@ public final class PlayerInformationCommandService {
                                     user.timestamps().activeSessionStartedAt(),
                                     System.currentTimeMillis()
                             )))
-                            .exceptionally(_ -> PlayerStateCommandResult.failure(
+                            .exceptionally(_ -> PlayerStateCommandResult.failed(
                                     "service.user.load-failed"
                             ));
 
@@ -414,16 +423,23 @@ public final class PlayerInformationCommandService {
                                 return finish(PlayerStateCommandResult.success(
                                         "commands.playerstate.seen-offline",
                                         Map.of(
-                                                "player", resolved.name(),
-                                                "timestamp", Instant.ofEpochMilli(user.timestamps().lastQuit()).toString(),
-                                                "ago", duration(Math.max(
+                                                "player",
+                                                resolved.name(),
+                                                "timestamp",
+                                                Instant
+                                                        .ofEpochMilli(user.timestamps().lastQuit())
+                                                        .toString(),
+                                                "ago",
+                                                duration(Math.max(
                                                         0L,
-                                                        System.currentTimeMillis() - user.timestamps().lastQuit()
+                                                        System.currentTimeMillis() - user
+                                                                .timestamps()
+                                                                .lastQuit()
                                                 ))
                                         )
                                 ));
                             })
-                            .exceptionally(_ -> PlayerStateCommandResult.failure(
+                            .exceptionally(_ -> PlayerStateCommandResult.failed(
                                     "service.user.load-failed"
                             ));
                 });
@@ -466,12 +482,26 @@ public final class PlayerInformationCommandService {
                                         "commands.playerstate.whois",
                                         Map.ofEntries(
                                                 Map.entry("player", resolved.name()),
-                                                Map.entry("uuid", showUuid ? uuid.toString() : "-"),
+                                                Map.entry(
+                                                        "uuid",
+                                                        showUuid
+                                                                ? uuid.toString()
+                                                                : "-"
+                                                ),
                                                 Map.entry("online", resolved.online().isPresent()),
                                                 Map.entry("afk", user.state().afk()),
-                                                Map.entry("firstJoin", instantOrUnknown(user.timestamps().firstJoin())),
-                                                Map.entry("lastJoin", instantOrUnknown(user.timestamps().lastJoin())),
-                                                Map.entry("lastQuit", instantOrUnknown(user.timestamps().lastQuit())),
+                                                Map.entry(
+                                                        "firstJoin",
+                                                        instantOrUnknown(user.timestamps().firstJoin())
+                                                ),
+                                                Map.entry(
+                                                        "lastJoin",
+                                                        instantOrUnknown(user.timestamps().lastJoin())
+                                                ),
+                                                Map.entry(
+                                                        "lastQuit",
+                                                        instantOrUnknown(user.timestamps().lastQuit())
+                                                ),
                                                 Map.entry("playtime", duration(total)),
                                                 Map.entry(
                                                         "nickname",
@@ -482,7 +512,7 @@ public final class PlayerInformationCommandService {
                                         )
                                 ));
                             })
-                            .exceptionally(_ -> PlayerStateCommandResult.failure(
+                            .exceptionally(_ -> PlayerStateCommandResult.failed(
                                     "service.user.load-failed"
                             ));
                 });

@@ -12,6 +12,7 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandExecutionPipeline;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.service.CommandAliasRegistry;
 import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
@@ -19,12 +20,11 @@ import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
-import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.*;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -227,30 +227,48 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String auditSummary,
-            Function<MinecraftCommandPolicyContext, Integer> terminal
+            Function<
+                    MinecraftCommandPolicyContext,
+                    ? extends CompletionStage<CommandOutcome>
+                    > terminal
     ) {
-        var policy = new MinecraftCommandPolicyContext(
-                command.getSource(),
-                descriptor,
-                permissions(),
-                players,
-                responder,
-                invokedLabel(command.getInput()),
-                auditSummary
-        );
-        return pipeline.execute(descriptor, policy, () -> terminal.apply(policy));
-    }
+        final MinecraftCommandPolicyContext policy;
+        try {
+            policy = new MinecraftCommandPolicyContext(
+                    command.getSource(),
+                    descriptor,
+                    permissions(),
+                    players,
+                    responder,
+                    invokedLabel(command.getInput()),
+                    auditSummary
+            );
 
-    @Override
-    public void internalFailure(
-            MinecraftCommandPolicyContext policy,
-            Throwable failure
-    ) {
-        bootstrap.logger().error(
-                "Command /" + policy.canonicalRoot() + " failed after asynchronous acceptance",
-                failure
-        );
-        policy.error(LocalizedMessage.of(GeneratedMessageKeys.COMMANDS_COMMON_PLATFORM_INTERNAL_ERROR));
+            pipeline
+                    .execute(
+                            descriptor,
+                            policy,
+                            () -> terminal.apply(policy)
+                    )
+                    .whenComplete((_, failure) -> {
+                        if (failure != null) {
+                            bootstrap.logger().error(
+                                    "Command /%s pipeline completion callback failed".formatted(
+                                            policy.canonicalRoot()
+                                    ),
+                                    failure
+                            );
+                        }
+                    });
+
+            return 1;
+        } catch (RuntimeException failure) {
+            bootstrap.logger().error(
+                    "Failed to start command /" + descriptor.canonicalName(),
+                    failure
+            );
+            return 0;
+        }
     }
 
     private String invokedLabel(String input) {
@@ -285,8 +303,8 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
 
     public Map<String, List<String>> configuredAliases() {
         var result = new LinkedHashMap<String, List<String>>();
-        bootstrap.coreConfig().commands.aliases.forEach(
-                (command, aliases) -> result.put(
+        bootstrap.coreConfig().commands.aliases.forEach((command, aliases) ->
+                result.put(
                         command.toLowerCase(Locale.ROOT),
                         List.copyOf(aliases)
                 )

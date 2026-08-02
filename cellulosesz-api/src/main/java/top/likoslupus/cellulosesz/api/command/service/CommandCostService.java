@@ -2,12 +2,12 @@ package top.likoslupus.cellulosesz.api.command.service;
 
 import java.math.BigDecimal;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 public interface CommandCostService {
 
     BigDecimal cost(String command);
 
-    CompletableFuture<Boolean> charge(UUID uuid, String command);
+    CompletionStage<CommandCostReserveResult> reserve(UUID uuid, String command);
 
 }

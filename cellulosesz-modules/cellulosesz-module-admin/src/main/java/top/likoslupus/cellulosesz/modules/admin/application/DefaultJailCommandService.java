@@ -6,7 +6,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -25,7 +25,7 @@ public final class DefaultJailCommandService implements JailCommandService {
     private final PlayerLocationPlatformService locations;
     private final ServerThreadExecutor serverThread;
     private final Clock clock;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     public DefaultJailCommandService(
             JailService jails,
@@ -34,7 +34,7 @@ public final class DefaultJailCommandService implements JailCommandService {
             PlayerLocationPlatformService locations,
             ServerThreadExecutor serverThread,
             Clock clock,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.jails = requireNonNull(jails, "jails");
         this.players = requireNonNull(players, "players");
@@ -94,12 +94,12 @@ public final class DefaultJailCommandService implements JailCommandService {
                     clock.instant(),
                     duration.orElseThrow()
             );
-        } else if (config.defaultJailSeconds <= 0) {
+        } else if (config.defaultJailSeconds() <= 0) {
             expiration = Expiration.permanent();
         } else {
             expiration = Expiration.after(
                     clock.instant(),
-                    Duration.ofSeconds(config.defaultJailSeconds)
+                    Duration.ofSeconds(config.defaultJailSeconds())
             );
         }
 
@@ -120,13 +120,14 @@ public final class DefaultJailCommandService implements JailCommandService {
                                 .flatMap(players::onlinePlayer)
                                 .orElse(null)
                 )
-                .thenCompose(value -> value.optionalUuid().isEmpty() ?
+                .thenCompose(value -> value.optionalUuid().isEmpty()
+                        ?
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
                                 Map.of("player", player)
-                        )) :
-                        jails.unjail(
+                        ))
+                        : jails.unjail(
                                 value.optionalUuid().orElseThrow(),
                                 value.name(),
                                 actor
@@ -141,9 +142,10 @@ public final class DefaultJailCommandService implements JailCommandService {
         var value = input.trim();
 
         if (value.isBlank()) {
-            value = config.defaultReason;
+            value = config.defaultReason();
         }
-        if (value.length() > config.maximumReasonLength
+
+        if (value.length() > config.maximumReasonLength()
                 || value.chars().anyMatch(Character::isISOControl)
         ) {
             throw new IllegalArgumentException("invalid reason");

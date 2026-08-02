@@ -12,7 +12,7 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
-import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.data.JailDocument;
 
 import java.nio.file.Path;
@@ -36,7 +36,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
     private final TeleportService teleports;
     private final ServerThreadExecutor serverThread;
     private final Clock clock;
-    private final AdminConfig config;
+    private final AdminRuntimeSettings config;
 
     private final SerialAsyncQueue mutations = new SerialAsyncQueue(
             Runnable::run,
@@ -52,7 +52,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
             TeleportService teleports,
             ServerThreadExecutor serverThread,
             Clock clock,
-            AdminConfig config
+            AdminRuntimeSettings config
     ) {
         this.storage = requireNonNull(storage, "storage");
         this.path = requireNonNull(path, "path");
@@ -445,7 +445,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
             JailedPlayer record
     ) {
         if (record.returnLocation().isEmpty()
-                || !config.teleportOnJailRelease
+                || !config.teleportOnJailRelease()
         ) {
             return removeAccepted(record.uuid())
                     .thenApply(removed ->

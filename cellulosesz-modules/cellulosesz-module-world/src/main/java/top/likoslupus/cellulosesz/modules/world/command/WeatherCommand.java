@@ -16,7 +16,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.world.command.argument.LoadedWorldArgument;
 import top.likoslupus.cellulosesz.modules.world.command.argument.WeatherTypeArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,13 +28,13 @@ public final class WeatherCommand implements CommandContributor {
     private final WorldService service;
     private final WorldDirectory worlds;
     private final PlayerLocationPlatformService locations;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public WeatherCommand(
             WorldService service,
             WorldDirectory worlds,
             PlayerLocationPlatformService locations,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.service = requireNonNull(service, "service");
         this.worlds = requireNonNull(worlds, "worlds");
@@ -54,7 +54,7 @@ public final class WeatherCommand implements CommandContributor {
                         context,
                         command,
                         descriptor,
-                        config.defaultWeatherSeconds,
+                        config.defaultWeatherSeconds(),
                         Optional.empty()
                 ))
                 .then(Commands.argument("seconds", IntegerArgumentType.integer(1, 1_000_000))

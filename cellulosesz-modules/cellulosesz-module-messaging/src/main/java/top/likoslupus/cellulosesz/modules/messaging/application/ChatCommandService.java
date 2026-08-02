@@ -35,7 +35,7 @@ public final class ChatCommandService {
     private final PermissionService permissions;
     private final DisplayNameService displayNames;
     private final MessageRenderer renderer;
-    private final MessagingConfig config;
+    private volatile MessagingConfig config;
 
     public ChatCommandService(
             ServiceRegistry services,
@@ -58,7 +58,11 @@ public final class ChatCommandService {
         this.permissions = requireNonNull(permissions, "permissions");
         this.displayNames = requireNonNull(displayNames, "displayNames");
         this.renderer = requireNonNull(renderer, "renderer");
-        this.config = requireNonNull(config, "config");
+        this.config = requireNonNull(config, "config").validatedCopy();
+    }
+
+    public void configure(MessagingConfig config) {
+        this.config = requireNonNull(config, "config").validatedCopy();
     }
 
     public CompletableFuture<MessageResult> broadcast(String message) {
@@ -163,8 +167,10 @@ public final class ChatCommandService {
                     case AMBIGUOUS -> MessageResult.failure(
                             "commands.messaging.broadcast-world-command.ambiguous",
                             Map.of(
-                                    "world", input,
-                                    "candidates", String.join(", ", result.resolution().candidates())
+                                    "world",
+                                    input,
+                                    "candidates",
+                                    String.join(", ", result.resolution().candidates())
                             )
                     );
                     case RESOLVED -> deliveryResult(
@@ -261,7 +267,8 @@ public final class ChatCommandService {
                             "player.list",
                             Map.of(
                                     "count", visible.size(),
-                                    "players", text)
+                                    "players", text
+                            )
                     );
                 });
     }

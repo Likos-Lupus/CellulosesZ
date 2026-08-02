@@ -13,7 +13,7 @@ import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.item.ItemConfig;
+import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
 
 import java.util.List;
@@ -24,12 +24,12 @@ public final class RecipeCommand implements CommandContributor {
 
     private final ItemService items;
     private final RecipePlatformService recipes;
-    private final ItemConfig config;
+    private final ItemRuntimeSettings config;
 
     public RecipeCommand(
             ItemService items,
             RecipePlatformService recipes,
-            ItemConfig config
+            ItemRuntimeSettings config
     ) {
         this.items = requireNonNull(items, "items");
         this.recipes = requireNonNull(recipes, "recipes");
@@ -99,7 +99,7 @@ public final class RecipeCommand implements CommandContributor {
                 _ -> {
                     var result = recipes.recipesFor(
                             ItemIdArgument.get(command, "item"),
-                            config.maximumRecipeIngredientCandidates
+                            config.maximumRecipeIngredientCandidates()
                     );
 
                     if (!result.successful() || result.value().isEmpty()) {

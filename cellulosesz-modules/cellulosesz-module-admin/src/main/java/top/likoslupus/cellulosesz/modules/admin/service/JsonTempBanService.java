@@ -13,6 +13,7 @@ import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.data.TempBanDocument;
 
 import java.net.InetAddress;
@@ -40,7 +41,7 @@ public final class JsonTempBanService
     private final MessageRenderer renderer;
     private final ServerThreadExecutor serverThread;
     private final Clock clock;
-    private final boolean disconnectOnline;
+    private final AdminRuntimeSettings settings;
 
     private final SerialAsyncQueue mutations = new SerialAsyncQueue(
             Runnable::run,
@@ -58,7 +59,7 @@ public final class JsonTempBanService
             MessageRenderer renderer,
             ServerThreadExecutor serverThread,
             Clock clock,
-            boolean disconnectOnline
+            AdminRuntimeSettings settings
     ) {
         this.storage = requireNonNull(storage, "storage");
         this.path = requireNonNull(path, "path");
@@ -69,7 +70,7 @@ public final class JsonTempBanService
         this.renderer = requireNonNull(renderer, "renderer");
         this.serverThread = requireNonNull(serverThread, "serverThread");
         this.clock = requireNonNull(clock, "clock");
-        this.disconnectOnline = disconnectOnline;
+        this.settings = requireNonNull(settings, "settings");
     }
 
     @Override
@@ -191,7 +192,7 @@ public final class JsonTempBanService
                         "service.admin.temp-ban-success",
                         Map.of("player", name)
                 );
-            }).thenCompose(result -> (!result.success() || !disconnectOnline)
+            }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
                     ? completed(result)
                     : disconnectUser(
                             uuid,
@@ -236,7 +237,7 @@ public final class JsonTempBanService
                         "service.admin.temp-ban-ip-success",
                         Map.of("address", canonical)
                 );
-            }).thenCompose(result -> (!result.success() || !disconnectOnline)
+            }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
                     ? completed(result)
                     : disconnectAddress(
                             address,

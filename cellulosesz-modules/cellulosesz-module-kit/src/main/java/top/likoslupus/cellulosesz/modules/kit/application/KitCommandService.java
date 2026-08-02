@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.kit.application;
 
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 
@@ -44,17 +45,37 @@ public interface KitCommandService {
     ) {
 
         public ResetRequest {
-            requester = requireNonNull(requester, "requester");
+            requireNonNull(requester, "requester");
             kit = requireNonNull(kit, "kit");
-            target = requireNonNull(target, "target");
+            requireNonNull(target, "target");
         }
 
     }
 
     record Result(
-            boolean success,
+            CommandOutcome.Status status,
             LocalizedMessage message
     ) {
+
+        public Result(
+                boolean success,
+                LocalizedMessage message
+        ) {
+            this(
+                    success
+                            ? CommandOutcome.Status.SUCCESS
+                            : CommandOutcome.Status.REJECTED, message
+            );
+        }
+
+        public Result {
+            requireNonNull(status, "status");
+            requireNonNull(message, "message");
+        }
+
+        public boolean success() {
+            return status == CommandOutcome.Status.SUCCESS;
+        }
 
     }
 

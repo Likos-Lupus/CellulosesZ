@@ -4,9 +4,7 @@ import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.event.*;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.*;
@@ -28,6 +26,8 @@ import top.likoslupus.cellulosesz.modules.playerstate.service.DefaultVanishServi
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import org.jspecify.annotations.Nullable;
 
@@ -69,7 +69,6 @@ public final class PlayerStateModule implements CellulosesZModule {
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var users = context.services().require(UserService.class);
         var permissions = context.services().require(PermissionService.class);
@@ -304,26 +303,39 @@ public final class PlayerStateModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var current = requireNonNull(config, "config");
-        var candidate = context.configs().require(
-                "module.playerstate",
-                PlayerStateConfig.class
-        );
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previousConfig = requireNonNull(config, "config");
+        var previousSettings = requireNonNull(settings, "settings");
+        var candidate = reload.configs().require("module.playerstate", PlayerStateConfig.class);
         var replacement = PlayerStateCommandSettings.from(candidate);
 
-        current.copyFrom(candidate);
-        settings = replacement;
-        requireNonNull(information, "information").configure(replacement);
-
-        if (nearCommand != null) {
-            nearCommand.configure(replacement);
-        }
-
-        lastTime.clear();
-        lastWeather.clear();
-
-        scheduleTasks(context);
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    settings = replacement;
+                    requireNonNull(information, "information").configure(replacement);
+                    if (nearCommand != null) {
+                        nearCommand.configure(replacement);
+                    }
+                    lastTime.clear();
+                    lastWeather.clear();
+                    scheduleTasks(context);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previousConfig;
+                    settings = previousSettings;
+                    requireNonNull(information, "information").configure(previousSettings);
+                    if (nearCommand != null) {
+                        nearCommand.configure(previousSettings);
+                    }
+                    lastTime.clear();
+                    lastWeather.clear();
+                    scheduleTasks(context);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     @Override
@@ -344,18 +356,18 @@ public final class PlayerStateModule implements CellulosesZModule {
     private void scheduleTasks(ModuleContext context) {
         cancelTasks();
         var current = requireNonNull(settings, "settings");
-        afkTask = context.scheduler().syncRepeating(
+        afkTask = context.scope().own(context.scheduler().syncRepeating(
                 () -> checkAutomaticAfk(context),
                 20L,
                 current.activityCheckTicks()
-        );
+        ));
 
         if (current.persistPersonalTimeWeather()) {
-            personalWorldTask = context.scheduler().syncRepeating(
+            personalWorldTask = context.scope().own(context.scheduler().syncRepeating(
                     () -> maintainPersonalWorldState(context),
                     20L,
                     20L
-            );
+            ));
         }
     }
 

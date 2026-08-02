@@ -17,7 +17,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -29,14 +29,14 @@ public final class LightningCommand implements CommandContributor {
     private final PlayerTargetingService targeting;
     private final PlayerDirectory players;
     private final PlayerLocationPlatformService locations;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public LightningCommand(
             WorldPlatformService worlds,
             PlayerTargetingService targeting,
             PlayerDirectory players,
             PlayerLocationPlatformService locations,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.targeting = requireNonNull(targeting, "targeting");
@@ -69,7 +69,7 @@ public final class LightningCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "damage",
-                                        DoubleArgumentType.doubleArg(0.0D, config.lightningMaximumDamage)
+                                        DoubleArgumentType.doubleArg(0.0D, config.lightningMaximumDamage())
                                 )
                                 .executes(command -> target(
                                         context,
@@ -113,7 +113,7 @@ public final class LightningCommand implements CommandContributor {
 
                     var target = targeting.targetLocation(
                             player.orElseThrow(),
-                            config.targetDistance
+                            config.targetDistance()
                     );
                     return target.successful() && target.value().isPresent()
                             ?

@@ -5,6 +5,7 @@ import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
@@ -69,16 +70,16 @@ final class WorldCommandSupport {
             String audit,
             Function<MinecraftCommandPolicyContext, PlatformResult<?>> operation
     ) {
-        return CommandExecutions.sync(
+        return CommandExecutions.syncOutcome(
                 registration,
                 command,
                 descriptor,
                 audit,
-                policy -> respond(
-                        policy,
-                        descriptor.canonicalName(),
-                        operation.apply(policy)
-                )
+                policy -> {
+                    var result = operation.apply(policy);
+                    respond(policy, descriptor.canonicalName(), result);
+                    return CommandOutcome.fromPlatformStatus(result.status());
+                }
         );
     }
 
@@ -146,11 +147,10 @@ final class WorldCommandSupport {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) -> respond(
-                        policy,
-                        descriptor.canonicalName(),
-                        result
-                )
+                (policy, result) -> {
+                    respond(policy, descriptor.canonicalName(), result);
+                    return CommandOutcome.fromPlatformStatus(result.status());
+                }
         );
     }
 

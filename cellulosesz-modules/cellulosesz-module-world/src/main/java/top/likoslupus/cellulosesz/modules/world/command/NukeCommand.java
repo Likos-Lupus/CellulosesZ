@@ -16,7 +16,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,13 +28,13 @@ public final class NukeCommand implements CommandContributor {
     private final EntityPlatformService entities;
     private final PlayerDirectory players;
     private final PlayerLocationPlatformService locations;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public NukeCommand(
             EntityPlatformService entities,
             PlayerDirectory players,
             PlayerLocationPlatformService locations,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
         this.players = requireNonNull(players, "players");
@@ -91,7 +91,7 @@ public final class NukeCommand implements CommandContributor {
                 descriptor,
                 "nuke",
                 policy -> {
-                    if (!config.destructiveCommandsEnabled || !config.nukeEnabled) {
+                    if (!config.destructiveCommandsEnabled() || !config.nukeEnabled()) {
                         return PlatformResult.failure(
                                 PlatformOperationStatus.STATE_NOT_ALLOWED,
                                 "nuke-disabled"
@@ -105,12 +105,12 @@ public final class NukeCommand implements CommandContributor {
                             .<PlatformResult<?>>map(player -> entities.spawnTnt(
                                     new TntBurstRequest(
                                             locations.currentLocation(player),
-                                            config.nukeTntPerTarget,
-                                            config.nukeFuseTicks,
-                                            config.nukeExplosionPower,
-                                            config.explosionBlockDamage,
-                                            config.nukeSpread,
-                                            config.nukeHeight
+                                            config.nukeTntPerTarget(),
+                                            config.nukeFuseTicks(),
+                                            config.nukeExplosionPower(),
+                                            config.explosionBlockDamage(),
+                                            config.nukeSpread(),
+                                            config.nukeHeight()
                                     )
                             ))
                             .orElseGet(() -> PlatformResult.failure(

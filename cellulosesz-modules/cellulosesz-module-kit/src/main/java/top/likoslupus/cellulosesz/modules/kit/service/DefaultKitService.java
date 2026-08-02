@@ -5,12 +5,11 @@ import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.kit.KitClaimResult;
-import top.likoslupus.cellulosesz.api.kit.KitDefinition;
-import top.likoslupus.cellulosesz.api.kit.KitItem;
-import top.likoslupus.cellulosesz.api.kit.KitService;
+import top.likoslupus.cellulosesz.api.kit.*;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
+import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
+import top.likoslupus.cellulosesz.api.module.PreparedReloads;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
@@ -24,6 +23,7 @@ import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -41,9 +41,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
     private final InventoryPlatformService inventory;
     private final ServerThreadExecutor serverThread;
     private final Optional<EconomyService> economy;
-    private final KitConfig config;
     private final Path kitsDirectory;
-    private final LinkedHashMap<String, KitDefinition> kits = new LinkedHashMap<>();
     private final KeyedSerialAsyncQueue<UUID> claims = new KeyedSerialAsyncQueue<>(
             Runnable::run,
             MAXIMUM_PENDING_PER_PLAYER
@@ -56,6 +54,8 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
             Runnable::run,
             MAXIMUM_PENDING_RELOADS
     );
+    private RuntimeState state;
+    private long mutationVersion;
 
     public DefaultKitService(
             StorageService storage,
@@ -71,22 +71,43 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         this.inventory = requireNonNull(inventory, "inventory");
         this.serverThread = requireNonNull(serverThread, "serverThread");
         this.economy = requireNonNull(economy, "economy");
-        this.config = requireNonNull(config, "config");
+        var initialConfig = requireNonNull(config, "config");
         this.kitsDirectory = requireNonNull(kitsDirectory, "kitsDirectory");
+        this.state = new RuntimeState(
+                Map.of(),
+                initialConfig.createStarterKitWhenEmpty,
+                initialConfig.chargeKitCost
+        );
+    }
+
+    private static Throwable unwrap(Throwable failure) {
+        var current = failure;
+        while (current instanceof java.util.concurrent.CompletionException
+                && current.getCause() != null
+        ) {
+            current = current.getCause();
+        }
+        return current;
     }
 
     @Override
     public CompletableFuture<Void> initialize() {
-        return reload();
+        var current = state;
+        return prepareReload(
+                current.createStarterKitWhenEmpty(),
+                current.chargeKitCost()
+        ).thenCompose(PreparedKitReload::commit).toCompletableFuture();
     }
 
-    @Override
-    public CompletableFuture<Void> reload() {
+    public CompletableFuture<PreparedKitReload> prepareReload(
+            boolean createStarterKitWhenEmpty,
+            boolean chargeKitCost
+    ) {
         return reloads.submit(() -> storage.loadDirectory(
                                 kitsDirectory,
                                 KitDefinition.class
                         )
-                        .thenCompose(loaded -> {
+                        .thenApply(loaded -> {
                             var next = new LinkedHashMap<String, KitDefinition>();
                             loaded.stream()
                                     .map(this::validatedCopy)
@@ -94,33 +115,41 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                                     .forEach(kit -> {
                                         var previous = next.put(key(kit.id), kit);
                                         if (previous != null) {
-                                            throw new IllegalStateException("Duplicate kit id: " + kit.id);
+                                            throw new IllegalStateException(
+                                                    "Duplicate kit id: " + kit.id);
                                         }
                                     });
 
-                            if (next.isEmpty() && config.createStarterKitWhenEmpty) {
-                                var starter = starterKit();
-                                validate(starter);
-                                return storage
-                                        .save(path(starter.id), starter)
-                                        .thenRun(() -> replaceKits(Map.of(starter.id, starter)));
+                            var persistStarter = next.isEmpty() && createStarterKitWhenEmpty;
+                            if (persistStarter) {
+                                var starter = validatedCopy(starterKit());
+                                next.put(key(starter.id), starter);
                             }
 
-                            replaceKits(next);
-                            return CompletableFuture.completedFuture(null);
+                            synchronized (this) {
+                                return new PreparedReload(
+                                        state,
+                                        immutableDefinitions(next),
+                                        createStarterKitWhenEmpty,
+                                        chargeKitCost,
+                                        mutationVersion,
+                                        persistStarter
+                                );
+                            }
                         })
         );
     }
 
     @Override
     public synchronized List<KitDefinition> kits() {
-        return kits.values().stream()
-                .map(this::copyDefinition).toList();
+        return state.kits().values().stream()
+                .map(this::copyDefinition)
+                .toList();
     }
 
     @Override
     public synchronized Optional<KitDefinition> kit(String id) {
-        return Optional.ofNullable(kits.get(key(id)))
+        return Optional.ofNullable(state.kits().get(key(id)))
                 .map(this::copyDefinition);
     }
 
@@ -129,16 +158,19 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         var candidate = validatedCopy(kit);
         var id = key(candidate.id);
 
-        return enqueueDefinitionMutation(
+        return reloads.submit(() -> enqueueDefinitionMutation(
                 id,
                 () -> storage
                         .save(path(candidate.id), candidate)
                         .thenRun(() -> {
                             synchronized (this) {
-                                kits.put(id, candidate);
+                                var next = new LinkedHashMap<>(state.kits());
+                                next.put(id, candidate);
+                                state = state.withKits(immutableDefinitions(next));
+                                mutationVersion++;
                             }
                         })
-        );
+        ));
     }
 
     @Override
@@ -148,11 +180,11 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
             return CompletableFuture.completedFuture(false);
         }
 
-        return enqueueDefinitionMutation(
+        return reloads.submit(() -> enqueueDefinitionMutation(
                 normalizedId,
                 () -> {
                     synchronized (this) {
-                        if (!kits.containsKey(normalizedId)) {
+                        if (!state.kits().containsKey(normalizedId)) {
                             return CompletableFuture.completedFuture(false);
                         }
                     }
@@ -165,27 +197,37 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                                 }
 
                                 synchronized (this) {
-                                    kits.remove(normalizedId);
+                                    var next = new LinkedHashMap<>(state.kits());
+                                    next.remove(normalizedId);
+                                    state = state.withKits(immutableDefinitions(next));
+                                    mutationVersion++;
                                 }
+
                                 return true;
                             });
                 }
-        );
+        ));
     }
 
     @Override
     public CompletableFuture<KitClaimResult> claim(CellPlayer player, KitDefinition kit) {
         requireNonNull(player, "player");
         var candidate = validatedCopy(kit);
+        final boolean chargeKitCost;
+        synchronized (this) {
+            chargeKitCost = state.chargeKitCost();
+        }
+
         return claims.submit(
                 player.uuid(),
-                () -> claimSerialized(player, candidate)
+                () -> claimSerialized(player, candidate, chargeKitCost)
         );
     }
 
     private CompletableFuture<KitClaimResult> claimSerialized(
             CellPlayer player,
-            KitDefinition kit
+            KitDefinition kit,
+            boolean chargeKitCost
     ) {
         var cooldownKey = cooldownKey(kit.id);
         return users
@@ -203,7 +245,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                     }
 
                     var cost = parseMoney(kit.cost);
-                    if (config.chargeKitCost
+                    if (chargeKitCost
                             && cost.signum() > 0
                             && economy.isEmpty()
                     ) {
@@ -219,7 +261,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                     }
 
                     CompletableFuture<Optional<TransactionResult>> payment;
-                    if (config.chargeKitCost && cost.signum() > 0) {
+                    if (chargeKitCost && cost.signum() > 0) {
                         payment = economy
                                 .orElseThrow()
                                 .withdraw(
@@ -424,12 +466,6 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         );
     }
 
-    private KitDefinition validatedCopy(KitDefinition source) {
-        var copy = copyDefinition(source);
-        validate(copy);
-        return copy;
-    }
-
     private <T> CompletableFuture<T> enqueueDefinitionMutation(
             String id,
             Supplier<CompletableFuture<T>> operation
@@ -444,6 +480,24 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         }
 
         return kitsDirectory.resolve(normalizedId + ".yml");
+    }
+
+    private Map<String, KitDefinition> immutableDefinitions(
+            Map<String, KitDefinition> definitions
+    ) {
+        var copy = new LinkedHashMap<String, KitDefinition>();
+        definitions.forEach((id, definition) -> copy.put(
+                key(id),
+                validatedCopy(definition)
+        ));
+
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private KitDefinition validatedCopy(KitDefinition source) {
+        var copy = copyDefinition(source);
+        validate(copy);
+        return copy;
     }
 
     private void validate(KitDefinition kit) {
@@ -532,14 +586,6 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         return kit;
     }
 
-    private synchronized void replaceKits(Map<String, KitDefinition> next) {
-        kits.clear();
-        next.forEach((id, definition) -> kits.put(
-                key(id),
-                validatedCopy(definition)
-        ));
-    }
-
     @Override
     public void stopAccepting() {
         reloads.stopAccepting();
@@ -554,6 +600,18 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                 claims.drain(),
                 definitions.drain()
         );
+    }
+
+    private record RuntimeState(
+            Map<String, KitDefinition> kits,
+            boolean createStarterKitWhenEmpty,
+            boolean chargeKitCost
+    ) {
+
+        private RuntimeState withKits(Map<String, KitDefinition> next) {
+            return new RuntimeState(next, createStarterKitWhenEmpty, chargeKitCost);
+        }
+
     }
 
     private record CooldownReservation(
@@ -590,6 +648,113 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                     0L,
                     failure
             );
+        }
+
+    }
+
+    private final class PreparedReload implements PreparedKitReload {
+
+        private final RuntimeState previous;
+        private final Map<String, KitDefinition> candidate;
+        private final boolean createStarterKitWhenEmpty;
+        private final boolean chargeKitCost;
+        private final long preparedVersion;
+        private final boolean persistStarter;
+        private final PreparedModuleReload delegate;
+        private boolean starterCreated;
+        private long committedVersion = -1L;
+
+        private PreparedReload(
+                RuntimeState previous,
+                Map<String, KitDefinition> candidate,
+                boolean createStarterKitWhenEmpty,
+                boolean chargeKitCost,
+                long preparedVersion,
+                boolean persistStarter
+        ) {
+            this.previous = previous;
+            this.candidate = candidate;
+            this.createStarterKitWhenEmpty = createStarterKitWhenEmpty;
+            this.chargeKitCost = chargeKitCost;
+            this.preparedVersion = preparedVersion;
+            this.persistStarter = persistStarter;
+            this.delegate = PreparedReloads.of(
+                    () -> reloads.submit(this::commitSerialized),
+                    () -> reloads.submit(this::rollbackSerialized)
+            );
+        }
+
+        private CompletionStage<Void> commitSerialized() {
+            synchronized (DefaultKitService.this) {
+                if (mutationVersion != preparedVersion) {
+                    return CompletableFuture.failedFuture(new IllegalStateException(
+                            "Kit definitions changed after reload preparation"
+                    ));
+                }
+            }
+
+            CompletionStage<Void> persistence;
+            if (persistStarter) {
+                var starter = candidate.get("starter");
+                persistence = storage
+                        .save(path("starter"), requireNonNull(starter, "starter"))
+                        .thenRun(() -> starterCreated = true);
+            } else {
+                persistence = CompletableFuture.completedFuture(null);
+            }
+
+            return persistence.thenRun(() -> {
+                synchronized (DefaultKitService.this) {
+                    if (mutationVersion != preparedVersion) {
+                        throw new IllegalStateException(
+                                "Kit definitions changed during reload commit"
+                        );
+                    }
+
+                    state = new RuntimeState(
+                            candidate,
+                            createStarterKitWhenEmpty,
+                            chargeKitCost
+                    );
+                    mutationVersion++;
+                    committedVersion = mutationVersion;
+                }
+            });
+        }
+
+        private CompletionStage<Void> rollbackSerialized() {
+            synchronized (DefaultKitService.this) {
+                if (committedVersion >= 0L) {
+                    if (mutationVersion != committedVersion) {
+                        return CompletableFuture.failedFuture(new IllegalStateException(
+                                "Kit definitions changed after reload commit"
+                        ));
+                    }
+
+                    state = previous;
+                    mutationVersion++;
+                }
+            }
+
+            return cleanupStaleStarter();
+        }
+
+        private CompletionStage<Void> cleanupStaleStarter() {
+            if (!starterCreated) {
+                return CompletableFuture.completedFuture(null);
+            }
+
+            return storage.delete(path("starter")).thenApply(_ -> null);
+        }
+
+        @Override
+        public CompletionStage<Void> commit() {
+            return delegate.commit();
+        }
+
+        @Override
+        public CompletionStage<Void> rollback() {
+            return delegate.rollback();
         }
 
     }

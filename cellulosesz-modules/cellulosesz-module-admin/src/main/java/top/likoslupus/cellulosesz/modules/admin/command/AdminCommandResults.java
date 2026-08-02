@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.api.admin.AdminActor;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
@@ -44,8 +45,19 @@ final class AdminCommandResults {
                 descriptor,
                 audit,
                 operation,
-                (policy, result) ->
-                        policy.respond(result.success(), result.message())
+                (policy, result) -> {
+                    policy.respond(result.success(), result.message());
+                    return switch (result.status()) {
+                        case SUCCESS -> CommandOutcome.success();
+                        case PARTIAL_SUCCESS -> CommandOutcome.partial();
+                        case PERSISTENCE_FAILURE,
+                             NATIVE_COMMAND_FAILURE,
+                             PLATFORM_FAILURE,
+                             ROLLBACK_FAILURE,
+                             FAILURE -> CommandOutcome.failed();
+                        case NOT_FOUND, ALREADY_EXISTS, INVALID_INPUT -> CommandOutcome.rejected();
+                    };
+                }
         );
     }
 

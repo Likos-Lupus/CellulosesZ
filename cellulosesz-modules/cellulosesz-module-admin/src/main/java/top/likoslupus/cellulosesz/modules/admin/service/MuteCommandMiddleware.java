@@ -4,32 +4,39 @@ import top.likoslupus.cellulosesz.api.admin.MuteService;
 import top.likoslupus.cellulosesz.api.command.CommandContinuation;
 import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
 import java.util.Locale;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.stream.Collectors;
 
 public final class MuteCommandMiddleware implements CommandMiddleware {
 
     private final MuteService mutes;
-    private volatile AdminConfig config;
+    private volatile Set<String> blockedCommands;
 
     public MuteCommandMiddleware(
             MuteService mutes,
             AdminConfig config
     ) {
         this.mutes = mutes;
-        this.config = config;
+        configure(config);
     }
 
     public void configure(AdminConfig config) {
-        this.config = config;
+        blockedCommands = config.muteCommands.stream()
+                .map(value -> value.trim().toLowerCase(Locale.ROOT))
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
-    public int invoke(
+    public CompletionStage<CommandOutcome> invoke(
             CommandDescriptor descriptor,
             CommandPolicyContext context,
             CommandContinuation next
@@ -41,16 +48,15 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
             context.error(LocalizedMessage.of(
                     GeneratedMessageKeys.COMMANDS_ADMIN_MUTE_COMMAND_MIDDLEWARE_ERROR_MUTED_CANNOT_USE_COMMAND
             ));
-            return 0;
+            return CompletableFuture.completedFuture(CommandOutcome.rejected());
         }
         return next.proceed();
     }
 
     public boolean blocked(String root) {
         var normalized = root.trim().toLowerCase(Locale.ROOT);
-        return config.muteCommands.stream().anyMatch(value ->
-                value.equals("*") || value.equalsIgnoreCase(normalized)
-        );
+        var current = blockedCommands;
+        return current.contains("*") || current.contains(normalized);
     }
 
 }

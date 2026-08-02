@@ -1,5 +1,8 @@
 package top.likoslupus.cellulosesz.api.module;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
 public interface CellulosesZModule {
 
     default void construct(ModuleContext context) {
@@ -23,7 +26,8 @@ public interface CellulosesZModule {
     default void onServerStarted(ModuleContext context) {
     }
 
-    default void onReload(ModuleContext context) {
+    default CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext context) {
+        return CompletableFuture.completedFuture(PreparedReloads.noop());
     }
 
     default void onUnload(ModuleContext context) {

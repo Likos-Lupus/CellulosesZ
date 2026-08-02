@@ -2,29 +2,29 @@ package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
 import java.util.random.RandomGenerator;
 
 import static java.util.Objects.requireNonNull;
-import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class DefaultRandomTeleportService implements RandomTeleportService {
 
     private final TeleportOperations operations;
     private final WorldDirectory worlds;
     private final RandomGenerator random;
-    private final int attempts;
+    private final TeleportRuntimeSettings runtimeSettings;
 
     public DefaultRandomTeleportService(
             TeleportOperations operations,
             WorldDirectory worlds,
             RandomGenerator random,
-            int attempts
+            TeleportRuntimeSettings runtimeSettings
     ) {
         this.operations = requireNonNull(operations, "operations");
         this.worlds = requireNonNull(worlds, "worlds");
         this.random = requireNonNull(random, "random");
-        this.attempts = requirePositive(attempts, "attempts");
+        this.runtimeSettings = requireNonNull(runtimeSettings, "runtimeSettings");
     }
 
     @Override
@@ -43,7 +43,7 @@ public final class DefaultRandomTeleportService implements RandomTeleportService
         var minSquared = (double) settings.minRadius() * settings.minRadius();
         var maxSquared = (double) settings.maxRadius() * settings.maxRadius();
 
-        for (var attempt = 0; attempt < attempts; attempt++) {
+        for (var attempt = 0; attempt < runtimeSettings.randomTeleportAttempts(); attempt++) {
             var angle = random.nextDouble(0.0D, Math.PI * 2.0D);
             var radius = Math.sqrt(random.nextDouble(minSquared, maxSquared));
             var requested = new CellLocation(

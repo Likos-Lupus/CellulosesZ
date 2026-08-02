@@ -7,6 +7,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
@@ -300,25 +301,18 @@ public final class WarpCommand implements CommandContributor {
                                         GeneratedMessageKeys.COMMON_PLAYER_ONLY
                                 )
                         );
-                        return 0;
+
+                        return CompletableFuture.completedFuture(
+                                CommandOutcome.rejected(0)
+                        );
                     }
 
-                    operation.apply(policy)
-                            .whenComplete((result, failure) -> {
-                                if (failure != null) {
-                                    registration.internalFailure(
-                                            policy,
-                                            failure
-                                    );
-                                } else {
-                                    policy.respond(
-                                            result.success(),
-                                            result.message()
-                                    );
-                                }
+                    return operation
+                            .apply(policy)
+                            .thenApply(result -> {
+                                policy.respond(result.success(), result.message());
+                                return CommandOutcome.fromStatus(result.status());
                             });
-
-                    return 1;
                 }
         );
     }

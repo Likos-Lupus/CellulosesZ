@@ -13,7 +13,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -23,12 +23,12 @@ public final class AntiochCommand implements CommandContributor {
 
     private final PlayerTargetingService targeting;
     private final EntityPlatformService entities;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public AntiochCommand(
             PlayerTargetingService targeting,
             EntityPlatformService entities,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.targeting = requireNonNull(targeting, "targeting");
         this.entities = requireNonNull(entities, "entities");
@@ -55,7 +55,8 @@ public final class AntiochCommand implements CommandContributor {
                                 command,
                                 descriptor,
                                 StringArgumentType.getString(command, "message")
-                        )));
+                        ))
+                );
 
         context.registerDirect(
                 moduleId(),
@@ -79,7 +80,7 @@ public final class AntiochCommand implements CommandContributor {
                 descriptor,
                 "antioch message-present=" + !message.isBlank(),
                 policy -> {
-                    if (!config.destructiveCommandsEnabled) {
+                    if (!config.destructiveCommandsEnabled()) {
                         return PlatformResult.failure(
                                 PlatformOperationStatus.STATE_NOT_ALLOWED,
                                 "destructive-commands-disabled"
@@ -96,17 +97,17 @@ public final class AntiochCommand implements CommandContributor {
 
                     var target = targeting.targetLocation(
                             player.orElseThrow(),
-                            config.targetDistance
+                            config.targetDistance()
                     );
 
                     return target.successful() && target.value().isPresent()
                             ?
                             entities.spawnTnt(new TntBurstRequest(
                                     target.value().orElseThrow(),
-                                    Math.min(1, config.antiochMaximumEntities),
-                                    config.antiochFuseTicks,
-                                    config.antiochExplosionPower,
-                                    config.explosionBlockDamage,
+                                    Math.min(1, config.antiochMaximumEntities()),
+                                    config.antiochFuseTicks(),
+                                    config.antiochExplosionPower(),
+                                    config.explosionBlockDamage(),
                                     0.0D,
                                     0.0D
                             ))

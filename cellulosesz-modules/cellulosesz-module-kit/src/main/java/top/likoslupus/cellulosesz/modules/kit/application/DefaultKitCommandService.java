@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.kit.application;
 
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
@@ -44,11 +45,16 @@ public final class DefaultKitCommandService implements KitCommandService {
     @Override
     public Result list(Predicate<String> hasPermission) {
         var names = kits.kits().stream()
-                .filter(kit -> kit.permission.isBlank() || hasPermission.test(kit.permission))
+                .filter(kit -> kit.permission.isBlank()
+                        || hasPermission.test(kit.permission)
+                )
                 .map(kit -> kit.id)
                 .sorted()
                 .toList();
-        if (names.isEmpty()) return success(GeneratedMessageKeys.COMMANDS_KIT_LIST_EMPTY);
+
+        if (names.isEmpty()) {
+            return success(GeneratedMessageKeys.COMMANDS_KIT_LIST_EMPTY);
+        }
 
         return success(LocalizedMessage.of(
                 GeneratedMessageKeys.COMMANDS_KIT_LIST,
@@ -64,11 +70,13 @@ public final class DefaultKitCommandService implements KitCommandService {
     ) {
         var name = normalize(rawName);
         var kit = kits.kit(name);
+
         if (kit.isEmpty()) {
             return CompletableFuture.completedFuture(missing(name));
         }
 
         var definition = kit.orElseThrow();
+
         if (!definition.permission.isBlank() && !hasPermission.test(definition.permission)) {
             return CompletableFuture.completedFuture(failure(
                     GeneratedMessageKeys.COMMANDS_KIT_KIT_COMMAND_ERROR_DO_NOT_PERMISSION_CLAIM_KIT
@@ -77,7 +85,7 @@ public final class DefaultKitCommandService implements KitCommandService {
 
         return kits.claim(player, definition)
                 .handle((result, failure) -> failure != null
-                        ? failure(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED)
+                        ? failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED)
                         : new Result(result.success(), result.message())
                 );
     }
@@ -86,7 +94,10 @@ public final class DefaultKitCommandService implements KitCommandService {
     public Result show(String rawName) {
         var name = normalize(rawName);
         var kit = kits.kit(name);
-        if (kit.isEmpty()) return missing(name);
+
+        if (kit.isEmpty()) {
+            return missing(name);
+        }
 
         var entries = new StringBuilder();
         var sorted = kit.orElseThrow().items.stream()
@@ -164,7 +175,7 @@ public final class DefaultKitCommandService implements KitCommandService {
                                     Map.of("kit", id)
                             )));
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
     }
 
     @Override
@@ -172,8 +183,9 @@ public final class DefaultKitCommandService implements KitCommandService {
         var name = normalize(rawName);
         return kits.delete(name).handle((deleted, failure) -> {
             if (failure != null) {
-                return failure(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED);
+                return failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED);
             }
+
             if (!deleted) {
                 return missingDelete(name);
             }
@@ -209,7 +221,9 @@ public final class DefaultKitCommandService implements KitCommandService {
             var requesterName = request.requester()
                     .map(p -> p.name().toLowerCase(Locale.ROOT));
             if (requesterName.isEmpty()
-                    || !requesterName.orElseThrow().equals(explicitTarget.orElseThrow().toLowerCase(Locale.ROOT))
+                    || !requesterName
+                    .orElseThrow()
+                    .equals(explicitTarget.orElseThrow().toLowerCase(Locale.ROOT))
             ) {
                 return CompletableFuture.completedFuture(failure(
                         GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_ERROR_OTHERS
@@ -239,7 +253,7 @@ public final class DefaultKitCommandService implements KitCommandService {
                                     )
                             )));
                 })
-                .exceptionally(_ -> failure(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
     }
 
     @Override
@@ -286,6 +300,10 @@ public final class DefaultKitCommandService implements KitCommandService {
 
     private Result failure(String key) {
         return failure(LocalizedMessage.of(key));
+    }
+
+    private Result failed(String key) {
+        return new Result(CommandOutcome.Status.FAILED, LocalizedMessage.of(key));
     }
 
     private Result failure(LocalizedMessage message) {

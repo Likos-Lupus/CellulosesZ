@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecution
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
 import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry;
 import top.likoslupus.cellulosesz.core.scheduler.DefaultScheduler;
+import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
 
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +25,7 @@ final class OwnerBoundRegistryTest {
         var logger = new NoopLogger();
         var scope = new DefaultModuleScope("module");
         var events = new ModuleScopedEventRegistry("module", new SimpleEventRegistry(), scope);
-        var pipeline = new DefaultCommandExecutionPipeline(logger);
+        var pipeline = new DefaultCommandExecutionPipeline(logger, new DefaultServiceRegistry());
         var middlewares = new ModuleScopedCommandMiddlewareRegistry("module", pipeline, scope);
         var schedulerDelegate = new DefaultScheduler(logger);
         var scheduler = new ModuleScopedScheduler("module", schedulerDelegate, scope);

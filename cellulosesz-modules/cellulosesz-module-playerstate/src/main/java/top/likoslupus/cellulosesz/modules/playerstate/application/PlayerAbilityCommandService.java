@@ -46,7 +46,7 @@ public final class PlayerAbilityCommandService {
                         finish(PlayerStateCommandResult.from(result))
                 )
                 .exceptionally(_ ->
-                        PlayerStateCommandResult.failure("service.user.persistence-failed")
+                        PlayerStateCommandResult.failed("service.user.persistence-failed")
                 );
     }
 
@@ -78,7 +78,7 @@ public final class PlayerAbilityCommandService {
                             );
                 })
                 .exceptionally(_ ->
-                        PlayerStateCommandResult.failure("service.playerstate.fly-failed")
+                        PlayerStateCommandResult.failed("service.playerstate.fly-failed")
                 );
     }
 
@@ -100,7 +100,7 @@ public final class PlayerAbilityCommandService {
                             .setGod(player, enabled)
                             .thenCompose(result -> finish(PlayerStateCommandResult.from(result)));
                 })
-                .exceptionally(_ -> PlayerStateCommandResult.failure(
+                .exceptionally(_ -> PlayerStateCommandResult.failed(
                         "service.playerstate.god-failed"
                 ));
     }
@@ -112,7 +112,7 @@ public final class PlayerAbilityCommandService {
         return onServer(() -> requested.orElse(!vanish.vanished(player.uuid())))
                 .thenCompose(enabled -> vanish.setVanished(player, enabled))
                 .thenCompose(result -> finish(PlayerStateCommandResult.from(result)))
-                .exceptionally(_ -> PlayerStateCommandResult.failure(
+                .exceptionally(_ -> PlayerStateCommandResult.failed(
                         "service.playerstate.vanish-failed"
                 ));
     }
@@ -250,13 +250,16 @@ public final class PlayerAbilityCommandService {
 
     public CompletableFuture<PlayerStateCommandResult> rest(CellPlayer player) {
         return onServer(() ->
-                platform.resetRest(player).successful() ? PlayerStateCommandResult.success(
-                        "commands.playerstate.rest.success",
-                        Map.of("player", player.name())
-                ) : PlayerStateCommandResult.failure(
-                        "commands.playerstate.rest.failed",
-                        Map.of("player", player.name())
-                )
+                platform.resetRest(player).successful()
+                        ?
+                        PlayerStateCommandResult.success(
+                                "commands.playerstate.rest.success",
+                                Map.of("player", player.name())
+                        )
+                        : PlayerStateCommandResult.failure(
+                                "commands.playerstate.rest.failed",
+                                Map.of("player", player.name())
+                        )
         );
     }
 
@@ -273,7 +276,7 @@ public final class PlayerAbilityCommandService {
                 .thenCompose(result ->
                         finish(PlayerStateCommandResult.from(result))
                 )
-                .exceptionally(_ -> PlayerStateCommandResult.failure(
+                .exceptionally(_ -> PlayerStateCommandResult.failed(
                         "service.user.persistence-failed"
                 ));
     }
@@ -287,7 +290,7 @@ public final class PlayerAbilityCommandService {
                 .thenCompose(result ->
                         finish(PlayerStateCommandResult.from(result))
                 )
-                .exceptionally(_ -> PlayerStateCommandResult.failure(
+                .exceptionally(_ -> PlayerStateCommandResult.failed(
                         "service.user.persistence-failed"
                 ));
     }
@@ -301,7 +304,7 @@ public final class PlayerAbilityCommandService {
                 .thenCompose(result ->
                         finish(PlayerStateCommandResult.from(result))
                 )
-                .exceptionally(_ -> PlayerStateCommandResult.failure(
+                .exceptionally(_ -> PlayerStateCommandResult.failed(
                         "service.user.persistence-failed"
                 ));
     }

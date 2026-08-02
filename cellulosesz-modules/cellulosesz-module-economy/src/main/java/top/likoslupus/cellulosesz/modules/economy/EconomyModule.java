@@ -7,9 +7,7 @@ import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.WorthService;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -27,6 +25,8 @@ import top.likoslupus.cellulosesz.modules.economy.command.*;
 import top.likoslupus.cellulosesz.modules.economy.service.JsonEconomyService;
 import top.likoslupus.cellulosesz.modules.economy.service.JsonWorthService;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
@@ -208,20 +208,38 @@ public final class EconomyModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var current = requireNonNull(config, "EconomyConfig has not been initialized");
-        var candidate = context.configs().require("module.economy", EconomyConfig.class);
-        var candidateSettings = EconomyCommandSettings.from(
-                candidate,
-                configVersion.incrementAndGet()
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previousConfig = requireNonNull(
+                config,
+                "EconomyConfig has not been initialized"
         );
+        var previousSettings = requireNonNull(
+                settings,
+                "Economy settings have not been initialized"
+        );
+        var previousVersion = configVersion.get();
+        var candidate = reload.configs().require("module.economy", EconomyConfig.class);
+        var candidateSettings = EconomyCommandSettings.from(candidate, previousVersion + 1L);
+        var serviceReload = economy instanceof JsonEconomyService service
+                ? service.prepareConfiguration(candidate)
+                : PreparedReloads.noop();
 
-        if (economy instanceof JsonEconomyService service) {
-            service.configure(candidate);
-        }
-
-        current.copyFrom(candidate);
-        settings = candidateSettings;
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> serviceReload
+                        .commit()
+                        .thenRun(() -> {
+                            config = candidate;
+                            settings = candidateSettings;
+                            configVersion.set(previousVersion + 1L);
+                        }),
+                () -> serviceReload
+                        .rollback()
+                        .thenRun(() -> {
+                            config = previousConfig;
+                            settings = previousSettings;
+                            configVersion.set(previousVersion);
+                        })
+        ));
     }
 
 }

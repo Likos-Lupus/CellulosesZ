@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.modules.permission;
 
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -44,13 +44,24 @@ public final class PermissionModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        config = context.configs().require("module.permission", PermissionConfig.class);
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var context = reload.module();
+        var previous = requireNonNull(config, "PermissionConfig has not been initialized");
+        var candidate = reload.configs().require("module.permission", PermissionConfig.class);
         var permissions = context.services().require(DefaultPermissionService.class);
-        permissions.cache(
-                config.cache.enabled,
-                config.cache.expireSeconds
-        );
+
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    config = candidate;
+                    permissions.cache(candidate.cache.enabled, candidate.cache.expireSeconds);
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    config = previous;
+                    permissions.cache(previous.cache.enabled, previous.cache.expireSeconds);
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
 }

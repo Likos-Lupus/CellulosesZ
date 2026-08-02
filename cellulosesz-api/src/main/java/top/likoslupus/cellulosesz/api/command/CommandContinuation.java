@@ -1,8 +1,12 @@
 package top.likoslupus.cellulosesz.api.command;
 
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
+
+import java.util.concurrent.CompletionStage;
+
 @FunctionalInterface
 public interface CommandContinuation {
 
-    int proceed();
+    CompletionStage<CommandOutcome> proceed();
 
 }

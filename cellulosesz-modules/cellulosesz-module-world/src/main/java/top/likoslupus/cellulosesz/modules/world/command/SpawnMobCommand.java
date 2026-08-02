@@ -17,7 +17,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Optional;
@@ -28,12 +28,12 @@ public final class SpawnMobCommand implements CommandContributor {
 
     private final EntityPlatformService entities;
     private final PlayerDirectory players;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public SpawnMobCommand(
             EntityPlatformService entities,
             PlayerDirectory players,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
         this.players = requireNonNull(players, "players");
@@ -50,7 +50,7 @@ public final class SpawnMobCommand implements CommandContributor {
 
         var amount = Commands.argument(
                         "amount",
-                        IntegerArgumentType.integer(1, config.spawnMobMaximumAmount)
+                        IntegerArgumentType.integer(1, config.spawnMobMaximumAmount())
                 )
                 .executes(command -> execute(
                         context,

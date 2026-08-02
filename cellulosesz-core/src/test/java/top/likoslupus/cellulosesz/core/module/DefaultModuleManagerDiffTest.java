@@ -6,10 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModuleDescriptor;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecutionPipeline;
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
 import top.likoslupus.cellulosesz.core.config.ModulesConfig;
@@ -21,6 +18,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,6 +32,10 @@ final class DefaultModuleManagerDiffTest {
     void resetLog() {
         LOG.clear();
         FailingModule.closed = false;
+        TransactionModuleA.mode = TransactionMode.SUCCESS;
+        TransactionModuleB.mode = TransactionMode.SUCCESS;
+        TransactionModuleA.prepareGate = null;
+        TransactionModuleB.prepareGate = null;
     }
 
     @AfterEach
@@ -64,13 +66,13 @@ final class DefaultModuleManagerDiffTest {
 
         LOG.clear();
         fixture.modules().modules.put("dependent", true);
-        fixture.manager.onReloadAsync().join();
+        reload(fixture);
         assertEquals(List.of("load:dependent"), LOG);
 
         LOG.clear();
         fixture.modules().modules.put("dependent", false);
         fixture.modules().modules.put("dependency", false);
-        fixture.manager.onReloadAsync().join();
+        reload(fixture);
 
         assertEquals(List.of("unload:dependent", "unload:dependency"), LOG);
         assertFalse(fixture.manager.moduleEnabled("dependency"));
@@ -94,7 +96,7 @@ final class DefaultModuleManagerDiffTest {
                 configs,
                 new SimpleEventRegistry(),
                 scheduler,
-                new DefaultCommandExecutionPipeline(logger),
+                new DefaultCommandExecutionPipeline(logger, services),
                 logger
         );
 
@@ -121,6 +123,13 @@ final class DefaultModuleManagerDiffTest {
         );
     }
 
+    private static void reload(Fixture fixture) {
+        fixture.manager.prepareReload(fixture.configs.snapshot())
+                .thenCompose(prepared -> prepared.commit())
+                .toCompletableFuture()
+                .join();
+    }
+
     @Test
     void invalidRequiredDependencyFailsBeforeChangingActiveModules() {
         var fixture = fixture(List.of(
@@ -145,7 +154,7 @@ final class DefaultModuleManagerDiffTest {
         fixture.modules().modules.put("dependency", false);
         assertThrows(
                 RuntimeException.class,
-                () -> fixture.manager.onReloadAsync().join()
+                () -> reload(fixture)
         );
 
         assertTrue(LOG.isEmpty());
@@ -182,7 +191,7 @@ final class DefaultModuleManagerDiffTest {
 
         LOG.clear();
         fixture.modules().modules.put("provider", true);
-        fixture.manager.onReloadAsync().join();
+        reload(fixture);
 
         assertEquals(
                 List.of(
@@ -215,6 +224,165 @@ final class DefaultModuleManagerDiffTest {
         assertFalse(fixture.services.contains(MarkerService.class));
         assertTrue(FailingModule.closed);
         assertFalse(fixture.manager.moduleEnabled("failing"));
+    }
+
+    @Test
+    void prepareFailureRollsBackEarlierPreparedModulesWithoutCommitting() {
+        var fixture = transactionFixture();
+        fixture.manager.loadAsync().join();
+        LOG.clear();
+        TransactionModuleB.mode = TransactionMode.PREPARE_FAILURE;
+
+        assertThrows(
+                RuntimeException.class,
+                () -> fixture.manager.prepareReload(fixture.configs.snapshot())
+                        .toCompletableFuture()
+                        .join()
+        );
+
+        assertEquals(List.of("prepare:a", "prepare:b", "rollback:a"), LOG);
+    }
+
+    private Fixture transactionFixture() {
+        return fixture(List.of(
+                descriptor(
+                        "a",
+                        List.of(),
+                        List.of(),
+                        true,
+                        TransactionModuleA.class
+                ),
+                descriptor(
+                        "b",
+                        List.of("a"),
+                        List.of(),
+                        true,
+                        TransactionModuleB.class
+                )
+        ));
+    }
+
+    @Test
+    void commitFailureRollsBackPreparedModulesInReverseOrder() {
+        var fixture = transactionFixture();
+        fixture.manager.loadAsync().join();
+        LOG.clear();
+        TransactionModuleB.mode = TransactionMode.COMMIT_FAILURE;
+
+        var prepared = fixture.manager.prepareReload(fixture.configs.snapshot())
+                .toCompletableFuture()
+                .join();
+        assertThrows(
+                RuntimeException.class,
+                () -> prepared.commit().toCompletableFuture().join()
+        );
+        prepared.rollback().toCompletableFuture().join();
+
+        assertEquals(
+                List.of(
+                        "prepare:a",
+                        "prepare:b",
+                        "commit:a",
+                        "commit:b",
+                        "rollback:b",
+                        "rollback:a"
+                ),
+                LOG
+        );
+    }
+
+    @Test
+    void rollbackFailureDoesNotPreventRemainingRollbackAndIsAggregated() {
+        var fixture = transactionFixture();
+        fixture.manager.loadAsync().join();
+        LOG.clear();
+        TransactionModuleB.mode = TransactionMode.ROLLBACK_FAILURE;
+
+        var prepared = fixture.manager.prepareReload(fixture.configs.snapshot())
+                .toCompletableFuture()
+                .join();
+        prepared.commit().toCompletableFuture().join();
+
+        var failure = assertThrows(
+                RuntimeException.class,
+                () -> prepared.rollback().toCompletableFuture().join()
+        );
+
+        assertEquals(
+                List.of(
+                        "prepare:a",
+                        "prepare:b",
+                        "commit:a",
+                        "commit:b",
+                        "rollback:b",
+                        "rollback:a"
+                ),
+                LOG
+        );
+        assertTrue(failure.getCause().getSuppressed().length > 0);
+    }
+
+    @Test
+    void delayedModulePreparationKeepsManagerReloadIncomplete() {
+        var fixture = transactionFixture();
+        fixture.manager.loadAsync().join();
+        LOG.clear();
+        var gate = new CompletableFuture<Void>();
+        TransactionModuleB.prepareGate = gate;
+
+        var preparation = fixture.manager.prepareReload(fixture.configs.snapshot())
+                .toCompletableFuture();
+
+        assertFalse(preparation.isDone());
+        gate.complete(null);
+        var prepared = preparation.join();
+        prepared.rollback().toCompletableFuture().join();
+        assertEquals(
+                List.of("prepare:a", "prepare:b", "rollback:b", "rollback:a"),
+                LOG
+        );
+    }
+
+    @Test
+    void failedToggleCommitRestoresPreviousActiveSet() {
+        var fixture = fixture(List.of(
+                descriptor(
+                        "dependency",
+                        List.of(),
+                        List.of(),
+                        true,
+                        DependencyModule.class
+                ),
+                descriptor(
+                        "failing",
+                        List.of(),
+                        List.of(),
+                        false,
+                        FailingModule.class
+                )
+        ));
+        fixture.manager.loadAsync().join();
+        fixture.modules().modules.put("dependency", false);
+        fixture.modules().modules.put("failing", true);
+
+        var prepared = fixture.manager.prepareReload(fixture.configs.snapshot())
+                .toCompletableFuture()
+                .join();
+        assertThrows(
+                RuntimeException.class,
+                () -> prepared.commit().toCompletableFuture().join()
+        );
+        prepared.rollback().toCompletableFuture().join();
+
+        assertTrue(fixture.manager.moduleEnabled("dependency"));
+        assertFalse(fixture.manager.moduleEnabled("failing"));
+    }
+
+    private enum TransactionMode {
+        SUCCESS,
+        PREPARE_FAILURE,
+        COMMIT_FAILURE,
+        ROLLBACK_FAILURE
     }
 
     private record Fixture(
@@ -302,6 +470,93 @@ final class DefaultModuleManagerDiffTest {
         public void registerEvents(ModuleContext context) {
             throw new IllegalStateException("expected load failure");
         }
+
+    }
+
+    public static final class TransactionModuleA extends TransactionModule {
+
+        private static TransactionMode mode = TransactionMode.SUCCESS;
+        private static CompletableFuture<Void> prepareGate;
+
+        public TransactionModuleA() {
+            super("a");
+        }
+
+        @Override
+        TransactionMode mode() {
+            return mode;
+        }
+
+        @Override
+        CompletableFuture<Void> prepareGate() {
+            return prepareGate;
+        }
+
+    }
+
+    public static final class TransactionModuleB extends TransactionModule {
+
+        private static TransactionMode mode = TransactionMode.SUCCESS;
+        private static CompletableFuture<Void> prepareGate;
+
+        public TransactionModuleB() {
+            super("b");
+        }
+
+        @Override
+        TransactionMode mode() {
+            return mode;
+        }
+
+        @Override
+        CompletableFuture<Void> prepareGate() {
+            return prepareGate;
+        }
+
+    }
+
+    public abstract static class TransactionModule implements CellulosesZModule {
+
+        private final String id;
+
+        protected TransactionModule(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext context) {
+            LOG.add("prepare:" + id);
+            if (mode() == TransactionMode.PREPARE_FAILURE) {
+                return CompletableFuture.failedFuture(new IllegalStateException("prepare:" + id));
+            }
+
+            var gate = prepareGate();
+            var ready = gate == null
+                    ? CompletableFuture.completedFuture(null)
+                    : gate;
+            return ready.thenApply(_ -> PreparedReloads.of(
+                    () -> {
+                        LOG.add("commit:" + id);
+                        return mode() == TransactionMode.COMMIT_FAILURE
+                                ? CompletableFuture.failedFuture(
+                                new IllegalStateException("commit:" + id)
+                        )
+                                : CompletableFuture.completedFuture(null);
+                    },
+                    () -> {
+                        LOG.add("rollback:" + id);
+                        return mode() == TransactionMode.ROLLBACK_FAILURE
+                                ? CompletableFuture.failedFuture(
+                                new IllegalStateException("rollback:" + id)
+                        )
+                                : CompletableFuture.completedFuture(null);
+                    }
+            ));
+        }
+
+        abstract TransactionMode mode();
+
+        abstract CompletableFuture<Void> prepareGate();
 
     }
 

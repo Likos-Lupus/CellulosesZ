@@ -14,7 +14,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.world.command.argument.ProjectileTypeArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 import java.util.Locale;
@@ -24,11 +24,11 @@ import static java.util.Objects.requireNonNull;
 public final class FireballCommand implements CommandContributor {
 
     private final EntityPlatformService entities;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public FireballCommand(
             EntityPlatformService entities,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
         this.config = requireNonNull(config, "config");
@@ -47,11 +47,11 @@ public final class FireballCommand implements CommandContributor {
                         command,
                         descriptor,
                         ProjectileTypeArgument.get(command, "projectile"),
-                        config.defaultProjectileSpeed
+                        config.defaultProjectileSpeed()
                 ))
                 .then(Commands.argument(
                                         "speed",
-                                        DoubleArgumentType.doubleArg(0.01D, config.maximumProjectileSpeed)
+                                        DoubleArgumentType.doubleArg(0.01D, config.maximumProjectileSpeed())
                                 )
                                 .executes(command -> execute(
                                         context,
@@ -67,7 +67,7 @@ public final class FireballCommand implements CommandContributor {
                         command,
                         descriptor,
                         ProjectileType.FIREBALL,
-                        config.defaultProjectileSpeed
+                        config.defaultProjectileSpeed()
                 ))
                 .then(type);
 
@@ -115,7 +115,7 @@ public final class FireballCommand implements CommandContributor {
                                             value,
                                             type,
                                             speed,
-                                            config.projectileLifetimeTicks
+                                            config.projectileLifetimeTicks()
                                     )
                             ))
                             .orElseGet(() -> PlatformResult.failure(

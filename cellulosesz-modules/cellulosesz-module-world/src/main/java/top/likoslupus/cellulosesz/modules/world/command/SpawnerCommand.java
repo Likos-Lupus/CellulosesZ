@@ -15,7 +15,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
-import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
 
@@ -25,12 +25,12 @@ public final class SpawnerCommand implements CommandContributor {
 
     private final WorldPlatformService worlds;
     private final EntityPlatformService entities;
-    private final WorldConfig config;
+    private final WorldRuntimeSettings config;
 
     public SpawnerCommand(
             WorldPlatformService worlds,
             EntityPlatformService entities,
-            WorldConfig config
+            WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.entities = requireNonNull(entities, "entities");
@@ -53,13 +53,13 @@ public final class SpawnerCommand implements CommandContributor {
                         context,
                         command,
                         descriptor,
-                        config.spawnerDefaultDelayTicks
+                        config.spawnerDefaultDelayTicks()
                 ))
                 .then(Commands.argument(
                                         "delayTicks",
                                         IntegerArgumentType.integer(
-                                                config.spawnerMinimumDelayTicks,
-                                                config.spawnerMaximumDelayTicks
+                                                config.spawnerMinimumDelayTicks(),
+                                                config.spawnerMaximumDelayTicks()
                                         )
                                 )
                                 .requires(source -> context.permissions().has(
@@ -114,7 +114,7 @@ public final class SpawnerCommand implements CommandContributor {
                     return player
                             .<PlatformResult<?>>map(value -> worlds.configureSpawner(
                                     value,
-                                    config.targetDistance,
+                                    config.targetDistance(),
                                     new SpawnerRequest(entity, delay)
                             ))
                             .orElseGet(() -> PlatformResult.failure(

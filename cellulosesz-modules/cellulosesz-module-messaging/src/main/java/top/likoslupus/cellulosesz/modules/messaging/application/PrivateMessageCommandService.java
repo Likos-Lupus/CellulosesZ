@@ -25,7 +25,7 @@ public final class PrivateMessageCommandService {
     private final PrivateMessageService privateMessages;
     private final UserService users;
     private final ServerThreadExecutor serverThread;
-    private final MessagingConfig config;
+    private volatile MessagingConfig config;
 
     public PrivateMessageCommandService(
             PlayerResolver resolver,
@@ -42,7 +42,11 @@ public final class PrivateMessageCommandService {
         this.privateMessages = requireNonNull(privateMessages, "privateMessages");
         this.users = requireNonNull(users, "users");
         this.serverThread = requireNonNull(serverThread, "serverThread");
-        this.config = requireNonNull(config, "config");
+        this.config = requireNonNull(config, "config").validatedCopy();
+    }
+
+    public void configure(MessagingConfig config) {
+        this.config = requireNonNull(config, "config").validatedCopy();
     }
 
     public CompletableFuture<MessageResult> send(
@@ -109,25 +113,33 @@ public final class PrivateMessageCommandService {
                     return serverThread
                             .submit(() -> players.onlinePlayer(target.orElseThrow()))
                             .thenCompose(online ->
-                                    online.isEmpty() ? CompletableFuture.completedFuture(MessageResult.failure(
-                                            "commands.messaging.reply-command.error.player-can-reply-no-longer-online"
-                                    )) : privateMessages.send(
-                                            sender,
-                                            online.orElseThrow(),
-                                            message
-                                    ));
+                                    online.isEmpty()
+                                            ?
+                                            CompletableFuture.completedFuture(MessageResult.failure(
+                                                    "commands.messaging.reply-command.error.player-can-reply-no-longer-online"
+                                            ))
+                                            : privateMessages.send(
+                                                    sender,
+                                                    online.orElseThrow(),
+                                                    message
+                                            ));
                 });
     }
 
     public CompletableFuture<MessageResult> toggleMessages(UUID uuid) {
         return users
-                .update(uuid, user -> {
-                    var enabled = !user.preferences().privateMessages();
-                    return UserUpdate.of(
-                            user.withPreferences(user.preferences().withPrivateMessages(enabled)),
-                            enabled
-                    );
-                })
+                .update(
+                        uuid,
+                        user -> {
+                            var enabled = !user.preferences().privateMessages();
+                            return UserUpdate.of(
+                                    user.withPreferences(user
+                                            .preferences()
+                                            .withPrivateMessages(enabled)),
+                                    enabled
+                            );
+                        }
+                )
                 .thenApply(enabled -> MessageResult.success(
                         enabled
                                 ? "commands.messaging.private-messages-enabled"
@@ -177,14 +189,20 @@ public final class PrivateMessageCommandService {
             Optional<Boolean> requested
     ) {
         return users
-                .update(target, user -> {
-                    var enabled = requested
-                            .orElse(!user.preferences().replyToLastRecipient());
-                    return UserUpdate.of(
-                            user.withPreferences(user.preferences().withReplyToLastRecipient(enabled)),
-                            enabled
-                    );
-                })
+                .update(
+                        target,
+                        user -> {
+                            var enabled = requested
+                                    .orElse(!user.preferences().replyToLastRecipient());
+                            return UserUpdate.of(
+                                    user.withPreferences(
+                                            user.preferences()
+                                                    .withReplyToLastRecipient(enabled)
+                                    ),
+                                    enabled
+                            );
+                        }
+                )
                 .thenApply(enabled -> MessageResult.success(
                         enabled
                                 ? "commands.messaging.reply-toggle.recipient"
@@ -199,14 +217,17 @@ public final class PrivateMessageCommandService {
             Optional<Boolean> requested
     ) {
         return users
-                .update(target, user -> {
-                    var enabled = requested
-                            .orElse(!user.preferences().socialSpy());
-                    return UserUpdate.of(
-                            user.withPreferences(user.preferences().withSocialSpy(enabled)),
-                            enabled
-                    );
-                })
+                .update(
+                        target,
+                        user -> {
+                            var enabled = requested
+                                    .orElse(!user.preferences().socialSpy());
+                            return UserUpdate.of(
+                                    user.withPreferences(user.preferences().withSocialSpy(enabled)),
+                                    enabled
+                            );
+                        }
+                )
                 .thenApply(enabled -> MessageResult.success(
                         enabled
                                 ? "commands.messaging.social-spy-enabled"

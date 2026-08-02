@@ -3,9 +3,7 @@ package top.likoslupus.cellulosesz.modules.world;
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
-import top.likoslupus.cellulosesz.api.module.CellulosesZModule;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModulePhase;
+import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.*;
@@ -13,11 +11,14 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
 import top.likoslupus.cellulosesz.modules.world.command.*;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
+import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultBackupService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultEntityRemoveService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultWorldService;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -33,6 +34,7 @@ import static java.util.Objects.requireNonNull;
 public final class WorldModule implements CellulosesZModule {
 
     private @Nullable WorldConfig config;
+    private @Nullable WorldRuntimeSettings runtimeSettings;
     private @Nullable WorldService worlds;
     private @Nullable EntityRemoveService remover;
     private @Nullable DefaultBackupService backups;
@@ -45,8 +47,10 @@ public final class WorldModule implements CellulosesZModule {
                 "modules/world.yml",
                 WorldConfig::new
         );
-        config = context.configs().require("module.world", WorldConfig.class);
-        requireNonNull(config, "WorldConfig has not been initialized").validate();
+        var initial = context.configs().require("module.world", WorldConfig.class);
+        initial.validate();
+        config = copy(initial);
+        runtimeSettings = new WorldRuntimeSettings(config);
     }
 
     @Override
@@ -80,7 +84,10 @@ public final class WorldModule implements CellulosesZModule {
         var entityOperations = context.services().require(EntityPlatformService.class);
         var targeting = context.services().require(PlayerTargetingService.class);
         var removals = context.services().require(EntityRemovalPlatformService.class);
-        var current = requireNonNull(config, "WorldConfig has not been initialized");
+        var current = requireNonNull(
+                runtimeSettings,
+                "WorldRuntimeSettings has not been initialized"
+        );
 
         track(
                 context,
@@ -228,14 +235,32 @@ public final class WorldModule implements CellulosesZModule {
     }
 
     @Override
-    public void onReload(ModuleContext context) {
-        var candidate = context.configs().require("module.world", WorldConfig.class);
-        candidate.validate();
-
-        var current = requireNonNull(config, "WorldConfig has not been initialized");
-        current.copyFrom(candidate);
-
-        requireNonNull(backups, "BackupService has not been initialized").configure(current);
+    public CompletionStage<PreparedModuleReload> prepareReload(ModuleReloadContext reload) {
+        var previous = requireNonNull(config, "WorldConfig has not been initialized");
+        var loaded = reload.configs().require("module.world", WorldConfig.class);
+        loaded.validate();
+        var candidate = copy(loaded);
+        var backupService = requireNonNull(backups, "BackupService has not been initialized");
+        return CompletableFuture.completedFuture(PreparedReloads.of(
+                () -> {
+                    backupService.configure(candidate);
+                    requireNonNull(
+                            runtimeSettings,
+                            "WorldRuntimeSettings has not been initialized"
+                    ).configure(candidate);
+                    config = candidate;
+                    return CompletableFuture.completedFuture(null);
+                },
+                () -> {
+                    backupService.configure(previous);
+                    requireNonNull(
+                            runtimeSettings,
+                            "WorldRuntimeSettings has not been initialized"
+                    ).configure(previous);
+                    config = previous;
+                    return CompletableFuture.completedFuture(null);
+                }
+        ));
     }
 
     @Override
@@ -336,6 +361,12 @@ public final class WorldModule implements CellulosesZModule {
                         "Launch a trident"
                 )
         ).forEach(catalog::register);
+    }
+
+    private static WorldConfig copy(WorldConfig source) {
+        var copy = new WorldConfig();
+        copy.copyFrom(source);
+        return copy;
     }
 
 }
