@@ -3,7 +3,7 @@ minecraft = "26.1.2"
 java = "25"
 
 fabric-loader = "0.19.3"
-fabric-api = "0.154.0+26.1.2"
+fabric-api = "0.156.1+"
 loom = "1.17-SNAPSHOT"
 architectury-api = "20.0.9"
 architectury-plugin = "3.5.169"
