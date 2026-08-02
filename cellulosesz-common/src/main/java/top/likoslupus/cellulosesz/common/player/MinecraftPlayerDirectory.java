@@ -19,7 +19,6 @@ public final class MinecraftPlayerDirectory implements PlayerDirectory {
         this.server = requireNonNull(server, "server");
     }
 
-    @SuppressWarnings("resource")
     @Override
     public List<CellPlayer> onlinePlayers() {
         var current = server.current();

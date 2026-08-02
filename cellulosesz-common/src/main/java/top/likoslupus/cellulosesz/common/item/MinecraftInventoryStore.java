@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.item;
 
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.StringReader;
@@ -10,6 +10,8 @@ import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -20,16 +22,16 @@ import static java.util.Objects.requireNonNull;
 /**
  * Exact-slot inventory snapshots and transactions.
  */
-final class FabricInventoryStore {
+final class MinecraftInventoryStore {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
 
-    FabricInventoryStore(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    MinecraftInventoryStore(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     Optional<List<InventoryItemSnapshot>> snapshot(CellPlayer player) {
-        var inventory = access.player(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
         var snapshots = new ArrayList<InventoryItemSnapshot>();
 
         for (var slot = 0; slot < inventory.getContainerSize(); slot++) {
@@ -54,7 +56,7 @@ final class FabricInventoryStore {
             return Optional.empty();
         }
 
-        var operations = access.requireServer()
+        var operations = server.requireRunning()
                 .registryAccess()
                 .createSerializationContext(JsonOps.INSTANCE);
 
@@ -65,7 +67,7 @@ final class FabricInventoryStore {
     }
 
     Optional<InventoryItemSnapshot> heldSnapshot(CellPlayer player) {
-        var inventory = access.player(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
         var slot = inventory.getSelectedSlot();
         var stack = inventory.getItem(slot);
 
@@ -83,7 +85,7 @@ final class FabricInventoryStore {
         return decode(snapshot.validatedStack())
                 .filter(stack -> !stack.isEmpty())
                 .map(stack -> new ItemDescriptor(
-                        access.itemId(stack),
+                        MinecraftItems.id(stack),
                         stack.getCount()
                 ));
     }
@@ -94,7 +96,7 @@ final class FabricInventoryStore {
         }
 
         try {
-            var operations = access.requireServer()
+            var operations = server.requireRunning()
                     .registryAccess()
                     .createSerializationContext(JsonOps.INSTANCE);
             return ItemStack.CODEC.parse(operations, JsonParser.parseString(encoded)).result();
@@ -123,7 +125,7 @@ final class FabricInventoryStore {
             return Optional.empty();
         }
 
-        var inventory = access.player(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
         var planned = new LinkedHashMap<Integer, ItemStack>();
         var before = new LinkedHashMap<Integer, ItemStack>();
 
@@ -168,7 +170,9 @@ final class FabricInventoryStore {
                         }
                     }
 
-                    planned.forEach((slot, stack) -> inventory.setItem(slot, stack.copy()));
+                    planned.forEach((slot, stack) ->
+                            inventory.setItem(slot, stack.copy())
+                    );
                     inventory.setChanged();
                     committed = true;
                     return true;
@@ -188,7 +192,9 @@ final class FabricInventoryStore {
                         }
                     }
 
-                    before.forEach((slot, stack) -> inventory.setItem(slot, stack.copy()));
+                    before.forEach((slot, stack) ->
+                            inventory.setItem(slot, stack.copy())
+                    );
                     inventory.setChanged();
                     committed = false;
                     return true;
@@ -215,7 +221,7 @@ final class FabricInventoryStore {
             return Optional.empty();
         }
 
-        var inventory = access.player(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
         var before = copyInventory(inventory);
         var after = copyStacks(before);
         var seen = new HashSet<Integer>();
@@ -261,7 +267,9 @@ final class FabricInventoryStore {
     private static List<ItemStack> copyInventory(Container inventory) {
         return IntStream.range(0, inventory.getContainerSize())
                 .mapToObj(slot -> inventory.getItem(slot).copy())
-                .collect(Collectors.toCollection(() -> new ArrayList<>(inventory.getContainerSize())));
+                .collect(Collectors.toCollection(() ->
+                        new ArrayList<>(inventory.getContainerSize())
+                ));
     }
 
     private static List<ItemStack> copyStacks(List<ItemStack> source) {
@@ -356,7 +364,7 @@ final class FabricInventoryStore {
             return Optional.empty();
         }
 
-        var inventory = access.player(player).getInventory();
+        var inventory = MinecraftPlayers.requireOnline(player).getInventory();
         var before = copyInventory(inventory);
         var after = copyStacks(before);
 
@@ -368,7 +376,7 @@ final class FabricInventoryStore {
 
             if (!removeMatching(
                     after,
-                    parsed.orElseThrow().createItemStack(1, false),
+                    parsed.orElseThrow().createItemStack(1),
                     request.count()
             )) {
                 return Optional.empty();
@@ -383,7 +391,7 @@ final class FabricInventoryStore {
 
             if (!addMatching(
                     after,
-                    parsed.orElseThrow().createItemStack(1, false),
+                    parsed.orElseThrow().createItemStack(1),
                     request.count()
             )) {
                 return Optional.empty();
@@ -409,13 +417,14 @@ final class FabricInventoryStore {
 
         try {
             var reader = new StringReader(argument.trim());
-            var parsed = ItemParser.parseForItem(access.requireServer().registryAccess(), reader);
+            var parsed = new ItemParser(server.requireRunning().registryAccess()).parse(reader);
+            reader.skipWhitespace();
             if (reader.canRead()) {
                 return Optional.empty();
             }
 
             return Optional.of(parsed);
-        } catch (CommandSyntaxException exception) {
+        } catch (CommandSyntaxException | RuntimeException exception) {
             return Optional.empty();
         }
     }
@@ -493,6 +502,36 @@ final class FabricInventoryStore {
         }
 
         return remaining == 0;
+    }
+
+    Optional<ItemDescriptor> parseDescriptor(String input) {
+        if (input.isBlank()) {
+            return Optional.empty();
+        }
+
+        try {
+            var value = input.trim();
+            var reader = new StringReader(value);
+            var parsed = new ItemParser(server.requireRunning().registryAccess()).parse(reader);
+            var itemEnd = reader.getCursor();
+            reader.skipWhitespace();
+            var count = reader.canRead()
+                    ? reader.readInt()
+                    : 1;
+            reader.skipWhitespace();
+            if (reader.canRead() || count <= 0) {
+                return Optional.empty();
+            }
+
+            var stack = parsed.createItemStack(1);
+            return Optional.of(new ItemDescriptor(
+                    MinecraftItems.id(stack),
+                    count,
+                    value.substring(0, itemEnd).trim()
+            ));
+        } catch (CommandSyntaxException | RuntimeException exception) {
+            return Optional.empty();
+        }
     }
 
 }

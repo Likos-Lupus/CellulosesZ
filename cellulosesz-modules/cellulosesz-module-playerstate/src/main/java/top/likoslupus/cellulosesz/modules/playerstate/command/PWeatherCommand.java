@@ -4,14 +4,14 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.PersonalWeatherSetting;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
@@ -81,18 +81,12 @@ public final class PWeatherCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        EntityArgument.player()
                                 )
                                 .requires(source -> context.permissions().has(
                                         source,
                                         "cellulosesz.playerstate.pweather.others"
                                 ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                players::onlinePlayerNames,
-                                                builder
-                                        )
-                                )
                                 .executes(command -> other(
                                         context,
                                         command,
@@ -144,23 +138,10 @@ public final class PWeatherCommand implements CommandContributor {
                 command,
                 descriptor,
                 "pweather other",
-                _ -> {
-                    var name = PlayerNameArgument.get(
-                            command,
-                            "player"
-                    );
-
-                    return players.onlinePlayer(name)
-                            .map(player ->
-                                    service.personalWeather(
-                                            player,
-                                            setting
-                                    )
-                            )
-                            .orElseGet(() ->
-                                    PlayerStateCommandSupport.offline(name)
-                            );
-                }
+                _ -> service.personalWeather(
+                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        setting
+                )
         );
     }
 

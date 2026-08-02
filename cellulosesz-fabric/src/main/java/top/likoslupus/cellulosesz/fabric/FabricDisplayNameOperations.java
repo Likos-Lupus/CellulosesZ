@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.DisplayNamePlatformService;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
@@ -17,14 +19,14 @@ import static java.util.Objects.requireNonNull;
 
 public final class FabricDisplayNameOperations implements DisplayNamePlatformService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final CellulosesZLogger logger;
 
     public FabricDisplayNameOperations(
-            FabricServerAccess access,
+            MinecraftServerHandle server,
             CellulosesZLogger logger
     ) {
-        this.access = requireNonNull(access, "access");
+        this.server = requireNonNull(server, "server");
         this.logger = requireNonNull(logger, "logger");
     }
 
@@ -34,7 +36,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
             RichText displayName
     ) {
         requireNonNull(displayName, "displayName");
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
@@ -42,7 +44,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
         }
 
         try {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             FabricDisplayNameBridge.displayName(
                     player.uuid(),
                     MinecraftTextAdapter.toComponent(displayName, logger)
@@ -59,7 +61,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
 
     @Override
     public PlatformResult<Void> refreshPlayerInfo(CellPlayer player) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
@@ -67,7 +69,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
         }
 
         try {
-            return refresh(access.player(player));
+            return refresh(MinecraftPlayers.requireOnline(player));
         } catch (RuntimeException failure) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,
@@ -78,7 +80,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
 
     private PlatformResult<Void> refresh(net.minecraft.server.level.ServerPlayer player) {
         var packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player));
-        access.requireServer().getPlayerList().getPlayers().stream()
+        server.requireRunning().getPlayerList().getPlayers().stream()
                 .filter(viewer -> !FabricVanishBridge.hiddenFrom(viewer, player))
                 .forEach(viewer -> viewer.connection.send(packet));
         return PlatformResult.success();

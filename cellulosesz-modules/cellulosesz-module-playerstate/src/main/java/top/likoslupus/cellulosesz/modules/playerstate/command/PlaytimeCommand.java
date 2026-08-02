@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -7,7 +8,6 @@ import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
@@ -65,7 +65,7 @@ public final class PlaytimeCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        StringArgumentType.word()
                                 )
                                 .requires(source -> context.permissions().has(
                                         source,
@@ -87,10 +87,7 @@ public final class PlaytimeCommand implements CommandContributor {
                                                         policy,
                                                         players
                                                 ),
-                                                PlayerNameArgument.get(
-                                                        command,
-                                                        "player"
-                                                )
+                                                StringArgumentType.getString(command, "player")
                                         )
                                 ))
                 );

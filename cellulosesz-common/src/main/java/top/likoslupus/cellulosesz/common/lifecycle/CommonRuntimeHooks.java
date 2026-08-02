@@ -11,10 +11,6 @@ public interface CommonRuntimeHooks extends AutoCloseable {
     default void initialize() {
     }
 
-    void attachServer(MinecraftServer server);
-
-    void detachServer();
-
     default void beforeServerTick(MinecraftServer server) {
     }
 

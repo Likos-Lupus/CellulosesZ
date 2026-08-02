@@ -10,7 +10,6 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
 
 import java.util.List;
@@ -40,7 +39,7 @@ public final class BanCommand implements CommandContributor {
 
         var target = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -91,7 +90,7 @@ public final class BanCommand implements CommandContributor {
                 descriptor,
                 "ban reason-present=" + !reason.isBlank(),
                 policy -> service.ban(
-                        PlayerNameArgument.get(command, "player"),
+                        StringArgumentType.getString(command, "player"),
                         AdminCommandResults.actor(policy, players),
                         reason
                 )

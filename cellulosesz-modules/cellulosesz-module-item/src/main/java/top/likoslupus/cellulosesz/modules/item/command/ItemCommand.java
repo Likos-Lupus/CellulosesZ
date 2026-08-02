@@ -1,7 +1,12 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -35,38 +40,26 @@ public final class ItemCommand implements CommandContributor {
                 CommandSourceKind.PLAYER_ONLY
         );
 
-        var root = Commands.literal("item")
-                .then(Commands.argument(
-                                        "item",
-                                        ItemDescriptorArgument.itemDescriptor(items)
+        var item = Commands.argument(
+                        "item",
+                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
+                )
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        ItemDescriptorArgument.get(command, "item")
+                ))
+                .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                withCount(
+                                        ItemDescriptorArgument.get(command, "item"),
+                                        IntegerArgumentType.getInteger(command, "amount")
                                 )
-                                .executes(command -> ItemCommandSupport.sync(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "item grant",
-                                        policy -> {
-                                            var player = ItemCommandSupport.current(policy);
-
-                                            if (player.isEmpty()) {
-                                                return PlatformResult.failure(
-                                                        PlatformOperationStatus.INVALID_SOURCE,
-                                                        "player-only"
-                                                );
-                                            }
-
-                                            return service.grant(
-                                                    player.orElseThrow(),
-                                                    ItemDescriptorArgument.get(command, "item"),
-                                                    policy.hasPermission(
-                                                            "cellulosesz.item.spawn.blacklist"
-                                                    ),
-                                                    policy.hasPermission(
-                                                            "cellulosesz.item.spawn.oversized"
-                                                    )
-                                            );
-                                        }
-                                ))
+                        ))
                 );
 
         context.registerDirect(
@@ -74,8 +67,46 @@ public final class ItemCommand implements CommandContributor {
                 descriptor,
                 List.of(),
                 "commands.description.item",
-                "/item <item-descriptor>",
-                root
+                "/item <item> [amount]",
+                Commands.literal("item").then(item)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            ItemDescriptor item
+    ) {
+        return ItemCommandSupport.sync(
+                registration,
+                command,
+                descriptor,
+                "item grant",
+                policy -> {
+                    var player = ItemCommandSupport.current(policy);
+                    if (player.isEmpty()) {
+                        return PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        );
+                    }
+
+                    return service.grant(
+                            player.orElseThrow(),
+                            item,
+                            policy.hasPermission("cellulosesz.item.spawn.blacklist"),
+                            policy.hasPermission("cellulosesz.item.spawn.oversized")
+                    );
+                }
+        );
+    }
+
+    private static ItemDescriptor withCount(ItemDescriptor item, int count) {
+        return new ItemDescriptor(
+                item.normalizedItem(),
+                count,
+                item.normalizedArgument()
         );
     }
 

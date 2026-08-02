@@ -11,8 +11,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
 
 import java.util.List;
 
@@ -47,13 +46,7 @@ public final class ItemDbCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "item",
-                                        ItemIdArgument.itemId(items)
-                                )
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                items::names,
-                                                builder
-                                        )
+                                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
                                 )
                                 .executes(command -> lookup(
                                         context,
@@ -106,7 +99,7 @@ public final class ItemDbCommand implements CommandContributor {
                 descriptor,
                 "itemdb item",
                 _ -> {
-                    var item = ItemIdArgument.get(command, "item");
+                    var item = ItemDescriptorArgument.get(command, "item").normalizedItem();
                     var parsed = items.parse(item);
 
                     return parsed.isPresent()

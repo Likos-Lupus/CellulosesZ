@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.item;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -12,28 +12,30 @@ import top.likoslupus.cellulosesz.api.item.WorkstationPlatformService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricWorkstationOperations implements WorkstationPlatformService {
+public final class MinecraftWorkstationOperations implements WorkstationPlatformService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
 
-    public FabricWorkstationOperations(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public MinecraftWorkstationOperations(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
     public PlatformResult<Void> open(CellPlayer player, WorkstationKind kind) {
         requireNonNull(kind, "kind");
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Workstations must be opened on the server thread"
             );
         }
 
-        var nativePlayer = access.player(player);
+        var nativePlayer = MinecraftPlayers.requireOnline(player);
         if (!nativePlayer.isAlive() || nativePlayer.hasDisconnected()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -59,7 +61,7 @@ public final class FabricWorkstationOperations implements WorkstationPlatformSer
             String translationSuffix
     ) {
         player.openMenu(new SimpleMenuProvider(
-                (id, inventory, ignored) -> requireNonNull(type.create(id, inventory)),
+                (id, inventory, _) -> requireNonNull(type.create(id, inventory)),
                 Component.translatable("container." + translationSuffix)
         ));
         return PlatformResult.success();

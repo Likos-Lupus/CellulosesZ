@@ -11,7 +11,6 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
 
@@ -47,7 +46,7 @@ public final class JailCommand implements CommandContributor {
 
         var player = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -63,10 +62,7 @@ public final class JailCommand implements CommandContributor {
                         descriptor,
                         "jail off",
                         policy -> service.unjail(
-                                PlayerNameArgument.get(
-                                        command,
-                                        "player"
-                                ),
+                                StringArgumentType.getString(command, "player"),
                                 AdminCommandResults.actor(
                                         policy,
                                         players
@@ -187,7 +183,7 @@ public final class JailCommand implements CommandContributor {
                         + " reason-present="
                         + !reason.isBlank(),
                 policy -> service.jail(
-                        PlayerNameArgument.get(command, "player"),
+                        StringArgumentType.getString(command, "player"),
                         StringArgumentType.getString(command, "jail"),
                         AdminCommandResults.actor(policy, players),
                         duration,

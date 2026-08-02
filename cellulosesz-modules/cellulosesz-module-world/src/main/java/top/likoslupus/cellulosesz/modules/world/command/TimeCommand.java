@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.modules.world.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
@@ -11,8 +12,6 @@ import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.world.command.argument.LoadedWorldArgument;
 import top.likoslupus.cellulosesz.modules.world.command.argument.TimeValueArgument;
 
 import java.util.List;
@@ -50,16 +49,17 @@ public final class TimeCommand implements CommandContributor {
                         descriptor,
                         Optional.empty()
                 ))
-                .then(Commands.argument("world", LoadedWorldArgument.loadedWorld(worlds))
-                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                                worlds::loadedWorldIds,
-                                builder
-                        ))
+                .then(Commands.argument("world", DimensionArgument.dimension())
                         .executes(command -> execute(
                                 context,
                                 command,
                                 descriptor,
-                                Optional.of(LoadedWorldArgument.get(command, "world"))
+                                Optional.of(
+                                        DimensionArgument.getDimension(command, "world")
+                                                .dimension()
+                                                .identifier()
+                                                .toString()
+                                )
                         ))
                 );
 

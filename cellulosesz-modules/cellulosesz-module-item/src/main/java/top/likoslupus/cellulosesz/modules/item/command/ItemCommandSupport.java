@@ -7,7 +7,6 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
@@ -121,25 +120,6 @@ final class ItemCommandSupport {
         }
 
         return player;
-    }
-
-    static Optional<CellPlayer> target(
-            MinecraftCommandPolicyContext policy,
-            PlayerDirectory players,
-            String name
-    ) {
-        var target = players.onlinePlayer(name);
-
-        if (target.isEmpty()) {
-            policy.error(
-                    LocalizedMessage.of(
-                            "commands.item.player-not-online",
-                            Map.of("player", name)
-                    )
-            );
-        }
-
-        return target;
     }
 
 }

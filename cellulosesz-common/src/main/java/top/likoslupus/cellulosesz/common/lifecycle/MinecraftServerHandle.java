@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.common.lifecycle;
 
 import net.minecraft.server.MinecraftServer;
-import org.jspecify.annotations.Nullable;
 
 import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -48,6 +48,10 @@ public final class MinecraftServerHandle {
             throw new IllegalStateException("Minecraft server is stopping");
         }
         return server;
+    }
+
+    public synchronized boolean serverThread() {
+        return server != null && !stopping && server.isSameThread();
     }
 
 }

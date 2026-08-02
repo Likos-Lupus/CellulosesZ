@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
 
 import java.util.List;
@@ -36,7 +36,7 @@ public final class UnbanCommand implements CommandContributor {
 
         var argument = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -50,10 +50,7 @@ public final class UnbanCommand implements CommandContributor {
                         descriptor,
                         "unban",
                         policy -> service.unban(
-                                PlayerNameArgument.get(
-                                        command,
-                                        "player"
-                                ),
+                                StringArgumentType.getString(command, "player"),
                                 AdminCommandResults.actor(
                                         policy,
                                         players

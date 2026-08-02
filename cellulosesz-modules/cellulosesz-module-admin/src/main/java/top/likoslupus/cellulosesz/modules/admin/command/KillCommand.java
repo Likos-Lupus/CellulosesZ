@@ -1,12 +1,10 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
 import java.util.List;
@@ -16,14 +14,9 @@ import static java.util.Objects.requireNonNull;
 public final class KillCommand implements CommandContributor {
 
     private final PlayerControlCommandService service;
-    private final PlayerDirectory players;
 
-    public KillCommand(
-            PlayerControlCommandService service,
-            PlayerDirectory players
-    ) {
+    public KillCommand(PlayerControlCommandService service) {
         this.service = requireNonNull(service, "service");
-        this.players = requireNonNull(players, "players");
     }
 
     @Override
@@ -36,13 +29,7 @@ public final class KillCommand implements CommandContributor {
 
         var argument = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        )
+                        EntityArgument.player()
                 )
                 .executes(command -> AdminCommandResults.async(
                         context,
@@ -53,10 +40,9 @@ public final class KillCommand implements CommandContributor {
                                 "cellulosesz.command.kill.force"
                         ),
                         _ -> service.kill(
-                                PlayerNameArgument.get(
-                                        command,
-                                        "player"
-                                ),
+                                EntityArgument.getPlayer(command, "player")
+                                        .getGameProfile()
+                                        .name(),
                                 context.permissions().has(
                                         command.getSource(),
                                         "cellulosesz.command.kill.force"

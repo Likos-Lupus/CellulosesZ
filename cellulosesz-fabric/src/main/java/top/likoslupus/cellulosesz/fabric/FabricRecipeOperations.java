@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.recipe.CompressionRule;
 import top.likoslupus.cellulosesz.api.recipe.RecipeDescription;
 import top.likoslupus.cellulosesz.api.recipe.RecipeIngredient;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.fabric.mixin.RecipeResultAccessor;
 
 import java.util.*;
@@ -29,14 +30,14 @@ final class FabricRecipeOperations implements RecipePlatformService {
             RecipeType.SMITHING
     );
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final ItemPlatformService items;
 
     FabricRecipeOperations(
-            FabricServerAccess access,
+            MinecraftServerHandle server,
             ItemPlatformService items
     ) {
-        this.access = requireNonNull(access, "access");
+        this.server = requireNonNull(server, "server");
         this.items = requireNonNull(items, "items");
     }
 
@@ -168,7 +169,7 @@ final class FabricRecipeOperations implements RecipePlatformService {
     }
 
     private List<RecipeDescription> allDescriptions(int candidateLimit) {
-        var manager = (FabricRecipeManager) access.requireServer().getRecipeManager();
+        var manager = (FabricRecipeManager) server.requireRunning().getRecipeManager();
         var result = new ArrayList<RecipeDescription>();
 
         STANDARD_TYPES.forEach(type -> appendType(

@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
 import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandResult;
 
@@ -57,7 +57,7 @@ public final class BalanceCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        StringArgumentType.word()
                                 )
                                 .requires(source -> context.permissions().has(
                                         source,
@@ -75,10 +75,7 @@ public final class BalanceCommand implements CommandContributor {
                                         descriptor,
                                         "balance other",
                                         policy -> service.other(
-                                                PlayerNameArgument.get(
-                                                        command,
-                                                        "player"
-                                                ),
+                                                StringArgumentType.getString(command, "player"),
                                                 EconomyCommandSupport.currentPlayer(
                                                                 policy.playerUuid(),
                                                                 players

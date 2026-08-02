@@ -1,8 +1,9 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.world;
 
 import net.minecraft.world.level.storage.LevelResource;
 import top.likoslupus.cellulosesz.api.world.BackupPlatformService;
 import top.likoslupus.cellulosesz.api.world.BackupResult;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.io.IOException;
 import java.nio.file.*;
@@ -20,19 +21,19 @@ import java.util.zip.ZipOutputStream;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricBackupOperations implements BackupPlatformService {
+public final class MinecraftBackupOperations implements BackupPlatformService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final Clock clock;
     private final ExecutorService executor;
     private final AtomicBoolean running = new AtomicBoolean();
 
-    public FabricBackupOperations(FabricServerAccess access) {
-        this(access, Clock.systemUTC());
+    public MinecraftBackupOperations(MinecraftServerHandle server) {
+        this(server, Clock.systemUTC());
     }
 
-    FabricBackupOperations(FabricServerAccess access, Clock clock) {
-        this.access = requireNonNull(access, "access");
+    MinecraftBackupOperations(MinecraftServerHandle server, Clock clock) {
+        this.server = requireNonNull(server, "server");
         this.clock = requireNonNull(clock, "clock");
         this.executor = Executors.newSingleThreadExecutor(
                 Thread.ofVirtual().name("cellulosesz-backup-", 0).factory()
@@ -50,16 +51,16 @@ public final class FabricBackupOperations implements BackupPlatformService {
 
         var barrier = new CompletableFuture<Path>();
         try {
-            @SuppressWarnings("resource")
-            var server = access.requireServer();
-            server.execute(() -> {
+            var currentServer = server.requireRunning();
+            currentServer.execute(() -> {
                 try {
-                    if (!server.saveEverything(false, true, true)) {
+                    if (!currentServer.saveEverything(false, true, true)) {
                         throw new IllegalStateException(
                                 "Minecraft reported that the world save failed"
                         );
                     }
-                    barrier.complete(server
+
+                    barrier.complete(currentServer
                             .getWorldPath(LevelResource.ROOT)
                             .toAbsolutePath()
                             .normalize());

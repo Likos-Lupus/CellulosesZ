@@ -10,7 +10,6 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
 
@@ -46,7 +45,7 @@ public final class MuteCommand implements CommandContributor {
 
         var player = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -69,10 +68,7 @@ public final class MuteCommand implements CommandContributor {
                         descriptor,
                         "mute off",
                         policy -> service.unmute(
-                                PlayerNameArgument.get(
-                                        command,
-                                        "player"
-                                ),
+                                StringArgumentType.getString(command, "player"),
                                 AdminCommandResults.actor(
                                         policy,
                                         players
@@ -163,7 +159,7 @@ public final class MuteCommand implements CommandContributor {
                         !reason.isBlank()
                 ),
                 policy -> service.mute(
-                        PlayerNameArgument.get(command, "player"),
+                        StringArgumentType.getString(command, "player"),
                         AdminCommandResults.actor(policy, players),
                         duration,
                         reason

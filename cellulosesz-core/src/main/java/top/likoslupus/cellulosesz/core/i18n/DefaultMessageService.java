@@ -6,7 +6,6 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.Placeholder;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import net.kyori.adventure.text.minimessage.tag.standard.StandardTags;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
@@ -20,7 +19,7 @@ import java.nio.file.Path;
 import java.util.*;
 import java.util.regex.Pattern;
 
-public final class DefaultMessageService implements MessageService, MessageRenderer {
+public final class DefaultMessageService implements MessageRenderer {
 
     private static final String RESOURCE_ROOT = "/messages/";
     private static final Pattern HEX = Pattern.compile("^#[0-9a-fA-F]{6}$");
@@ -69,22 +68,35 @@ public final class DefaultMessageService implements MessageService, MessageRende
             Map<String, Object> raw = JacksonCodecs.readYaml(input, Map.class);
             return Map.copyOf(raw);
         } catch (IOException exception) {
-            throw new IllegalStateException("Failed to load packaged message catalog " + resource, exception);
+            throw new IllegalStateException(
+                    "Failed to load packaged message catalog " + resource,
+                    exception
+            );
         }
     }
 
     private InputStream resource(String path) throws IOException {
         var input = DefaultMessageService.class.getResourceAsStream(path);
-        if (input == null) throw new IOException("Missing packaged message resource: " + path);
+        if (input == null) {
+            throw new IOException("Missing packaged message resource: " + path);
+        }
         return input;
     }
 
-    private static Optional<String> lookup(RuntimeState state, String requestedLocale, String key) {
+    private static Optional<String> lookup(
+            RuntimeState state,
+            String requestedLocale,
+            String key
+    ) {
         var requested = messages(state, requestedLocale).get(key);
-        if (requested != null) return Optional.of(requested);
+        if (requested != null) {
+            return Optional.of(requested);
+        }
 
         var configured = messages(state, state.locale()).get(key);
-        if (configured != null) return Optional.of(configured);
+        if (configured != null) {
+            return Optional.of(configured);
+        }
 
         return Optional.ofNullable(messages(state, state.fallback()).get(key));
     }
@@ -102,7 +114,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
     }
 
     private static String normalizeLocaleValue(String value, String fallbackValue) {
-        if (value.isBlank()) return fallbackValue;
+        if (value.isBlank()) {
+            return fallbackValue;
+        }
         return value.toLowerCase(Locale.ROOT).replace('-', '_');
     }
 
@@ -128,23 +142,22 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     private String normalizeColor(String value, String fallbackColor) {
         var normalized = value.trim();
-        if (!normalized.startsWith("#")) normalized = "#" + normalized;
+        if (!normalized.startsWith("#")) {
+            normalized = "#" + normalized;
+        }
         return HEX.matcher(normalized).matches()
                 ? normalized.toUpperCase(Locale.ROOT)
                 : fallbackColor;
     }
 
-    @Override
     public String message(String key) {
         return message(key, Map.of());
     }
 
-    @Override
     public String message(String key, Map<String, ?> placeholders) {
         return rich(state.locale(), key, placeholders).plainText();
     }
 
-    @Override
     public RichText rich(
             String locale,
             String key,
@@ -153,7 +166,6 @@ public final class DefaultMessageService implements MessageService, MessageRende
         return render(locale, key, placeholders);
     }
 
-    @Override
     public boolean contains(String locale, String key) {
         var current = state;
         var normalized = normalizeLocaleValue(locale, current.locale());
@@ -161,7 +173,13 @@ public final class DefaultMessageService implements MessageService, MessageRende
                 || messages(current, current.fallback()).containsKey(key);
     }
 
-    @Override
+    private static Map<String, String> messages(RuntimeState state, String requestedLocale) {
+        return state.locales().getOrDefault(
+                normalizeLocaleValue(requestedLocale, state.locale()),
+                Map.of()
+        );
+    }
+
     public void reload() {
         var current = state;
         var prepared = prepareReload(
@@ -184,15 +202,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
         }
     }
 
-    private static Map<String, String> messages(RuntimeState state, String requestedLocale) {
-        return state.locales().getOrDefault(
-                normalizeLocaleValue(requestedLocale, state.locale()),
-                Map.of()
-        );
-    }
-
     /**
-     * Reads and validates all locale files without publishing them. Runtime rendering never performs file I/O.
+     * Reads and validates all locale files without publishing them. Runtime rendering never
+     * performs file I/O.
      */
     public PreparedMessages prepareReload(String configuredLocale, String configuredFallback) {
         var current = state;
@@ -246,7 +258,10 @@ public final class DefaultMessageService implements MessageService, MessageRende
             return new PreparedMessages(loaded);
         } catch (IOException | RuntimeException exception) {
             logger.error("Failed to load messages; the previous messages remain active", exception);
-            throw new IllegalStateException("Failed to reload messages: " + exception.getMessage(), exception);
+            throw new IllegalStateException(
+                    "Failed to reload messages: " + exception.getMessage(),
+                    exception
+            );
         }
     }
 
@@ -348,8 +363,14 @@ public final class DefaultMessageService implements MessageService, MessageRende
                 throw new IllegalArgumentException("Invalid message placeholder name: " + name);
             }
             if (value instanceof RichText richText) {
-                resolver.resolver(Placeholder.component(normalized, AdventureRichTextAdapter.toComponent(richText)));
-            } else if (value instanceof LocalizedMessage(String key, Map<String, Object> placeholders1)) {
+                resolver.resolver(Placeholder.component(
+                        normalized,
+                        AdventureRichTextAdapter.toComponent(richText)
+                ));
+            } else if (value instanceof LocalizedMessage(
+                    String key,
+                    Map<String, Object> placeholders1
+            )) {
                 resolver.resolver(Placeholder.component(
                         normalized,
                         AdventureRichTextAdapter.toComponent(render(
@@ -370,7 +391,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     private TagResolver colorTag(String name, String color) {
         var parsed = TextColor.fromHexString(color);
-        if (parsed == null) throw new IllegalStateException("Invalid configured message color: " + color);
+        if (parsed == null) {
+            throw new IllegalStateException("Invalid configured message color: " + color);
+        }
         return TagResolver.resolver(name, Tag.styling(parsed));
     }
 
@@ -380,7 +403,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
     ) throws IOException {
         var loaded = new LinkedHashMap<String, String>();
         var packaged = packagedDefaults.get(name);
-        if (packaged != null) flatten("", packaged, loaded);
+        if (packaged != null) {
+            flatten("", packaged, loaded);
+        }
 
         loaded.putAll(readFlattened(directory.resolve(name + ".yml")));
         var immutable = Map.copyOf(loaded);
@@ -390,7 +415,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     private void writeDefaultIfMissing(String name) throws IOException {
         var path = directory.resolve(name + ".yml");
-        if (Files.exists(path)) return;
+        if (Files.exists(path)) {
+            return;
+        }
 
         var resource = RESOURCE_ROOT + name + ".yml";
         try (var input = resource(resource)) {
@@ -400,7 +427,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
 
     @SuppressWarnings("unchecked")
     private Map<String, String> readFlattened(Path path) throws IOException {
-        if (Files.notExists(path)) return Map.of();
+        if (Files.notExists(path)) {
+            return Map.of();
+        }
 
         Map<String, Object> raw = JacksonCodecs.readYaml(path, Map.class);
         Map<String, String> flattened = new LinkedHashMap<>();
@@ -411,7 +440,8 @@ public final class DefaultMessageService implements MessageService, MessageRende
         var unknown = new TreeSet<>(flattened.keySet());
         unknown.removeAll(defaults.keySet());
         if (!unknown.isEmpty()) {
-            logger.warn("Ignoring unknown message keys in " + path + ": " + String.join(", ", unknown));
+            logger.warn(
+                    "Ignoring unknown message keys in " + path + ": " + String.join(", ", unknown));
             unknown.forEach(flattened::remove);
         }
         return flattened;
@@ -424,7 +454,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
             Map<String, String> flattened
     ) {
         raw.forEach((key, value) -> {
-            var fullKey = prefix.isBlank() ? key : prefix + "." + key;
+            var fullKey = prefix.isBlank()
+                    ? key
+                    : prefix + "." + key;
             if (value instanceof Map<?, ?> map) {
                 flatten(fullKey, (Map<String, Object>) map, flattened);
             } else {
@@ -452,7 +484,10 @@ public final class DefaultMessageService implements MessageService, MessageRende
             var localeName = localeEntry.getKey();
             for (var messageEntry : localeEntry.getValue().entrySet()) {
                 var expected = english.get(messageEntry.getKey());
-                if (expected == null) continue;
+                if (expected == null) {
+                    continue;
+                }
+
                 var expectedPlaceholders = MessageTemplatePlaceholders.names(expected);
                 var actualPlaceholders = MessageTemplatePlaceholders.names(messageEntry.getValue());
                 if (!expectedPlaceholders.equals(actualPlaceholders)) {
@@ -462,6 +497,7 @@ public final class DefaultMessageService implements MessageService, MessageRende
                                     + " but found " + actualPlaceholders
                     );
                 }
+
                 validateTemplate(
                         messageEntry.getKey(),
                         messageEntry.getValue(),
@@ -488,7 +524,9 @@ public final class DefaultMessageService implements MessageService, MessageRende
         placeholders.forEach(name -> resolver.resolver(Placeholder.unparsed(name, "placeholder")));
         try {
             miniMessage.deserialize(
-                    candidateLegacyColors ? LegacyMiniMessagePreprocessor.convert(template) : template,
+                    candidateLegacyColors
+                            ? LegacyMiniMessagePreprocessor.convert(template)
+                            : template,
                     resolver.build()
             );
         } catch (RuntimeException exception) {

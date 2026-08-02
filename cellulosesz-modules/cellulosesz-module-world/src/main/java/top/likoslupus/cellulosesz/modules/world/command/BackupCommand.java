@@ -5,9 +5,9 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-import top.likoslupus.cellulosesz.api.world.BackupService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.modules.world.service.BackupService;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -37,33 +37,34 @@ public final class BackupCommand implements CommandContributor {
                 "/backup",
                 Commands.literal("backup")
                         .executes(command -> WorldCommandSupport.async(
-                        context,
-                        command,
-                        descriptor,
-                        "backup",
-                        policy -> {
-                            if (backups.running()) {
-                                return CompletableFuture.completedFuture(
-                                        PlatformResult.failure(
-                                                PlatformOperationStatus.CONFLICT,
-                                                "backup-already-running"
-                                        )
-                                );
-                            }
+                                context,
+                                command,
+                                descriptor,
+                                "backup",
+                                policy -> {
+                                    if (backups.running()) {
+                                        return CompletableFuture.completedFuture(
+                                                PlatformResult.failure(
+                                                        PlatformOperationStatus.CONFLICT,
+                                                        "backup-already-running"
+                                                )
+                                        );
+                                    }
 
-                            policy.respond(
-                                    true,
-                                    LocalizedMessage.of("commands.world.backup-started")
-                            );
+                                    policy.respond(
+                                            true,
+                                            LocalizedMessage.of("commands.world.backup-started")
+                                    );
 
-                            return backups.createBackup()
-                                    .thenApply(PlatformResult::success)
-                                    .exceptionally(failure -> PlatformResult.failure(
-                                            PlatformOperationStatus.INTERNAL_ERROR,
-                                            failure.getClass().getSimpleName()
-                                    ));
-                        }
-                ))
+                                    return backups
+                                            .createBackup()
+                                            .thenApply(PlatformResult::success)
+                                            .exceptionally(failure -> PlatformResult.failure(
+                                                    PlatformOperationStatus.INTERNAL_ERROR,
+                                                    failure.getClass().getSimpleName()
+                                            ));
+                                }
+                        ))
         );
     }
 

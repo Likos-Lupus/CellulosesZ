@@ -10,7 +10,6 @@ import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("resource")
 final class JacksonConfigRegistryTest {
 
     @TempDir Path root;

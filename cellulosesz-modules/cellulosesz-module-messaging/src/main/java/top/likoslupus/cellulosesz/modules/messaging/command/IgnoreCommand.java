@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
 import java.util.List;
@@ -37,7 +37,7 @@ public final class IgnoreCommand implements CommandContributor {
         var root = Commands.literal("ignore")
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        StringArgumentType.word()
                                 )
                                 .suggests((_, builder) ->
                                         CommandSuggestionSupport.suggest(
@@ -54,10 +54,7 @@ public final class IgnoreCommand implements CommandContributor {
                                                 players,
                                                 actor -> service.ignore(
                                                         actor,
-                                                        PlayerNameArgument.get(
-                                                                command,
-                                                                "player"
-                                                        )
+                                                        StringArgumentType.getString(command, "player")
                                                 )
                                         )
                                 )

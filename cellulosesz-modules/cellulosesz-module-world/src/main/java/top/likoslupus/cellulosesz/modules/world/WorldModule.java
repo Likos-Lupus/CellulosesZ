@@ -9,11 +9,11 @@ import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.world.MinecraftEntityRemovalOperations;
 import top.likoslupus.cellulosesz.modules.world.command.*;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.world.service.DefaultBackupService;
-import top.likoslupus.cellulosesz.modules.world.service.DefaultEntityRemoveService;
+import top.likoslupus.cellulosesz.modules.world.service.BackupService;
 import top.likoslupus.cellulosesz.modules.world.service.DefaultWorldService;
 
 import java.util.Map;
@@ -30,14 +30,12 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command"}
 )
-@SuppressWarnings("resource")
 public final class WorldModule implements CellulosesZModule {
 
     private @Nullable WorldConfig config;
     private @Nullable WorldRuntimeSettings runtimeSettings;
     private @Nullable WorldService worlds;
-    private @Nullable EntityRemoveService remover;
-    private @Nullable DefaultBackupService backups;
+    private @Nullable BackupService backups;
 
     @Override
     public void registerConfigs(ModuleContext context) {
@@ -59,19 +57,13 @@ public final class WorldModule implements CellulosesZModule {
         worlds = new DefaultWorldService(
                 context.services().require(WorldStatePlatformService.class)
         );
-        remover = new DefaultEntityRemoveService(
-                context.services().require(EntityRemovalPlatformService.class)
-        );
-        backups = new DefaultBackupService(
+        backups = new BackupService(
                 context.services().require(BackupPlatformService.class),
                 context.dataDirectory().getParent(),
                 current
         );
 
         context.services().register(WorldService.class, requireNonNull(worlds));
-        context.services().register(EntityRemoveService.class, requireNonNull(remover));
-        context.services().register(BackupService.class, requireNonNull(backups));
-        context.services().register(DefaultBackupService.class, requireNonNull(backups));
     }
 
     @Override
@@ -79,11 +71,10 @@ public final class WorldModule implements CellulosesZModule {
         var registry = context.services().require(CommandRegistry.class);
         var directory = context.services().require(WorldDirectory.class);
         var locations = context.services().require(PlayerLocationPlatformService.class);
-        var players = context.services().require(PlayerDirectory.class);
         var worldOperations = context.services().require(WorldPlatformService.class);
         var entityOperations = context.services().require(EntityPlatformService.class);
         var targeting = context.services().require(PlayerTargetingService.class);
-        var removals = context.services().require(EntityRemovalPlatformService.class);
+        var removals = context.services().require(MinecraftEntityRemovalOperations.class);
         var current = requireNonNull(
                 runtimeSettings,
                 "WorldRuntimeSettings has not been initialized"
@@ -163,7 +154,6 @@ public final class WorldModule implements CellulosesZModule {
                 new LightningCommand(
                         worldOperations,
                         targeting,
-                        players,
                         locations,
                         current
                 )
@@ -190,7 +180,6 @@ public final class WorldModule implements CellulosesZModule {
                 "spawnmob-command",
                 new SpawnMobCommand(
                         entityOperations,
-                        players,
                         current
                 )
         );
@@ -225,7 +214,6 @@ public final class WorldModule implements CellulosesZModule {
                 "nuke-command",
                 new NukeCommand(
                         entityOperations,
-                        players,
                         locations,
                         current
                 )

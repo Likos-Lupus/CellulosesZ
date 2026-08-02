@@ -4,15 +4,15 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceArgument;
+import net.minecraft.core.registries.Registries;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
-import top.likoslupus.cellulosesz.modules.item.command.argument.EnchantmentArgument;
 
 import java.util.List;
 
@@ -36,14 +36,9 @@ public final class EnchantCommand implements CommandContributor {
 
         var enchantment = Commands.argument(
                         "enchantment",
-                        EnchantmentArgument.enchantment(
-                                service.platform()::enchantmentIds
-                        )
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                service.platform()::enchantmentIds,
-                                builder
+                        ResourceArgument.resource(
+                                context.buildContext(),
+                                Registries.ENCHANTMENT
                         )
                 )
                 .executes(command -> execute(
@@ -105,7 +100,10 @@ public final class EnchantCommand implements CommandContributor {
 
                     return service.enchant(
                             player.orElseThrow(),
-                            EnchantmentArgument.get(command, "enchantment"),
+                            ResourceArgument.getEnchantment(command, "enchantment")
+                                    .key()
+                                    .identifier()
+                                    .toString(),
                             level,
                             unsafe
                     );

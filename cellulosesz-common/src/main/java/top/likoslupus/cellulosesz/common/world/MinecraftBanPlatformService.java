@@ -1,9 +1,10 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.world;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.*;
 import top.likoslupus.cellulosesz.api.platform.admin.*;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -15,24 +16,17 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-/**
- * Direct adapter for Minecraft's persisted user and IP ban lists.
- */
-public final class FabricBanPlatformService implements BanPlatformService {
+/** Direct adapter for Minecraft's persisted user and IP ban lists. */
+public final class MinecraftBanPlatformService implements BanPlatformService {
 
-    private @Nullable MinecraftServer server;
+    private final MinecraftServerHandle server;
 
-    public void server(MinecraftServer server) {
+    public MinecraftBanPlatformService(MinecraftServerHandle server) {
         this.server = requireNonNull(server, "server");
-    }
-
-    public void clearServer() {
-        server = null;
     }
 
     @Override
     public BanPlatformResult banUser(BanUserRequest request) {
-        @SuppressWarnings("resource")
         var active = activeServer();
 
         if (active == null) {
@@ -57,7 +51,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
-
         if (!bans.add(entry)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
@@ -78,7 +71,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public BanPlatformResult pardonUser(PlayerProfileId target) {
-        @SuppressWarnings("resource")
         var active = activeServer();
 
         if (active == null) {
@@ -117,7 +109,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public BanPlatformResult banIp(BanIpRequest request) {
-        @SuppressWarnings("resource")
         var active = activeServer();
 
         if (active == null) {
@@ -142,7 +133,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
                 nullableDate(request.expiration().expiresAt().orElse(null)),
                 nullableReason(request.reason())
         );
-
         if (!bans.add(entry)) {
             return BanPlatformResult.failure(
                     BanPlatformStatus.PLATFORM_FAILURE,
@@ -163,7 +153,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public BanPlatformResult pardonIp(InetAddress address) {
-        @SuppressWarnings("resource")
         var active = activeServer();
 
         if (active == null) {
@@ -202,7 +191,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public boolean isUserBanned(PlayerProfileId target) {
-        @SuppressWarnings("resource")
         var active = activeServer();
         return active != null
                 && active.isSameThread()
@@ -211,7 +199,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public boolean isIpBanned(InetAddress address) {
-        @SuppressWarnings("resource")
         var active = activeServer();
         return active != null
                 && active.isSameThread()
@@ -220,7 +207,6 @@ public final class FabricBanPlatformService implements BanPlatformService {
 
     @Override
     public BanPlatformResult disconnectMatchingPlayers(BanDisconnectRequest request) {
-        @SuppressWarnings("resource")
         var active = activeServer();
 
         if (active == null) {
@@ -232,11 +218,10 @@ public final class FabricBanPlatformService implements BanPlatformService {
         }
 
         var count = 0;
+
         var component = disconnectReason(request.reason());
         for (var player : active.getPlayerList().getPlayers()) {
-            if (request.userId() != null
-                    && request.userId().equals(player.getUUID())
-            ) {
+            if (request.userId() != null && request.userId().equals(player.getUUID())) {
                 player.connection.disconnect(component);
                 count++;
                 continue;
@@ -266,7 +251,7 @@ public final class FabricBanPlatformService implements BanPlatformService {
     }
 
     private static String canonical(InetAddress address) {
-        var value = address.getHostAddress().toLowerCase(Locale.ROOT);
+        var value = requireNonNull(address, "address").getHostAddress().toLowerCase(Locale.ROOT);
         var zone = value.indexOf('%');
         return zone < 0
                 ? value
@@ -293,7 +278,11 @@ public final class FabricBanPlatformService implements BanPlatformService {
     }
 
     private @Nullable MinecraftServer activeServer() {
-        return server;
+        try {
+            return server.requireRunning();
+        } catch (IllegalStateException _) {
+            return null;
+        }
     }
 
     private static BanPlatformResult notReady() {

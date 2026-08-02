@@ -14,6 +14,9 @@ import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignSnapshot;
 import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
 
 import java.text.Normalizer;
@@ -26,10 +29,10 @@ import static java.util.Objects.requireNonNull;
 
 public final class FabricSignOperations implements SignPlatformService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
 
-    public FabricSignOperations(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public FabricSignOperations(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
@@ -42,7 +45,7 @@ public final class FabricSignOperations implements SignPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -75,7 +78,10 @@ public final class FabricSignOperations implements SignPlatformService {
     public PlatformResult<SignSnapshot> compareAndReplace(SignWriteRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = access.level(request.location().world);
+            var level = MinecraftWorlds.findLoaded(
+                    server.requireRunning(),
+                    request.location().world
+            );
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -137,7 +143,10 @@ public final class FabricSignOperations implements SignPlatformService {
     public PlatformResult<Void> compareAndBreak(SignBreakRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = access.level(request.location().world);
+            var level = MinecraftWorlds.findLoaded(
+                    server.requireRunning(),
+                    request.location().world
+            );
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -167,7 +176,7 @@ public final class FabricSignOperations implements SignPlatformService {
                     level.orElseThrow().destroyBlock(
                             position,
                             true,
-                            access.player(request.actor())
+                            MinecraftPlayers.requireOnline(request.actor())
                     )
             );
 
@@ -230,7 +239,7 @@ public final class FabricSignOperations implements SignPlatformService {
     }
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"

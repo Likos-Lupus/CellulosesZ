@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.item;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
@@ -21,6 +21,8 @@ import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +33,7 @@ import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricInventoryOperations implements InventoryPlatformService {
+public final class MinecraftInventoryOperations implements InventoryPlatformService {
 
     private static final int MAIN_END = 36;
     private static final int ARMOR_END = 40;
@@ -39,19 +41,19 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     private static final int MAX_BOOK_TITLE = 32;
     private static final int MAX_BOOK_AUTHOR = 16;
 
-    private final FabricServerAccess access;
-    private final FabricInventoryStore store;
+    private final MinecraftServerHandle server;
+    private final MinecraftInventoryStore store;
 
-    public FabricInventoryOperations(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
-        this.store = new FabricInventoryStore(access);
+    public MinecraftInventoryOperations(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
+        this.store = new MinecraftInventoryStore(server);
     }
 
     @Override
     public PlatformResult<Void> openInventory(CellPlayer viewer, CellPlayer target) {
         return onServerThread(() -> {
-            var viewerPlayer = access.player(viewer);
-            var targetPlayer = access.player(target);
+            var viewerPlayer = MinecraftPlayers.requireOnline(viewer);
+            var targetPlayer = MinecraftPlayers.requireOnline(target);
             var mirror = new InventoryMirror(targetPlayer.getInventory(), 54);
 
             viewerPlayer.openMenu(new SimpleMenuProvider(
@@ -70,8 +72,8 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     @Override
     public PlatformResult<Void> openEnderChest(CellPlayer viewer, CellPlayer target) {
         return onServerThread(() -> {
-            var viewerPlayer = access.player(viewer);
-            var targetPlayer = access.player(target);
+            var viewerPlayer = MinecraftPlayers.requireOnline(viewer);
+            var targetPlayer = MinecraftPlayers.requireOnline(target);
             viewerPlayer.openMenu(new SimpleMenuProvider(
                     (id, inventory, ignored) -> ChestMenu.threeRows(
                             id,
@@ -231,7 +233,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
         }
 
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var held = nativePlayer.getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
@@ -248,7 +250,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, replacement);
 
             return PlatformResult.success(new HeldStackChange(
-                    access.itemId(replacement),
+                    MinecraftItems.id(replacement),
                     previous,
                     targetCount,
                     normalMaximum
@@ -264,7 +266,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     ) {
         requireNonNull(action, "action");
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var inventory = nativePlayer.getInventory();
             var helmet = nativePlayer.getItemBySlot(EquipmentSlot.HEAD);
 
@@ -291,7 +293,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                     );
                 }
 
-                var before = access.itemId(helmet);
+                var before = MinecraftItems.id(helmet);
                 insertExact(inventory, destination, helmet.copy());
                 nativePlayer.setItemSlot(EquipmentSlot.HEAD, ItemStack.EMPTY);
                 inventory.setChanged();
@@ -311,8 +313,8 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
             var previous = helmet.isEmpty()
                     ? Optional.<String>empty()
-                    : Optional.of(access.itemId(helmet));
-            var next = access.itemId(held);
+                    : Optional.of(MinecraftItems.id(helmet));
+            var next = MinecraftItems.id(held);
             var heldCopy = held.copy();
             var helmetCopy = helmet.copy();
 
@@ -327,7 +329,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     @Override
     public PlatformResult<ItemStackDetails> heldItemDetails(CellPlayer player) {
         return onServerThread(() -> {
-            var stack = access.player(player).getMainHandItem();
+            var stack = MinecraftPlayers.requireOnline(player).getMainHandItem();
             if (stack.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -342,7 +344,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
             var maximumDamage = stack.getMaxDamage();
 
             return PlatformResult.success(new ItemStackDetails(
-                    access.itemId(stack),
+                    MinecraftItems.id(stack),
                     stack.getHoverName().getString(),
                     stack.getCount(),
                     stack.getMaxStackSize(),
@@ -358,29 +360,30 @@ public final class FabricInventoryOperations implements InventoryPlatformService
 
     @Override
     public PlatformResult<BookDetails> heldBook(CellPlayer player) {
-        return onServerThread(() -> details(access.player(player).getMainHandItem()));
+        return onServerThread(() -> details(MinecraftPlayers
+                .requireOnline(player)
+                .getMainHandItem()));
     }
 
     @Override
     public PlatformResult<BookMutationResult> mutateBook(CellPlayer player, BookRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var original = nativePlayer.getMainHandItem();
             var current = details(original);
             if (!current.successful()) {
                 return PlatformResult.failure(current.status(), current.detail());
             }
 
-            if ((
-                    request.action() == BookAction.SET_TITLE
-                            && request.value().length() > MAX_BOOK_TITLE
-            )
-                    || (
-                    request.action() == BookAction.SET_AUTHOR
-                            && request.value().length() > MAX_BOOK_AUTHOR
-            )
-                    || request.value().codePoints().anyMatch(Character::isISOControl)
+            if (
+                    (
+                            request.action() == BookAction.SET_TITLE
+                                    && request.value().length() > MAX_BOOK_TITLE
+                    ) || (
+                            request.action() == BookAction.SET_AUTHOR
+                                    && request.value().length() > MAX_BOOK_AUTHOR
+                    ) || request.value().codePoints().anyMatch(Character::isISOControl)
             ) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INVALID_ARGUMENT,
@@ -434,8 +437,8 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     @Override
     public CompletableFuture<PlatformResult<SkullResult>> skull(SkullRequest request) {
         requireNonNull(request, "request");
-        var server = access.requireServer();
-        return server.getProfileCache()
+        var currentServer = server.requireRunning();
+        return currentServer.getProfileCache()
                 .getAsync(request.owner())
                 .thenCompose(profile -> {
                     if (profile.isEmpty()) {
@@ -446,7 +449,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
                     }
 
                     var future = new CompletableFuture<PlatformResult<SkullResult>>();
-                    access.requireServer().execute(() -> {
+                    currentServer.execute(() -> {
                         try {
                             future.complete(applySkull(request, profile.orElseThrow()));
                         } catch (RuntimeException failure) {
@@ -463,7 +466,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     }
 
     private PlatformResult<SkullResult> applySkull(SkullRequest request, GameProfile profile) {
-        var target = access.player(request.recipient());
+        var target = MinecraftPlayers.requireOnline(request.recipient());
         if (target.hasDisconnected()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -707,7 +710,7 @@ public final class FabricInventoryOperations implements InventoryPlatformService
     }
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
-        if (!access.requireServer().isSameThread()) {
+        if (!server.requireRunning().isSameThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.STATE_NOT_ALLOWED,
                     "Operation requires the server thread"

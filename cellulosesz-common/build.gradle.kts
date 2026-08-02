@@ -17,7 +17,10 @@ loom {
 
 dependencies {
     minecraft(libs.minecraft)
+
     implementation(libs.architectury.common)
     implementation(project(":cellulosesz-api"))
     implementation(project(":cellulosesz-core"))
+
+    compileOnly(libs.luckperms.api)
 }

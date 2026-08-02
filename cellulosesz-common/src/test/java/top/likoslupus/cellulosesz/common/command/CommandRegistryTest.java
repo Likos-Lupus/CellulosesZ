@@ -8,7 +8,6 @@ import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("resource")
 final class CommandRegistryTest {
 
     @Test

@@ -17,7 +17,6 @@ import static java.util.Objects.requireNonNull;
         description = "Permission provider integration and cache.",
         phase = ModulePhase.CORE
 )
-@SuppressWarnings("resource")
 public final class PermissionModule implements CellulosesZModule {
 
     private @Nullable PermissionConfig config;

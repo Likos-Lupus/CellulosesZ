@@ -28,7 +28,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "teleport", "command"}
 )
-@SuppressWarnings("resource")
 public final class HomeModule implements CellulosesZModule {
 
     private @Nullable HomeConfig config;

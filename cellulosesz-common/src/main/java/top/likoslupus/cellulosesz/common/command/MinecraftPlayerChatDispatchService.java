@@ -1,25 +1,27 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.command;
 
 import net.minecraft.network.chat.Component;
 import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricPlayerChatDispatchService implements PlayerChatDispatchService {
+public final class MinecraftPlayerChatDispatchService implements PlayerChatDispatchService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
 
-    public FabricPlayerChatDispatchService(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public MinecraftPlayerChatDispatchService(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
     public PlatformResult<Void> dispatch(CellPlayer player, String message) {
         requireNonNull(message, "message");
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
@@ -34,8 +36,8 @@ public final class FabricPlayerChatDispatchService implements PlayerChatDispatch
         }
 
         try {
-            var nativePlayer = access.player(player);
-            access.requireServer().getPlayerList().broadcastSystemMessage(
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
+            server.requireRunning().getPlayerList().broadcastSystemMessage(
                     Component.translatable(
                             "chat.type.text",
                             nativePlayer.getDisplayName(),

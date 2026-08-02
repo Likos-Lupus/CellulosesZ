@@ -1,30 +1,31 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.world;
 
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldStatePlatformService;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricWorldStateOperations implements WorldStatePlatformService {
+public final class MinecraftWorldStateOperations implements WorldStatePlatformService {
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
 
-    public FabricWorldStateOperations(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public MinecraftWorldStateOperations(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
     public PlatformResult<Void> setTime(String worldId, long ticks) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
             );
         }
 
-        var level = access.level(worldId);
+        var level = MinecraftWorlds.findLoaded(server.requireRunning(), worldId);
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -43,14 +44,14 @@ public final class FabricWorldStateOperations implements WorldStatePlatformServi
             int durationSeconds
     ) {
         requireNonNull(type, "type");
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
             );
         }
 
-        var level = access.level(worldId);
+        var level = MinecraftWorlds.findLoaded(server.requireRunning(), worldId);
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,

@@ -11,11 +11,13 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.command.MinecraftPlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.entity.MinecraftEntityOperations;
 import top.likoslupus.cellulosesz.common.lifecycle.CommonRuntimeHooks;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.world.MinecraftBackupOperations;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
-import top.likoslupus.cellulosesz.fabric.*;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
 import top.likoslupus.cellulosesz.fabric.hook.FabricGameplayHooks;
@@ -26,33 +28,25 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-/**
- * Fabric-only hooks left after common Architectury lifecycle wiring.
- */
+/** Fabric-only hooks left after common Architectury lifecycle wiring. */
 public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
 
     private final CellulosesZBootstrap bootstrap;
-    private final FabricServerAccess access;
-    private final FabricBanPlatformService bans;
-    private final FabricPlayerCommandDispatchService commandDispatch;
-    private final FabricEntityOperations entities;
-    private final FabricBackupOperations backups;
+    private final MinecraftPlayerCommandDispatchService commandDispatch;
+    private final MinecraftEntityOperations entities;
+    private final MinecraftBackupOperations backups;
     private final Supplier<PermissionBackend> permissions;
     private @Nullable FabricGameplayHooks gameplay;
     private @Nullable FabricPlatformEventBridge events;
 
     public FabricCommonRuntimeHooks(
             CellulosesZBootstrap bootstrap,
-            FabricServerAccess access,
-            FabricBanPlatformService bans,
-            FabricPlayerCommandDispatchService commandDispatch,
-            FabricEntityOperations entities,
-            FabricBackupOperations backups,
+            MinecraftPlayerCommandDispatchService commandDispatch,
+            MinecraftEntityOperations entities,
+            MinecraftBackupOperations backups,
             Supplier<PermissionBackend> permissions
     ) {
         this.bootstrap = requireNonNull(bootstrap, "bootstrap");
-        this.access = requireNonNull(access, "access");
-        this.bans = requireNonNull(bans, "bans");
         this.commandDispatch = requireNonNull(commandDispatch, "commandDispatch");
         this.entities = requireNonNull(entities, "entities");
         this.backups = requireNonNull(backups, "backups");
@@ -89,20 +83,7 @@ public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
                         MinecraftPlayers.wrap(viewer),
                         target.getUUID()
                 ))
-                .orElse(true)
-        );
-    }
-
-    @Override
-    public void attachServer(MinecraftServer server) {
-        access.attach(server);
-        bans.server(server);
-    }
-
-    @Override
-    public void detachServer() {
-        bans.clearServer();
-        access.clear();
+                .orElse(true));
     }
 
     @Override
@@ -153,8 +134,6 @@ public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
         entities.clearTrackedEntities();
         backups.close();
         FabricVanishBridge.clear();
-        bans.clearServer();
-        access.clear();
     }
 
 }

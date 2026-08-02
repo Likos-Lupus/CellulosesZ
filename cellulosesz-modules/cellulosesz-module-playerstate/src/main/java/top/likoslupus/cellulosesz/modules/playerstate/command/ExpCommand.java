@@ -5,6 +5,7 @@ import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -13,8 +14,7 @@ import top.likoslupus.cellulosesz.api.playerstate.ExperienceRequest;
 import top.likoslupus.cellulosesz.api.playerstate.ExperienceUnit;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 import top.likoslupus.cellulosesz.modules.playerstate.command.argument.ExperienceAmountArgument;
@@ -182,18 +182,12 @@ public final class ExpCommand implements CommandContributor {
     ) {
         return Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        EntityArgument.player()
                 )
                 .requires(source ->
                         context.permissions().has(
                                 source,
                                 permission
-                        )
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
                         )
                 );
     }
@@ -249,18 +243,9 @@ public final class ExpCommand implements CommandContributor {
                 command,
                 descriptor,
                 "exp show other",
-                _ -> {
-                    var name = PlayerNameArgument.get(
-                            command,
-                            "player"
-                    );
-
-                    return players.onlinePlayer(name)
-                            .map(service::experience)
-                            .orElseGet(() ->
-                                    PlayerStateCommandSupport.offline(name)
-                            );
-                }
+                _ -> service.experience(MinecraftPlayers.wrap(
+                        EntityArgument.getPlayer(command, "player")
+                ))
         );
     }
 
@@ -306,23 +291,10 @@ public final class ExpCommand implements CommandContributor {
                 command,
                 descriptor,
                 "exp mutation other",
-                _ -> {
-                    var name = PlayerNameArgument.get(
-                            command,
-                            "player"
-                    );
-
-                    return players.onlinePlayer(name)
-                            .map(player ->
-                                    service.mutateExperience(
-                                            player,
-                                            request
-                                    )
-                            )
-                            .orElseGet(() ->
-                                    PlayerStateCommandSupport.offline(name)
-                            );
-                }
+                _ -> service.mutateExperience(
+                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        request
+                )
         );
     }
 

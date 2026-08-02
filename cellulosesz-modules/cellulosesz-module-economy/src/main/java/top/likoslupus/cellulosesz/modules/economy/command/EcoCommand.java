@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -8,7 +9,6 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
 import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
 import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
@@ -94,7 +94,7 @@ public final class EcoCommand implements CommandContributor {
         return Commands.literal(literal)
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        StringArgumentType.word()
                                 )
                                 .suggests((_, builder) ->
                                         CommandSuggestionSupport.suggest(
@@ -111,7 +111,7 @@ public final class EcoCommand implements CommandContributor {
                                                         "eco " + literal,
                                                         policy -> service.mutate(
                                                                 mutation,
-                                                                PlayerNameArgument.get(
+                                                                StringArgumentType.getString(
                                                                         command,
                                                                         "player"
                                                                 ),

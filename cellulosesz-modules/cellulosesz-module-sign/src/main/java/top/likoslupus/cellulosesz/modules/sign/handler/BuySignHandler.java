@@ -73,7 +73,7 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
         }
 
         var request = new InventoryItemRequest(
-                items.commandArgument(descriptor.orElseThrow()),
+                descriptor.orElseThrow().normalizedArgument(),
                 descriptor.orElseThrow().count
         );
         var prepared = inventory.prepareExchange(
@@ -112,9 +112,12 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
                                     return CompletableFuture.completedFuture(SignUseResult.success(
                                             "service.sign.buy-success",
                                             Map.of(
-                                                    "count", descriptor.orElseThrow().count,
-                                                    "item", descriptor.orElseThrow().normalizedItem(),
-                                                    "price", economy.format(price.orElseThrow())
+                                                    "count",
+                                                    descriptor.orElseThrow().count,
+                                                    "item",
+                                                    descriptor.orElseThrow().normalizedItem(),
+                                                    "price",
+                                                    economy.format(price.orElseThrow())
                                             )
                                     ));
                                 }
@@ -125,9 +128,15 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
                                                 price.orElseThrow(),
                                                 TransactionCause.system("buy sign refund")
                                         )
-                                        .handle((refund, failure) -> failure == null && refund.success()
-                                                ? SignUseResult.failure("service.sign.buy-inventory-full")
-                                                : SignUseResult.failure("service.sign.buy-rollback-failed"));
+                                        .handle((refund, failure) ->
+                                                failure == null && refund.success()
+                                                        ?
+                                                        SignUseResult.failure(
+                                                                "service.sign.buy-inventory-full"
+                                                        )
+                                                        : SignUseResult.failure(
+                                                                "service.sign.buy-rollback-failed"
+                                                        ));
                             });
                 })
                 .exceptionally(_ -> SignUseResult.failure("service.sign.execution-failed"));

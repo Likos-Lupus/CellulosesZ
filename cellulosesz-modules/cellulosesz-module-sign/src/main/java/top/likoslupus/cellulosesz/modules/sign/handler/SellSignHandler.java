@@ -73,7 +73,7 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
         }
 
         var request = new InventoryItemRequest(
-                items.commandArgument(descriptor.orElseThrow()),
+                descriptor.orElseThrow().normalizedArgument(),
                 descriptor.orElseThrow().count
         );
         var prepared = inventory.prepareExchange(

@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.modules.world.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
@@ -10,12 +11,10 @@ import top.likoslupus.cellulosesz.api.entity.TntBurstRequest;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -26,18 +25,15 @@ import static java.util.Objects.requireNonNull;
 public final class NukeCommand implements CommandContributor {
 
     private final EntityPlatformService entities;
-    private final PlayerDirectory players;
     private final PlayerLocationPlatformService locations;
     private final WorldRuntimeSettings config;
 
     public NukeCommand(
             EntityPlatformService entities,
-            PlayerDirectory players,
             PlayerLocationPlatformService locations,
             WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
-        this.players = requireNonNull(players, "players");
         this.locations = requireNonNull(locations, "locations");
         this.config = requireNonNull(config, "config");
     }
@@ -56,16 +52,14 @@ public final class NukeCommand implements CommandContributor {
                         descriptor,
                         Optional.empty()
                 ))
-                .then(Commands.argument("player", PlayerNameArgument.playerName())
-                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        ))
+                .then(Commands.argument("player", EntityArgument.player())
                         .executes(command -> execute(
                                 context,
                                 command,
                                 descriptor,
-                                Optional.of(PlayerNameArgument.get(command, "player"))
+                                Optional.of(MinecraftPlayers.wrap(
+                                        EntityArgument.getPlayer(command, "player")
+                                ))
                         ))
                 );
 
@@ -83,7 +77,7 @@ public final class NukeCommand implements CommandContributor {
             CommandRegistrationContext registration,
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
-            Optional<String> targetName
+            Optional<CellPlayer> target
     ) {
         return WorldCommandSupport.sync(
                 registration,
@@ -98,10 +92,10 @@ public final class NukeCommand implements CommandContributor {
                         );
                     }
 
-                    Optional<CellPlayer> target = targetName.isPresent()
-                            ? players.onlinePlayer(targetName.orElseThrow())
+                    Optional<CellPlayer> anchor = target.isPresent()
+                            ? target
                             : policy.currentPlayer();
-                    return target
+                    return anchor
                             .<PlatformResult<?>>map(player -> entities.spawnTnt(
                                     new TntBurstRequest(
                                             locations.currentLocation(player),

@@ -1,14 +1,13 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
 import java.util.List;
@@ -18,14 +17,9 @@ import static java.util.Objects.requireNonNull;
 public final class InvSeeCommand implements CommandContributor {
 
     private final InventoryCommandService service;
-    private final PlayerDirectory players;
 
-    public InvSeeCommand(
-            InventoryCommandService service,
-            PlayerDirectory players
-    ) {
+    public InvSeeCommand(InventoryCommandService service) {
         this.service = requireNonNull(service, "service");
-        this.players = requireNonNull(players, "players");
     }
 
     @Override
@@ -38,13 +32,7 @@ public final class InvSeeCommand implements CommandContributor {
 
         var target = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
-                )
-                .suggests((ignored, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        )
+                        EntityArgument.player()
                 )
                 .executes(command -> ItemCommandSupport.sync(
                         context,
@@ -53,26 +41,19 @@ public final class InvSeeCommand implements CommandContributor {
                         "invsee",
                         policy -> {
                             var viewer = ItemCommandSupport.current(policy);
-                            var targetPlayer = ItemCommandSupport.target(
-                                    policy,
-                                    players,
-                                    PlayerNameArgument.get(
-                                            command,
-                                            "player"
-                                    )
-                            );
-
-                            if (viewer.isEmpty()
-                                    || targetPlayer.isEmpty()) {
+                            if (viewer.isEmpty()) {
                                 return PlatformResult.failure(
-                                        PlatformOperationStatus.NOT_FOUND,
-                                        "player-offline"
+                                        PlatformOperationStatus.INVALID_SOURCE,
+                                        "player-only"
                                 );
                             }
 
                             return service.openInventory(
                                     viewer.orElseThrow(),
-                                    targetPlayer.orElseThrow()
+                                    MinecraftPlayers.wrap(EntityArgument.getPlayer(
+                                            command,
+                                            "player"
+                                    ))
                             );
                         }
                 ));

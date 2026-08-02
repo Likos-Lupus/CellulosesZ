@@ -4,6 +4,9 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.ResourceArgument;
+import net.minecraft.core.registries.Registries;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
@@ -11,12 +14,9 @@ import top.likoslupus.cellulosesz.api.entity.SpawnMobRequest;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -27,16 +27,13 @@ import static java.util.Objects.requireNonNull;
 public final class SpawnMobCommand implements CommandContributor {
 
     private final EntityPlatformService entities;
-    private final PlayerDirectory players;
     private final WorldRuntimeSettings config;
 
     public SpawnMobCommand(
             EntityPlatformService entities,
-            PlayerDirectory players,
             WorldRuntimeSettings config
     ) {
         this.entities = requireNonNull(entities, "entities");
-        this.players = requireNonNull(players, "players");
         this.config = requireNonNull(config, "config");
     }
 
@@ -59,29 +56,26 @@ public final class SpawnMobCommand implements CommandContributor {
                         IntegerArgumentType.getInteger(command, "amount"),
                         Optional.empty()
                 ))
-                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                .then(Commands.argument("player", EntityArgument.player())
                         .requires(source -> context.permissions().has(
                                 source,
                                 "cellulosesz.command.spawnmob.others"
-                        ))
-                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
                         ))
                         .executes(command -> execute(
                                 context,
                                 command,
                                 descriptor,
                                 IntegerArgumentType.getInteger(command, "amount"),
-                                Optional.of(PlayerNameArgument.get(command, "player"))
+                                Optional.of(MinecraftPlayers.wrap(
+                                        EntityArgument.getPlayer(command, "player")
+                                ))
                         ))
                 );
 
-        var entity = Commands.argument("entity", EntityTypeArgument.livingEntity(entities))
-                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                        entities::livingEntityIds,
-                        builder
-                ))
+        var entity = Commands.argument(
+                        "entity",
+                        ResourceArgument.resource(context.buildContext(), Registries.ENTITY_TYPE)
+                )
                 .executes(command -> execute(
                         context,
                         command,
@@ -106,7 +100,7 @@ public final class SpawnMobCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             int amount,
-            Optional<String> targetName
+            Optional<CellPlayer> target
     ) {
         return WorldCommandSupport.sync(
                 registration,
@@ -114,7 +108,10 @@ public final class SpawnMobCommand implements CommandContributor {
                 descriptor,
                 "spawnmob",
                 policy -> {
-                    var entity = EntityTypeArgument.get(command, "entity");
+                    var entity = ResourceArgument.getEntityType(command, "entity")
+                            .key()
+                            .identifier()
+                            .toString();
                     var permission = "cellulosesz.command.spawnmob.entity."
                             + entity.replace(':', '.')
                             .replaceAll("[^a-z0-9_.-]", "_");
@@ -128,8 +125,8 @@ public final class SpawnMobCommand implements CommandContributor {
                         );
                     }
 
-                    Optional<CellPlayer> anchor = targetName.isPresent()
-                            ? players.onlinePlayer(targetName.orElseThrow())
+                    Optional<CellPlayer> anchor = target.isPresent()
+                            ? target
                             : policy.currentPlayer();
                     return anchor
                             .<PlatformResult<?>>map(player -> entities.spawnMob(

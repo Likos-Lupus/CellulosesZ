@@ -13,6 +13,10 @@ import java.util.Set;
  */
 public interface ItemPlatformService {
 
+    boolean registryReady();
+
+    Optional<ItemDescriptor> parse(String input);
+
     Set<String> itemIds();
 
     Set<String> enchantmentIds();

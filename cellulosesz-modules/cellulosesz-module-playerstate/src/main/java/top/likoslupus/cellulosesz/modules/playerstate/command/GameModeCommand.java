@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
@@ -68,43 +68,27 @@ public final class GameModeCommand implements CommandContributor {
                         ))
                         .then(Commands.argument(
                                                 "player",
-                                                PlayerNameArgument.playerName()
+                                                EntityArgument.player()
                                         )
                                         .requires(source -> context.permissions().has(
                                                 source,
                                                 "cellulosesz.playerstate.gamemode.others"
                                         ))
-                                        .suggests((_, builder) ->
-                                                CommandSuggestionSupport.suggest(
-                                                        players::onlinePlayerNames,
-                                                        builder
-                                                )
-                                        )
                                         .executes(command ->
                                                 PlayerStateCommandSupport.async(
                                                         context,
                                                         command,
                                                         descriptor,
                                                         "gamemode other",
-                                                        _ -> {
-                                                            var name = PlayerNameArgument.get(
-                                                                    command,
-                                                                    "player"
-                                                            );
-
-                                                            return players.onlinePlayer(name)
-                                                                    .map(player ->
-                                                                            service.gameMode(
-                                                                                    player,
-                                                                                    mode
-                                                                            )
-                                                                    )
-                                                                    .orElseGet(() ->
-                                                                            PlayerStateCommandSupport.offline(
-                                                                                    name
-                                                                            )
-                                                                    );
-                                                        }
+                                                        _ -> service.gameMode(
+                                                                MinecraftPlayers.wrap(
+                                                                        EntityArgument.getPlayer(
+                                                                                command,
+                                                                                "player"
+                                                                        )
+                                                                ),
+                                                                mode
+                                                        )
                                                 )
                                         )
                         )

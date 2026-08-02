@@ -1,9 +1,10 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
@@ -11,18 +12,17 @@ import top.likoslupus.cellulosesz.api.item.SkullRequest;
 import top.likoslupus.cellulosesz.api.item.SkullResult;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -30,16 +30,13 @@ public final class SkullCommand implements CommandContributor {
 
     private final InventoryCommandService service;
     private final InventoryPlatformService inventory;
-    private final PlayerDirectory players;
 
     public SkullCommand(
             InventoryCommandService service,
-            InventoryPlatformService inventory,
-            PlayerDirectory players
+            InventoryPlatformService inventory
     ) {
         this.service = requireNonNull(service, "service");
         this.inventory = requireNonNull(inventory, "inventory");
-        this.players = requireNonNull(players, "players");
     }
 
     @Override
@@ -52,7 +49,7 @@ public final class SkullCommand implements CommandContributor {
 
         var owner = Commands.argument(
                         "owner",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .executes(command -> modify(
                         context,
@@ -61,7 +58,7 @@ public final class SkullCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                 "player",
-                                PlayerNameArgument.playerName()
+                                EntityArgument.player()
                         )
                         .requires(source ->
                                 context.permissions().has(
@@ -70,12 +67,6 @@ public final class SkullCommand implements CommandContributor {
                                 ) && context.permissions().has(
                                         source,
                                         "cellulosesz.command.skull.spawn.others"
-                                )
-                        )
-                        .suggests((_, builder) ->
-                                CommandSuggestionSupport.suggest(
-                                        players::onlinePlayerNames,
-                                        builder
                                 )
                         )
                         .executes(command -> spawnOther(
@@ -164,7 +155,7 @@ public final class SkullCommand implements CommandContributor {
                     }
 
                     return new SkullRequest(
-                            PlayerNameArgument.get(command, "owner"),
+                            StringArgumentType.getString(command, "owner"),
                             player,
                             false,
                             Optional.of(
@@ -186,20 +177,12 @@ public final class SkullCommand implements CommandContributor {
                 context,
                 command,
                 descriptor,
-                _ -> {
-                    var target = players.onlinePlayer(
-                            PlayerNameArgument.get(command, "player")
-                    );
-
-                    return target
-                            .map(player -> new SkullRequest(
-                                    PlayerNameArgument.get(command, "owner"),
-                                    player,
-                                    true,
-                                    Optional.empty()
-                            ))
-                            .orElse(null);
-                }
+                _ -> new SkullRequest(
+                        StringArgumentType.getString(command, "owner"),
+                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        true,
+                        Optional.empty()
+                )
         );
     }
 
@@ -230,7 +213,9 @@ public final class SkullCommand implements CommandContributor {
                     }
 
                     @SuppressWarnings("unchecked")
-                    var future = (CompletableFuture<PlatformResult<SkullResult>>) service.skull(value);
+                    var future = (CompletableFuture<PlatformResult<SkullResult>>) service.skull(
+                            value
+                    );
                     return future;
                 }
         );

@@ -2,12 +2,10 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
 import java.util.List;
@@ -17,16 +15,13 @@ import static java.util.Objects.requireNonNull;
 public final class BurnCommand implements CommandContributor {
 
     private final PlayerControlCommandService service;
-    private final PlayerDirectory players;
     private final int maximum;
 
     public BurnCommand(
             PlayerControlCommandService service,
-            PlayerDirectory players,
             int maximum
     ) {
         this.service = requireNonNull(service, "service");
-        this.players = requireNonNull(players, "players");
         this.maximum = maximum;
     }
 
@@ -40,13 +35,7 @@ public final class BurnCommand implements CommandContributor {
 
         var player = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        )
+                        EntityArgument.player()
                 )
                 .then(Commands.argument(
                                         "seconds",
@@ -62,10 +51,9 @@ public final class BurnCommand implements CommandContributor {
                                                 "seconds"
                                         ),
                                         _ -> service.burn(
-                                                PlayerNameArgument.get(
-                                                        command,
-                                                        "player"
-                                                ),
+                                                EntityArgument.getPlayer(command, "player")
+                                                        .getGameProfile()
+                                                        .name(),
                                                 IntegerArgumentType.getInteger(
                                                         command,
                                                         "seconds"

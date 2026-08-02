@@ -25,7 +25,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.CORE,
         priority = 0
 )
-@SuppressWarnings("resource")
 public final class CommandModule implements CellulosesZModule {
 
     private @Nullable CommandConfig config;

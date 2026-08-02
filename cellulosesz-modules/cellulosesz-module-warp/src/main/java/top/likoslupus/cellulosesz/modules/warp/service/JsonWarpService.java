@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
 import top.likoslupus.cellulosesz.api.module.PreparedReloads;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.warp.PreparedWarpReload;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
@@ -184,7 +183,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
                 .thenCompose(prepared -> prepared.commit().toCompletableFuture());
     }
 
-    public CompletableFuture<PreparedWarpReload> prepareReload(boolean perWarpPermission) {
+    public CompletableFuture<PreparedModuleReload> prepareReload(boolean perWarpPermission) {
         return reloads.submit(() -> {
             final RuntimeState previous;
             final long preparedVersion;
@@ -208,7 +207,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
                                     }
                                 });
 
-                        return new PreparedWarpReloadImpl(
+                        return new PreparedReloadState(
                                 previous,
                                 new RuntimeState(Map.copyOf(next), perWarpPermission),
                                 preparedVersion
@@ -245,7 +244,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
 
     }
 
-    private final class PreparedWarpReloadImpl implements PreparedWarpReload {
+    private final class PreparedReloadState implements PreparedModuleReload {
 
         private final RuntimeState previous;
         private final RuntimeState candidate;
@@ -254,7 +253,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
         private boolean committed;
         private long committedVersion;
 
-        private PreparedWarpReloadImpl(
+        private PreparedReloadState(
                 RuntimeState previous,
                 RuntimeState candidate,
                 long preparedVersion

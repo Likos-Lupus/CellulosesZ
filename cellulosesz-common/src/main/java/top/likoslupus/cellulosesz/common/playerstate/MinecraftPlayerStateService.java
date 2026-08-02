@@ -29,7 +29,6 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         this.server = requireNonNull(server, "server");
     }
 
-    @SuppressWarnings("resource")
     @Override
     public PlatformResult<Integer> seaLevel(CellPlayer player) {
         return onServerThread(() ->
@@ -250,7 +249,6 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         });
     }
 
-    @SuppressWarnings("resource")
     @Override
     public PlatformResult<PersonalTimeSetting> setPersonalTime(
             CellPlayer player,
@@ -415,7 +413,6 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         });
     }
 
-    @SuppressWarnings("resource")
     private static void restoreWorldWeather(ServerPlayer target) {
         var level = target.level();
         if (level.isRaining()) {
@@ -512,7 +509,6 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         );
     }
 
-    @SuppressWarnings("resource")
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
         var current = server.current();
         if (current.isEmpty() || !current.orElseThrow().isSameThread()) {

@@ -34,7 +34,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command", "permission"}
 )
-@SuppressWarnings("resource")
 public final class UserModule implements CellulosesZModule {
 
     private volatile @Nullable UserConfig config;

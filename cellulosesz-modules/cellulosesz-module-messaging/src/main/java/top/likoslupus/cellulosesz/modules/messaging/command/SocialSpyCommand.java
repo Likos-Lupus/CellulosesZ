@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.messaging.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -10,8 +11,6 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
 import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 
 import java.util.List;
@@ -48,58 +47,55 @@ public final class SocialSpyCommand implements CommandContributor {
                         descriptor,
                         Optional.empty()
                 ))
-                .then(Commands.argument(
-                                        "state",
-                                        ToggleArgument.toggle()
-                                )
-                                .executes(command -> self(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        Optional.of(
-                                                ToggleArgument.get(
-                                                        command,
-                                                        "state"
-                                                ).enabled()
-                                        )
-                                ))
+                .then(Commands.literal("on")
+                        .executes(command -> self(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(true)
+                        ))
                 )
-                .then(Commands.argument(
-                                        "player",
-                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                .then(Commands.literal("off")
+                        .executes(command -> self(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(false)
+                        ))
+                )
+                .then(Commands.argument("player", StringArgumentType.word())
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.messaging.socialspy.others"
+                        ))
+                        .suggests((_, builder) ->
+                                CommandSuggestionSupport.suggest(
+                                        service::knownNames,
+                                        builder
                                 )
-                                .requires(source -> context.permissions().has(
-                                        source,
-                                        "cellulosesz.messaging.socialspy.others"
-                                ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                service::knownNames,
-                                                builder
-                                        )
-                                )
+                        )
+                        .executes(command -> other(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.empty()
+                        ))
+                        .then(Commands.literal("on")
                                 .executes(command -> other(
                                         context,
                                         command,
                                         descriptor,
-                                        Optional.empty()
+                                        Optional.of(true)
                                 ))
-                                .then(Commands.argument(
-                                                        "targetState",
-                                                        ToggleArgument.toggle()
-                                                )
-                                                .executes(command -> other(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        Optional.of(
-                                                                ToggleArgument.get(
-                                                                        command,
-                                                                        "targetState"
-                                                                ).enabled()
-                                                        )
-                                                ))
-                                )
+                        )
+                        .then(Commands.literal("off")
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(false)
+                                ))
+                        )
                 );
 
         context.registerDirect(
@@ -168,10 +164,7 @@ public final class SocialSpyCommand implements CommandContributor {
                     }
 
                     return service.knownTarget(
-                                    PlayerNameArgument.get(
-                                            command,
-                                            "player"
-                                    ),
+                                    StringArgumentType.getString(command, "player"),
                                     viewer.orElseThrow()
                             )
                             .thenCompose(target ->

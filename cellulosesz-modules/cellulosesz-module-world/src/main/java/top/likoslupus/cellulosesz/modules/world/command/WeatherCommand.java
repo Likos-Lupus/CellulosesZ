@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.DimensionArgument;
 import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
@@ -13,8 +14,6 @@ import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.world.command.argument.LoadedWorldArgument;
 import top.likoslupus.cellulosesz.modules.world.command.argument.WeatherTypeArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
@@ -65,17 +64,18 @@ public final class WeatherCommand implements CommandContributor {
                                 IntegerArgumentType.getInteger(command, "seconds"),
                                 Optional.empty()
                         ))
-                        .then(Commands.argument("world", LoadedWorldArgument.loadedWorld(worlds))
-                                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                                        worlds::loadedWorldIds,
-                                        builder
-                                ))
+                        .then(Commands.argument("world", DimensionArgument.dimension())
                                 .executes(command -> execute(
                                         context,
                                         command,
                                         descriptor,
                                         IntegerArgumentType.getInteger(command, "seconds"),
-                                        Optional.of(LoadedWorldArgument.get(command, "world"))
+                                        Optional.of(
+                                                DimensionArgument.getDimension(command, "world")
+                                                        .dimension()
+                                                        .identifier()
+                                                        .toString()
+                                        )
                                 ))
                         )
                 );

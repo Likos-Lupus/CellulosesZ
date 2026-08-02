@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 
 public final class MinecraftPlayerLocationService implements PlayerLocationPlatformService {
 
-    @SuppressWarnings("resource")
     @Override
     public CellLocation currentLocation(CellPlayer player) {
         var nativePlayer = MinecraftPlayers.requireOnline(player);

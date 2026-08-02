@@ -24,7 +24,6 @@ public final class MinecraftServerThreadExecutor implements ServerThreadExecutor
                 .orElse(false);
     }
 
-    @SuppressWarnings("resource")
     @Override
     public void execute(Runnable task) {
         var current = server.requireRunning();

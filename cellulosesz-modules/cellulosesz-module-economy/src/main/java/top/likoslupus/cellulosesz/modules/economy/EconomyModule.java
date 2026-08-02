@@ -40,7 +40,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command", "item"}
 )
-@SuppressWarnings("resource")
 public final class EconomyModule implements CellulosesZModule {
 
     private final AtomicLong configVersion = new AtomicLong();
@@ -74,7 +73,6 @@ public final class EconomyModule implements CellulosesZModule {
     }
 
     @Override
-    @SuppressWarnings("resource")
     public void registerServices(ModuleContext context) {
         var storage = context.services().require(StorageService.class);
         var root = context.dataDirectory().getParent().resolve("economy");

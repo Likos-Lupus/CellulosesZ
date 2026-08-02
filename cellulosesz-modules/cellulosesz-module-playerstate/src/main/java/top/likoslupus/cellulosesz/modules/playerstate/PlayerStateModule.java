@@ -40,7 +40,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "permission", "command"}
 )
-@SuppressWarnings("resource")
 public final class PlayerStateModule implements CellulosesZModule {
 
     private final Map<UUID, PersonalTimeSetting> lastTime = new ConcurrentHashMap<>();

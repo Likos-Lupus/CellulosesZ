@@ -1,12 +1,11 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.PlayerControlCommandService;
 
 import java.util.List;
@@ -48,18 +47,12 @@ public final class IceCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        EntityArgument.player()
                                 )
                                 .requires(source -> context.permissions().has(
                                         source,
                                         "cellulosesz.command.ice.others"
                                 ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                players::onlinePlayerNames,
-                                                builder
-                                        )
-                                )
                                 .executes(command -> AdminCommandResults.async(
                                         context,
                                         command,
@@ -71,10 +64,9 @@ public final class IceCommand implements CommandContributor {
                                                         players
                                                 ),
                                                 Optional.of(
-                                                        PlayerNameArgument.get(
-                                                                command,
-                                                                "player"
-                                                        )
+                                                        EntityArgument.getPlayer(command, "player")
+                                                                .getGameProfile()
+                                                                .name()
                                                 )
                                         )
                                 ))

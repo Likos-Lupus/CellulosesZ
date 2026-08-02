@@ -30,7 +30,6 @@ import static java.util.Objects.requireNonNull;
         requires = {"user", "command"},
         optional = {"economy"}
 )
-@SuppressWarnings("resource")
 public final class KitModule implements CellulosesZModule {
 
     private @Nullable KitConfig config;

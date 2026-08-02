@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.common.command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.tree.CommandNode;
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
@@ -21,6 +22,8 @@ import java.util.function.Function;
  * model.
  */
 public interface CommandRegistrationContext {
+
+    CommandBuildContext buildContext();
 
     ServiceRegistry services();
 
@@ -59,7 +62,10 @@ public interface CommandRegistrationContext {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String auditSummary,
-            Function<MinecraftCommandPolicyContext, ? extends CompletionStage<CommandOutcome>> terminal
+            Function<
+                    MinecraftCommandPolicyContext,
+                    ? extends CompletionStage<CommandOutcome>
+                    > terminal
     );
 
 }

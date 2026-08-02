@@ -4,6 +4,8 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceArgument;
+import net.minecraft.core.registries.Registries;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.PotionItemRequest;
@@ -11,9 +13,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
-import top.likoslupus.cellulosesz.modules.item.command.argument.PotionEffectArgument;
 
 import java.util.List;
 
@@ -37,14 +37,9 @@ public final class PotionCommand implements CommandContributor {
 
         var effect = Commands.argument(
                         "effect",
-                        PotionEffectArgument.effect(
-                                service.platform()::potionEffectIds
-                        )
-                )
-                .suggests((ignored, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                service.platform()::potionEffectIds,
-                                builder
+                        ResourceArgument.resource(
+                                context.buildContext(),
+                                Registries.MOB_EFFECT
                         )
                 )
                 .executes(command -> execute(
@@ -52,10 +47,10 @@ public final class PotionCommand implements CommandContributor {
                         command,
                         descriptor,
                         PotionItemRequest.apply(
-                                PotionEffectArgument.get(
-                                        command,
-                                        "effect"
-                                ),
+                                ResourceArgument.getMobEffect(command, "effect")
+                                        .key()
+                                        .identifier()
+                                        .toString(),
                                 180,
                                 0
                         )
@@ -69,10 +64,10 @@ public final class PotionCommand implements CommandContributor {
                                         command,
                                         descriptor,
                                         PotionItemRequest.apply(
-                                                PotionEffectArgument.get(
-                                                        command,
-                                                        "effect"
-                                                ),
+                                                ResourceArgument.getMobEffect(command, "effect")
+                                                        .key()
+                                                        .identifier()
+                                                        .toString(),
                                                 IntegerArgumentType.getInteger(
                                                         command,
                                                         "duration"
@@ -89,10 +84,10 @@ public final class PotionCommand implements CommandContributor {
                                                         command,
                                                         descriptor,
                                                         PotionItemRequest.apply(
-                                                                PotionEffectArgument.get(
-                                                                        command,
-                                                                        "effect"
-                                                                ),
+                                                                ResourceArgument.getMobEffect(command, "effect")
+                                                                        .key()
+                                                                        .identifier()
+                                                                        .toString(),
                                                                 IntegerArgumentType.getInteger(
                                                                         command,
                                                                         "duration"

@@ -41,7 +41,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command", "permission"}
 )
-@SuppressWarnings("resource")
 public final class AdminModule implements CellulosesZModule {
 
     private @Nullable AdminConfig config;
@@ -405,7 +404,7 @@ public final class AdminModule implements CellulosesZModule {
                 context,
                 registry,
                 "burn-command",
-                new BurnCommand(controls, players, current.maximumBurnSeconds)
+                new BurnCommand(controls, current.maximumBurnSeconds)
         );
         track(context, registry, "deljail-command", new DelJailCommand(jail));
         track(context, registry, "ext-command", new ExtCommand(controls, players));
@@ -415,7 +414,7 @@ public final class AdminModule implements CellulosesZModule {
         track(context, registry, "jails-command", new JailsCommand(jail));
         track(context, registry, "kick-command", new KickCommand(moderation, players));
         track(context, registry, "kickall-command", new KickAllCommand(moderation, players));
-        track(context, registry, "kill-command", new KillCommand(controls, players));
+        track(context, registry, "kill-command", new KillCommand(controls));
         track(context, registry, "mute-command", new MuteCommand(moderation, players, muteMaximum));
         track(context, registry, "setjail-command", new SetJailCommand(jail, players));
         track(context, registry, "sudo-command", new SudoCommand(controls, players));

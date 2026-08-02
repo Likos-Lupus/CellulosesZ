@@ -15,7 +15,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("resource")
 final class OwnerBoundRegistryTest {
 
     @TempDir Path root;

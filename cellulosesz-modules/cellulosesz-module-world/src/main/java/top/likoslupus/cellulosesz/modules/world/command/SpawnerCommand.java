@@ -4,6 +4,8 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceArgument;
+import net.minecraft.core.registries.Registries;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
@@ -13,8 +15,6 @@ import top.likoslupus.cellulosesz.api.world.SpawnerRequest;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.modules.world.command.argument.EntityTypeArgument;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -44,11 +44,10 @@ public final class SpawnerCommand implements CommandContributor {
                 "cellulosesz.command.spawner",
                 CommandSourceKind.PLAYER_ONLY
         );
-        var entity = Commands.argument("entity", EntityTypeArgument.livingEntity(entities))
-                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                        entities::livingEntityIds,
-                        builder
-                ))
+        var entity = Commands.argument(
+                        "entity",
+                        ResourceArgument.resource(context.buildContext(), Registries.ENTITY_TYPE)
+                )
                 .executes(command -> execute(
                         context,
                         command,
@@ -96,7 +95,10 @@ public final class SpawnerCommand implements CommandContributor {
                 descriptor,
                 "spawner",
                 policy -> {
-                    var entity = EntityTypeArgument.get(command, "entity");
+                    var entity = ResourceArgument.getEntityType(command, "entity")
+                            .key()
+                            .identifier()
+                            .toString();
                     var permission = "cellulosesz.command.spawner.entity."
                             + entity.replace(':', '.')
                             .replaceAll("[^a-z0-9_.-]", "_");

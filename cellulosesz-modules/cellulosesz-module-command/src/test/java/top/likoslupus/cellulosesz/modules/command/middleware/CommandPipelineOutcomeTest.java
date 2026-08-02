@@ -25,7 +25,6 @@ import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("resource")
 final class CommandPipelineOutcomeTest {
 
     private static final CommandDescriptor DESCRIPTOR = new CommandDescriptor(

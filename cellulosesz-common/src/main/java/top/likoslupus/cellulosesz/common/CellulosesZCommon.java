@@ -40,7 +40,6 @@ public final class CellulosesZCommon {
     private CellulosesZCommon() {
     }
 
-    @SuppressWarnings("resource")
     public static void initialize(CommonRuntime runtime) {
         requireNonNull(runtime, "runtime");
         if (!INITIALIZED.compareAndSet(false, true)) {
@@ -50,7 +49,7 @@ public final class CellulosesZCommon {
         }
 
         var bootstrap = runtime.bootstrap();
-        var server = new MinecraftServerHandle();
+        var server = runtime.server();
         var commands = new CommandRegistry();
         var serverThread = new MinecraftServerThreadExecutor(server);
         var treeRefresh = new CommandTreeRefreshService(server);
@@ -125,7 +124,6 @@ public final class CellulosesZCommon {
         CommandRegistrationEvent.EVENT.register(commandManager::register);
         LifecycleEvent.SERVER_BEFORE_START.register(current -> {
             server.attach(current);
-            runtime.hooks().attachServer(current);
             bootstrap.onServerStarting(current);
         });
         LifecycleEvent.SERVER_STARTED.register(bootstrap::onServerStarted);
@@ -143,7 +141,6 @@ public final class CellulosesZCommon {
                             }
                             runtime.hooks().close();
                         } finally {
-                            runtime.hooks().detachServer();
                             server.detach(current);
                         }
                     });

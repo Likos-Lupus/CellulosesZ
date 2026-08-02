@@ -3,15 +3,14 @@ package top.likoslupus.cellulosesz.modules.item.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
 import java.util.List;
@@ -21,14 +20,9 @@ import static java.util.Objects.requireNonNull;
 public final class EnderChestCommand implements CommandContributor {
 
     private final InventoryCommandService service;
-    private final PlayerDirectory players;
 
-    public EnderChestCommand(
-            InventoryCommandService service,
-            PlayerDirectory players
-    ) {
+    public EnderChestCommand(InventoryCommandService service) {
         this.service = requireNonNull(service, "service");
-        this.players = requireNonNull(players, "players");
     }
 
     @Override
@@ -47,18 +41,12 @@ public final class EnderChestCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "player",
-                                        PlayerNameArgument.playerName()
+                                        EntityArgument.player()
                                 )
                                 .requires(source -> context.permissions().has(
                                         source,
                                         "cellulosesz.item.enderchest.others"
                                 ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                players::onlinePlayerNames,
-                                                builder
-                                        )
-                                )
                                 .executes(command -> executeTarget(
                                         context,
                                         command,
@@ -119,24 +107,12 @@ public final class EnderChestCommand implements CommandContributor {
                 descriptor,
                 "enderchest target",
                 policy -> {
-                    var target = ItemCommandSupport.target(
-                            policy,
-                            players,
-                            PlayerNameArgument.get(command, "player")
-                    );
-                    var viewer = ItemCommandSupport.current(policy)
-                            .or(() -> target);
-
-                    if (target.isEmpty()) {
-                        return PlatformResult.failure(
-                                PlatformOperationStatus.NOT_FOUND,
-                                "player-offline"
-                        );
-                    }
+                    var target = MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player"));
+                    var viewer = ItemCommandSupport.current(policy).orElse(target);
 
                     return service.openEnderChest(
-                            viewer.orElseThrow(),
-                            target.orElseThrow()
+                            viewer,
+                            target
                     );
                 }
         );

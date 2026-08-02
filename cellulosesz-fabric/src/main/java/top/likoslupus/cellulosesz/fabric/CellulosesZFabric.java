@@ -17,10 +17,19 @@ import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
 import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.common.CellulosesZCommon;
 import top.likoslupus.cellulosesz.common.bootstrap.CommonRuntime;
+import top.likoslupus.cellulosesz.common.command.MinecraftPlayerChatDispatchService;
+import top.likoslupus.cellulosesz.common.command.MinecraftPlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.entity.MinecraftEntityOperations;
+import top.likoslupus.cellulosesz.common.item.MinecraftInventoryOperations;
+import top.likoslupus.cellulosesz.common.item.MinecraftItemOperations;
+import top.likoslupus.cellulosesz.common.item.MinecraftWorkstationOperations;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.permission.LuckPermsPermissionBackend;
+import top.likoslupus.cellulosesz.common.permission.MinecraftOpPermissionBackend;
+import top.likoslupus.cellulosesz.common.world.*;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
-import top.likoslupus.cellulosesz.core.permission.ReflectionLuckPermsPermissionBackend;
 import top.likoslupus.cellulosesz.fabric.bridge.FabricCommandRootMutator;
 import top.likoslupus.cellulosesz.fabric.lifecycle.FabricCommonRuntimeHooks;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
@@ -57,15 +66,16 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         bootstrap = currentBootstrap;
 
-        var access = new FabricServerAccess();
-        var bans = new FabricBanPlatformService();
-        var dispatch = new FabricPlayerCommandDispatchService(access);
-        var inventory = new FabricInventoryOperations(access);
-        var items = new FabricItemOperations(access, logger);
-        var workstations = new FabricWorkstationOperations(access);
-        var backups = new FabricBackupOperations(access);
-        var signs = new FabricSignOperations(access);
-        var entities = new FabricEntityOperations(access);
+        var server = new MinecraftServerHandle();
+        var bans = new MinecraftBanPlatformService(server);
+        var dispatch = new MinecraftPlayerCommandDispatchService(server);
+        var inventory = new MinecraftInventoryOperations(server);
+        var items = new MinecraftItemOperations(server, logger);
+        var workstations = new MinecraftWorkstationOperations(server);
+        var backups = new MinecraftBackupOperations(server);
+        var signs = new FabricSignOperations(server);
+        var entities = new MinecraftEntityOperations(server);
+        var removals = new MinecraftEntityRemovalOperations(server);
 
         currentBootstrap.registerService(
                 BanPlatformService.class,
@@ -77,7 +87,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 PlayerChatDispatchService.class,
-                new FabricPlayerChatDispatchService(access)
+                new MinecraftPlayerChatDispatchService(server)
         );
         currentBootstrap.registerService(
                 InventoryPlatformService.class,
@@ -101,7 +111,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 DisplayNamePlatformService.class,
-                new FabricDisplayNameOperations(access, logger)
+                new FabricDisplayNameOperations(server, logger)
         );
         currentBootstrap.registerService(
                 VanishPlatformService.class,
@@ -109,19 +119,23 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 WorldStatePlatformService.class,
-                new FabricWorldStateOperations(access)
+                new MinecraftWorldStateOperations(server)
         );
         currentBootstrap.registerService(
                 PlayerTargetingService.class,
-                new FabricPlayerTargetingOperations(access)
+                new MinecraftPlayerTargetingOperations(server)
         );
         currentBootstrap.registerService(
                 EntityRemovalPlatformService.class,
-                new FabricEntityRemovalOperations(access)
+                removals
+        );
+        currentBootstrap.registerService(
+                MinecraftEntityRemovalOperations.class,
+                removals
         );
         currentBootstrap.registerService(
                 WorldPlatformService.class,
-                new FabricWorldOperations(access, signs)
+                new FabricWorldOperations(server, signs)
         );
         currentBootstrap.registerService(
                 EntityPlatformService.class,
@@ -129,13 +143,10 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         currentBootstrap.registerService(
                 RecipePlatformService.class,
-                new FabricRecipeOperations(access, items)
+                new FabricRecipeOperations(server, items)
         );
-
         var hooks = new FabricCommonRuntimeHooks(
                 currentBootstrap,
-                access,
-                bans,
                 dispatch,
                 entities,
                 backups,
@@ -143,6 +154,7 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         );
         CellulosesZCommon.initialize(new CommonRuntime(
                 currentBootstrap,
+                server,
                 hooks,
                 new FabricCommandRootMutator()
         ));
@@ -161,15 +173,21 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         if (permissionConfig.provider.preferLuckPerms
                 && FabricLoader.getInstance().isModLoaded("luckperms")
         ) {
-            backends.add(new ReflectionLuckPermsPermissionBackend());
+            try {
+                backends.add(LuckPermsPermissionBackend.fromProvider());
+            } catch (IllegalStateException unavailable) {
+                current.logger().warn(
+                        "LuckPerms is installed but its API provider is not available; using fallback permissions"
+                );
+            }
         }
 
         if (permissionConfig.provider.opFallback) {
-            backends.add(new FabricOpPermissionBackend(permissionConfig.provider.opLevel));
+            backends.add(new MinecraftOpPermissionBackend(permissionConfig.provider.opLevel));
         }
 
         if (backends.isEmpty()) {
-            backends.add(new FabricOpPermissionBackend(
+            backends.add(new MinecraftOpPermissionBackend(
                     current.coreConfig().permissions.opFallbackLevel
             ));
         }

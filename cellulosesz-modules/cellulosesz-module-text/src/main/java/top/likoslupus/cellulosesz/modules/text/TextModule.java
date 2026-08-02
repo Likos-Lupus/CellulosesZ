@@ -29,7 +29,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"command"}
 )
-@SuppressWarnings("resource")
 public final class TextModule implements CellulosesZModule {
 
     private @Nullable TextConfig config;

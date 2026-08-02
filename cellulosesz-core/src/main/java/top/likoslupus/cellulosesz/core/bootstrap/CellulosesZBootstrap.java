@@ -9,7 +9,6 @@ import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
-import top.likoslupus.cellulosesz.api.i18n.MessageService;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.LoadedModuleInfo;
 import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
@@ -61,7 +60,6 @@ public final class CellulosesZBootstrap {
     private final DefaultScheduler scheduler;
     private final DefaultPermissionCatalog permissionCatalog = new DefaultPermissionCatalog();
     private final DefaultCommandAliasRegistry aliasRegistry = new DefaultCommandAliasRegistry();
-    private final DefaultCommandSuggestionRegistry suggestionRegistry = new DefaultCommandSuggestionRegistry();
     private final DefaultCommandExecutionPipeline commandPipeline;
     private final DefaultCommandAvailabilityService commandAvailability = new DefaultCommandAvailabilityService();
     private final DefaultCommandCatalog commandCatalog = new DefaultCommandCatalog();
@@ -102,12 +100,10 @@ public final class CellulosesZBootstrap {
         );
     }
 
-    @SuppressWarnings("resource")
     public <T> void registerService(Class<T> type, T instance) {
         services.register(type, instance);
     }
 
-    @SuppressWarnings("resource")
     public synchronized void initialize() {
         if (initialized) {
             return;
@@ -152,12 +148,10 @@ public final class CellulosesZBootstrap {
         services.register(PermissionService.class, permissions);
         services.register(DefaultPermissionService.class, permissions);
         services.register(StorageService.class, storage);
-        services.register(MessageService.class, messages);
         services.register(MessageRenderer.class, messages);
         services.register(LocaleResolver.class, localeResolver);
         services.register(PermissionCatalog.class, permissionCatalog);
         services.register(CommandAliasRegistry.class, aliasRegistry);
-        services.register(CommandSuggestionRegistry.class, suggestionRegistry);
         services.register(CooldownService.class, cooldowns);
         services.register(ConfirmationService.class, confirmations);
         services.register(CommandCostService.class, commandCosts);
@@ -524,9 +518,6 @@ public final class CellulosesZBootstrap {
         return events;
     }
 
-    public MessageService messageService() {
-        return messages;
-    }
 
     public CellulosesZLogger logger() {
         return logger;

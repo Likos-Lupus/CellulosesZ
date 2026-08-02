@@ -143,22 +143,24 @@ final class BorrowedMinecraftLifecycleResourceTest {
     void banAndBackupSourcesKeepTargetedLifecycleGuards() throws IOException {
         var root = projectRoot();
         var banSource = Files.readString(root.resolve(
-                "cellulosesz-fabric/src/main/java/top/likoslupus/cellulosesz/fabric/FabricBanPlatformService.java"
+                "cellulosesz-common/src/main/java/top/likoslupus/cellulosesz/common/world/MinecraftBanPlatformService.java"
         ));
         assertTrue(
                 tryResources(banSource)
                         .stream()
                         .noneMatch(resource -> resource.contains("activeServer(")),
-                "FabricBanPlatformService must borrow the active server without closing it"
+                "MinecraftBanPlatformService must borrow the active server without closing it"
         );
 
         var backupSource = Files.readString(root.resolve(
-                "cellulosesz-fabric/src/main/java/top/likoslupus/cellulosesz/fabric/FabricBackupOperations.java"
+                "cellulosesz-common/src/main/java/top/likoslupus/cellulosesz/common/world/MinecraftBackupOperations.java"
         ));
         var backupResources = tryResources(backupSource);
         assertTrue(
-                backupResources.stream().noneMatch(resource -> resource.contains("requireServer(")),
-                "FabricBackupOperations must borrow the active server without closing it"
+                backupResources
+                        .stream()
+                        .noneMatch(resource -> resource.contains("requireRunning(")),
+                "MinecraftBackupOperations must borrow the active server without closing it"
         );
         assertTrue(
                 backupResources
@@ -177,7 +179,7 @@ final class BorrowedMinecraftLifecycleResourceTest {
                 "Backup archive path stream must remain scoped and closed"
         );
         assertFalse(
-                backupSource.contains("try (var server = access.requireServer())"),
+                backupSource.contains("try (var server = server.requireRunning())"),
                 "Backup server access must not regress to the original dangerous form"
         );
     }

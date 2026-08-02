@@ -16,7 +16,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
 
-@SuppressWarnings("resource")
 public final class DefaultTeleportService implements TeleportService, AsyncCloseable {
 
     private final TeleportOperations operations;

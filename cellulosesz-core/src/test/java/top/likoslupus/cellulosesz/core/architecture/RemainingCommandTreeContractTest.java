@@ -7,8 +7,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
-import static java.util.Objects.requireNonNull;
 import static org.junit.jupiter.api.Assertions.*;
+
+import static java.util.Objects.requireNonNull;
 
 final class RemainingCommandTreeContractTest {
 
@@ -68,26 +69,74 @@ final class RemainingCommandTreeContractTest {
 
     private static Map<String, List<String>> typedMarkers() {
         var result = new LinkedHashMap<String, List<String>>();
-        result.put("item", List.of("ItemDescriptorArgument"));
-        result.put("give", List.of("ItemDescriptorArgument", "PlayerNameArgument"));
-        result.put("enchant", List.of("EnchantmentArgument", "IntegerArgumentType.integer"));
-        result.put("potion", List.of("PotionEffectArgument", "IntegerArgumentType.integer"));
-        result.put("clearinventory", List.of("ItemIdArgument", "IntegerArgumentType.integer(1, 1_000_000)"));
-        result.put("condense", List.of("ItemIdArgument"));
-        result.put("recipe", List.of("ItemIdArgument", "IntegerArgumentType.integer(1)"));
-        result.put("itemdb", List.of("ItemIdArgument"));
+        result.put("item", List.of("ItemDescriptorArgument", "IntegerArgumentType.integer"));
+        result.put(
+                "give",
+                List.of(
+                        "ItemDescriptorArgument",
+                        "EntityArgument.player",
+                        "IntegerArgumentType.integer"
+                )
+        );
+        result.put(
+                "enchant",
+                List.of(
+                        "ResourceArgument.resource",
+                        "Registries.ENCHANTMENT",
+                        "IntegerArgumentType.integer"
+                )
+        );
+        result.put(
+                "potion",
+                List.of(
+                        "ResourceArgument.resource",
+                        "Registries.MOB_EFFECT",
+                        "IntegerArgumentType.integer"
+                )
+        );
+        result.put(
+                "clearinventory",
+                List.of("ItemDescriptorArgument", "IntegerArgumentType.integer(1, 1_000_000)")
+        );
+        result.put("condense", List.of("ItemDescriptorArgument"));
+        result.put("recipe", List.of("ItemDescriptorArgument", "IntegerArgumentType.integer(1)"));
+        result.put("itemdb", List.of("ItemDescriptorArgument"));
         result.put("more", List.of("IntegerArgumentType.integer(1"));
         result.put("powertool", List.of("StringArgumentType.greedyString()"));
         result.put("powertoollist", List.of("IntegerArgumentType.integer(1)"));
-        result.put("time", List.of("TimeValueArgument", "LoadedWorldArgument"));
-        result.put("weather", List.of("WeatherTypeArgument", "LoadedWorldArgument"));
-        result.put("remove", List.of("EntityRemoveSelectorArgument", "IntegerArgumentType.integer(1, 4_096)"));
+        result.put("time", List.of("TimeValueArgument", "DimensionArgument.dimension"));
+        result.put("weather", List.of("WeatherTypeArgument", "DimensionArgument.dimension"));
+        result.put(
+                "remove",
+                List.of(
+                        "ResourceArgument.resource",
+                        "Registries.ENTITY_TYPE",
+                        "IntegerArgumentType.integer(1, 4_096)"
+                )
+        );
         result.put("fireball", List.of("ProjectileTypeArgument", "DoubleArgumentType.doubleArg"));
-        result.put("spawner", List.of("EntityTypeArgument", "IntegerArgumentType.integer"));
-        result.put("spawnmob", List.of("EntityTypeArgument", "IntegerArgumentType.integer"));
+        result.put(
+                "spawner",
+                List.of(
+                        "ResourceArgument.resource",
+                        "Registries.ENTITY_TYPE",
+                        "IntegerArgumentType.integer"
+                )
+        );
+        result.put(
+                "spawnmob",
+                List.of(
+                        "ResourceArgument.resource",
+                        "Registries.ENTITY_TYPE",
+                        "IntegerArgumentType.integer"
+                )
+        );
         result.put("tree", List.of("TreeTypeArgument"));
         result.put("bigtree", List.of("TreeTypeArgument"));
-        result.put("editsign", List.of("IntegerArgumentType.integer(1, 4)", "StringArgumentType.greedyString()"));
+        result.put(
+                "editsign",
+                List.of("IntegerArgumentType.integer(1, 4)", "StringArgumentType.greedyString()")
+        );
         return Map.copyOf(result);
     }
 
@@ -119,7 +168,10 @@ final class RemainingCommandTreeContractTest {
 
             var moduleText = moduleText(source);
             for (var alias : contract.aliases()) {
-                assertTrue(moduleText.contains('"' + alias + '"'), root + " missing alias " + alias);
+                assertTrue(
+                        moduleText.contains('"' + alias + '"'),
+                        root + " missing alias " + alias
+                );
             }
         }
     }
@@ -150,12 +202,14 @@ final class RemainingCommandTreeContractTest {
             var aliases = columns.get(aliasesIndex).isBlank()
                     ? List.<String>of()
                     : List.of(columns.get(aliasesIndex).split(";"));
-            result.put(root, new Contract(
-                    aliases,
-                    columns.get(sourceKindIndex),
-                    columns.get(usageIndex),
-                    columns.get(sourceIndex)
-            ));
+            result.put(
+                    root, new Contract(
+                            aliases,
+                            columns.get(sourceKindIndex),
+                            columns.get(usageIndex),
+                            columns.get(sourceIndex)
+                    )
+            );
         }
         return Map.copyOf(result);
     }
@@ -180,6 +234,7 @@ final class RemainingCommandTreeContractTest {
         var values = new ArrayList<String>();
         var value = new StringBuilder();
         var quoted = false;
+
         for (var index = 0; index < row.length(); index++) {
             var character = row.charAt(index);
             if (character == '"') {
@@ -196,6 +251,7 @@ final class RemainingCommandTreeContractTest {
                 value.append(character);
             }
         }
+
         values.add(value.toString());
         return List.copyOf(values);
     }

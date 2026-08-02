@@ -1,7 +1,10 @@
 package top.likoslupus.cellulosesz.modules.item;
 
 import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
-import top.likoslupus.cellulosesz.api.command.service.*;
+import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
+import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
+import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.item.*;
 import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
@@ -33,7 +36,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command"}
 )
-@SuppressWarnings("resource")
 public final class ItemModule implements CellulosesZModule {
 
     private @Nullable ItemConfig config;
@@ -115,7 +117,7 @@ public final class ItemModule implements CellulosesZModule {
         track(
                 context, registry,
                 "give-command",
-                new GiveCommand(itemCommands, loadedItems, players)
+                new GiveCommand(itemCommands, loadedItems)
         );
         track(
                 context, registry,
@@ -130,12 +132,12 @@ public final class ItemModule implements CellulosesZModule {
         track(
                 context, registry,
                 "invsee-command",
-                new InvSeeCommand(inventoryCommands, players)
+                new InvSeeCommand(inventoryCommands)
         );
         track(
                 context, registry,
                 "enderchest-command",
-                new EnderChestCommand(inventoryCommands, players)
+                new EnderChestCommand(inventoryCommands)
         );
         track(
                 context, registry,
@@ -206,7 +208,7 @@ public final class ItemModule implements CellulosesZModule {
         track(
                 context, registry,
                 "skull-command",
-                new SkullCommand(inventoryCommands, inventory, players)
+                new SkullCommand(inventoryCommands, inventory)
         );
         track(
                 context, registry,
@@ -239,14 +241,6 @@ public final class ItemModule implements CellulosesZModule {
         );
 
         registerCommandPermissions(context.services().require(PermissionCatalog.class));
-        var suggestions = context.services().require(CommandSuggestionRegistry.class);
-        List.of("item", "give", "worth", "sell", "setworth").forEach(command ->
-                suggestions.register(
-                        command,
-                        "item",
-                        _ -> loadedItems.names()
-                )
-        );
     }
 
     @Override
@@ -264,10 +258,11 @@ public final class ItemModule implements CellulosesZModule {
                 automation,
                 "ItemAutomationService has not been initialized"
         );
+        var preparedItems = itemService.prepareConfiguration(candidate);
 
         return CompletableFuture.completedFuture(PreparedReloads.of(
                 () -> {
-                    itemService.configure(candidate);
+                    itemService.configure(preparedItems);
                     try {
                         automationService.configure(candidate);
                     } catch (RuntimeException failure) {

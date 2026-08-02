@@ -4,19 +4,18 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.LightningRequest;
 import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -27,20 +26,17 @@ public final class LightningCommand implements CommandContributor {
 
     private final WorldPlatformService worlds;
     private final PlayerTargetingService targeting;
-    private final PlayerDirectory players;
     private final PlayerLocationPlatformService locations;
     private final WorldRuntimeSettings config;
 
     public LightningCommand(
             WorldPlatformService worlds,
             PlayerTargetingService targeting,
-            PlayerDirectory players,
             PlayerLocationPlatformService locations,
             WorldRuntimeSettings config
     ) {
         this.worlds = requireNonNull(worlds, "worlds");
         this.targeting = requireNonNull(targeting, "targeting");
-        this.players = requireNonNull(players, "players");
         this.locations = requireNonNull(locations, "locations");
         this.config = requireNonNull(config, "config");
     }
@@ -52,14 +48,10 @@ public final class LightningCommand implements CommandContributor {
                 "cellulosesz.command.lightning",
                 CommandSourceKind.ANY
         );
-        var target = Commands.argument("player", PlayerNameArgument.playerName())
+        var target = Commands.argument("player", EntityArgument.player())
                 .requires(source -> context.permissions().has(
                         source,
                         "cellulosesz.command.lightning.others"
-                ))
-                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
-                        players::onlinePlayerNames,
-                        builder
                 ))
                 .executes(command -> target(
                         context,
@@ -138,19 +130,16 @@ public final class LightningCommand implements CommandContributor {
                 command,
                 descriptor,
                 "lightning player",
-                _ -> players.onlinePlayer(PlayerNameArgument.get(
-                                command,
-                                "player"
-                        ))
-                        .<PlatformResult<?>>map(player -> worlds.strikeLightning(new LightningRequest(
-                                locations.currentLocation(player),
-                                false,
-                                damage
-                        )))
-                        .orElseGet(() -> PlatformResult.failure(
-                                PlatformOperationStatus.TARGET_NOT_FOUND,
-                                "player-not-online"
-                        ))
+                _ -> {
+                    var player = MinecraftPlayers.wrap(
+                            EntityArgument.getPlayer(command, "player")
+                    );
+                    return worlds.strikeLightning(new LightningRequest(
+                            locations.currentLocation(player),
+                            false,
+                            damage
+                    ));
+                }
         );
     }
 

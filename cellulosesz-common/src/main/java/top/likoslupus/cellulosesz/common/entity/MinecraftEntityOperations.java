@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.entity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,13 +15,16 @@ import net.minecraft.world.phys.Vec3;
 import top.likoslupus.cellulosesz.api.entity.*;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 
 import java.util.*;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
 
-public final class FabricEntityOperations implements EntityPlatformService {
+public final class MinecraftEntityOperations implements EntityPlatformService {
 
     private static final Set<EntityType<?>> DENIED_TYPES = Set.of(
             EntityType.PLAYER,
@@ -35,17 +38,17 @@ public final class FabricEntityOperations implements EntityPlatformService {
             EntityType.TEXT_DISPLAY
     );
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final Map<UUID, TrackedEntity> tracked = new HashMap<>();
     private long ticks;
 
-    public FabricEntityOperations(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public MinecraftEntityOperations(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
     public Set<String> livingEntityIds() {
-        var level = access.requireServer().overworld();
+        var level = server.requireRunning().overworld();
         var result = new TreeSet<String>();
 
         BuiltInRegistries.ENTITY_TYPE.forEach(type -> {
@@ -83,7 +86,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
             return false;
         }
 
-        var level = access.requireServer().overworld();
+        var level = server.requireRunning().overworld();
         var entity = type.create(level, EntitySpawnReason.COMMAND);
 
         if (entity == null) {
@@ -120,7 +123,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
                 );
             }
 
-            var anchor = access.player(request.anchor());
+            var anchor = MinecraftPlayers.requireOnline(request.anchor());
             var level = anchor.level();
             var base = anchor.blockPosition().relative(anchor.getDirection(), 2);
             if (!level.hasChunkAt(base)
@@ -190,7 +193,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
     public PlatformResult<ProjectileLaunchResult> launchProjectile(ProjectileRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var shooter = access.player(request.shooter());
+            var shooter = MinecraftPlayers.requireOnline(request.shooter());
             var level = shooter.level();
             var entity = createProjectile(level, request.type());
 
@@ -252,7 +255,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
     public PlatformResult<TntBurstResult> spawnTnt(TntBurstRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = access.level(request.center().world);
+            var level = MinecraftWorlds.findLoaded(server.requireRunning(), request.center().world);
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -320,7 +323,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
     public PlatformResult<TemporaryMobResult> launchTemporaryMob(TemporaryMobRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var shooter = access.player(request.shooter());
+            var shooter = MinecraftPlayers.requireOnline(request.shooter());
             var level = shooter.level();
             var entity = (Entity) switch (request.type()) {
                 case BEE -> EntityType.BEE.create(level, EntitySpawnReason.COMMAND);
@@ -378,14 +381,16 @@ public final class FabricEntityOperations implements EntityPlatformService {
 
     @Override
     public void tick() {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return;
         }
 
         ticks++;
         var removals = new ArrayList<UUID>();
         tracked.forEach((uuid, state) -> {
-            var level = access.level(state.worldId()).orElse(null);
+            var level = MinecraftWorlds
+                    .findLoaded(server.requireRunning(), state.worldId())
+                    .orElse(null);
             if (level == null) {
                 removals.add(uuid);
                 return;
@@ -422,11 +427,12 @@ public final class FabricEntityOperations implements EntityPlatformService {
 
     @Override
     public void clearTrackedEntities() {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return;
         }
 
-        tracked.forEach((uuid, state) -> access.level(state.worldId())
+        tracked.forEach((uuid, state) -> MinecraftWorlds
+                .findLoaded(server.requireRunning(), state.worldId())
                 .map(level -> level.getEntity(uuid))
                 .ifPresent(Entity::discard));
         tracked.clear();
@@ -486,7 +492,7 @@ public final class FabricEntityOperations implements EntityPlatformService {
     }
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.STATE_NOT_ALLOWED,
                     "Operation requires the server thread"

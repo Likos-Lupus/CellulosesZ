@@ -3,14 +3,13 @@ package top.likoslupus.cellulosesz.modules.playerstate.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 
@@ -48,58 +47,49 @@ public final class VanishCommand implements CommandContributor {
                         descriptor,
                         Optional.empty()
                 ))
-                .then(Commands.argument(
-                                        "state",
-                                        ToggleArgument.toggle()
-                                )
-                                .executes(command -> self(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        Optional.of(
-                                                ToggleArgument.get(
-                                                        command,
-                                                        "state"
-                                                ).enabled()
-                                        )
-                                ))
+                .then(Commands.literal("on")
+                        .executes(command -> self(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(true)
+                        ))
                 )
-                .then(Commands.argument(
-                                        "player",
-                                        PlayerNameArgument.playerNameWithoutToggleWords()
-                                )
-                                .requires(source -> context.permissions().has(
-                                        source,
-                                        "cellulosesz.playerstate.vanish.other"
-                                ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                players::onlinePlayerNames,
-                                                builder
-                                        )
-                                )
+                .then(Commands.literal("off")
+                        .executes(command -> self(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(false)
+                        ))
+                )
+                .then(Commands.argument("player", EntityArgument.player())
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.playerstate.vanish.other"
+                        ))
+                        .executes(command -> other(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.empty()
+                        ))
+                        .then(Commands.literal("on")
                                 .executes(command -> other(
                                         context,
                                         command,
                                         descriptor,
-                                        Optional.empty()
+                                        Optional.of(true)
                                 ))
-                                .then(Commands.argument(
-                                                        "state",
-                                                        ToggleArgument.toggle()
-                                                )
-                                                .executes(command -> other(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        Optional.of(
-                                                                ToggleArgument.get(
-                                                                        command,
-                                                                        "state"
-                                                                ).enabled()
-                                                        )
-                                                ))
-                                )
+                        )
+                        .then(Commands.literal("off")
+                                .executes(command -> other(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        Optional.of(false)
+                                ))
+                        )
                 );
 
         var node = context.registerDirect(
@@ -161,23 +151,10 @@ public final class VanishCommand implements CommandContributor {
                 command,
                 descriptor,
                 "vanish other",
-                _ -> {
-                    var name = PlayerNameArgument.get(
-                            command,
-                            "player"
-                    );
-
-                    return players.onlinePlayer(name)
-                            .map(player ->
-                                    service.vanish(
-                                            player,
-                                            state
-                                    )
-                            )
-                            .orElseGet(() ->
-                                    PlayerStateCommandSupport.offline(name)
-                            );
-                }
+                _ -> service.vanish(
+                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        state
+                )
         );
     }
 

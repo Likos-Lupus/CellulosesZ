@@ -1,13 +1,12 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportRequestCommandService;
 
 import java.util.List;
@@ -36,12 +35,7 @@ public final class TpaHereCommand implements CommandContributor {
         );
 
         var root = Commands.literal("tpahere")
-                .then(Commands.argument("player", PlayerNameArgument.playerName())
-                        .suggests((_, builder) ->
-                                CommandSuggestionSupport.suggest(
-                                        players::onlinePlayerNames, builder
-                                )
-                        )
+                .then(Commands.argument("player", EntityArgument.player())
                         .executes(command -> TeleportCommandResults.player(
                                 context,
                                 command,
@@ -50,7 +44,9 @@ public final class TpaHereCommand implements CommandContributor {
                                 players,
                                 actor -> service.create(
                                         actor,
-                                        PlayerNameArgument.get(command, "player"),
+                                        EntityArgument.getPlayer(command, "player")
+                                                .getGameProfile()
+                                                .name(),
                                         TeleportRequestType.TARGET_TO_REQUESTER,
                                         context.permissions().has(
                                                 command.getSource(),

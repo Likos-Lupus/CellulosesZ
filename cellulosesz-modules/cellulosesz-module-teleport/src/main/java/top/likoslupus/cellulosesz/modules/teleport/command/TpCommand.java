@@ -1,12 +1,11 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
 import java.util.List;
@@ -49,12 +48,7 @@ public final class TpCommand implements CommandContributor {
                 CommandSourceKind.ANY
         );
 
-        var first = Commands.argument("first", PlayerNameArgument.playerName())
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames, builder
-                        )
-                )
+        var first = Commands.argument("first", EntityArgument.player())
                 .executes(command -> TeleportCommandResults.async(
                         context,
                         command,
@@ -62,7 +56,9 @@ public final class TpCommand implements CommandContributor {
                         name + " self",
                         policy -> service.tp(
                                 TeleportCommandResults.current(policy, players),
-                                PlayerNameArgument.get(command, "first"),
+                                EntityArgument.getPlayer(command, "first")
+                                        .getGameProfile()
+                                        .name(),
                                 Optional.empty(),
                                 override,
                                 context.permissions().has(
@@ -70,14 +66,9 @@ public final class TpCommand implements CommandContributor {
                                 )
                         )
                 ))
-                .then(Commands.argument("second", PlayerNameArgument.playerName())
+                .then(Commands.argument("second", EntityArgument.player())
                         .requires(source ->
                                 context.permissions().has(source, permission + ".others")
-                        )
-                        .suggests((_, builder) ->
-                                CommandSuggestionSupport.suggest(
-                                        players::onlinePlayerNames, builder
-                                )
                         )
                         .executes(command -> TeleportCommandResults.async(
                                 context,
@@ -86,8 +77,12 @@ public final class TpCommand implements CommandContributor {
                                 name + " others",
                                 policy -> service.tp(
                                         TeleportCommandResults.current(policy, players),
-                                        PlayerNameArgument.get(command, "first"),
-                                        Optional.of(PlayerNameArgument.get(command, "second")),
+                                        EntityArgument.getPlayer(command, "first")
+                                                .getGameProfile()
+                                                .name(),
+                                        Optional.of(EntityArgument.getPlayer(command, "second")
+                                                .getGameProfile()
+                                                .name()),
                                         override,
                                         true
                                 )

@@ -3,14 +3,14 @@ package top.likoslupus.cellulosesz.modules.playerstate.command;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandSettings;
@@ -108,18 +108,12 @@ public final class SpeedCommand implements CommandContributor {
                                             ))
                                             .then(Commands.argument(
                                                                     "player",
-                                                                    PlayerNameArgument.playerName()
+                                                                    EntityArgument.player()
                                                             )
                                                             .requires(source ->
                                                                     context.permissions().has(
                                                                             source,
                                                                             "cellulosesz.playerstate.speed.others"
-                                                                    )
-                                                            )
-                                                            .suggests((_, builder) ->
-                                                                    CommandSuggestionSupport.suggest(
-                                                                            players::onlinePlayerNames,
-                                                                            builder
                                                                     )
                                                             )
                                                             .executes(command -> other(
@@ -187,25 +181,11 @@ public final class SpeedCommand implements CommandContributor {
                 command,
                 descriptor,
                 "speed other",
-                _ -> {
-                    var name = PlayerNameArgument.get(
-                            command,
-                            "player"
-                    );
-
-                    return players.onlinePlayer(name)
-                            .map(player -> service.speed(
-                                    player,
-                                    type,
-                                    FiniteSpeedArgument.get(
-                                            command,
-                                            "speed"
-                                    )
-                            ))
-                            .orElseGet(() ->
-                                    PlayerStateCommandSupport.offline(name)
-                            );
-                }
+                _ -> service.speed(
+                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        type,
+                        FiniteSpeedArgument.get(command, "speed")
+                )
         );
     }
 

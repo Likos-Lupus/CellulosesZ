@@ -81,7 +81,7 @@ public final class FreeSignHandler implements SynchronousSignHandler {
         }
 
         var request = new InventoryItemRequest(
-                items.commandArgument(item.orElseThrow()),
+                item.orElseThrow().normalizedArgument(),
                 item.orElseThrow().count
         );
         var prepared = inventory.prepareExchange(

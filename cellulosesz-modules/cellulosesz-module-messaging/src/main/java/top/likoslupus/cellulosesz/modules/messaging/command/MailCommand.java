@@ -15,7 +15,6 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.messaging.application.MailCommandService;
 import top.likoslupus.cellulosesz.modules.messaging.command.argument.MailDurationArgument;
@@ -60,7 +59,7 @@ public final class MailCommand implements CommandContributor {
     private RequiredArgumentBuilder<CommandSourceStack, String> playerArgument() {
         return Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
+                        StringArgumentType.word()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -101,10 +100,7 @@ public final class MailCommand implements CommandContributor {
                                 policy,
                                 players
                         ),
-                        PlayerNameArgument.get(
-                                command,
-                                "player"
-                        ),
+                        StringArgumentType.getString(command, "player"),
                         duration,
                         StringArgumentType.getString(
                                 command,

@@ -27,7 +27,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"teleport", "command"}
 )
-@SuppressWarnings("resource")
 public final class WarpModule implements CellulosesZModule {
 
     private @Nullable WarpConfig config;

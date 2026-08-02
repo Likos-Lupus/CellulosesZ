@@ -4,13 +4,12 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
 
 import java.util.List;
@@ -40,13 +39,7 @@ public final class KickCommand implements CommandContributor {
 
         var target = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        )
+                        EntityArgument.player()
                 )
                 .executes(command -> execute(
                         context,
@@ -91,7 +84,9 @@ public final class KickCommand implements CommandContributor {
                 descriptor,
                 "kick reason-present=" + !reason.isBlank(),
                 policy -> service.kick(
-                        PlayerNameArgument.get(command, "player"),
+                        EntityArgument.getPlayer(command, "player")
+                                .getGameProfile()
+                                .name(),
                         AdminCommandResults.actor(policy, players),
                         reason
                 )

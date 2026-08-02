@@ -12,9 +12,8 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
 
 import java.util.List;
 
@@ -46,13 +45,7 @@ public final class RecipeCommand implements CommandContributor {
 
         var item = Commands.argument(
                         "item",
-                        ItemIdArgument.itemId(items)
-                )
-                .suggests((ignored, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                items::names,
-                                builder
-                        )
+                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
                 )
                 .executes(command -> execute(
                         context,
@@ -98,7 +91,7 @@ public final class RecipeCommand implements CommandContributor {
                 "recipe number=" + number,
                 _ -> {
                     var result = recipes.recipesFor(
-                            ItemIdArgument.get(command, "item"),
+                            ItemDescriptorArgument.get(command, "item").normalizedItem(),
                             config.maximumRecipeIngredientCandidates()
                     );
 

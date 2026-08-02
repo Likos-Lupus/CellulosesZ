@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.service;
 
 import top.likoslupus.cellulosesz.api.world.BackupPlatformService;
-import top.likoslupus.cellulosesz.api.world.BackupService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
 import java.io.IOException;
@@ -16,14 +15,14 @@ import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
-public final class DefaultBackupService implements BackupService {
+public final class BackupService {
 
     private final BackupPlatformService platform;
     private final Path dataRoot;
     private final AtomicBoolean running = new AtomicBoolean();
     private volatile BackupSnapshot config;
 
-    public DefaultBackupService(
+    public BackupService(
             BackupPlatformService platform,
             Path dataRoot,
             WorldConfig config
@@ -47,7 +46,6 @@ public final class DefaultBackupService implements BackupService {
         this.config = new BackupSnapshot(backup.enabled, directory, retain);
     }
 
-    @Override
     public CompletableFuture<Path> createBackup() {
         var current = config;
         if (!current.enabled()) {
@@ -72,16 +70,11 @@ public final class DefaultBackupService implements BackupService {
                 .whenComplete((_, _) -> running.set(false));
     }
 
-    @Override
-    public boolean running() {
-        return running.get();
-    }
-
     private static void prune(Path directory, int retain) {
         try (var files = Files.list(directory)) {
             var backups = files
                     .filter(path -> path.getFileName().toString().endsWith(".zip"))
-                    .sorted(Comparator.comparingLong(DefaultBackupService::modified).reversed())
+                    .sorted(Comparator.comparingLong(BackupService::modified).reversed())
                     .toList();
 
             for (var index = retain; index < backups.size(); index++) {
@@ -98,6 +91,10 @@ public final class DefaultBackupService implements BackupService {
         } catch (IOException exception) {
             throw new IllegalStateException("Unable to inspect backup", exception);
         }
+    }
+
+    public boolean running() {
+        return running.get();
     }
 
     private record BackupSnapshot(

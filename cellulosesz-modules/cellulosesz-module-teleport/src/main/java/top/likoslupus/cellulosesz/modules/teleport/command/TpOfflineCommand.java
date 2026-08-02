@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandService;
 
 import java.util.List;
@@ -34,7 +34,7 @@ public final class TpOfflineCommand implements CommandContributor {
         );
 
         var root = Commands.literal("tpoffline")
-                .then(Commands.argument("player", PlayerNameArgument.playerName())
+                .then(Commands.argument("player", StringArgumentType.word())
                         .executes(command -> TeleportCommandResults.player(
                                 context,
                                 command,
@@ -43,7 +43,7 @@ public final class TpOfflineCommand implements CommandContributor {
                                 players,
                                 player -> service.offline(
                                         player,
-                                        PlayerNameArgument.get(command, "player")
+                                        StringArgumentType.getString(command, "player")
                                 )
                         ))
                 );

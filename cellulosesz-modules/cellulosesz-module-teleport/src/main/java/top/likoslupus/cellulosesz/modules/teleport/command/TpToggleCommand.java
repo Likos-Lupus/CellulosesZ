@@ -1,13 +1,11 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportPreferenceCommandService;
 
 import java.util.List;
@@ -47,7 +45,7 @@ public final class TpToggleCommand implements CommandContributor {
                                 player, Optional.empty(), Optional.empty()
                         )
                 ))
-                .then(Commands.argument("state", ToggleArgument.toggle())
+                .then(Commands.literal("on")
                         .executes(command -> TeleportCommandResults.player(
                                 context,
                                 command,
@@ -55,59 +53,75 @@ public final class TpToggleCommand implements CommandContributor {
                                 "tptoggle self set",
                                 players,
                                 player -> service.toggle(
-                                        player,
-                                        Optional.empty(),
-                                        Optional.of(ToggleArgument.get(
-                                                command, "state"
-                                        ).enabled())
+                                        player, Optional.empty(), Optional.of(true)
                                 )
                         ))
                 )
-                .then(Commands.argument(
-                                        "player",
-                                        PlayerNameArgument.playerNameWithoutToggleWords()
+                .then(Commands.literal("off")
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tptoggle self set",
+                                players,
+                                player -> service.toggle(
+                                        player, Optional.empty(), Optional.of(false)
                                 )
-                                .requires(source -> context.permissions().has(
-                                        source,
-                                        "cellulosesz.teleport.tptoggle.others"
-                                ))
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                players::onlinePlayerNames, builder
-                                        )
+                        ))
+                )
+                .then(Commands.argument("player", EntityArgument.player())
+                        .requires(source -> context.permissions().has(
+                                source,
+                                "cellulosesz.teleport.tptoggle.others"
+                        ))
+                        .executes(command -> TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "tptoggle other",
+                                players,
+                                player -> service.toggle(
+                                        player,
+                                        Optional.of(EntityArgument.getPlayer(command, "player")
+                                                .getGameProfile()
+                                                .name()),
+                                        Optional.empty()
                                 )
+                        ))
+                        .then(Commands.literal("on")
                                 .executes(command -> TeleportCommandResults.player(
                                         context,
                                         command,
                                         descriptor,
-                                        "tptoggle other",
+                                        "tptoggle other set",
                                         players,
                                         player -> service.toggle(
                                                 player,
-                                                Optional.of(PlayerNameArgument.get(
-                                                        command, "player"
-                                                )),
-                                                Optional.empty()
+                                                Optional.of(EntityArgument
+                                                        .getPlayer(command, "player")
+                                                        .getGameProfile()
+                                                        .name()),
+                                                Optional.of(true)
                                         )
                                 ))
-                                .then(Commands.argument("state", ToggleArgument.toggle())
-                                        .executes(command -> TeleportCommandResults.player(
-                                                context,
-                                                command,
-                                                descriptor,
-                                                "tptoggle other set",
-                                                players,
-                                                player -> service.toggle(
-                                                        player,
-                                                        Optional.of(PlayerNameArgument.get(
-                                                                command, "player"
-                                                        )),
-                                                        Optional.of(ToggleArgument.get(
-                                                                command, "state"
-                                                        ).enabled())
-                                                )
-                                        ))
-                                )
+                        )
+                        .then(Commands.literal("off")
+                                .executes(command -> TeleportCommandResults.player(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "tptoggle other set",
+                                        players,
+                                        player -> service.toggle(
+                                                player,
+                                                Optional.of(EntityArgument
+                                                        .getPlayer(command, "player")
+                                                        .getGameProfile()
+                                                        .name()),
+                                                Optional.of(false)
+                                        )
+                                ))
+                        )
                 );
 
         context.registerDirect(

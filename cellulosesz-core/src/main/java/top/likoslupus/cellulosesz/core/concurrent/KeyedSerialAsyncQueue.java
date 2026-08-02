@@ -34,7 +34,6 @@ public final class KeyedSerialAsyncQueue<K> implements AutoCloseable {
         this.maximumPendingPerKey = requirePositive(maximumPendingPerKey, "maximumPendingPerKey");
     }
 
-    @SuppressWarnings("resource")
     public <T> CompletableFuture<T> submit(
             K key,
             Supplier<? extends CompletionStage<T>> operation

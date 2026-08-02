@@ -5,7 +5,10 @@ import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.kit.*;
+import top.likoslupus.cellulosesz.api.kit.KitClaimResult;
+import top.likoslupus.cellulosesz.api.kit.KitDefinition;
+import top.likoslupus.cellulosesz.api.kit.KitItem;
+import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
@@ -96,10 +99,10 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         return prepareReload(
                 current.createStarterKitWhenEmpty(),
                 current.chargeKitCost()
-        ).thenCompose(PreparedKitReload::commit).toCompletableFuture();
+        ).thenCompose(PreparedModuleReload::commit).toCompletableFuture();
     }
 
-    public CompletableFuture<PreparedKitReload> prepareReload(
+    public CompletableFuture<PreparedModuleReload> prepareReload(
             boolean createStarterKitWhenEmpty,
             boolean chargeKitCost
     ) {
@@ -652,7 +655,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
 
     }
 
-    private final class PreparedReload implements PreparedKitReload {
+    private final class PreparedReload implements PreparedModuleReload {
 
         private final RuntimeState previous;
         private final Map<String, KitDefinition> candidate;

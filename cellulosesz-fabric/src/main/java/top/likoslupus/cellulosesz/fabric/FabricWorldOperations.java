@@ -22,6 +22,9 @@ import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
 import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.world.*;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 import top.likoslupus.cellulosesz.fabric.mixin.BaseSpawnerAccessor;
 
 import java.lang.management.ManagementFactory;
@@ -50,27 +53,27 @@ public final class FabricWorldOperations implements WorldPlatformService {
             Map.entry(TreeType.DARK_OAK, "minecraft:dark_oak")
     );
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final SignPlatformService signs;
 
     public FabricWorldOperations(
-            FabricServerAccess access,
+            MinecraftServerHandle server,
             SignPlatformService signs
     ) {
-        this.access = requireNonNull(access, "access");
+        this.server = requireNonNull(server, "server");
         this.signs = requireNonNull(signs, "signs");
     }
 
     @Override
     public PlatformResult<ServerDiagnosticsSnapshot> diagnostics() {
         return onServerThread(() -> {
-            var server = access.requireServer();
+            var currentServer = server.requireRunning();
             var runtime = Runtime.getRuntime();
             var allocated = runtime.totalMemory();
             var free = runtime.freeMemory();
             var maximum = runtime.maxMemory();
             var used = allocated - free;
-            var averageNanos = server.getAverageTickTimeNanos();
+            var averageNanos = currentServer.getAverageTickTimeNanos();
             var averageMillis = averageNanos <= 0L
                     ? OptionalDouble.empty()
                     : OptionalDouble.of(averageNanos / 1_000_000.0D);
@@ -79,7 +82,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                     : Math.min(20.0D, 1000.0D / averageMillis.orElseThrow());
             var worlds = new ArrayList<WorldDiagnostics>();
 
-            server.getAllLevels()
+            currentServer.getAllLevels()
                     .forEach(level -> {
                         var entities = 0;
                         for (var _ : level.getAllEntities()) entities++;
@@ -119,7 +122,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -185,7 +188,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
         }
 
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)
                     || hit.getType() != HitResult.Type.BLOCK
@@ -295,7 +298,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
                 return PlatformResult.failure(
@@ -339,7 +342,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     ) {
         requireNonNull(type, "type");
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             var hit = nativePlayer.pick(maximumDistance, 0.0F, false);
             if (!(hit instanceof BlockHitResult blockHit)) {
                 return PlatformResult.failure(
@@ -412,7 +415,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     public PlatformResult<Void> setThunder(String worldId, ThunderRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = access.level(worldId);
+            var level = MinecraftWorlds.findLoaded(server.requireRunning(), worldId);
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -440,7 +443,10 @@ public final class FabricWorldOperations implements WorldPlatformService {
     public PlatformResult<Void> strikeLightning(LightningRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var level = access.level(request.location().world);
+            var level = MinecraftWorlds.findLoaded(
+                    server.requireRunning(),
+                    request.location().world
+            );
             if (level.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.TARGET_NOT_FOUND,
@@ -515,7 +521,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     }
 
     private <T> PlatformResult<T> onServerThread(Supplier<PlatformResult<T>> operation) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.STATE_NOT_ALLOWED,
                     "Operation requires the server thread"

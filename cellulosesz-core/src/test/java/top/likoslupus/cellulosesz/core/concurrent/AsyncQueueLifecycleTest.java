@@ -8,7 +8,6 @@ import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SuppressWarnings("resource")
 final class AsyncQueueLifecycleTest {
 
     @Test

@@ -65,7 +65,6 @@ import static java.util.Objects.requireNonNull;
                 "command"
         }
 )
-@SuppressWarnings("resource")
 public final class SignModule implements CellulosesZModule {
 
     private @Nullable SignConfig config;

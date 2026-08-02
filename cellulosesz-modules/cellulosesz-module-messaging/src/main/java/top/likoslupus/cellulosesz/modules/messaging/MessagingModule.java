@@ -39,7 +39,6 @@ import static java.util.Objects.requireNonNull;
         phase = ModulePhase.FEATURE,
         requires = {"user", "command"}
 )
-@SuppressWarnings("resource")
 public final class MessagingModule implements CellulosesZModule {
 
     private @Nullable MessagingConfig config;

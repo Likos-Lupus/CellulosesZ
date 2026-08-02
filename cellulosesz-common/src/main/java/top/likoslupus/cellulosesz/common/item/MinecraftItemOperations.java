@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.item;
 
 import com.google.gson.Gson;
 import com.mojang.brigadier.StringReader;
@@ -18,6 +18,8 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
 
 import java.util.*;
@@ -30,7 +32,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * Ordinary item-stack operations backed by Minecraft data-component codecs.
  */
-public final class FabricItemOperations implements ItemPlatformService {
+public final class MinecraftItemOperations implements ItemPlatformService {
 
     private static final Gson GSON = new Gson();
     private static final Set<String> POTION_ITEMS = Set.of(
@@ -40,17 +42,32 @@ public final class FabricItemOperations implements ItemPlatformService {
             "minecraft:tipped_arrow"
     );
 
-    private final FabricServerAccess access;
-    private final FabricInventoryStore inventory;
+    private final MinecraftServerHandle server;
+    private final MinecraftInventoryStore inventory;
     private final CellulosesZLogger logger;
 
-    public FabricItemOperations(
-            FabricServerAccess access,
+    public MinecraftItemOperations(
+            MinecraftServerHandle server,
             CellulosesZLogger logger
     ) {
-        this.access = requireNonNull(access, "access");
-        this.inventory = new FabricInventoryStore(access);
+        this.server = requireNonNull(server, "server");
+        this.inventory = new MinecraftInventoryStore(server);
         this.logger = requireNonNull(logger, "logger");
+    }
+
+    @Override
+    public boolean registryReady() {
+        try {
+            server.requireRunning();
+            return true;
+        } catch (IllegalStateException _) {
+            return false;
+        }
+    }
+
+    @Override
+    public Optional<ItemDescriptor> parse(String input) {
+        return inventory.parseDescriptor(input);
     }
 
     @Override
@@ -62,8 +79,7 @@ public final class FabricItemOperations implements ItemPlatformService {
 
     @Override
     public Set<String> enchantmentIds() {
-        var registry = access
-                .requireServer()
+        var registry = server.requireRunning()
                 .registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT);
         return registry.keySet().stream()
@@ -87,7 +103,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     public int maxStackSize(String itemId) {
         return inventory.parseItem(normalize(itemId))
                 .map(input ->
-                        input.createItemStack(1, false).getMaxStackSize()
+                        input.createItemStack(1).getMaxStackSize()
                 )
                 .orElse(0);
     }
@@ -95,7 +111,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     @Override
     public PlatformResult<ItemGrantResult> grant(CellPlayer player, ItemDescriptor descriptor) {
         return onServerThread(() -> {
-            var argument = commandArgument(descriptor);
+            var argument = descriptor.normalizedArgument();
             var prepared = inventory.prepareExchange(
                     player,
                     List.of(),
@@ -129,7 +145,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     @Override
     public PlatformResult<Integer> count(CellPlayer player, ItemDescriptor descriptor) {
         return onServerThread(() -> {
-            var parsed = inventory.parseItem(commandArgument(descriptor));
+            var parsed = inventory.parseItem(descriptor.normalizedArgument());
 
             if (parsed.isEmpty()) {
                 return PlatformResult.failure(
@@ -138,8 +154,8 @@ public final class FabricItemOperations implements ItemPlatformService {
                 );
             }
 
-            var template = parsed.orElseThrow().createItemStack(1, false);
-            var nativeInventory = access.player(player).getInventory();
+            var template = parsed.orElseThrow().createItemStack(1);
+            var nativeInventory = MinecraftPlayers.requireOnline(player).getInventory();
             var count = IntStream.range(0, nativeInventory.getContainerSize())
                     .mapToObj(nativeInventory::getItem)
                     .filter(stack -> !stack.isEmpty()
@@ -158,7 +174,7 @@ public final class FabricItemOperations implements ItemPlatformService {
             var prepared = inventory.prepareExchange(
                     player,
                     List.of(new InventoryItemRequest(
-                            commandArgument(descriptor),
+                            descriptor.normalizedArgument(),
                             descriptor.count
                     )),
                     List.of()
@@ -183,14 +199,14 @@ public final class FabricItemOperations implements ItemPlatformService {
     @Override
     public PlatformResult<String> heldItemId(CellPlayer player) {
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             return held.isEmpty()
                     ?
                     PlatformResult.failure(
                             PlatformOperationStatus.STATE_NOT_ALLOWED,
                             "Main hand is empty"
                     )
-                    : PlatformResult.success(access.itemId(held));
+                    : PlatformResult.success(MinecraftItems.id(held));
         });
     }
 
@@ -198,7 +214,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     public PlatformResult<Void> setHeldName(CellPlayer player, Optional<RichText> name) {
         requireNonNull(name, "name");
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -223,7 +239,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     public PlatformResult<Void> setHeldLore(CellPlayer player, List<RichText> lore) {
         requireNonNull(lore, "lore");
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -255,7 +271,7 @@ public final class FabricItemOperations implements ItemPlatformService {
             boolean unsafe
     ) {
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             if (held.isEmpty()) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -271,8 +287,7 @@ public final class FabricItemOperations implements ItemPlatformService {
                 );
             }
 
-            var registry = access
-                    .requireServer()
+            var registry = server.requireRunning()
                     .registryAccess()
                     .lookupOrThrow(Registries.ENCHANTMENT);
             var enchantment = registry.getValue(location);
@@ -315,7 +330,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     public PlatformResult<Integer> repair(CellPlayer player, RepairScope scope) {
         requireNonNull(scope, "scope");
         return onServerThread(() -> {
-            var nativePlayer = access.player(player);
+            var nativePlayer = MinecraftPlayers.requireOnline(player);
             if (scope == RepairScope.HAND) {
                 return PlatformResult.success(repair(nativePlayer.getMainHandItem())
                         ? 1
@@ -337,9 +352,9 @@ public final class FabricItemOperations implements ItemPlatformService {
     public PlatformResult<Void> applyPotion(CellPlayer player, PotionItemRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             if (held.isEmpty()
-                    || !POTION_ITEMS.contains(access.itemId(held))
+                    || !POTION_ITEMS.contains(MinecraftItems.id(held))
             ) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
@@ -377,10 +392,10 @@ public final class FabricItemOperations implements ItemPlatformService {
     public PlatformResult<Void> applyFirework(CellPlayer player, FireworkItemRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var held = access.player(player).getMainHandItem();
+            var held = MinecraftPlayers.requireOnline(player).getMainHandItem();
             var itemId = held.isEmpty()
                     ? ""
-                    : access.itemId(held);
+                    : MinecraftItems.id(held);
             var componentId = itemId.equals("minecraft:firework_rocket")
                     ? "minecraft:fireworks"
                     : itemId.equals("minecraft:firework_star")
@@ -464,9 +479,9 @@ public final class FabricItemOperations implements ItemPlatformService {
             String rawValue
     ) {
         try {
-            var argument = access.itemId(target) + "[" + componentId + "=" + rawValue + "]";
+            var argument = MinecraftItems.id(target) + "[" + componentId + "=" + rawValue + "]";
             var reader = new StringReader(argument);
-            var parsed = ItemParser.parseForItem(access.requireServer().registryAccess(), reader);
+            var parsed = new ItemParser(server.requireRunning().registryAccess()).parse(reader);
 
             if (reader.canRead()) {
                 return PlatformResult.failure(
@@ -475,7 +490,7 @@ public final class FabricItemOperations implements ItemPlatformService {
                 );
             }
 
-            var source = parsed.createItemStack(1, false);
+            var source = parsed.createItemStack(1);
             var component = componentType(componentId);
             if (component.isEmpty()
                     || !copyComponent(source, target, component.orElseThrow())
@@ -532,7 +547,7 @@ public final class FabricItemOperations implements ItemPlatformService {
     private <T> PlatformResult<T> onServerThread(
             Supplier<PlatformResult<T>> operation
     ) {
-        if (!access.serverThread()) {
+        if (!server.serverThread()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WRONG_THREAD,
                     "Operation requires the server thread"
@@ -547,26 +562,6 @@ public final class FabricItemOperations implements ItemPlatformService {
                     failure.getClass().getSimpleName()
             );
         }
-    }
-
-    private String commandArgument(ItemDescriptor descriptor) {
-        var id = descriptor.normalizedItem();
-        var components = descriptor.normalizedComponents();
-        if (components.isEmpty()) {
-            return id;
-        }
-
-        var parts = new ArrayList<String>();
-        components.forEach((key, value) -> parts.add(key + "=" + serialize(value)));
-        return id + "[" + String.join(",", parts) + "]";
-    }
-
-    private static String serialize(Object value) {
-        if (value instanceof RawItemComponent(String value1)) {
-            return value1;
-        }
-
-        return GSON.toJson(value);
     }
 
     private static String normalize(String value) {

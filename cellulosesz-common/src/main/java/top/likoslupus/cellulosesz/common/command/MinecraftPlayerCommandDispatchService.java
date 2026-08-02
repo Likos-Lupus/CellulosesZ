@@ -1,7 +1,9 @@
-package top.likoslupus.cellulosesz.fabric;
+package top.likoslupus.cellulosesz.common.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import top.likoslupus.cellulosesz.api.command.service.*;
+import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
 import java.util.*;
 
@@ -10,25 +12,25 @@ import static java.util.Objects.requireNonNull;
 /**
  * Guarded server-thread dispatch for explicitly permitted indirect command origins.
  */
-public final class FabricPlayerCommandDispatchService implements PlayerCommandDispatchService {
+public final class MinecraftPlayerCommandDispatchService implements PlayerCommandDispatchService {
 
     private static final int MAX_COMMAND_LENGTH = 2_048;
     private static final int MAX_DEPTH = 8;
     private static final int MAX_INDIRECT_EXECUTIONS_PER_TICK = 64;
 
-    private final FabricServerAccess access;
+    private final MinecraftServerHandle server;
     private final ThreadLocal<ArrayDeque<Frame>> chain = ThreadLocal.withInitial(ArrayDeque::new);
     private final Map<UUID, Integer> tickExecutions = new HashMap<>();
 
-    public FabricPlayerCommandDispatchService(FabricServerAccess access) {
-        this.access = requireNonNull(access, "access");
+    public MinecraftPlayerCommandDispatchService(MinecraftServerHandle server) {
+        this.server = requireNonNull(server, "server");
     }
 
     @Override
     public PlayerCommandDispatchResult dispatch(PlayerCommandDispatchRequest request) {
         requireNonNull(request, "request");
-        var server = access.requireServer();
-        if (!server.isSameThread()) {
+        var currentServer = server.requireRunning();
+        if (!currentServer.isSameThread()) {
             return failure(
                     CommandDispatchStatus.REJECTED_BY_GUARD,
                     "Player command dispatch requires the server thread"
@@ -93,12 +95,12 @@ public final class FabricPlayerCommandDispatchService implements PlayerCommandDi
             );
         }
 
-        var nativePlayer = access.player(request.target());
+        var nativePlayer = MinecraftPlayers.requireOnline(request.target());
         stack.push(frame);
         tickExecutions.put(request.target().uuid(), targetExecutions + 1);
 
         try {
-            var result = server.getCommands()
+            var result = currentServer.getCommands()
                     .getDispatcher()
                     .execute(normalized, nativePlayer.createCommandSourceStack());
             return PlayerCommandDispatchResult.executed(result);

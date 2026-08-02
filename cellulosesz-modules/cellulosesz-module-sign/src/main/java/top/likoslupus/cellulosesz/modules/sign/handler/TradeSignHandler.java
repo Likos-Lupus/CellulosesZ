@@ -100,15 +100,15 @@ public final class TradeSignHandler implements SynchronousSignHandler {
         return SignUseResult.success(
                 "service.sign.trade-success",
                 Map.of(
-                        "cost", items.commandArgument(cost.orElseThrow()),
-                        "reward", items.commandArgument(reward.orElseThrow())
+                        "cost", cost.orElseThrow().normalizedArgument(),
+                        "reward", reward.orElseThrow().normalizedArgument()
                 )
         );
     }
 
     private InventoryItemRequest request(ItemDescriptor descriptor) {
         return new InventoryItemRequest(
-                items.commandArgument(descriptor),
+                descriptor.normalizedArgument(),
                 descriptor.count
         );
     }

@@ -6,6 +6,7 @@ import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
@@ -18,10 +19,8 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
-import top.likoslupus.cellulosesz.common.command.argument.PlayerNameArgument;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemIdArgument;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -72,7 +71,9 @@ public final class ClearInventoryCommand implements CommandContributor {
         return fixedTarget == null
                 ?
                 Target.player(
-                        PlayerNameArgument.get(command, "player")
+                        EntityArgument.getPlayer(command, "player")
+                                .getGameProfile()
+                                .name()
                 )
                 : fixedTarget;
     }
@@ -132,20 +133,16 @@ public final class ClearInventoryCommand implements CommandContributor {
     ) {
         var branch = Commands.argument(
                         "player",
-                        PlayerNameArgument.playerName()
-                )
-                .suggests((_, builder) ->
-                        CommandSuggestionSupport.suggest(
-                                players::onlinePlayerNames,
-                                builder
-                        )
+                        EntityArgument.player()
                 )
                 .executes(command -> execute(
                         context,
                         command,
                         descriptor,
                         Target.player(
-                                PlayerNameArgument.get(command, "player")
+                                EntityArgument.getPlayer(command, "player")
+                                        .getGameProfile()
+                                        .name()
                         ),
                         InventoryClearFilter.inventory(),
                         0,
@@ -249,13 +246,7 @@ public final class ClearInventoryCommand implements CommandContributor {
         parent.then(Commands.literal("item")
                 .then(Commands.argument(
                                         "item",
-                                        ItemIdArgument.itemId(items)
-                                )
-                                .suggests((_, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                items::names,
-                                                builder
-                                        )
+                                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
                                 )
                                 .executes(command -> execute(
                                         context,
@@ -263,7 +254,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                                         descriptor,
                                         target(command, fixedTarget),
                                         InventoryClearFilter.item(
-                                                ItemIdArgument.get(command, "item")
+                                                ItemDescriptorArgument.get(command, "item").normalizedItem()
                                         ),
                                         0,
                                         false
@@ -281,10 +272,10 @@ public final class ClearInventoryCommand implements CommandContributor {
                                                         descriptor,
                                                         target(command, fixedTarget),
                                                         InventoryClearFilter.item(
-                                                                ItemIdArgument.get(
+                                                                ItemDescriptorArgument.get(
                                                                         command,
                                                                         "item"
-                                                                )
+                                                                ).normalizedItem()
                                                         ),
                                                         IntegerArgumentType.getInteger(
                                                                 command,
