@@ -74,53 +74,63 @@ public final class TpToggleCommand implements CommandContributor {
                                 source,
                                 "cellulosesz.teleport.tptoggle.others"
                         ))
-                        .executes(command -> TeleportCommandResults.player(
-                                context,
-                                command,
-                                descriptor,
-                                "tptoggle other",
-                                players,
-                                player -> service.toggle(
-                                        player,
-                                        Optional.of(EntityArgument.getPlayer(command, "player")
-                                                .getGameProfile()
-                                                .name()),
-                                        Optional.empty()
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "player")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.player(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    "tptoggle other",
+                                    players,
+                                    player -> service.toggle(
+                                            player,
+                                            Optional.of(targetName),
+                                            Optional.empty()
+                                    )
+                            );
+                        })
                         .then(Commands.literal("on")
-                                .executes(command -> TeleportCommandResults.player(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "tptoggle other set",
-                                        players,
-                                        player -> service.toggle(
-                                                player,
-                                                Optional.of(EntityArgument
-                                                        .getPlayer(command, "player")
-                                                        .getGameProfile()
-                                                        .name()),
-                                                Optional.of(true)
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return TeleportCommandResults.player(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "tptoggle other set",
+                                            players,
+                                            player -> service.toggle(
+                                                    player,
+                                                    Optional.of(targetName),
+                                                    Optional.of(true)
+                                            )
+                                    );
+                                })
                         )
                         .then(Commands.literal("off")
-                                .executes(command -> TeleportCommandResults.player(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "tptoggle other set",
-                                        players,
-                                        player -> service.toggle(
-                                                player,
-                                                Optional.of(EntityArgument
-                                                        .getPlayer(command, "player")
-                                                        .getGameProfile()
-                                                        .name()),
-                                                Optional.of(false)
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return TeleportCommandResults.player(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "tptoggle other set",
+                                            players,
+                                            player -> service.toggle(
+                                                    player,
+                                                    Optional.of(targetName),
+                                                    Optional.of(false)
+                                            )
+                                    );
+                                })
                         )
                 );
 

@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.playerstate.command;
 
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -132,14 +133,18 @@ public final class PWeatherCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             PersonalWeatherSetting setting
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "pweather other",
                 _ -> service.personalWeather(
-                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        target,
                         setting
                 )
         );

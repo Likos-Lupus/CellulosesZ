@@ -49,44 +49,53 @@ public final class TpCommand implements CommandContributor {
         );
 
         var first = Commands.argument("first", EntityArgument.player())
-                .executes(command -> TeleportCommandResults.async(
-                        context,
-                        command,
-                        descriptor,
-                        name + " self",
-                        policy -> service.tp(
-                                TeleportCommandResults.current(policy, players),
-                                EntityArgument.getPlayer(command, "first")
-                                        .getGameProfile()
-                                        .name(),
-                                Optional.empty(),
-                                override,
-                                context.permissions().has(
-                                        command.getSource(), permission + ".bypass"
-                                )
-                        )
-                ))
+                .executes(command -> {
+                    var targetName = EntityArgument.getPlayer(command, "first")
+                            .getGameProfile()
+                            .name();
+
+                    return TeleportCommandResults.async(
+                            context,
+                            command,
+                            descriptor,
+                            name + " self",
+                            policy -> service.tp(
+                                    TeleportCommandResults.current(policy, players),
+                                    targetName,
+                                    Optional.empty(),
+                                    override,
+                                    context.permissions().has(
+                                            command.getSource(), permission + ".bypass"
+                                    )
+                            )
+                    );
+                })
                 .then(Commands.argument("second", EntityArgument.player())
                         .requires(source ->
                                 context.permissions().has(source, permission + ".others")
                         )
-                        .executes(command -> TeleportCommandResults.async(
-                                context,
-                                command,
-                                descriptor,
-                                name + " others",
-                                policy -> service.tp(
-                                        TeleportCommandResults.current(policy, players),
-                                        EntityArgument.getPlayer(command, "first")
-                                                .getGameProfile()
-                                                .name(),
-                                        Optional.of(EntityArgument.getPlayer(command, "second")
-                                                .getGameProfile()
-                                                .name()),
-                                        override,
-                                        true
-                                )
-                        ))
+                        .executes(command -> {
+                            var sourceName = EntityArgument.getPlayer(command, "first")
+                                    .getGameProfile()
+                                    .name();
+                            var targetName = EntityArgument.getPlayer(command, "second")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.async(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    name + " others",
+                                    policy -> service.tp(
+                                            TeleportCommandResults.current(policy, players),
+                                            sourceName,
+                                            Optional.of(targetName),
+                                            override,
+                                            true
+                                    )
+                            );
+                        })
                 );
 
         var root = Commands.literal(name).then(first);

@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -77,16 +78,18 @@ public final class KickCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String reason
-    ) {
+    ) throws CommandSyntaxException {
+        var targetName = EntityArgument.getPlayer(command, "player")
+                .getGameProfile()
+                .name();
+
         return AdminCommandResults.async(
                 registration,
                 command,
                 descriptor,
                 "kick reason-present=" + !reason.isBlank(),
                 policy -> service.kick(
-                        EntityArgument.getPlayer(command, "player")
-                                .getGameProfile()
-                                .name(),
+                        targetName,
                         AdminCommandResults.actor(policy, players),
                         reason
                 )

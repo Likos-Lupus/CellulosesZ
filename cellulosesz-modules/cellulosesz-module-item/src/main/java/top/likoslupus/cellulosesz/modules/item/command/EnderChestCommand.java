@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -100,14 +101,17 @@ public final class EnderChestCommand implements CommandContributor {
             CommandRegistrationContext context,
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return ItemCommandSupport.sync(
                 context,
                 command,
                 descriptor,
                 "enderchest target",
                 policy -> {
-                    var target = MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player"));
                     var viewer = ItemCommandSupport.current(policy).orElse(target);
 
                     return service.openEnderChest(

@@ -35,21 +35,25 @@ public final class TpoHereCommand implements CommandContributor {
 
         var root = Commands.literal("tpohere")
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(command -> TeleportCommandResults.player(
-                                context,
-                                command,
-                                descriptor,
-                                "tpohere",
-                                players,
-                                actor -> service.here(
-                                        actor,
-                                        EntityArgument.getPlayer(command, "player")
-                                                .getGameProfile()
-                                                .name(),
-                                        true,
-                                        true
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "player")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.player(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    "tpohere",
+                                    players,
+                                    actor -> service.here(
+                                            actor,
+                                            targetName,
+                                            true,
+                                            true
+                                    )
+                            );
+                        })
                 );
 
         context.registerDirect(

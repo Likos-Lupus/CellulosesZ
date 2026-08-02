@@ -63,15 +63,19 @@ public final class HealCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.playerstate.heal.other"
                                 ))
-                                .executes(command -> PlayerStateCommandSupport.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "heal other",
-                                        _ -> service.heal(MinecraftPlayers.wrap(
-                                                EntityArgument.getPlayer(command, "player")
-                                        ))
-                                ))
+                                .executes(command -> {
+                                    var targetPlayer = MinecraftPlayers.wrap(
+                                            EntityArgument.getPlayer(command, "player")
+                                    );
+
+                                    return PlayerStateCommandSupport.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "heal other",
+                                            _ -> service.heal(targetPlayer)
+                                    );
+                                })
                 );
 
         context.registerDirect(

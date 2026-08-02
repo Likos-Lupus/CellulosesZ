@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.item.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -78,14 +79,18 @@ public final class GiveCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             ItemDescriptor item
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return ItemCommandSupport.sync(
                 registration,
                 command,
                 descriptor,
                 "give item",
                 policy -> service.grant(
-                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        target,
                         item,
                         policy.hasPermission("cellulosesz.item.give.blacklist"),
                         policy.hasPermission("cellulosesz.item.give.oversized")

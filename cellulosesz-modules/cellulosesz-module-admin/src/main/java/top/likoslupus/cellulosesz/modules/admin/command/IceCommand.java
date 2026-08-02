@@ -53,23 +53,25 @@ public final class IceCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.command.ice.others"
                                 ))
-                                .executes(command -> AdminCommandResults.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "ice other",
-                                        policy -> service.ice(
-                                                AdminCommandResults.current(
-                                                        policy,
-                                                        players
-                                                ),
-                                                Optional.of(
-                                                        EntityArgument.getPlayer(command, "player")
-                                                                .getGameProfile()
-                                                                .name()
-                                                )
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return AdminCommandResults.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "ice other",
+                                            policy -> service.ice(
+                                                    AdminCommandResults.current(
+                                                            policy,
+                                                            players
+                                                    ),
+                                                    Optional.of(targetName)
+                                            )
+                                    );
+                                })
                 );
 
         context.registerDirect(

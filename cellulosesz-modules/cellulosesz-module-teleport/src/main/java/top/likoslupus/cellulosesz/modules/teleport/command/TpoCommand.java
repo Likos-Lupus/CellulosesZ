@@ -36,43 +36,51 @@ public final class TpoCommand implements CommandContributor {
 
         var root = Commands.literal("tpo")
                 .then(Commands.argument("first", EntityArgument.player())
-                        .executes(command -> TeleportCommandResults.async(
-                                context,
-                                command,
-                                descriptor,
-                                "tpo self",
-                                policy -> service.tp(
-                                        TeleportCommandResults.current(policy, players),
-                                        EntityArgument.getPlayer(command, "first")
-                                                .getGameProfile()
-                                                .name(),
-                                        Optional.empty(),
-                                        true,
-                                        true
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "first")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.async(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    "tpo self",
+                                    policy -> service.tp(
+                                            TeleportCommandResults.current(policy, players),
+                                            targetName,
+                                            Optional.empty(),
+                                            true,
+                                            true
+                                    )
+                            );
+                        })
                         .then(Commands.argument("second", EntityArgument.player())
                                 .requires(source -> context.permissions().has(
                                         source, "cellulosesz.teleport.tpo.others"
                                 ))
-                                .executes(command -> TeleportCommandResults.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "tpo others",
-                                        policy -> service.tp(
-                                                TeleportCommandResults.current(policy, players),
-                                                EntityArgument.getPlayer(command, "first")
-                                                        .getGameProfile()
-                                                        .name(),
-                                                Optional.of(EntityArgument
-                                                        .getPlayer(command, "second")
-                                                        .getGameProfile()
-                                                        .name()),
-                                                true,
-                                                true
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var sourceName = EntityArgument.getPlayer(command, "first")
+                                            .getGameProfile()
+                                            .name();
+                                    var targetName = EntityArgument.getPlayer(command, "second")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return TeleportCommandResults.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "tpo others",
+                                            policy -> service.tp(
+                                                    TeleportCommandResults.current(policy, players),
+                                                    sourceName,
+                                                    Optional.of(targetName),
+                                                    true,
+                                                    true
+                                            )
+                                    );
+                                })
                         )
                 );
 

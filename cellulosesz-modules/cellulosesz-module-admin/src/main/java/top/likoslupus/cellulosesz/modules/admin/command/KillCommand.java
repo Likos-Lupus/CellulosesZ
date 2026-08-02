@@ -31,24 +31,28 @@ public final class KillCommand implements CommandContributor {
                         "player",
                         EntityArgument.player()
                 )
-                .executes(command -> AdminCommandResults.async(
-                        context,
-                        command,
-                        descriptor,
-                        "kill force=" + context.permissions().has(
-                                command.getSource(),
-                                "cellulosesz.command.kill.force"
-                        ),
-                        _ -> service.kill(
-                                EntityArgument.getPlayer(command, "player")
-                                        .getGameProfile()
-                                        .name(),
-                                context.permissions().has(
-                                        command.getSource(),
-                                        "cellulosesz.command.kill.force"
-                                )
-                        )
-                ));
+                .executes(command -> {
+                    var targetName = EntityArgument.getPlayer(command, "player")
+                            .getGameProfile()
+                            .name();
+
+                    return AdminCommandResults.async(
+                            context,
+                            command,
+                            descriptor,
+                            "kill force=" + context.permissions().has(
+                                    command.getSource(),
+                                    "cellulosesz.command.kill.force"
+                            ),
+                            _ -> service.kill(
+                                    targetName,
+                                    context.permissions().has(
+                                            command.getSource(),
+                                            "cellulosesz.command.kill.force"
+                                    )
+                            )
+                    );
+                });
 
         context.registerDirect(
                 moduleId(),

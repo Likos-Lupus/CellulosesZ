@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -67,7 +68,7 @@ public final class ClearInventoryCommand implements CommandContributor {
     private static Target target(
             CommandContext<CommandSourceStack> command,
             @Nullable Target fixedTarget
-    ) {
+    ) throws CommandSyntaxException {
         return fixedTarget == null
                 ?
                 Target.player(
@@ -139,11 +140,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                         context,
                         command,
                         descriptor,
-                        Target.player(
-                                EntityArgument.getPlayer(command, "player")
-                                        .getGameProfile()
-                                        .name()
-                        ),
+                        target(command, null),
                         InventoryClearFilter.inventory(),
                         0,
                         false

@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.item.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -172,14 +173,18 @@ public final class SkullCommand implements CommandContributor {
             CommandRegistrationContext context,
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return run(
                 context,
                 command,
                 descriptor,
                 _ -> new SkullRequest(
                         StringArgumentType.getString(command, "owner"),
-                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        target,
                         true,
                         Optional.empty()
                 )

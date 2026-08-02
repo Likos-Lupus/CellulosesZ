@@ -35,10 +35,10 @@ public final class DefaultItemService implements ItemService {
 
     public void configure(PreparedConfiguration prepared) {
         var configuration = requireNonNull(prepared, "prepared");
-        this.config = configuration.config;
-        this.aliases = configuration.aliases;
-        this.customItems = configuration.customItems;
-        this.blacklist = configuration.blacklist;
+        this.config = configuration.config();
+        this.aliases = configuration.aliases();
+        this.customItems = configuration.customItems();
+        this.blacklist = configuration.blacklist();
         this.registryValidated = platform.registryReady();
     }
 
@@ -256,6 +256,22 @@ public final class DefaultItemService implements ItemService {
         return result.successful()
                 ? result.value()
                 : Optional.empty();
+    }
+
+    public record PreparedConfiguration(
+            ItemConfig config,
+            Map<String, String> aliases,
+            Map<String, ItemDescriptor> customItems,
+            Set<String> blacklist
+    ) {
+
+        public PreparedConfiguration {
+            requireNonNull(config, "config");
+            aliases = Map.copyOf(requireNonNull(aliases, "aliases"));
+            customItems = Map.copyOf(requireNonNull(customItems, "customItems"));
+            blacklist = Set.copyOf(requireNonNull(blacklist, "blacklist"));
+        }
+
     }
 
 }

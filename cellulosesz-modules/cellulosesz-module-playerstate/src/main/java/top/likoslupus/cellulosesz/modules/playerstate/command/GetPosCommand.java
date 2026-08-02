@@ -67,18 +67,25 @@ public final class GetPosCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.command.getpos.others"
                                 ))
-                                .executes(command -> PlayerStateCommandSupport.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "getpos other",
-                                        policy -> service.getPos(
-                                                PlayerStateCommandSupport.currentPlayer(policy, players),
-                                                MinecraftPlayers.wrap(
-                                                        EntityArgument.getPlayer(command, "player")
-                                                )
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetPlayer = MinecraftPlayers.wrap(
+                                            EntityArgument.getPlayer(command, "player")
+                                    );
+
+                                    return PlayerStateCommandSupport.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "getpos other",
+                                            policy -> service.getPos(
+                                                    PlayerStateCommandSupport.currentPlayer(
+                                                            policy,
+                                                            players
+                                                    ),
+                                                    targetPlayer
+                                            )
+                                    );
+                                })
                 );
 
         context.registerDirect(

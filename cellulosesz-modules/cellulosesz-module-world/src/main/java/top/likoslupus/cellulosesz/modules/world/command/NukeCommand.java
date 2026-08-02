@@ -53,14 +53,18 @@ public final class NukeCommand implements CommandContributor {
                         Optional.empty()
                 ))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(command -> execute(
-                                context,
-                                command,
-                                descriptor,
-                                Optional.of(MinecraftPlayers.wrap(
-                                        EntityArgument.getPlayer(command, "player")
-                                ))
-                        ))
+                        .executes(command -> {
+                            var targetPlayer = MinecraftPlayers.wrap(
+                                    EntityArgument.getPlayer(command, "player")
+                            );
+
+                            return execute(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    Optional.of(targetPlayer)
+                            );
+                        })
                 );
 
         context.registerDirect(

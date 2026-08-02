@@ -49,23 +49,27 @@ public final class TpHereCommand implements CommandContributor {
 
         var root = Commands.literal(name)
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(command -> TeleportCommandResults.player(
-                                context,
-                                command,
-                                descriptor,
-                                name,
-                                players,
-                                actor -> service.here(
-                                        actor,
-                                        EntityArgument.getPlayer(command, "player")
-                                                .getGameProfile()
-                                                .name(),
-                                        override,
-                                        context.permissions().has(
-                                                command.getSource(), permission + ".bypass"
-                                        )
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "player")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.player(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    name,
+                                    players,
+                                    actor -> service.here(
+                                            actor,
+                                            targetName,
+                                            override,
+                                            context.permissions().has(
+                                                    command.getSource(), permission + ".bypass"
+                                            )
+                                    )
+                            );
+                        })
                 );
 
         context.registerDirect(

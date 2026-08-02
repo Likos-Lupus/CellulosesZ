@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.world.command;
 
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -124,22 +125,21 @@ public final class LightningCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             double damage
-    ) {
+    ) throws CommandSyntaxException {
+        var player = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return WorldCommandSupport.sync(
                 registration,
                 command,
                 descriptor,
                 "lightning player",
-                _ -> {
-                    var player = MinecraftPlayers.wrap(
-                            EntityArgument.getPlayer(command, "player")
-                    );
-                    return worlds.strikeLightning(new LightningRequest(
-                            locations.currentLocation(player),
-                            false,
-                            damage
-                    ));
-                }
+                _ -> worlds.strikeLightning(new LightningRequest(
+                        locations.currentLocation(player),
+                        false,
+                        damage
+                ))
         );
     }
 

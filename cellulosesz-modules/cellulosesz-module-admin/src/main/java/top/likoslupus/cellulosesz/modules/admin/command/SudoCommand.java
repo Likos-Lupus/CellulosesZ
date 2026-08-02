@@ -42,29 +42,33 @@ public final class SudoCommand implements CommandContributor {
                                         "command",
                                         StringArgumentType.greedyString()
                                 )
-                                .executes(command -> AdminCommandResults.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "sudo command-redacted length="
-                                                + StringArgumentType.getString(
-                                                command,
-                                                "command"
-                                        ).length(),
-                                        policy -> service.sudo(
-                                                AdminCommandResults.actor(
-                                                        policy,
-                                                        players
-                                                ),
-                                                EntityArgument.getPlayer(command, "player")
-                                                        .getGameProfile()
-                                                        .name(),
-                                                StringArgumentType.getString(
-                                                        command,
-                                                        "command"
-                                                )
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return AdminCommandResults.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "sudo command-redacted length="
+                                                    + StringArgumentType.getString(
+                                                    command,
+                                                    "command"
+                                            ).length(),
+                                            policy -> service.sudo(
+                                                    AdminCommandResults.actor(
+                                                            policy,
+                                                            players
+                                                    ),
+                                                    targetName,
+                                                    StringArgumentType.getString(
+                                                            command,
+                                                            "command"
+                                                    )
+                                            )
+                                    );
+                                })
                 );
 
         context.registerDirect(

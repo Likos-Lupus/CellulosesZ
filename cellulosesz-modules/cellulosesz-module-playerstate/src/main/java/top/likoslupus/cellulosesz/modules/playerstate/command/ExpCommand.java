@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.modules.playerstate.command;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -237,15 +238,17 @@ public final class ExpCommand implements CommandContributor {
             CommandRegistrationContext context,
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "exp show other",
-                _ -> service.experience(MinecraftPlayers.wrap(
-                        EntityArgument.getPlayer(command, "player")
-                ))
+                _ -> service.experience(target)
         );
     }
 
@@ -285,14 +288,18 @@ public final class ExpCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             ExperienceRequest request
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "exp mutation other",
                 _ -> service.mutateExperience(
-                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        target,
                         request
                 )
         );

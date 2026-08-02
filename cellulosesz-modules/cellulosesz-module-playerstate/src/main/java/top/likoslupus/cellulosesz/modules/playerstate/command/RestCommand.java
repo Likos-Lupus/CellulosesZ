@@ -63,15 +63,19 @@ public final class RestCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.command.rest.others"
                                 ))
-                                .executes(command -> PlayerStateCommandSupport.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "rest other",
-                                        _ -> service.rest(MinecraftPlayers.wrap(
-                                                EntityArgument.getPlayer(command, "player")
-                                        ))
-                                ))
+                                .executes(command -> {
+                                    var targetPlayer = MinecraftPlayers.wrap(
+                                            EntityArgument.getPlayer(command, "player")
+                                    );
+
+                                    return PlayerStateCommandSupport.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "rest other",
+                                            _ -> service.rest(targetPlayer)
+                                    );
+                                })
                 );
 
         context.registerDirect(

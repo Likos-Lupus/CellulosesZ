@@ -59,25 +59,28 @@ public final class MsgCommand implements CommandContributor {
                                                         "message",
                                                         StringArgumentType.greedyString()
                                                 )
-                                                .executes(command ->
-                                                        MessagingCommandSupport.requirePlayer(
-                                                                context,
-                                                                command,
-                                                                descriptor,
-                                                                "private message body redacted",
-                                                                players,
-                                                                sender -> service.send(
-                                                                        sender,
-                                                                        EntityArgument.getPlayer(command, "player")
-                                                                                .getGameProfile()
-                                                                                .name(),
-                                                                        StringArgumentType.getString(
-                                                                                command,
-                                                                                "message"
-                                                                        )
-                                                                )
-                                                        )
-                                                )
+                                                .executes(command -> {
+                                                    var targetName = EntityArgument.getPlayer(
+                                                            command,
+                                                            "player"
+                                                    ).getGameProfile().name();
+
+                                                    return MessagingCommandSupport.requirePlayer(
+                                                            context,
+                                                            command,
+                                                            descriptor,
+                                                            "private message body redacted",
+                                                            players,
+                                                            sender -> service.send(
+                                                                    sender,
+                                                                    targetName,
+                                                                    StringArgumentType.getString(
+                                                                            command,
+                                                                            "message"
+                                                                    )
+                                                            )
+                                                    );
+                                                })
                                 )
                 );
 

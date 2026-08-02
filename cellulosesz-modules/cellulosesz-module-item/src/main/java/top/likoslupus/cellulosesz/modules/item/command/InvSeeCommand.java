@@ -34,29 +34,32 @@ public final class InvSeeCommand implements CommandContributor {
                         "player",
                         EntityArgument.player()
                 )
-                .executes(command -> ItemCommandSupport.sync(
-                        context,
-                        command,
-                        descriptor,
-                        "invsee",
-                        policy -> {
-                            var viewer = ItemCommandSupport.current(policy);
-                            if (viewer.isEmpty()) {
-                                return PlatformResult.failure(
-                                        PlatformOperationStatus.INVALID_SOURCE,
-                                        "player-only"
+                .executes(command -> {
+                    var targetPlayer = MinecraftPlayers.wrap(
+                            EntityArgument.getPlayer(command, "player")
+                    );
+
+                    return ItemCommandSupport.sync(
+                            context,
+                            command,
+                            descriptor,
+                            "invsee",
+                            policy -> {
+                                var viewer = ItemCommandSupport.current(policy);
+                                if (viewer.isEmpty()) {
+                                    return PlatformResult.failure(
+                                            PlatformOperationStatus.INVALID_SOURCE,
+                                            "player-only"
+                                    );
+                                }
+
+                                return service.openInventory(
+                                        viewer.orElseThrow(),
+                                        targetPlayer
                                 );
                             }
-
-                            return service.openInventory(
-                                    viewer.orElseThrow(),
-                                    MinecraftPlayers.wrap(EntityArgument.getPlayer(
-                                            command,
-                                            "player"
-                                    ))
-                            );
-                        }
-                ));
+                    );
+                });
 
         context.registerDirect(
                 moduleId(),

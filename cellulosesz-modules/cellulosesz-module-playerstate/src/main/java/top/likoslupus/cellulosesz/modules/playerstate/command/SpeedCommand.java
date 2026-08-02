@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -175,14 +176,18 @@ public final class SpeedCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             MovementSpeedType type
-    ) {
+    ) throws CommandSyntaxException {
+        var target = MinecraftPlayers.wrap(
+                EntityArgument.getPlayer(command, "player")
+        );
+
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "speed other",
                 _ -> service.speed(
-                        MinecraftPlayers.wrap(EntityArgument.getPlayer(command, "player")),
+                        target,
                         type,
                         FiniteSpeedArgument.get(command, "speed")
                 )

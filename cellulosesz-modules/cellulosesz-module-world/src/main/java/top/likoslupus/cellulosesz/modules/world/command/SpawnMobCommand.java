@@ -61,15 +61,19 @@ public final class SpawnMobCommand implements CommandContributor {
                                 source,
                                 "cellulosesz.command.spawnmob.others"
                         ))
-                        .executes(command -> execute(
-                                context,
-                                command,
-                                descriptor,
-                                IntegerArgumentType.getInteger(command, "amount"),
-                                Optional.of(MinecraftPlayers.wrap(
-                                        EntityArgument.getPlayer(command, "player")
-                                ))
-                        ))
+                        .executes(command -> {
+                            var targetPlayer = MinecraftPlayers.wrap(
+                                    EntityArgument.getPlayer(command, "player")
+                            );
+
+                            return execute(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    IntegerArgumentType.getInteger(command, "amount"),
+                                    Optional.of(targetPlayer)
+                            );
+                        })
                 );
 
         var entity = Commands.argument(

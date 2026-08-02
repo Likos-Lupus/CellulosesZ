@@ -41,25 +41,29 @@ public final class BurnCommand implements CommandContributor {
                                         "seconds",
                                         IntegerArgumentType.integer(0, maximum)
                                 )
-                                .executes(command -> AdminCommandResults.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "burn seconds="
-                                                + IntegerArgumentType.getInteger(
-                                                command,
-                                                "seconds"
-                                        ),
-                                        _ -> service.burn(
-                                                EntityArgument.getPlayer(command, "player")
-                                                        .getGameProfile()
-                                                        .name(),
-                                                IntegerArgumentType.getInteger(
-                                                        command,
-                                                        "seconds"
-                                                )
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return AdminCommandResults.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "burn seconds="
+                                                    + IntegerArgumentType.getInteger(
+                                                    command,
+                                                    "seconds"
+                                            ),
+                                            _ -> service.burn(
+                                                    targetName,
+                                                    IntegerArgumentType.getInteger(
+                                                            command,
+                                                            "seconds"
+                                                    )
+                                            )
+                                    );
+                                })
                 );
 
         context.registerDirect(

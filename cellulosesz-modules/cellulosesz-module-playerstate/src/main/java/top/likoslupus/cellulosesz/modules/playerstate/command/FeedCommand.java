@@ -63,15 +63,19 @@ public final class FeedCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.playerstate.feed.other"
                                 ))
-                                .executes(command -> PlayerStateCommandSupport.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "feed other",
-                                        _ -> service.feed(MinecraftPlayers.wrap(
-                                                EntityArgument.getPlayer(command, "player")
-                                        ))
-                                ))
+                                .executes(command -> {
+                                    var targetPlayer = MinecraftPlayers.wrap(
+                                            EntityArgument.getPlayer(command, "player")
+                                    );
+
+                                    return PlayerStateCommandSupport.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "feed other",
+                                            _ -> service.feed(targetPlayer)
+                                    );
+                                })
                 );
 
         context.registerDirect(

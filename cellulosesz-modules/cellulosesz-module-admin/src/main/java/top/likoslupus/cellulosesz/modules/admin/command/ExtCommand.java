@@ -53,23 +53,25 @@ public final class ExtCommand implements CommandContributor {
                                         source,
                                         "cellulosesz.command.ext.others"
                                 ))
-                                .executes(command -> AdminCommandResults.async(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        "ext other",
-                                        policy -> service.extinguish(
-                                                AdminCommandResults.current(
-                                                        policy,
-                                                        players
-                                                ),
-                                                Optional.of(
-                                                        EntityArgument.getPlayer(command, "player")
-                                                                .getGameProfile()
-                                                                .name()
-                                                )
-                                        )
-                                ))
+                                .executes(command -> {
+                                    var targetName = EntityArgument.getPlayer(command, "player")
+                                            .getGameProfile()
+                                            .name();
+
+                                    return AdminCommandResults.async(
+                                            context,
+                                            command,
+                                            descriptor,
+                                            "ext other",
+                                            policy -> service.extinguish(
+                                                    AdminCommandResults.current(
+                                                            policy,
+                                                            players
+                                                    ),
+                                                    Optional.of(targetName)
+                                            )
+                                    );
+                                })
                 );
 
         context.registerDirect(

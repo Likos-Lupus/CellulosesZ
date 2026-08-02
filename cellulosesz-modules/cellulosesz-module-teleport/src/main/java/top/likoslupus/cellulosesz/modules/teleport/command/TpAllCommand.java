@@ -50,22 +50,26 @@ public final class TpAllCommand implements CommandContributor {
                         )
                 ))
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(command -> TeleportCommandResults.async(
-                                context,
-                                command,
-                                descriptor,
-                                "tpall target",
-                                policy -> service.all(
-                                        TeleportCommandResults.current(policy, players),
-                                        Optional.of(EntityArgument.getPlayer(command, "player")
-                                                .getGameProfile()
-                                                .name()),
-                                        context.permissions().has(
-                                                command.getSource(),
-                                                "cellulosesz.teleport.tpall.bypass"
-                                        )
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "player")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.async(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    "tpall target",
+                                    policy -> service.all(
+                                            TeleportCommandResults.current(policy, players),
+                                            Optional.of(targetName),
+                                            context.permissions().has(
+                                                    command.getSource(),
+                                                    "cellulosesz.teleport.tpall.bypass"
+                                            )
+                                    )
+                            );
+                        })
                 );
 
         context.registerDirect(

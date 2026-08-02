@@ -36,24 +36,28 @@ public final class TpaHereCommand implements CommandContributor {
 
         var root = Commands.literal("tpahere")
                 .then(Commands.argument("player", EntityArgument.player())
-                        .executes(command -> TeleportCommandResults.player(
-                                context,
-                                command,
-                                descriptor,
-                                "tpahere request",
-                                players,
-                                actor -> service.create(
-                                        actor,
-                                        EntityArgument.getPlayer(command, "player")
-                                                .getGameProfile()
-                                                .name(),
-                                        TeleportRequestType.TARGET_TO_REQUESTER,
-                                        context.permissions().has(
-                                                command.getSource(),
-                                                "cellulosesz.teleport.tpahere.bypass"
-                                        )
-                                )
-                        ))
+                        .executes(command -> {
+                            var targetName = EntityArgument.getPlayer(command, "player")
+                                    .getGameProfile()
+                                    .name();
+
+                            return TeleportCommandResults.player(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    "tpahere request",
+                                    players,
+                                    actor -> service.create(
+                                            actor,
+                                            targetName,
+                                            TeleportRequestType.TARGET_TO_REQUESTER,
+                                            context.permissions().has(
+                                                    command.getSource(),
+                                                    "cellulosesz.teleport.tpahere.bypass"
+                                            )
+                                    )
+                            );
+                        })
                 );
 
         context.registerDirect(

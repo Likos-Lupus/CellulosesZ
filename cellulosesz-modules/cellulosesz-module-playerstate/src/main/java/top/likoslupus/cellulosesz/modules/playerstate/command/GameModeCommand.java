@@ -52,19 +52,12 @@ public final class GameModeCommand implements CommandContributor {
                                                 policy,
                                                 players
                                         )
-                                        .map(player ->
-                                                service.gameMode(
-                                                        player,
-                                                        mode
+                                        .map(player -> service.gameMode(player, mode))
+                                        .orElseGet(() -> CompletableFuture.completedFuture(
+                                                PlayerStateCommandResult.failure(
+                                                        "common.player-only"
                                                 )
-                                        )
-                                        .orElseGet(() ->
-                                                CompletableFuture.completedFuture(
-                                                        PlayerStateCommandResult.failure(
-                                                                "common.player-only"
-                                                        )
-                                                )
-                                        )
+                                        ))
                         ))
                         .then(Commands.argument(
                                                 "player",
@@ -74,23 +67,19 @@ public final class GameModeCommand implements CommandContributor {
                                                 source,
                                                 "cellulosesz.playerstate.gamemode.others"
                                         ))
-                                        .executes(command ->
-                                                PlayerStateCommandSupport.async(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        "gamemode other",
-                                                        _ -> service.gameMode(
-                                                                MinecraftPlayers.wrap(
-                                                                        EntityArgument.getPlayer(
-                                                                                command,
-                                                                                "player"
-                                                                        )
-                                                                ),
-                                                                mode
-                                                        )
-                                                )
-                                        )
+                                        .executes(command -> {
+                                            var targetPlayer = MinecraftPlayers.wrap(
+                                                    EntityArgument.getPlayer(command, "player")
+                                            );
+
+                                            return PlayerStateCommandSupport.async(
+                                                    context,
+                                                    command,
+                                                    descriptor,
+                                                    "gamemode other",
+                                                    _ -> service.gameMode(targetPlayer, mode)
+                                            );
+                                        })
                         )
                 )
                 .forEach(root::then);
