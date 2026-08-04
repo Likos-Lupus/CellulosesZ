@@ -126,9 +126,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     @Override
     public PlatformResult<Integer> maxStackSize(String itemId) {
         return onServerThread(() -> inventory.parseItem(normalize(itemId))
-                .map(input -> PlatformResult.success(
-                        input.createItemStack(1).getMaxStackSize()
-                ))
+                .map(stack -> PlatformResult.success(stack.getMaxStackSize()))
                 .orElseGet(() -> PlatformResult.failure(
                         PlatformOperationStatus.INVALID_ARGUMENT,
                         "Unknown item: " + itemId
@@ -180,7 +178,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 );
             }
 
-            var template = parsed.orElseThrow().createItemStack(1);
+            var template = parsed.orElseThrow();
             var nativeInventory = MinecraftPlayers.requireOnline(server, player).getInventory();
             var count = IntStream.range(0, nativeInventory.getContainerSize())
                     .mapToObj(nativeInventory::getItem)

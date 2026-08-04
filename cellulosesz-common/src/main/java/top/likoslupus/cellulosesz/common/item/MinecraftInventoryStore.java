@@ -4,7 +4,6 @@ import com.google.gson.JsonParser;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.serialization.JsonOps;
-import net.minecraft.commands.arguments.item.ItemInput;
 import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
@@ -488,7 +487,7 @@ final class MinecraftInventoryStore {
                 );
             }
 
-            if (!removeMatching(after, parsed.orElseThrow().createItemStack(1), request.count())) {
+            if (!removeMatching(after, parsed.orElseThrow(), request.count())) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.CONFLICT,
                         "Inventory does not contain the requested removal"
@@ -505,7 +504,7 @@ final class MinecraftInventoryStore {
                 );
             }
 
-            if (!addMatching(after, parsed.orElseThrow().createItemStack(1), request.count())) {
+            if (!addMatching(after, parsed.orElseThrow(), request.count())) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.CONFLICT,
                         "Inventory does not have space for the requested addition"
@@ -527,7 +526,7 @@ final class MinecraftInventoryStore {
         return PlatformResult.success(mutation(inventory, before, after, affected));
     }
 
-    Optional<ItemInput> parseItem(String argument) {
+    Optional<ItemStack> parseItem(String argument) {
         if (argument.isBlank()) {
             return Optional.empty();
         }
@@ -540,7 +539,7 @@ final class MinecraftInventoryStore {
                 return Optional.empty();
             }
 
-            return Optional.of(parsed);
+            return Optional.of(parsed.createItemStack(1));
         } catch (CommandSyntaxException | IllegalArgumentException exception) {
             return Optional.empty();
         }
