@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
+import top.likoslupus.cellulosesz.modules.user.persistence.UserDocument;
+import top.likoslupus.cellulosesz.modules.user.persistence.UserMapper;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -104,7 +106,7 @@ final class JsonUserServiceTest {
         saveAll.join();
 
         assertEquals(2, storage.saveCalls.get());
-        var saved = (top.likoslupus.cellulosesz.api.user.CellUser) storage.savedValues.getLast();
+        var saved = UserMapper.toDomain((UserDocument) storage.savedValues.getLast());
         assertFalse(saved.preferences().privateMessages());
     }
 

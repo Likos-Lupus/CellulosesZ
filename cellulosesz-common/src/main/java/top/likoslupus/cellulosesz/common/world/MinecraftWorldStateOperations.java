@@ -25,7 +25,8 @@ public final class MinecraftWorldStateOperations implements WorldStatePlatformSe
             );
         }
 
-        var level = MinecraftWorlds.findLoaded(server.requireRunning(), worldId);
+        var currentServer = server.requireRunning();
+        var level = MinecraftWorlds.findLoaded(currentServer, worldId);
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -33,7 +34,19 @@ public final class MinecraftWorldStateOperations implements WorldStatePlatformSe
             );
         }
 
-        level.orElseThrow().setDayTime(Math.floorMod(ticks, 24_000L));
+        var clock = level.orElseThrow().dimensionType().defaultClock();
+        if (clock.isEmpty()) {
+            return PlatformResult.failure(
+                    PlatformOperationStatus.STATE_NOT_ALLOWED,
+                    "World does not define a default clock"
+            );
+        }
+
+        currentServer.clockManager().setTotalTicks(
+                clock.orElseThrow(),
+                Math.floorMod(ticks, 24_000L)
+        );
+        currentServer.forceGameTimeSynchronization();
         return PlatformResult.success();
     }
 
@@ -51,7 +64,8 @@ public final class MinecraftWorldStateOperations implements WorldStatePlatformSe
             );
         }
 
-        var level = MinecraftWorlds.findLoaded(server.requireRunning(), worldId);
+        var currentServer = server.requireRunning();
+        var level = MinecraftWorlds.findLoaded(currentServer, worldId);
         if (level.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.WORLD_NOT_FOUND,
@@ -70,9 +84,24 @@ public final class MinecraftWorldStateOperations implements WorldStatePlatformSe
         }
 
         switch (type) {
-            case CLEAR -> level.orElseThrow().setWeatherParameters(ticks, 0, false, false);
-            case RAIN -> level.orElseThrow().setWeatherParameters(0, ticks, true, false);
-            case THUNDER -> level.orElseThrow().setWeatherParameters(0, ticks, true, true);
+            case CLEAR -> currentServer.setWeatherParameters(
+                    ticks,
+                    0,
+                    false,
+                    false
+            );
+            case RAIN -> currentServer.setWeatherParameters(
+                    0,
+                    ticks,
+                    true,
+                    false
+            );
+            case THUNDER -> currentServer.setWeatherParameters(
+                    0,
+                    ticks,
+                    true,
+                    true
+            );
         }
 
         return PlatformResult.success();

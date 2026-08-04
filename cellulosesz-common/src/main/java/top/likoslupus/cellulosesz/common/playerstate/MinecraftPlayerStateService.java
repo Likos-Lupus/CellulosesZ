@@ -4,6 +4,7 @@ import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
+import net.minecraft.world.clock.ClockNetworkState;
 import net.minecraft.world.level.GameType;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
@@ -14,6 +15,7 @@ import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
+import java.util.Map;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -265,25 +267,40 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
         return onServerThread(() -> {
             var target = MinecraftPlayers.requireOnline(server, player);
             var level = target.level();
+            var currentTime = level.getDefaultClockTime();
             var applied = (PersonalTimeSetting) switch (setting) {
                 case PersonalTimeSetting.Fixed fixed ->
                         new PersonalTimeSetting.Fixed(Math.floorMod(fixed.ticks(), 24_000L));
                 case PersonalTimeSetting.Relative relative ->
                         new PersonalTimeSetting.Fixed(Math.floorMod(
-                                level.getDayTime() + relative.offset(),
+                                currentTime + relative.offset(),
                                 24_000L
                         ));
                 case PersonalTimeSetting.Reset _ -> new PersonalTimeSetting.Reset();
             };
 
-            var ticks = applied instanceof PersonalTimeSetting.Fixed(long ticks1)
-                    ? ticks1
-                    : level.getDayTime();
-            target.connection.send(new ClientboundSetTimePacket(
-                    level.getGameTime(),
-                    ticks,
-                    applied instanceof PersonalTimeSetting.Reset
-            ));
+            if (applied instanceof PersonalTimeSetting.Fixed(long ticks)) {
+                var clock = level.dimensionType().defaultClock();
+                if (clock.isEmpty()) {
+                    return PlatformResult.failure(
+                            PlatformOperationStatus.STATE_NOT_ALLOWED,
+                            "Player world does not define a default clock"
+                    );
+                }
+                target.connection.send(new ClientboundSetTimePacket(
+                        level.getGameTime(),
+                        Map.of(
+                                clock.orElseThrow(),
+                                new ClockNetworkState(ticks, 0.0F, 0.0F)
+                        )
+                ));
+            } else {
+                target.connection.send(
+                        server.requireRunning()
+                                .clockManager()
+                                .createFullSyncPacket()
+                );
+            }
 
             return PlatformResult.success(applied);
         });

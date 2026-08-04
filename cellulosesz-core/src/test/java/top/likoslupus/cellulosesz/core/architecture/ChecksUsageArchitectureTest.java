@@ -30,7 +30,9 @@ final class ChecksUsageArchitectureTest {
             assertFalse(text.contains("validation.Checks"), source.toString());
             assertFalse(
                     text.matches(
-                            "(?s).*private\\s+static.*(requirePositive|validateNonNegative|requireRange).*"
+                            "(?s).*\\bprivate\\s+static\\s+"
+                                    + "(?:<[^>{}]+>\\s+)?[\\w.?<>\\[\\],]+\\s+"
+                                    + "(requirePositive|validateNonNegative|requireRange)\\s*\\(.*"
                     ),
                     source.toString()
             );

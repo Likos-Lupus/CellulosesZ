@@ -146,12 +146,9 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
                     break;
                 }
 
-                entity.moveTo(
-                        base.getX() + 0.5D,
-                        base.getY(),
-                        base.getZ() + 0.5D,
-                        anchor.getYRot(),
-                        0.0F
+                entity.snapTo(
+                        base.getX() + 0.5D, base.getY(), base.getZ() + 0.5D,
+                        anchor.getYRot(), 0.0F
                 );
 
                 if (entity instanceof Mob mob) {
@@ -471,9 +468,11 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
 
         var entity = entityType.create(level, EntitySpawnReason.COMMAND);
         if (entity instanceof AbstractThrownPotion potion) {
-            potion.setItem(new ItemStack(type == ProjectileType.LINGERING_POTION
-                    ? Items.LINGERING_POTION
-                    : Items.SPLASH_POTION));
+            potion.setItem(new ItemStack(
+                    type == ProjectileType.LINGERING_POTION
+                            ? Items.LINGERING_POTION
+                            : Items.SPLASH_POTION
+            ));
         }
 
         return entity;

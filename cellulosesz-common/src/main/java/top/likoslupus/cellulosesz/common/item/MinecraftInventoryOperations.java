@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.network.Filterable;
+import net.minecraft.util.Util;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
@@ -410,8 +411,12 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
     public CompletableFuture<PlatformResult<SkullResult>> skull(SkullRequest request) {
         requireNonNull(request, "request");
         var currentServer = server.requireRunning();
-        return currentServer.getProfileCache()
-                .getAsync(request.owner())
+        return CompletableFuture.supplyAsync(
+                        () -> currentServer.services()
+                                .profileResolver()
+                                .fetchByName(request.owner()),
+                        Util.nonCriticalIoPool()
+                )
                 .thenCompose(profile -> {
                     if (profile.isEmpty()) {
                         return CompletableFuture.completedFuture(PlatformResult.failure(
@@ -449,7 +454,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         var skull = new ItemStack(Items.PLAYER_HEAD);
         skull.set(
                 DataComponents.PROFILE,
-                new ResolvableProfile(profile)
+                ResolvableProfile.createResolved(profile)
         );
         if (request.spawn()) {
             if (!target.getInventory().add(skull)) {
@@ -502,7 +507,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         var replacement = current.copy();
         replacement.set(
                 DataComponents.PROFILE,
-                new ResolvableProfile(profile)
+                ResolvableProfile.createResolved(profile)
         );
         target.setItemInHand(InteractionHand.MAIN_HAND, replacement);
 
@@ -550,13 +555,14 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
         }
 
         var pages = content.pages().stream()
-                .map(page -> Filterable.passThrough(Component.literal(page.raw())))
+                .map(page -> Filterable.<Component>passThrough(Component.literal(page.raw())))
                 .toList();
         var replacement = original.transmuteCopy(Items.WRITTEN_BOOK);
 
         replacement.remove(DataComponents.WRITABLE_BOOK_CONTENT);
         replacement.set(
-                DataComponents.WRITTEN_BOOK_CONTENT, new WrittenBookContent(
+                DataComponents.WRITTEN_BOOK_CONTENT,
+                new WrittenBookContent(
                         Filterable.passThrough(actualTitle),
                         author,
                         0,

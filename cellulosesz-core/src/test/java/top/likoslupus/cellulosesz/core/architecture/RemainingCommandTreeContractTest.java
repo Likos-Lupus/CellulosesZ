@@ -152,6 +152,7 @@ final class RemainingCommandTreeContractTest {
             var source = project.resolve(contract.sourceFile());
             assertTrue(Files.exists(source), source.toString());
             var text = Files.readString(source);
+            var compactText = text.replaceAll("\\s+", "");
 
             assertTrue(text.contains("implements CommandContributor"), root);
             assertTrue(text.contains("Commands.literal("), root);
@@ -163,7 +164,10 @@ final class RemainingCommandTreeContractTest {
             assertFalse(source.toString().contains("cellulosesz-fabric"), root);
 
             for (var marker : TYPED_MARKERS.getOrDefault(root, List.of())) {
-                assertTrue(text.contains(marker), root + " missing typed marker " + marker);
+                assertTrue(
+                        compactText.contains(marker.replaceAll("\\s+", "")),
+                        root + " missing typed marker " + marker
+                );
             }
 
             var moduleText = moduleText(source);
@@ -220,13 +224,15 @@ final class RemainingCommandTreeContractTest {
         while (current != null && !Files.exists(current.resolve("build.gradle.kts"))) {
             current = current.getParent();
         }
-        current = requireNonNull(current, "module root");
+
+        requireNonNull(current, "module root");
         var text = new StringBuilder();
         try (var paths = Files.walk(current.resolve("src/main/java"))) {
             for (var path : paths.filter(value -> value.toString().endsWith(".java")).toList()) {
                 text.append(Files.readString(path)).append('\n');
             }
         }
+
         return text.toString();
     }
 
