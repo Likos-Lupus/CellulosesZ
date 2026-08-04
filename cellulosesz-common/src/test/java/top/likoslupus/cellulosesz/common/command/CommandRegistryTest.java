@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.common.command;
 
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
 import java.util.List;
 import org.jspecify.annotations.NullMarked;
 
@@ -19,7 +18,7 @@ final class CommandRegistryTest {
         registry.register("main", warp);
         registry.register("main", home);
 
-        var snapshot = new ArrayList<>(registry.snapshot());
+        var snapshot = registry.snapshot();
         assertEquals(List.of(home, warp), snapshot);
         assertThrows(UnsupportedOperationException.class, () -> snapshot.add(home));
     }

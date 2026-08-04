@@ -12,10 +12,7 @@ import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import org.jspecify.annotations.Nullable;
 
@@ -41,6 +38,10 @@ public final class ItemValueCommandService {
         this.worths = requireNonNull(worths, "worths");
         this.economy = requireNonNull(economy, "economy");
         this.serverThread = requireNonNull(serverThread, "serverThread");
+    }
+
+    public Set<String> itemNames() {
+        return items.itemNames();
     }
 
     public CompletableFuture<EconomyCommandResult> worth(

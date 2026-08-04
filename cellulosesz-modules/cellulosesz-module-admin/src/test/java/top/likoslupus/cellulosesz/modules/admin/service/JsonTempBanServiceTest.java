@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.admin.AdminActor;
 import top.likoslupus.cellulosesz.api.admin.AdminStatus;
@@ -12,6 +10,8 @@ import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
+import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -23,6 +23,8 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,50 +49,86 @@ final class JsonTempBanServiceTest {
     }
 
     private static JsonTempBanService service(MemoryStorage storage, Clock clock) {
+        var config = new AdminConfig();
+        config.tempBanKickOnlinePlayers = false;
+
         return new JsonTempBanService(
                 storage,
                 Path.of("temp-bans.json"),
-                proxy(PlayerDirectory.class, (method, args) -> defaultValue(method)),
-                proxy(PlayerConnectionService.class, (method, args) -> defaultValue(method)),
-                proxy(PlayerAudienceService.class, (method, args) -> defaultValue(method)),
-                proxy(PlayerNetworkService.class, (method, args) -> Optional.empty()),
-                proxy(MessageRenderer.class, (method, args) -> defaultValue(method)),
+                proxy(PlayerDirectory.class, (method, _) -> defaultValue(method)),
+                proxy(PlayerConnectionService.class, (method, _) -> defaultValue(method)),
+                proxy(PlayerAudienceService.class, (method, _) -> defaultValue(method)),
+                proxy(PlayerNetworkService.class, (_, _) -> Optional.empty()),
+                proxy(MessageRenderer.class, (method, _) -> defaultValue(method)),
                 directExecutor(),
                 clock,
-                false
+                new AdminRuntimeSettings(config)
         );
     }
 
     @SuppressWarnings("unchecked")
     private static <T> T proxy(Class<T> type, BiFunction<Method, Object[], Object> behavior) {
-        return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, (instance, method, rawArgs) -> {
-            var args = rawArgs == null ? new Object[0] : rawArgs;
-            if (method.getDeclaringClass() == Object.class) {
-                return switch (method.getName()) {
-                    case "toString" -> type.getSimpleName() + "TestProxy";
-                    case "hashCode" -> System.identityHashCode(instance);
-                    case "equals" -> instance == args[0];
-                    default -> throw new UnsupportedOperationException(method.getName());
-                };
-            }
-            if (method.isDefault()) return InvocationHandler.invokeDefault(instance, method, args);
-            return behavior.apply(method, args);
-        });
+        return (T) Proxy.newProxyInstance(
+                type.getClassLoader(),
+                new Class<?>[]{type},
+                (instance, method, rawArgs) -> {
+                    var args = rawArgs == null
+                            ? new Object[0]
+                            : rawArgs;
+
+                    if (method.getDeclaringClass() == Object.class) {
+                        return switch (method.getName()) {
+                            case "toString" -> type.getSimpleName() + "TestProxy";
+                            case "hashCode" -> System.identityHashCode(instance);
+                            case "equals" -> instance == args[0];
+                            default -> throw new UnsupportedOperationException(method.getName());
+                        };
+                    }
+
+                    if (method.isDefault()) {
+                        return InvocationHandler.invokeDefault(instance, method, args);
+                    }
+
+                    return behavior.apply(method, args);
+                }
+        );
     }
 
-    private static Object defaultValue(Method method) {
+    private static @Nullable Object defaultValue(Method method) {
         var type = method.getReturnType();
-        if (type == void.class) return null;
-        if (type == boolean.class) return false;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == String.class) return "";
-        if (type == Optional.class) return Optional.empty();
-        if (type == List.class) return List.of();
-        if (type == Set.class) return Set.of();
-        if (type == Collection.class) return List.of();
-        if (type == Map.class) return Map.of();
-        if (type == CompletableFuture.class) return CompletableFuture.completedFuture(null);
+        if (type == void.class) {
+            return null;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == String.class) {
+            return "";
+        }
+        if (type == Optional.class) {
+            return Optional.empty();
+        }
+        if (type == List.class) {
+            return List.of();
+        }
+        if (type == Set.class) {
+            return Set.of();
+        }
+        if (type == Collection.class) {
+            return List.of();
+        }
+        if (type == Map.class) {
+            return Map.of();
+        }
+        if (type == CompletableFuture.class) {
+            return CompletableFuture.completedFuture(null);
+        }
         throw new UnsupportedOperationException(method.toString());
     }
 
@@ -124,9 +162,15 @@ final class JsonTempBanServiceTest {
         var service = service(storage, clock);
         var address = InetAddress.getByAddress(new byte[]{(byte) 192, 0, 2, 2});
 
-        assertTrue(service.tempBanIp(address, AdminActor.console("console"), Duration.ofSeconds(1), "test")
+        assertTrue(service.tempBanIp(
+                        address,
+                        AdminActor.console("console"),
+                        Duration.ofSeconds(1),
+                        "test"
+                )
                 .join()
-                .success());
+                .success()
+        );
         assertTrue(service.activeIp(address).isPresent());
         clock.advance(Duration.ofSeconds(2));
 

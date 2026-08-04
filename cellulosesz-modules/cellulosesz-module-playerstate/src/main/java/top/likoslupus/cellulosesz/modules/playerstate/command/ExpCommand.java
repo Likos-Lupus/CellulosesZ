@@ -177,7 +177,7 @@ public final class ExpCommand implements CommandContributor {
                 );
     }
 
-    private RequiredArgumentBuilder<CommandSourceStack, String> playerArgument(
+    private RequiredArgumentBuilder<CommandSourceStack, ?> playerArgument(
             CommandRegistrationContext context,
             String permission
     ) {

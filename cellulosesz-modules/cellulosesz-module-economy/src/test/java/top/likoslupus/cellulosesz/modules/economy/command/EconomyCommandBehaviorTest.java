@@ -16,6 +16,7 @@ import java.lang.reflect.Proxy;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
@@ -138,6 +139,9 @@ final class EconomyCommandBehaviorTest {
         }
         if (List.class.isAssignableFrom(type)) {
             return List.of();
+        }
+        if (Set.class.isAssignableFrom(type)) {
+            return Set.of();
         }
         if (CompletableFuture.class.isAssignableFrom(type)) {
             return CompletableFuture.completedFuture(null);

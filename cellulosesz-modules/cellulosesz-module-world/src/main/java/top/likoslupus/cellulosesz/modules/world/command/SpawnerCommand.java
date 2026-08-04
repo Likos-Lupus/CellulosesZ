@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.world.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ResourceArgument;
@@ -88,17 +89,18 @@ public final class SpawnerCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             int delay
-    ) {
+    ) throws CommandSyntaxException {
+        var entity = ResourceArgument.getEntityType(command, "entity")
+                .key()
+                .identifier()
+                .toString();
+
         return WorldCommandSupport.sync(
                 registration,
                 command,
                 descriptor,
                 "spawner",
                 policy -> {
-                    var entity = ResourceArgument.getEntityType(command, "entity")
-                            .key()
-                            .identifier()
-                            .toString();
                     var permission = "cellulosesz.command.spawner.entity."
                             + entity.replace(':', '.')
                             .replaceAll("[^a-z0-9_.-]", "_");

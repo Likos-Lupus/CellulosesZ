@@ -119,11 +119,11 @@ public final class PayCommand implements CommandContributor {
                         ),
                         token,
                         context.hasPermission(
-                                sender,
+                                command.getSource(),
                                 "cellulosesz.economy.pay.multiple"
                         ),
                         context.hasPermission(
-                                sender,
+                                command.getSource(),
                                 "cellulosesz.economy.pay.offline"
                         )
                 )

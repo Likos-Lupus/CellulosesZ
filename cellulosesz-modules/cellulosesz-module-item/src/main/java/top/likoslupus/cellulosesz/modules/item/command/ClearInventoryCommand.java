@@ -583,7 +583,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                     var rollback = committedPlan.mutation().rollback();
                     if (!rollback.successful()) {
                         rollbackFailures.add(
-                                committedPlan.player().uuid() + ": " + rollback.detail()
+                                committedPlan.target().uuid() + ": " + rollback.detail()
                         );
                     }
                 }

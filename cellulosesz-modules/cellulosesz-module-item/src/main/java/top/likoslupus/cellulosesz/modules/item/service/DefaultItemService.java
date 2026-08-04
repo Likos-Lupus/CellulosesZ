@@ -10,6 +10,8 @@ import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
 
+import org.jspecify.annotations.Nullable;
+
 import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
@@ -17,7 +19,7 @@ import static java.util.Objects.requireNonNull;
 public final class DefaultItemService implements ItemService {
 
     private final ItemPlatformService platform;
-    private volatile ItemConfig config;
+    private volatile @Nullable ItemConfig config;
     private volatile Map<String, String> aliases = Map.of();
     private volatile Map<String, ItemDescriptor> customItems = Map.of();
     private volatile Set<String> blacklist = Set.of();
@@ -150,6 +152,14 @@ public final class DefaultItemService implements ItemService {
         }
 
         configure(prepareConfiguration(config));
+    }
+
+    @Override
+    public Set<String> itemNames() {
+        var names = new LinkedHashSet<>(platform.itemIds());
+        names.addAll(aliases.keySet());
+        names.addAll(customItems.keySet());
+        return Set.copyOf(names);
     }
 
     @Override

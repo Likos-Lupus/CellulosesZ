@@ -3,8 +3,12 @@ package top.likoslupus.cellulosesz.api.item;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 
+import java.util.Set;
+
 /** Item application service that preserves validation and platform failure states. */
 public interface ItemService {
+
+    Set<String> itemNames();
 
     PlatformResult<ItemDescriptor> parse(String input);
 
