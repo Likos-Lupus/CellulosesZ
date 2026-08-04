@@ -127,7 +127,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
             var anchor = MinecraftPlayers.requireOnline(server, request.anchor());
             var level = anchor.level();
             var base = anchor.blockPosition().relative(anchor.getDirection(), 2);
-            if (!level.hasChunkAt(base)
+            if (!level.isLoaded(base)
                     || !level.getWorldBorder().isWithinBounds(base)
             ) {
                 return PlatformResult.failure(
@@ -273,7 +273,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
                 var z = request.center().z() + Math.sin(angle) * radius;
                 var position = BlockPos.containing(x, y, z);
 
-                if (!targetLevel.hasChunkAt(position)
+                if (!targetLevel.isLoaded(position)
                         || !targetLevel
                         .getWorldBorder()
                         .isWithinBounds(position)

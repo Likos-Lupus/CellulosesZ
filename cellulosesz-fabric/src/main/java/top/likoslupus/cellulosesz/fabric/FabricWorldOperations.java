@@ -355,7 +355,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
             var position = blockHit.getBlockPos().relative(blockHit.getDirection());
             var level = nativePlayer.level();
             if (!level.getWorldBorder().isWithinBounds(position)
-                    || !level.hasChunkAt(position)
+                    || !level.isLoaded(position)
             ) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.STATE_NOT_ALLOWED,
