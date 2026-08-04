@@ -9,7 +9,7 @@ import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
@@ -95,7 +95,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     @Override
     public Set<String> itemIds() {
         return BuiltInRegistries.ITEM.keySet().stream()
-                .map(ResourceLocation::toString)
+                .map(Identifier::toString)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -105,14 +105,14 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 .registryAccess()
                 .lookupOrThrow(Registries.ENCHANTMENT);
         return registry.keySet().stream()
-                .map(ResourceLocation::toString)
+                .map(Identifier::toString)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override
     public Set<String> potionEffectIds() {
         return BuiltInRegistries.MOB_EFFECT.keySet().stream()
-                .map(ResourceLocation::toString)
+                .map(Identifier::toString)
                 .collect(Collectors.toUnmodifiableSet());
     }
 
@@ -297,7 +297,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 );
             }
 
-            var location = ResourceLocation.tryParse(normalize(enchantmentId));
+            var location = Identifier.tryParse(normalize(enchantmentId));
             if (location == null) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INVALID_ARGUMENT,
@@ -530,7 +530,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
     }
 
     private Optional<DataComponentType<?>> componentType(String id) {
-        var location = ResourceLocation.tryParse(normalize(id));
+        var location = Identifier.tryParse(normalize(id));
         return location == null
                 ? Optional.empty()
                 : Optional.ofNullable(BuiltInRegistries.DATA_COMPONENT_TYPE.getValue(location));

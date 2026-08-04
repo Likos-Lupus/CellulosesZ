@@ -1,5 +1,3 @@
-import com.diffplug.gradle.spotless.SpotlessExtension
-
 plugins {
     alias(libs.plugins.architectury.plugin) apply false
     alias(libs.plugins.architectury.loom.no.remap) apply false
@@ -12,8 +10,7 @@ val cellulosesJavaVersion = libs.versions.java.get().toInt()
 val jspecifyDependency = libs.jspecify
 val lombokDependency = libs.lombok
 val junitDependency = libs.junit.jupiter
-
-val formatterConfig = rootProject.file("jdt.xml")
+val junitPlatformLauncherDependency = libs.junit.platform.launcher
 
 allprojects {
     group = "top.likoslupus"
@@ -23,11 +20,11 @@ allprojects {
         maven("https://maven.architectury.dev/") {
             name = "Architectury"
         }
-        maven("https://maven.neoforged.net/releases/") {
-            name = "NeoForge"
-        }
         maven("https://maven.fabricmc.net/") {
             name = "Fabric"
+        }
+        maven("https://maven.neoforged.net/releases/") {
+            name = "NeoForge"
         }
         mavenCentral()
     }
@@ -54,7 +51,13 @@ subprojects {
     tasks.withType<JavaCompile>().configureEach {
         options.encoding = "UTF-8"
         options.release.set(cellulosesJavaVersion)
-        options.compilerArgs.addAll(listOf("-parameters", "-Xlint:unchecked", "-Xlint:deprecation"))
+        options.compilerArgs.addAll(
+            listOf(
+                "-parameters",
+                "-Xlint:unchecked",
+                "-Xlint:deprecation"
+            )
+        )
     }
 
     dependencies {
@@ -65,40 +68,10 @@ subprojects {
         "testAnnotationProcessor"(lombokDependency)
         "testCompileOnly"(jspecifyDependency)
         "testImplementation"(junitDependency)
+        "testRuntimeOnly"(junitPlatformLauncherDependency)
     }
 
-    tasks.withType<Test>().configureEach { useJUnitPlatform() }
-
-    extensions.configure<SpotlessExtension> {
-        java {
-            target("src/main/java/**/*.java", "src/test/java/**/*.java")
-            targetExclude(
-                "**/build/**",
-                "**/generated/**",
-                "**/generated-sources/**"
-            )
-            eclipse().configFile(formatterConfig)
-            palantirJavaFormat(libs.versions.palantir.java.format.get())
-            removeUnusedImports()
-            trimTrailingWhitespace()
-            endWithNewline()
-        }
+    tasks.withType<Test>().configureEach {
+        useJUnitPlatform()
     }
-
-    tasks.named("check") {
-        dependsOn("spotlessCheck")
-    }
-
-    tasks.named("build") {
-        dependsOn("spotlessCheck")
-    }
-}
-
-
-tasks.named("spotlessApply") {
-    dependsOn(subprojects.map { it.tasks.named("spotlessApply") })
-}
-
-tasks.named("spotlessCheck") {
-    dependsOn(subprojects.map { it.tasks.named("spotlessCheck") })
 }

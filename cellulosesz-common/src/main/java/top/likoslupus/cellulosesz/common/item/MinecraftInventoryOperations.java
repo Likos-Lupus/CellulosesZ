@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.common.item;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.util.Filterable;
+import net.minecraft.server.network.Filterable;
 import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;

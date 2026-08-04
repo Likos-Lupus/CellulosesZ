@@ -74,7 +74,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             .filter(warp -> !current.hideNoPermission()
                                     || allowed(warp, hasPermission)
                             )
-                            .sorted(Comparator.comparing(warp -> warp.name()))
+                            .sorted(Comparator.comparing(Warp::name))
                             .toList();
                     if (visible.isEmpty()) {
                         return success(GeneratedMessageKeys.COMMANDS_WARP_LIST_EMPTY);
@@ -101,7 +101,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
                     var to = (int) Math.min((long) from + pageSize, visible.size());
                     var names = visible.subList(from, to).stream()
-                            .map(warp -> warp.displayName())
+                            .map(Warp::displayName)
                             .toList();
 
                     return success(LocalizedMessage.of(

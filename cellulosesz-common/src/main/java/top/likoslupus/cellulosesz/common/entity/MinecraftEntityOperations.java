@@ -2,12 +2,12 @@ package top.likoslupus.cellulosesz.common.entity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.projectile.Projectile;
-import net.minecraft.world.entity.projectile.ThrownPotion;
+import net.minecraft.world.entity.projectile.throwableitemprojectile.AbstractThrownPotion;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -72,7 +72,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
 
     @Override
     public boolean validLivingEntity(String entityId) {
-        var location = ResourceLocation.tryParse(normalize(entityId));
+        var location = Identifier.tryParse(normalize(entityId));
         if (location == null) {
             return false;
         }
@@ -103,7 +103,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
     public PlatformResult<SpawnMobResult> spawnMob(SpawnMobRequest request) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var location = ResourceLocation.tryParse(normalize(request.entityId()));
+            var location = Identifier.tryParse(normalize(request.entityId()));
             if (location == null) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INVALID_ARGUMENT,
@@ -199,10 +199,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
             var entity = createProjectile(level, request.type());
 
             if (!(entity instanceof Projectile projectile)) {
-                if (entity != null) {
-                    entity.discard();
-                }
-
+                entity.discard();
                 return PlatformResult.failure(
                         PlatformOperationStatus.UNSUPPORTED,
                         "Projectile type is unavailable"
@@ -335,19 +332,13 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
             };
 
             if (!(entity instanceof LivingEntity living)) {
-                if (entity != null) {
-                    entity.discard();
-                }
-
                 return PlatformResult.failure(
                         PlatformOperationStatus.INTERNAL_ERROR,
                         "Temporary entity creation failed"
                 );
             }
 
-            if (living instanceof Mob mob) {
-                mob.setNoAi(true);
-            }
+            ((Mob) living).setNoAi(true);
 
             var direction = shooter.getLookAngle();
             if (!validDirection(direction)) {
@@ -479,7 +470,7 @@ public final class MinecraftEntityOperations implements EntityPlatformService {
         };
 
         var entity = entityType.create(level, EntitySpawnReason.COMMAND);
-        if (entity instanceof ThrownPotion potion) {
+        if (entity instanceof AbstractThrownPotion potion) {
             potion.setItem(new ItemStack(type == ProjectileType.LINGERING_POTION
                     ? Items.LINGERING_POTION
                     : Items.SPLASH_POTION));

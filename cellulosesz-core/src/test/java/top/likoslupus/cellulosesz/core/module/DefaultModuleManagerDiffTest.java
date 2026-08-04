@@ -125,7 +125,7 @@ final class DefaultModuleManagerDiffTest {
 
     private static void reload(Fixture fixture) {
         fixture.manager.prepareReload(fixture.configs.snapshot())
-                .thenCompose(prepared -> prepared.commit())
+                .thenCompose(PreparedModuleReload::commit)
                 .toCompletableFuture()
                 .join();
     }

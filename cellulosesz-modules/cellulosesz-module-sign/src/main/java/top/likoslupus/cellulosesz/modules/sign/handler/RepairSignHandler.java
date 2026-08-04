@@ -40,7 +40,7 @@ public final class RepairSignHandler implements SynchronousSignHandler {
                 ? RepairScope.ALL
                 : RepairScope.HAND;
         var result = items.repair(context.player(), scope);
-        var count = result.value().orElse(0);
+        var count = (int) result.value().orElse(0);
 
         return result.successful() && count > 0
                 ?

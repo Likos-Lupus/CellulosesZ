@@ -186,7 +186,7 @@ final class RemainingCommandTreeContractTest {
 
     private static Map<String, Contract> contracts(Path path) throws IOException {
         var lines = Files.readAllLines(path);
-        var headers = csv(lines.get(0));
+        var headers = csv(lines.getFirst());
         var rootIndex = headers.indexOf("root");
         var aliasesIndex = headers.indexOf("aliases");
         var sourceKindIndex = headers.indexOf("source_kind");

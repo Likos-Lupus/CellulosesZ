@@ -42,7 +42,7 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
 
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
-        var count = SignHandlerSupport
+        var count = (int) SignHandlerSupport
                 .count(context.line(2), 1, 64)
                 .orElse(1);
         var result = entities.spawnMob(new SpawnMobRequest(

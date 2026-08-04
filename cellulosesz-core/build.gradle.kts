@@ -117,3 +117,7 @@ sourceSets.named("main") {
 tasks.named("compileJava") {
     dependsOn(generateMessageKeys)
 }
+
+tasks.named("sourcesJar") {
+    dependsOn(generateMessageKeys)
+}

@@ -2,9 +2,9 @@ package top.likoslupus.cellulosesz.common.item;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.ContainerUser;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.ContainerUser;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.MenuType;
 import top.likoslupus.cellulosesz.api.item.WorkstationKind;

@@ -5,8 +5,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -278,7 +278,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     ) {
         requireNonNull(request, "request");
         return onServerThread(() -> {
-            var location = ResourceLocation.tryParse(normalize(request.entityId()));
+            var location = Identifier.tryParse(normalize(request.entityId()));
             if (location == null) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.INVALID_ARGUMENT,
@@ -370,7 +370,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            var id = ResourceLocation.tryParse(TREE_FEATURES.get(type));
+            var id = Identifier.tryParse(TREE_FEATURES.get(type));
             if (id == null) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.UNSUPPORTED,
