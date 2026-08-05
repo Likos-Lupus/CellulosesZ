@@ -15,7 +15,7 @@ final class JacksonConfigRegistryTest {
     @TempDir Path root;
 
     @Test
-    void duplicateKeysAndPathsFailFast() {
+    void register_whenKeyOrPathDuplicate_failsFast() {
         var registry = new JacksonConfigRegistry(root, new NoopLogger());
         registry.register(
                 "one",
@@ -44,7 +44,7 @@ final class JacksonConfigRegistryTest {
     }
 
     @Test
-    void closedRegistrationAllowsIdentitySafeReregistrationAndInvalidatesPreparedReload() {
+    void reregister_afterClose_invalidatesPreparedReload() {
         var registry = new JacksonConfigRegistry(root, new NoopLogger());
         var first = registry.register(
                 "one",
@@ -71,7 +71,7 @@ final class JacksonConfigRegistryTest {
     }
 
     @Test
-    void pathsCannotEscapeRoot() {
+    void resolve_whenPathEscapesRoot_rejectsPath() {
         var registry = new JacksonConfigRegistry(root, new NoopLogger());
         assertThrows(
                 IllegalArgumentException.class,
@@ -94,7 +94,7 @@ final class JacksonConfigRegistryTest {
     }
 
     @Test
-    void coreCommandCostsDoNotShareReferencesAcrossSnapshots() {
+    void snapshot_whenCommandCostsMutable_deepCopiesReferences() {
         var registry = new JacksonConfigRegistry(root, new NoopLogger());
         registry.register(
                 "core",
@@ -122,7 +122,7 @@ final class JacksonConfigRegistryTest {
     }
 
     @Test
-    void snapshotsAndCommitsDeepCopyNestedMutableValues() {
+    void prepareAndCommit_withNestedMutableValues_deepCopies() {
         var registry = new JacksonConfigRegistry(root, new NoopLogger());
         registry.register(
                 "nested",

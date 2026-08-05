@@ -63,7 +63,7 @@ public final class DefaultBanService implements BanService {
             return AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "service.admin.ban-failed",
-                    MessageArguments.builder().put("player", targetName).build()
+                    MessageArguments.builder().add(targetName).build()
             );
         }
 
@@ -71,7 +71,7 @@ public final class DefaultBanService implements BanService {
             return failure(
                     result,
                     "service.admin.ban-failed",
-                    MessageArguments.of("player", targetName)
+                    MessageArguments.builder().add(targetName).build()
             );
         }
 
@@ -83,11 +83,11 @@ public final class DefaultBanService implements BanService {
                 ?
                 AdminResult.success(
                         "service.admin.ban-success",
-                        MessageArguments.builder().put("player", targetName).build()
+                        MessageArguments.builder().add(targetName).build()
                 )
                 : AdminResult.partial(
                         "service.admin.ban-success",
-                        MessageArguments.builder().put("player", targetName).build()
+                        MessageArguments.builder().add(targetName).build()
                 );
     }
 
@@ -102,12 +102,12 @@ public final class DefaultBanService implements BanService {
                 ?
                 AdminResult.success(
                         "service.admin.unban-success",
-                        MessageArguments.builder().put("player", targetName).build()
+                        MessageArguments.builder().add(targetName).build()
                 )
                 : failure(
                         result,
                         "service.admin.unban-failed",
-                        MessageArguments.of("player", targetName)
+                        MessageArguments.builder().add(targetName).build()
                 );
     }
 
@@ -132,7 +132,7 @@ public final class DefaultBanService implements BanService {
             return AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "service.admin.ban-ip-failed",
-                    MessageArguments.builder().put("address", canonical).build()
+                    MessageArguments.builder().add(canonical).build()
             );
         }
 
@@ -140,7 +140,7 @@ public final class DefaultBanService implements BanService {
             return failure(
                     result,
                     "service.admin.ban-ip-failed",
-                    MessageArguments.of("address", canonical)
+                    MessageArguments.builder().add(canonical).build()
             );
         }
 
@@ -152,11 +152,11 @@ public final class DefaultBanService implements BanService {
                 ?
                 AdminResult.success(
                         "service.admin.ban-ip-success",
-                        MessageArguments.builder().put("address", canonical).build()
+                        MessageArguments.builder().add(canonical).build()
                 )
                 : AdminResult.partial(
                         "service.admin.ban-ip-success",
-                        MessageArguments.builder().put("address", canonical).build()
+                        MessageArguments.builder().add(canonical).build()
                 );
     }
 
@@ -169,12 +169,12 @@ public final class DefaultBanService implements BanService {
                 ?
                 AdminResult.success(
                         "service.admin.unban-ip-success",
-                        MessageArguments.builder().put("address", canonical).build()
+                        MessageArguments.builder().add(canonical).build()
                 )
                 : failure(
                         result,
                         "service.admin.unban-ip-failed",
-                        MessageArguments.of("address", canonical)
+                        MessageArguments.builder().add(canonical).build()
                 );
     }
 
@@ -185,12 +185,12 @@ public final class DefaultBanService implements BanService {
                 ?
                 AdminResult.success(
                         "service.admin.kick-success",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
                         "service.admin.kick-failed",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 );
     }
 
@@ -204,7 +204,7 @@ public final class DefaultBanService implements BanService {
     private static AdminResult failure(
             BanPlatformResult result,
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
         var status = switch (result.status()) {
             case ALREADY_BANNED -> AdminStatus.ALREADY_EXISTS;
@@ -213,7 +213,7 @@ public final class DefaultBanService implements BanService {
             case NOT_READY, WRONG_THREAD, PLATFORM_FAILURE -> AdminStatus.PLATFORM_FAILURE;
             case SUCCESS -> throw new IllegalArgumentException("success is not a failure");
         };
-        return AdminResult.failure(status, key, placeholders);
+        return AdminResult.failure(status, key, arguments);
     }
 
     public PlayerDirectory players() {

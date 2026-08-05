@@ -23,11 +23,11 @@ public final class DefaultWorldService implements WorldService {
                 ?
                 AdminResult.success(
                         "service.world.time-set",
-                        MessageArguments.builder().put("world", world).put("time", time).build()
+                        MessageArguments.builder().add(world).add(time).build()
                 )
                 : AdminResult.failure(
                         "service.world.time-failed",
-                        MessageArguments.builder().put("world", world).build()
+                        MessageArguments.builder().add(world).build()
                 );
     }
 
@@ -39,13 +39,13 @@ public final class DefaultWorldService implements WorldService {
                 AdminResult.success(
                         "service.world.weather-set",
                         MessageArguments.builder()
-                                .put("world", world)
-                                .put("weather", type.name().toLowerCase())
+                                .add(world)
+                                .add(type.name().toLowerCase())
                                 .build()
                 )
                 : AdminResult.failure(
                         "service.world.weather-failed",
-                        MessageArguments.builder().put("world", world).build()
+                        MessageArguments.builder().add(world).build()
                 );
     }
 

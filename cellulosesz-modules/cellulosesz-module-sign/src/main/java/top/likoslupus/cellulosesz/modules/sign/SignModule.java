@@ -354,10 +354,22 @@ public final class SignModule implements CellulosesZModule {
         ));
 
         var catalog = context.services().require(PermissionCatalog.class);
-        catalog.register("cellulosesz.command.editsign.waxed", "Edit waxed signs");
-        catalog.register("cellulosesz.command.editsign.color", "Use legacy colors on edited signs");
-        catalog.register("cellulosesz.command.editsign.format", "Use formatted sign text");
-        catalog.register("cellulosesz.command.editsign.rgb", "Use RGB colors on edited signs");
+        catalog.register(
+                "cellulosesz.command.editsign.waxed",
+                "Edit waxed signs"
+        );
+        catalog.register(
+                "cellulosesz.command.editsign.color",
+                "Use legacy colors on edited signs"
+        );
+        catalog.register(
+                "cellulosesz.command.editsign.format",
+                "Use formatted sign text"
+        );
+        catalog.register(
+                "cellulosesz.command.editsign.rgb",
+                "Use RGB colors on edited signs"
+        );
     }
 
     @Override
@@ -417,21 +429,21 @@ public final class SignModule implements CellulosesZModule {
                             if (!commit.platformActionRequired()) {
                                 commit
                                         .complete(true)
-                                        .whenComplete((result, completionFailure) -> serverThread
-                                                .execute(
-                                                        () ->
-                                                                send(
-                                                                        audience,
-                                                                        renderer,
-                                                                        locales,
-                                                                        player,
-                                                                        completionFailure == null
-                                                                                ? result
-                                                                                : failure(
-                                                                                        completionFailure
-                                                                                )
-                                                                )
-                                                ));
+                                        .whenComplete((result, completionFailure) ->
+                                                serverThread.execute(
+                                                        () -> send(
+                                                                audience,
+                                                                renderer,
+                                                                locales,
+                                                                player,
+                                                                completionFailure == null
+                                                                        ? result
+                                                                        : failure(
+                                                                                completionFailure
+                                                                        )
+                                                        )
+                                                )
+                                        );
                                 return;
                             }
 
@@ -468,13 +480,13 @@ public final class SignModule implements CellulosesZModule {
             SignUseResult result
     ) {
         result.optionalMessage()
-                .ifPresent(message -> audience
-                        .send(
+                .ifPresent(message ->
+                        audience.send(
                                 player,
                                 renderer.render(
                                         locales.locale(player),
                                         message.key(),
-                                        message.placeholders()
+                                        message.arguments()
                                 )
                         )
                 );
@@ -482,17 +494,18 @@ public final class SignModule implements CellulosesZModule {
 
     private SignUseResult failure(Throwable throwable) {
         var cause = throwable;
-        while (cause instanceof CompletionException && cause.getCause() != null) {
+        while (cause instanceof CompletionException
+                && cause.getCause() != null
+        ) {
             cause = cause.getCause();
         }
 
         var message = cause.getMessage();
         return SignUseResult.failure(
                 "service.sign.execution-failed",
-                MessageArguments.builder().put(
-                        "reason", message == null || message.isBlank()
-                                ? cause.getClass().getSimpleName()
-                                : message
+                MessageArguments.builder().add(message == null || message.isBlank()
+                        ? cause.getClass().getSimpleName()
+                        : message
                 ).build()
         );
     }

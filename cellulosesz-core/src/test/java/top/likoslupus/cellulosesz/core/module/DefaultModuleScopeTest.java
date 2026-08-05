@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class DefaultModuleScopeTest {
 
     @Test
-    void closesInReverseOrderWaitsForAsyncAndContinuesAfterFailure() {
+    void close_withAsyncAndFailures_usesReverseOrderAndContinues() {
         var order = new ArrayList<String>();
         var scope = new DefaultModuleScope("test");
         var asyncGate = new CompletableFuture<Void>();
@@ -34,7 +34,7 @@ final class DefaultModuleScopeTest {
     }
 
     @Test
-    void ownerMismatchClosesRegistrationAndDoesNotLeakIt() {
+    void register_whenOwnerMismatch_closesWithoutLeak() {
         var order = new ArrayList<String>();
         var scope = new DefaultModuleScope("expected");
         var registration = new TestRegistration("other", "closed", order, false);

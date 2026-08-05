@@ -4,28 +4,27 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
-import org.jspecify.annotations.NullMarked;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.jspecify.annotations.NullMarked;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class CommandRootLeaseManagerTest {
 
     private final RecordingLogger logger = new RecordingLogger();
-    private final CommandRootLeaseManager leases = new CommandRootLeaseManager(logger, CommandRootLeaseManagerTest::remove);
+    private final CommandRootLeaseManager leases = new CommandRootLeaseManager(
+            logger,
+            CommandRootLeaseManagerTest::remove
+    );
     private final CommandDispatcher<CommandSourceStack> dispatcher = new CommandDispatcher<>();
 
-    private static CommandRootLeaseManager.LabelKind semantic() {
-        return CommandRootLeaseManager.LabelKind.SEMANTIC_ROOT;
-    }
-
     @Test
-    void directCanonicalConflictFailsFast() {
+    void capture_whenDirectCanonicalConflicts_failsFast() {
         leases.capture(dispatcher);
         leases.claimCanonical(
                 "info",
@@ -55,7 +54,7 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void configuredAliasConflictSkipsAndWarns() {
+    void build_whenAliasConflicts_skipsAliasAndWarns() {
         dispatcher.register(literal("rules"));
         leases.capture(dispatcher);
 
@@ -71,7 +70,7 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void releaseRestoresVanillaAndProtectsForeignReplacement() {
+    void release_whenLeaseOwned_restoresVanillaAndProtectsReplacement() {
         var vanilla = dispatcher.register(literal("kill"));
         leases.capture(dispatcher);
         leases.claimCanonical(
@@ -115,7 +114,7 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void failedBuildRollsBackWholePreviousTree() {
+    void build_whenRegistrationFails_rollsBackPreviousTree() {
         leases.capture(dispatcher);
         var previous = leases.claimCanonical(
                 "home",
@@ -151,7 +150,7 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void rebuildNeverDeletesAForeignReplacement() {
+    void rebuild_afterForeignReplacement_preservesReplacement() {
         leases.capture(dispatcher);
         leases.claimCanonical(
                 "kit",
@@ -188,7 +187,7 @@ final class CommandRootLeaseManagerTest {
     }
 
     @Test
-    void dispatcherGenerationChangesOnCaptureAndBuild() {
+    void generation_afterCaptureAndBuild_changes() {
         leases.capture(dispatcher);
 
         var captured = leases.generation();

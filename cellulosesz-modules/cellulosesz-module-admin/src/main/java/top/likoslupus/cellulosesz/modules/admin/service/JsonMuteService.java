@@ -147,7 +147,7 @@ public final class JsonMuteService implements MuteService, AsyncInitializable, A
 
             return AdminResult.success(
                     "service.admin.mute-success",
-                    MessageArguments.builder().put("player", name).build()
+                    MessageArguments.builder().add(name).build()
             );
         });
     }
@@ -165,12 +165,12 @@ public final class JsonMuteService implements MuteService, AsyncInitializable, A
                         ?
                         AdminResult.success(
                                 "service.admin.unmute-success",
-                                MessageArguments.builder().put("player", name).build()
+                                MessageArguments.builder().add(name).build()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.not-muted",
-                                MessageArguments.builder().put("player", name).build()
+                                MessageArguments.empty()
                         )
         );
     }

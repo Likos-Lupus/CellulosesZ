@@ -71,7 +71,7 @@ public final class PaymentCommandService {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.pay-command.error.payment-amount-cannot-less-than",
                     MessageArguments.builder()
-                            .put("minimum_amount", economy.format(snapshot.minimumPayment()))
+                            .add(economy.format(snapshot.minimumPayment()))
                             .build()
             ));
         }
@@ -85,12 +85,13 @@ public final class PaymentCommandService {
         if (targetTokens.size() > snapshot.maximumRecipients()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.pay-too-many",
-                    MessageArguments.builder().put("maximum", snapshot.maximumRecipients()).build()
+                    MessageArguments.builder().add(snapshot.maximumRecipients()).build()
             ));
         }
         return resolveTargets(sender, targetTokens)
                 .thenCompose(resolved -> validateAndPay(
                         sender,
+                        targetTokens,
                         resolved,
                         amount,
                         token,
@@ -127,6 +128,7 @@ public final class PaymentCommandService {
 
     private CompletableFuture<EconomyCommandResult> validateAndPay(
             CellPlayer sender,
+            List<String> targetTokens,
             List<ResolvedPlayer> resolved,
             BigDecimal amount,
             Optional<String> token,
@@ -135,7 +137,10 @@ public final class PaymentCommandService {
     ) {
         if (resolved.isEmpty()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
-                    "commands.economy.abstract-economy-command.error.player-not-found"
+                    "commands.economy.abstract-economy-command.error.player-not-found",
+                    MessageArguments.builder()
+                            .add(String.join(", ", targetTokens))
+                            .build()
             ));
         }
 
@@ -143,7 +148,7 @@ public final class PaymentCommandService {
             if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.abstract-economy-command.error.player-not-found",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 ));
             }
 
@@ -159,7 +164,7 @@ public final class PaymentCommandService {
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-offline-denied",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 ));
             }
         }
@@ -167,15 +172,14 @@ public final class PaymentCommandService {
         var ids = new ArrayList<UUID>();
         ids.add(sender.uuid());
         resolved.forEach(target -> ids.add(target.optionalUuid().orElseThrow()));
-        return loadUsers(ids)
-                .thenCompose(loaded -> continuePayment(
-                        sender,
-                        resolved,
-                        amount,
-                        token,
-                        snapshot,
-                        loaded
-                ));
+        return loadUsers(ids).thenCompose(loaded -> continuePayment(
+                sender,
+                resolved,
+                amount,
+                token,
+                snapshot,
+                loaded
+        ));
     }
 
     private CompletableFuture<Map<UUID, CellUser>> loadUsers(List<UUID> ids) {
@@ -213,7 +217,7 @@ public final class PaymentCommandService {
             if (!recipient.preferences().payments()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-command.error.player-not-accepting-payments",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.empty()
                 ));
             }
 
@@ -222,7 +226,7 @@ public final class PaymentCommandService {
             ) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-ignored",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 ));
             }
         }
@@ -261,8 +265,8 @@ public final class PaymentCommandService {
                 return CompletableFuture.completedFuture(EconomyCommandResult.success(
                         "commands.economy.pay-confirm-required",
                         MessageArguments.builder()
-                                .put(
-                                        "player",
+                                .add(economy.format(total))
+                                .add(
                                         String.join(
                                                 ", ",
                                                 resolved.stream()
@@ -271,9 +275,8 @@ public final class PaymentCommandService {
                                                         .toList()
                                         )
                                 )
-                                .put("amount", economy.format(total))
-                                .put("token", generated.value())
-                                .put("seconds", CONFIRM_TTL.toSeconds())
+                                .add(generated.value())
+                                .add(CONFIRM_TTL.toSeconds())
                                 .build()
                 ));
             }
@@ -320,8 +323,8 @@ public final class PaymentCommandService {
                                             audiences.locale(player),
                                             "commands.economy.pay-received",
                                             MessageArguments.builder()
-                                                    .put("player", sender.name())
-                                                    .put("amount", economy.format(amount))
+                                                    .add(sender.name())
+                                                    .add(economy.format(amount))
                                                     .build()
                                     )
                             ))
@@ -329,9 +332,9 @@ public final class PaymentCommandService {
                     return EconomyCommandResult.success(
                             "commands.economy.pay-command.reply.paid-current-balance",
                             MessageArguments.builder()
-                                    .put("recipients", String.join(", ", names))
-                                    .put("amount", economy.format(total))
-                                    .put("balance", economy.format(transaction.balance()))
+                                    .add(economy.format(total))
+                                    .add(String.join(", ", names))
+                                    .add(economy.format(transaction.balance()))
                                     .build()
                     );
                 });

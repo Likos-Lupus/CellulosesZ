@@ -11,7 +11,6 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -56,12 +55,12 @@ public final class DefaultKitCommandService implements KitCommandService {
                 .toList();
 
         if (names.isEmpty()) {
-            return success(GeneratedMessageKeys.COMMANDS_KIT_LIST_EMPTY);
+            return success("commands.kit.list-empty");
         }
 
         return success(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_KIT_LIST,
-                MessageArguments.of("kits", String.join(", ", names))
+                "commands.kit.list",
+                MessageArguments.builder().add(String.join(", ", names)).build()
         ));
     }
 
@@ -84,13 +83,13 @@ public final class DefaultKitCommandService implements KitCommandService {
                 && !hasPermission.test(definition.permission().orElseThrow())
         ) {
             return CompletableFuture.completedFuture(failure(
-                    GeneratedMessageKeys.COMMANDS_KIT_KIT_COMMAND_ERROR_DO_NOT_PERMISSION_CLAIM_KIT
+                    "commands.kit.kit-command.error.do-not-permission-claim-kit"
             ));
         }
 
         return kits.claim(player, definition)
                 .handle((result, failure) -> failure != null
-                        ? failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED)
+                        ? failed("service.kit.persistence-failed")
                         : new Result(result.success(), result.message())
                 );
     }
@@ -114,8 +113,9 @@ public final class DefaultKitCommandService implements KitCommandService {
             var described = inventory.describeSnapshot(
                     new InventoryItemSnapshot(item.slot(), item.stack())
             );
+
             if (!described.successful() || described.value().isEmpty()) {
-                return failure(GeneratedMessageKeys.COMMANDS_KIT_SHOW_KIT_COMMAND_ERROR_INVALID_ITEM);
+                return failure("commands.kit.show-kit-command.error.invalid-item");
             }
 
             var descriptor = described.value().orElseThrow();
@@ -129,10 +129,10 @@ public final class DefaultKitCommandService implements KitCommandService {
         }
 
         return success(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_KIT_DETAILS,
+                "commands.kit.details",
                 MessageArguments.builder()
-                        .put("kit", kit.orElseThrow().displayName())
-                        .put("entries", entries.toString())
+                        .add(kit.orElseThrow().displayName())
+                        .add(entries.toString())
                         .build()
         ));
     }
@@ -154,14 +154,14 @@ public final class DefaultKitCommandService implements KitCommandService {
                 .thenCompose(snapshot -> {
                     if (!snapshot.successful() || snapshot.value().isEmpty()) {
                         return CompletableFuture.completedFuture(failure(
-                                GeneratedMessageKeys.COMMANDS_KIT_CREATE_KIT_COMMAND_ERROR_SNAPSHOT
+                                "commands.kit.create-kit-command.error.snapshot"
                         ));
                     }
 
                     var slots = snapshot.value().orElseThrow();
                     if (slots.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(
-                                GeneratedMessageKeys.COMMANDS_KIT_CREATE_KIT_COMMAND_ERROR_EMPTY
+                                "commands.kit.create-kit-command.error.empty"
                         ));
                     }
 
@@ -181,11 +181,11 @@ public final class DefaultKitCommandService implements KitCommandService {
 
                     return kits.save(definition)
                             .thenApply(_ -> success(LocalizedMessage.of(
-                                    GeneratedMessageKeys.COMMANDS_KIT_CREATE_KIT_COMMAND_REPLY_CREATED_KIT,
-                                    MessageArguments.of("kit", id)
+                                    "commands.kit.create-kit-command.reply.created-kit",
+                                    MessageArguments.builder().add(id).build()
                             )));
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed("service.kit.persistence-failed"));
     }
 
     @Override
@@ -193,7 +193,7 @@ public final class DefaultKitCommandService implements KitCommandService {
         var name = normalize(rawName);
         return kits.delete(name).handle((deleted, failure) -> {
             if (failure != null) {
-                return failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED);
+                return failed("service.kit.persistence-failed");
             }
 
             if (!deleted) {
@@ -201,8 +201,8 @@ public final class DefaultKitCommandService implements KitCommandService {
             }
 
             return success(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_KIT_DEL_KIT_COMMAND_REPLY_DELETED_KIT,
-                    MessageArguments.of("kit", name)
+                    "commands.kit.del-kit-command.reply.deleted-kit",
+                    MessageArguments.builder().add(name).build()
             ));
         });
     }
@@ -214,8 +214,8 @@ public final class DefaultKitCommandService implements KitCommandService {
 
         if (kit.isEmpty()) {
             return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_ERROR_KIT,
-                    MessageArguments.of("kit", kitName)
+                    "commands.kit.kit-reset-command.error.kit",
+                    MessageArguments.builder().add(kitName).build()
             )));
         }
 
@@ -225,7 +225,7 @@ public final class DefaultKitCommandService implements KitCommandService {
 
         if (explicitTarget.isEmpty() && request.requester().isEmpty()) {
             return CompletableFuture.completedFuture(failure(
-                    GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_ERROR_PLAYER_REQUIRED
+                    "commands.kit.kit-reset-command.error.player-required"
             ));
         }
 
@@ -238,7 +238,7 @@ public final class DefaultKitCommandService implements KitCommandService {
                     .equals(explicitTarget.orElseThrow().toLowerCase(Locale.ROOT))
             ) {
                 return CompletableFuture.completedFuture(failure(
-                        GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_ERROR_OTHERS
+                        "commands.kit.kit-reset-command.error.others"
                 ));
             }
         }
@@ -252,21 +252,18 @@ public final class DefaultKitCommandService implements KitCommandService {
                     var uuid = resolved.optionalUuid();
                     if (uuid.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_ERROR_PLAYER_NOT_FOUND,
-                                MessageArguments.of("player", target)
+                                "commands.kit.kit-reset-command.error.player-not-found",
+                                MessageArguments.builder().add(target).build()
                         )));
                     }
 
                     return kits.resetCooldown(uuid.orElseThrow(), kitName)
                             .thenApply(_ -> success(LocalizedMessage.of(
-                                    GeneratedMessageKeys.COMMANDS_KIT_KIT_RESET_COMMAND_REPLY_KIT_COOLDOWN_RESET,
-                                    MessageArguments.builder()
-                                            .put("kit", kitName)
-                                            .put("player", resolved.name())
-                                            .build()
+                                    "commands.kit.kit-reset-command.reply.kit-cooldown-reset",
+                                    MessageArguments.empty()
                             )));
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_KIT_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed("service.kit.persistence-failed"));
     }
 
     @Override
@@ -291,8 +288,8 @@ public final class DefaultKitCommandService implements KitCommandService {
 
     private Result missingDelete(String name) {
         return failure(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_KIT_DEL_KIT_COMMAND_ERROR_KIT_DOES_NOT_EXIST,
-                MessageArguments.of("kit", name)
+                "commands.kit.del-kit-command.error.kit-does-not-exist",
+                MessageArguments.builder().add(name).build()
         ));
     }
 
@@ -308,8 +305,8 @@ public final class DefaultKitCommandService implements KitCommandService {
 
     private Result missing(String name) {
         return failure(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_KIT_KIT_COMMAND_ERROR_KIT_DOES_NOT_EXIST,
-                MessageArguments.of("kit", name)
+                "commands.kit.kit-command.error.kit-does-not-exist",
+                MessageArguments.builder().add(name).build()
         ));
     }
 

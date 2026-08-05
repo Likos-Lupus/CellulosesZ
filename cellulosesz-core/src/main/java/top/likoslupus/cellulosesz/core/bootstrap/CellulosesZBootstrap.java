@@ -94,10 +94,7 @@ public final class CellulosesZBootstrap {
                 scheduler::async,
                 logger
         );
-        this.messages = new DefaultMessageService(
-                configDirectory.resolve("messages"),
-                logger
-        );
+        this.messages = new DefaultMessageService(logger);
     }
 
     public <T> void registerService(Class<T> type, T instance) {
@@ -126,7 +123,6 @@ public final class CellulosesZBootstrap {
                 coreConfig.locale.secondaryColor,
                 coreConfig.locale.legacyColors
         );
-        messages.reload();
 
         localeResolver = new DefaultLocaleResolver(
                 services.require(ClientLocaleService.class),
@@ -342,17 +338,9 @@ public final class CellulosesZBootstrap {
         );
         var preparedConfigs = configs.prepareReload();
         var candidateCore = preparedConfigs.require("core", CoreConfig.class);
-        var preparedMessages = messages.prepareReload(
-                candidateCore.locale.defaultLocale,
-                candidateCore.locale.fallback,
-                candidateCore.locale.primaryColor,
-                candidateCore.locale.secondaryColor,
-                candidateCore.locale.legacyColors
-        );
 
         return new ReloadPlan(
                 preparedConfigs,
-                preparedMessages,
                 candidateCore,
                 previous
         );
@@ -378,8 +366,7 @@ public final class CellulosesZBootstrap {
     private synchronized void commitCoreState(ReloadPlan plan) {
         configs.commit(plan.configs());
         var committedCore = configs.snapshot().require("core", CoreConfig.class);
-        messages.commit(
-                plan.messages(),
+        messages.commitConfiguration(
                 committedCore.locale.defaultLocale,
                 committedCore.locale.fallback,
                 committedCore.locale.primaryColor,
@@ -523,6 +510,10 @@ public final class CellulosesZBootstrap {
         return logger;
     }
 
+    public DefaultMessageService messageService() {
+        return messages;
+    }
+
     private record PreviousReloadState(
             JacksonConfigRegistry.ReloadSnapshot configs,
             DefaultMessageService.MessageState messages,
@@ -533,7 +524,6 @@ public final class CellulosesZBootstrap {
 
     private record ReloadPlan(
             JacksonConfigRegistry.ReloadSnapshot configs,
-            DefaultMessageService.PreparedMessages messages,
             CoreConfig core,
             PreviousReloadState previous
     ) {

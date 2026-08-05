@@ -27,13 +27,12 @@ public final class HelpCommand implements CommandContributor {
 
     private static final String MODULE = "command";
 
-    private static final CommandDescriptor DESCRIPTOR =
-            new CommandDescriptor(
-                    MODULE,
-                    "help",
-                    "cellulosesz.command.help",
-                    CommandSourceKind.ANY
-            );
+    private static final CommandDescriptor DESCRIPTOR = new CommandDescriptor(
+            MODULE,
+            "help",
+            "cellulosesz.command.help",
+            CommandSourceKind.ANY
+    );
 
     private record HelpEntry(
             String name,
@@ -178,7 +177,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.command.help-empty",
-                            MessageArguments.builder().put("query", rawQuery).build()
+                            MessageArguments.builder().add(rawQuery).build()
                     )
             );
 
@@ -201,7 +200,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.common.page-out-of-range",
-                            MessageArguments.builder().put("pages", pages).build()
+                            MessageArguments.builder().add(pages).build()
                     )
             );
 
@@ -214,7 +213,7 @@ public final class HelpCommand implements CommandContributor {
             policy.error(
                     LocalizedMessage.of(
                             "commands.common.page-out-of-range",
-                            MessageArguments.builder().put("pages", pages).build()
+                            MessageArguments.builder().add(pages).build()
                     )
             );
 
@@ -231,9 +230,9 @@ public final class HelpCommand implements CommandContributor {
                 LocalizedMessage.of(
                         "commands.command.help-header",
                         MessageArguments.builder()
-                                .put("page", page)
-                                .put("pages", pages)
-                                .put("query", rawQuery)
+                                .add(page)
+                                .add(pages)
+                                .add(rawQuery)
                                 .build()
                 )
         );
@@ -243,15 +242,10 @@ public final class HelpCommand implements CommandContributor {
                         LocalizedMessage.of(
                                 "commands.command.help-entry-detail",
                                 MessageArguments.builder()
-                                        .put("command", entry.name())
-                                        .put(
-                                                "aliases", String.join(
-                                                        ", ",
-                                                        entry.aliases()
-                                                )
-                                        )
-                                        .put("description", entry.description())
-                                        .put("usage", entry.usage())
+                                        .add(entry.name())
+                                        .add(entry.description())
+                                        .add(entry.usage())
+                                        .add(String.join(", ", entry.aliases()))
                                         .build()
                         )
                 ));

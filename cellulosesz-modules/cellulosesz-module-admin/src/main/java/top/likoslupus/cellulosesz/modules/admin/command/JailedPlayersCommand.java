@@ -79,9 +79,9 @@ public final class JailedPlayersCommand implements CommandContributor {
                 _ -> CompletableFuture.completedFuture(
                         AdminResult.success(
                                 "service.admin.jailed-list",
-                                MessageArguments.builder().put("page", page).put(
-                                        "players", service.jailedPlayers()
-                                                .stream()
+                                MessageArguments.builder()
+                                        .add(page)
+                                        .add(service.jailedPlayers().stream()
                                                 .skip((long) (page - 1) * 10)
                                                 .limit(10)
                                                 .map(jailed ->
@@ -93,7 +93,8 @@ public final class JailedPlayersCommand implements CommandContributor {
                                                 )
                                                 .toList()
                                                 .toString()
-                                ).build()
+                                        )
+                                        .build()
                         )
                 )
         );

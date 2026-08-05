@@ -24,8 +24,8 @@ public record SignUseResult(
         return new SignUseResult(true, true, LocalizedMessage.of(key));
     }
 
-    public static SignUseResult success(String key, MessageArguments placeholders) {
-        return new SignUseResult(true, true, LocalizedMessage.of(key, placeholders));
+    public static SignUseResult success(String key, MessageArguments arguments) {
+        return new SignUseResult(true, true, LocalizedMessage.of(key, arguments));
     }
 
     public static SignUseResult failure(LocalizedMessage message) {
@@ -36,8 +36,8 @@ public record SignUseResult(
         return new SignUseResult(true, false, LocalizedMessage.of(key));
     }
 
-    public static SignUseResult failure(String key, MessageArguments placeholders) {
-        return new SignUseResult(true, false, LocalizedMessage.of(key, placeholders));
+    public static SignUseResult failure(String key, MessageArguments arguments) {
+        return new SignUseResult(true, false, LocalizedMessage.of(key, arguments));
     }
 
     public Optional<LocalizedMessage> optionalMessage() {

@@ -259,7 +259,7 @@ public final class DefaultTeleportService implements TeleportService, AsyncClose
                 TeleportResult.failed(
                         status, key,
                         MessageArguments.builder()
-                                .put("reason", cause.getClass().getSimpleName())
+                                .add(cause.getClass().getSimpleName())
                                 .build()
                 )
         );

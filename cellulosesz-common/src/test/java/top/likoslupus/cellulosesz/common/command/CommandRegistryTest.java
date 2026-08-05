@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class CommandRegistryTest {
 
     @Test
-    void registersInStableIdentityOrderAndReturnsImmutableSnapshot() {
+    void snapshot_afterRegistration_isStableAndImmutable() {
         var registry = new CommandRegistry();
         var warp = new TestContributor("warp");
         var home = new TestContributor("home");
@@ -24,7 +24,7 @@ final class CommandRegistryTest {
     }
 
     @Test
-    void duplicateIdentityAndInstanceFail() {
+    void register_whenIdentityOrInstanceDuplicate_fails() {
         var registry = new CommandRegistry();
         var contributor = new TestContributor("home");
 
@@ -40,7 +40,7 @@ final class CommandRegistryTest {
     }
 
     @Test
-    void closedContributorCanBeRegisteredAgainForDynamicModuleReload() {
+    void register_afterContributorClosed_allowsSameIdentity() {
         var registry = new CommandRegistry();
         var first = new TestContributor("home");
         var handle = registry.register("main", first);
@@ -56,7 +56,7 @@ final class CommandRegistryTest {
     }
 
     @Test
-    void repeatedSnapshotsDoNotDuplicateContributors() {
+    void snapshot_whenRepeated_doesNotDuplicateContributors() {
         var registry = new CommandRegistry();
         registry.register("main", new TestContributor("home"));
 

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class AsyncQueueLifecycleTest {
 
     @Test
-    void sameKeyIsStrictlySerialAndFailureDoesNotPoisonFollowingOperation() {
+    void submit_sameKey_serializesAndContinuesAfterFailure() {
         var queue = new KeyedSerialAsyncQueue<String>(Runnable::run, 16);
         var firstGate = new CompletableFuture<Void>();
         var order = new ArrayList<String>();
@@ -48,7 +48,7 @@ final class AsyncQueueLifecycleTest {
     }
 
     @Test
-    void acceptedSubmissionIsDrainedAndCloseLinearizationRejectsLaterKeys() {
+    void close_afterAcceptedSubmission_drainsAndRejectsLaterKeys() {
         var queue = new KeyedSerialAsyncQueue<String>(Runnable::run, 16);
         var gate = new CompletableFuture<Void>();
         var accepted = queue.submit("accepted", () -> gate);
@@ -70,16 +70,14 @@ final class AsyncQueueLifecycleTest {
     }
 
     @Test
-    void stopBeforeSubmitDoesNotCreateAQueue() {
+    void submit_afterStopAccepting_doesNotCreateQueue() {
         var queue = new KeyedSerialAsyncQueue<String>(Runnable::run, 16);
         queue.stopAccepting();
 
         assertTrue(queue.submit(
-                                "late",
-                                () -> CompletableFuture.completedFuture(null)
-                        )
-                        .isCompletedExceptionally()
-        );
+                "late",
+                () -> CompletableFuture.completedFuture(null)
+        ).isCompletedExceptionally());
         queue.drain().join();
         assertEquals(0, queue.activeKeys());
     }

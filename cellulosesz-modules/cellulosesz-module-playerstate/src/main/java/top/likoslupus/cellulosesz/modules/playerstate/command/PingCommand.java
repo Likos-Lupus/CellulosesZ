@@ -78,7 +78,7 @@ public final class PingCommand implements CommandContributor {
                                                     LocalizedMessage.of(
                                                             "commands.playerstate.ping.echo",
                                                             MessageArguments.builder()
-                                                                    .put("message", message)
+                                                                    .add(message)
                                                                     .build()
                                                     )
                                             );

@@ -49,10 +49,9 @@ public final class DefaultTeleportPreferenceCommandService
                 )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-auto-command.reply.changed",
-                        MessageArguments.builder().put(
-                                "state", enabled
-                                        ? "on"
-                                        : "off"
+                        MessageArguments.builder().add(enabled
+                                ? "on"
+                                : "off"
                         ).build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
@@ -79,7 +78,7 @@ public final class DefaultTeleportPreferenceCommandService
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
                                 MessageArguments.builder()
-                                        .put("player", target.orElseThrow())
+                                        .add(target.orElseThrow())
                                         .build()
                         ))
                         : update(
@@ -110,10 +109,9 @@ public final class DefaultTeleportPreferenceCommandService
                 )
                 .thenApply(enabled -> TeleportCommandResult.success(
                         "commands.teleport.tp-toggle-command.reply.changed",
-                        MessageArguments.builder().put("player", name).put(
-                                "state", enabled
-                                        ? "on"
-                                        : "off"
+                        MessageArguments.builder().add(name).add(enabled
+                                ? "on"
+                                : "off"
                         ).build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(

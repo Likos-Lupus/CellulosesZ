@@ -5,7 +5,6 @@ import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.text.*;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.text.application.DefaultTextCommandService;
 import top.likoslupus.cellulosesz.modules.text.application.TextCommandService;
 import top.likoslupus.cellulosesz.modules.text.command.TextCommand;
@@ -77,8 +76,8 @@ public final class TextModule implements CellulosesZModule {
                             event.player(),
                             renderer.render(
                                     locales.locale(event.player()),
-                                    GeneratedMessageKeys.COMMANDS_TEXT_LINE,
-                                    MessageArguments.builder().put("line", line).build()
+                                    "commands.text.line",
+                                    MessageArguments.builder().add(line).build()
                             )
                     ));
                 }

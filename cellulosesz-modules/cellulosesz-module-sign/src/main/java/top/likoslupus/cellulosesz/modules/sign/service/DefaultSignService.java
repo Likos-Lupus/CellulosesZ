@@ -89,12 +89,15 @@ public final class DefaultSignService implements SignService, AsyncInitializable
     public synchronized void register(CellSignHandler handler) {
         var checked = requireNonNull(handler, "handler");
         var id = normalizeId(checked.id());
+
         if (id.isEmpty()) {
             throw new IllegalArgumentException("Sign handler id must not be blank");
         }
+
         if (!CONFIGURED_HANDLERS.contains(id)) {
             throw new IllegalArgumentException("Sign handler has no configuration entry: " + id);
         }
+
         if (handlers.putIfAbsent(id, checked) != null) {
             throw new IllegalArgumentException("Duplicate sign handler: " + id);
         }
@@ -108,6 +111,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
     @Override
     public synchronized List<String> formattedLines(List<String> lines) {
         requireNonNull(lines, "lines");
+
         if (lines.isEmpty()) {
             return List.copyOf(lines);
         }
@@ -150,6 +154,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         var backKey = key(location, false);
         var frontRecord = document.signs.get(frontKey);
         var backRecord = document.signs.get(backKey);
+
         if (frontRecord == null && backRecord == null) {
             return SignMutationExecution.pass();
         }
@@ -175,7 +180,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
             )) {
                 return completedMutation(SignUseResult.failure(
                         "service.sign.break-no-permission",
-                        MessageArguments.builder().put("sign", record.type).build()
+                        MessageArguments.empty()
                 ));
             }
         }
@@ -194,7 +199,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                     next,
                     SignUseResult.success(
                             "service.sign.break-success",
-                            MessageArguments.builder().put("count", records.size()).build()
+                            MessageArguments.empty()
                     )
             );
         });
@@ -235,17 +240,19 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         )) {
             return completedUse(SignUseResult.failure(
                     "service.sign.no-permission",
-                    MessageArguments.builder().put("sign", handler.id()).build()
+                    MessageArguments.builder().add(handler.id()).build()
             ));
         }
 
         var cooldownKey = cooldownKey(player.uuid(), location, front, stored.type);
+
         var now = System.nanoTime();
         var cooldownNanos = snapshot.cooldownNanos();
         var previous = lastUseNanos.get(cooldownKey);
         if (previous != null && elapsedNanos(now, previous) < cooldownNanos) {
             return completedUse(SignUseResult.failure("service.sign.cooldown"));
         }
+
         if (!activeUses.add(cooldownKey)) {
             return completedUse(SignUseResult.failure("service.sign.cooldown"));
         }
@@ -321,6 +328,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         var prepared = new CompletableFuture<SignMutationCommit>();
         var queued = mutations.submit(() -> {
             final MutationPlan plan;
+
             final SignDocument previous;
             synchronized (this) {
                 plan = requireNonNull(supplier.get(), "mutation plan");
@@ -339,9 +347,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                         if (saveFailure != null) {
                             prepared.complete(SignMutationCommits.completed(SignUseResult.failure(
                                     "service.sign.save-failed",
-                                    MessageArguments.builder()
-                                            .put("reason", safeReason(unwrap(saveFailure)))
-                                            .build()
+                                    MessageArguments.empty()
                             )));
 
                             operation.complete(null);
@@ -381,11 +387,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                                                 } else {
                                                     commit.finish(SignUseResult.failure(
                                                             "service.sign.platform-rollback-failed",
-                                                            MessageArguments.builder().put(
-                                                                    "reason", safeReason(unwrap(
-                                                                            rollbackFailure
-                                                                    ))
-                                                            ).build()
+                                                            MessageArguments.empty()
                                                     ));
                                                 }
 
@@ -414,19 +416,14 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         };
     }
 
-    private String safeReason(Throwable exception) {
-        var message = exception.getMessage();
-        return message == null || message.isBlank()
-                ? exception.getClass().getSimpleName()
-                : message;
-    }
-
     private Throwable unwrap(Throwable throwable) {
         var current = throwable;
-        while ((
-                current instanceof CompletionException || current instanceof ExecutionException
-        )
-                && current.getCause() != null
+        while (
+                (
+                        current instanceof CompletionException
+                                || current instanceof ExecutionException
+                )
+                        && current.getCause() != null
         ) {
             current = current.getCause();
         }
@@ -481,6 +478,13 @@ public final class DefaultSignService implements SignService, AsyncInitializable
         return requireNonNull(value, "value").strip().toLowerCase(Locale.ROOT);
     }
 
+    private String safeReason(Throwable exception) {
+        var message = exception.getMessage();
+        return message == null || message.isBlank()
+                ? exception.getClass().getSimpleName()
+                : message;
+    }
+
     private SignMutationExecution replace(
             CellPlayer player,
             CellLocation location,
@@ -499,6 +503,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
 
         var storageKey = key(location, front);
         var existing = document.signs.get(storageKey);
+
         var id = normalizeHeader(lines.getFirst());
         var handler = handlers.get(id);
         if (handler == null || !snapshot.enabled(id)) {
@@ -513,7 +518,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
             if (!permissions.has(player, permission("edit", existing.type))) {
                 return completedMutation(SignUseResult.failure(
                         "service.sign.edit-no-permission",
-                        MessageArguments.builder().put("sign", existing.type).build()
+                        MessageArguments.empty()
                 ));
             }
 
@@ -543,7 +548,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                     action.equals("create")
                             ? "service.sign.create-no-permission"
                             : "service.sign.edit-no-permission",
-                    MessageArguments.builder().put("sign", handler.id()).build()
+                    MessageArguments.empty()
             ));
         }
 
@@ -558,7 +563,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
             )) {
                 return completedMutation(SignUseResult.failure(
                         "service.sign.edit-no-permission",
-                        MessageArguments.builder().put("sign", existing.type).build()
+                        MessageArguments.empty()
                 ));
             }
         }
@@ -596,7 +601,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
                 creating
                         ? "service.sign.create-success"
                         : "service.sign.edit-success",
-                MessageArguments.builder().put("sign", handler.id()).build()
+                MessageArguments.empty()
         );
 
         return SignMutationExecution.handled(enqueueMutation(() -> {
@@ -646,7 +651,7 @@ public final class DefaultSignService implements SignService, AsyncInitializable
     private SignUseResult executionFailure(Throwable exception) {
         return SignUseResult.failure(
                 "service.sign.execution-failed",
-                MessageArguments.builder().put("reason", safeReason(exception)).build()
+                MessageArguments.builder().add(safeReason(exception)).build()
         );
     }
 

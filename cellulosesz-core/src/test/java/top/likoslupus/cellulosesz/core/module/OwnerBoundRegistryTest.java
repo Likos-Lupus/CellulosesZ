@@ -20,7 +20,7 @@ final class OwnerBoundRegistryTest {
     @TempDir Path root;
 
     @Test
-    void eventMiddlewareTaskAndConfigRegistrationsArePreciselyRevoked() {
+    void close_whenRegistrationsOwned_revokesAllSideEffects() {
         var logger = new NoopLogger();
         var scope = new DefaultModuleScope("module");
         var events = new ModuleScopedEventRegistry("module", new SimpleEventRegistry(), scope);

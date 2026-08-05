@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class JsonUserServiceTest {
 
     @Test
-    void unrelatedPreferenceUpdatePreservesConfirmInventoryClears() {
+    void update_whenPreferencesUnrelated_preservesConfirmAndClearsInventory() {
         var service = new JsonUserService(
                 new MemoryStorage(),
                 new MemoryNames(),
@@ -56,7 +56,7 @@ final class JsonUserServiceTest {
 
 
     @Test
-    void concurrentFirstLoadSharesOneStorageOperation() {
+    void load_whenConcurrentFirstAccess_sharesStorageOperation() {
         var storage = new MemoryStorage();
         storage.createGate = new CompletableFuture<>();
 
@@ -80,7 +80,7 @@ final class JsonUserServiceTest {
 
 
     @Test
-    void saveAllQueuesBehindAcceptedUpdateAndReadsLatestCacheAtExecution() {
+    void saveAll_afterQueuedUpdate_persistsLatestSnapshot() {
         var storage = new MemoryStorage();
         var service = new JsonUserService(
                 storage,
@@ -111,7 +111,7 @@ final class JsonUserServiceTest {
     }
 
     @Test
-    void acceptedUpdateCompletesDuringCloseAndNewOperationsAreRejected() {
+    void close_afterAcceptedUpdate_waitsAndRejectsNewOperations() {
         var storage = new MemoryStorage();
         var service = new JsonUserService(
                 storage,
@@ -143,7 +143,7 @@ final class JsonUserServiceTest {
     }
 
     @Test
-    void closeWaitsForFinalNameCacheSave() {
+    void close_afterNameCacheUpdate_waitsForFinalSave() {
         var names = new MemoryNames();
         names.saveGate = new CompletableFuture<>();
         var service = new JsonUserService(
@@ -161,7 +161,7 @@ final class JsonUserServiceTest {
     }
 
     @Test
-    void storageFailureDoesNotPublishReplacement() {
+    void load_whenStorageFails_doesNotPublishReplacement() {
         var storage = new MemoryStorage();
         var service = new JsonUserService(
                 storage,
@@ -193,7 +193,7 @@ final class JsonUserServiceTest {
     }
 
     @Test
-    void playTimeOverflowSaturatesWithoutEscapingTheQuitPath() {
+    void quit_whenPlayTimeOverflows_saturatesDuration() {
         var service = new JsonUserService(
                 new MemoryStorage(),
                 new MemoryNames(),

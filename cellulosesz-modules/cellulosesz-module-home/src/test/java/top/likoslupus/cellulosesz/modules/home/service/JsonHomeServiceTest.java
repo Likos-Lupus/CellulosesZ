@@ -34,7 +34,7 @@ final class JsonHomeServiceTest {
     );
 
     @Test
-    void missingSourceAndExistingTargetAreAtomicNoOps() {
+    void rename_whenSourceMissingOrTargetExists_isAtomicNoOp() {
         var storage = new FakeStorage(documentWith("old", OLD_LOCATION, "new", NEW_LOCATION));
         var service = new JsonHomeService(storage, Path.of("homes"));
 
@@ -68,7 +68,7 @@ final class JsonHomeServiceTest {
     }
 
     @Test
-    void successfulRenamePublishesOnlyAfterSave() {
+    void rename_whenSaveSucceeds_publishesAfterPersistence() {
         var storage = new FakeStorage(documentWith("old", OLD_LOCATION));
         var service = new JsonHomeService(storage, Path.of("homes"));
 
@@ -83,7 +83,7 @@ final class JsonHomeServiceTest {
     }
 
     @Test
-    void failedSaveDoesNotPublishPartialRename() {
+    void rename_whenSaveFails_doesNotPublishPartialState() {
         var storage = new FakeStorage(documentWith("old", OLD_LOCATION));
         storage.failSave = true;
         var service = new JsonHomeService(storage, Path.of("homes"));

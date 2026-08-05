@@ -59,15 +59,15 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
                 SignUseResult.success(
                         "service.sign.spawnmob-success",
                         MessageArguments.builder()
-                                .put("count", count)
-                                .put("entity", context.line(1))
+                                .add(count)
+                                .add(context.line(1))
                                 .build()
                 )
                 : SignUseResult.failure(
                         "service.sign.spawnmob-failed",
                         MessageArguments.builder()
-                                .put("spawned", spawned)
-                                .put("count", count)
+                                .add(spawned)
+                                .add(count)
                                 .build()
                 );
     }

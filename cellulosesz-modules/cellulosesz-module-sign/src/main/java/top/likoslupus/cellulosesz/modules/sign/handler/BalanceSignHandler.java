@@ -31,7 +31,7 @@ public final class BalanceSignHandler implements SynchronousSignHandler {
         return SignUseResult.success(
                 "service.sign.balance",
                 MessageArguments.builder()
-                        .put("balance", economy.format(economy.balance(context.player().uuid())))
+                        .add(economy.format(economy.balance(context.player().uuid())))
                         .build()
         );
     }

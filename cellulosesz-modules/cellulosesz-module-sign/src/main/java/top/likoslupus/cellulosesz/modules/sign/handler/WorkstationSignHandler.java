@@ -47,11 +47,11 @@ public final class WorkstationSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.workstation-opened",
-                        MessageArguments.builder().put("workstation", id).build()
+                        MessageArguments.builder().add(id).build()
                 )
                 : SignUseResult.failure(
                         "service.sign.workstation-failed",
-                        MessageArguments.builder().put("workstation", id).build()
+                        MessageArguments.empty()
                 );
     }
 

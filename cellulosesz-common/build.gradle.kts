@@ -21,6 +21,7 @@ dependencies {
     implementation(libs.architectury.common)
     implementation(project(":cellulosesz-api"))
     implementation(project(":cellulosesz-core"))
+    implementation(libs.jackson.databind)
 
     compileOnly(libs.luckperms.api)
 }

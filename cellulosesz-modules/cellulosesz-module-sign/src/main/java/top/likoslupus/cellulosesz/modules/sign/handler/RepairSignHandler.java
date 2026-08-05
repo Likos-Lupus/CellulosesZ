@@ -46,7 +46,7 @@ public final class RepairSignHandler implements SynchronousSignHandler {
                 ?
                 SignUseResult.success(
                         "service.sign.repair-success",
-                        MessageArguments.builder().put("count", count).build()
+                        MessageArguments.builder().add(count).build()
                 )
                 : SignUseResult.failure("service.sign.repair-nothing");
     }

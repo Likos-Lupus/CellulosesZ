@@ -89,33 +89,54 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
                 context.player().name(),
                 "buy sign " + descriptor.normalizedItem()
         );
-        return economy.withdraw(context.player().uuid(), price.orElseThrow(), cause)
+        return economy
+                .withdraw(
+                        context.player().uuid(),
+                        price.orElseThrow(),
+                        cause
+                )
                 .thenCompose(withdrawal -> {
                     if (!withdrawal.success()) {
                         return CompletableFuture.completedFuture(SignUseResult.failure(withdrawal.message()));
                     }
-                    return serverThread.submit(mutation::commit).thenCompose(committed -> {
-                        if (committed.successful()) {
-                            return CompletableFuture.completedFuture(SignUseResult.success(
-                                    "service.sign.buy-success",
-                                    MessageArguments.builder()
-                                            .put("count", descriptor.count())
-                                            .put("item", descriptor.normalizedItem())
-                                            .put("price", economy.format(price.orElseThrow()))
-                                            .build()
-                            ));
-                        }
-                        return economy.deposit(
-                                        context.player().uuid(),
-                                        price.orElseThrow(),
-                                        TransactionCause.system("buy sign refund")
-                                )
-                                .handle((refund, failure) -> failure == null && refund.success()
-                                        ? SignUseResult.failure("service.sign.buy-inventory-full")
-                                        : SignUseResult.failure("service.sign.buy-rollback-failed"));
-                    });
+
+                    return serverThread
+                            .submit(mutation::commit)
+                            .thenCompose(committed -> {
+                                if (committed.successful()) {
+                                    return CompletableFuture.completedFuture(SignUseResult.success(
+                                            "service.sign.buy-success",
+                                            MessageArguments.builder()
+                                                    .add(descriptor.count())
+                                                    .add(descriptor.normalizedItem())
+                                                    .add(economy.format(price.orElseThrow()))
+                                                    .build()
+                                    ));
+                                }
+
+                                return economy
+                                        .deposit(
+                                                context.player().uuid(),
+                                                price.orElseThrow(),
+                                                TransactionCause.system("buy sign refund")
+                                        )
+                                        .handle((refund, failure) ->
+                                                failure == null && refund.success()
+                                                        ?
+                                                        SignUseResult.failure(
+                                                                "service.sign.buy-inventory-full"
+                                                        )
+                                                        : SignUseResult.failure(
+                                                                "service.sign.buy-rollback-failed"
+                                                        ));
+                            });
                 })
-                .exceptionally(_ -> SignUseResult.failure("service.sign.execution-failed"));
+                .exceptionally(failure -> SignUseResult.failure(
+                        "service.sign.execution-failed",
+                        MessageArguments.builder()
+                                .add(failure.getClass().getSimpleName())
+                                .build()
+                ));
     }
 
 }

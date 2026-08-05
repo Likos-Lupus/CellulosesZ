@@ -228,17 +228,17 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                                     TeleportCommandResult.success(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
                                             MessageArguments.builder()
-                                                    .put("success", counts[0])
-                                                    .put("blocked", counts[1])
-                                                    .put("failed", counts[2])
+                                                    .add(counts[0])
+                                                    .add(counts[1])
+                                                    .add(counts[2])
                                                     .build()
                                     )
                                     : TeleportCommandResult.partial(
                                             "commands.teleport.tp-all-command.reply.teleported-all-players",
                                             MessageArguments.builder()
-                                                    .put("success", counts[0])
-                                                    .put("blocked", counts[1])
-                                                    .put("failed", counts[2])
+                                                    .add(counts[0])
+                                                    .add(counts[1])
+                                                    .add(counts[2])
                                                     .build()
                                     )
                             );
@@ -265,7 +265,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
-                                MessageArguments.of("player", target)
+                                MessageArguments.builder().add(target).build()
                         ));
                     }
 
@@ -277,7 +277,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 NOT_FOUND,
                                 "commands.teleport.offline-location-missing",
-                                MessageArguments.of("player", resolved.name())
+                                MessageArguments.builder().add(resolved.name()).build()
                         ));
                     }
 
@@ -403,7 +403,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         return completed(failure(
                 NOT_FOUND,
                 "commands.common.player-offline",
-                MessageArguments.of("player", name)
+                MessageArguments.builder().add(name).build()
         ));
     }
 
@@ -426,7 +426,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         return completed(failure(
                                 BLOCKED,
                                 "commands.teleport.request.blocked",
-                                MessageArguments.of("player", mover.name())
+                                MessageArguments.builder().add(mover.name()).build()
                         ));
                     }
 
@@ -457,7 +457,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         if (result.success()) {
             return TeleportCommandResult.success(
                     result.message().key(),
-                    result.message().placeholders()
+                    result.message().arguments()
             );
         }
 
@@ -472,13 +472,14 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
             case CANCELLED_DISCONNECT -> CANCELLED_DISCONNECT;
             case CANCELLED_REPLACED -> CANCELLED_REPLACED;
             case PLATFORM_FAILURE -> PLATFORM_FAILURE;
-            case SUCCESS ->
-                    throw new IllegalStateException("Successful teleport result reported as failure");
+            case SUCCESS -> throw new IllegalStateException(
+                    "Successful teleport result reported as failure"
+            );
         };
         return TeleportCommandResult.failure(
                 status,
                 result.message().key(),
-                result.message().placeholders()
+                result.message().arguments()
         );
     }
 

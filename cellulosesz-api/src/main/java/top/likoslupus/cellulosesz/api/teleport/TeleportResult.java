@@ -44,7 +44,7 @@ public record TeleportResult(
     public static TeleportResult failed(
             TeleportStatus status,
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
         if (status == TeleportStatus.SUCCESS) {
             throw new IllegalArgumentException("failure status required");
@@ -52,7 +52,7 @@ public record TeleportResult(
         return new TeleportResult(
                 status,
                 Optional.empty(),
-                LocalizedMessage.of(key, placeholders)
+                LocalizedMessage.of(key, arguments)
         );
     }
 

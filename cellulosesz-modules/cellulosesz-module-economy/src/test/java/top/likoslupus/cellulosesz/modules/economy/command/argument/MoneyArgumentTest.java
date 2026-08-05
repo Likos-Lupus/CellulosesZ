@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 final class MoneyArgumentTest {
 
     @Test
-    void preservesExactDecimalValue() throws Exception {
+    void parse_whenDecimalProvided_preservesExactValue() throws Exception {
         assertEquals(
                 new BigDecimal("10.50"),
                 MoneyArgument.positive(
@@ -22,7 +22,7 @@ final class MoneyArgumentTest {
     }
 
     @Test
-    void enforcesSignScaleAndMaximum() {
+    void parse_whenSignScaleOrMaximumInvalid_rejects() {
         var positive = MoneyArgument.positive(2, new BigDecimal("1000.00"));
         assertThrows(Exception.class, () -> positive.parse(new StringReader("0")));
         assertThrows(Exception.class, () -> positive.parse(new StringReader("-1")));
@@ -33,7 +33,7 @@ final class MoneyArgumentTest {
     }
 
     @Test
-    void nonNegativeAcceptsZeroButRejectsPlusPrefix() throws Exception {
+    void parseNonNegative_withZeroOrPlusPrefix_acceptsZeroOnly() throws Exception {
         var amount = MoneyArgument.nonNegative(2, BigDecimal.TEN);
         assertEquals(BigDecimal.ZERO, amount.parse(new StringReader("0")));
         assertThrows(Exception.class, () -> amount.parse(new StringReader("+1")));

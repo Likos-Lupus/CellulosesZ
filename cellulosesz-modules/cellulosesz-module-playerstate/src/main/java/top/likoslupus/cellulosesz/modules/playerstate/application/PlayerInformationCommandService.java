@@ -84,7 +84,7 @@ public final class PlayerInformationCommandService {
             return PlayerStateCommandResult.success(
                     "commands.playerstate.compass." + direction,
                     MessageArguments.builder()
-                            .put("degrees", Math.round(degrees * 10.0D) / 10.0D)
+                            .add(Math.round(degrees * 10.0D) / 10.0D)
                             .build()
             );
         });
@@ -115,14 +115,18 @@ public final class PlayerInformationCommandService {
                                     ? "commands.playerstate.depth.below"
                                     : "commands.playerstate.depth.equal";
 
-                    return PlayerStateCommandResult.success(
-                            key,
+                    var arguments = difference == 0
+                            ?
                             MessageArguments.builder()
-                                    .put("distance", Math.abs(difference))
-                                    .put("y", y)
-                                    .put("seaLevel", sea.value().orElseThrow())
+                                    .add(y)
+                                    .add(sea.value().orElseThrow())
                                     .build()
-                    );
+                            : MessageArguments.builder()
+                                    .add(Math.abs(difference))
+                                    .add(y)
+                                    .add(sea.value().orElseThrow())
+                                    .build();
+                    return PlayerStateCommandResult.success(key, arguments);
                 });
     }
 
@@ -136,7 +140,7 @@ public final class PlayerInformationCommandService {
             ) {
                 return PlayerStateCommandResult.failure(
                         "commands.common.unknown-player",
-                        MessageArguments.builder().put("player", target.name()).build()
+                        MessageArguments.builder().add(target.name()).build()
                 );
             }
 
@@ -154,18 +158,17 @@ public final class PlayerInformationCommandService {
             return PlayerStateCommandResult.success(
                     "commands.playerstate.getpos.result",
                     MessageArguments.builder()
-                            .put("player", target.name())
-                            .put("world", location.world())
-                            .put("blockX", (int) Math.floor(location.x()))
-                            .put("blockY", (int) Math.floor(location.y()))
-                            .put("blockZ", (int) Math.floor(location.z()))
-                            .put("x", round(location.x()))
-                            .put("y", round(location.y()))
-                            .put("z", round(location.z()))
-                            .put("yaw", round(location.yaw()))
-                            .put("pitch", round(location.pitch()))
-                            .put(
-                                    "distance",
+                            .add(target.name())
+                            .add(location.world())
+                            .add((int) Math.floor(location.x()))
+                            .add((int) Math.floor(location.y()))
+                            .add((int) Math.floor(location.z()))
+                            .add(round(location.x()))
+                            .add(round(location.y()))
+                            .add(round(location.z()))
+                            .add(round(location.yaw()))
+                            .add(round(location.pitch()))
+                            .add(
                                     distance
                                             .map(PlayerInformationCommandService::round)
                                             .map(String::valueOf)
@@ -212,9 +215,8 @@ public final class PlayerInformationCommandService {
                             .map(entry -> LocalizedMessage.of(
                                     "commands.playerstate.near-entry",
                                     MessageArguments.builder()
-                                            .put("player", displayNames.displayName(entry.player()))
-                                            .put(
-                                                    "distance",
+                                            .add(displayNames.displayName(entry.player()))
+                                            .add(
                                                     Math.round(Math.sqrt(entry.distanceSquared()))
                                             )
                                             .build()
@@ -224,7 +226,7 @@ public final class PlayerInformationCommandService {
                     if (rows.isEmpty()) {
                         return PlayerStateCommandResult.success(
                                 "commands.playerstate.near-empty",
-                                MessageArguments.builder().put("radius", radius).build()
+                                MessageArguments.empty()
                         );
                     }
 
@@ -232,8 +234,8 @@ public final class PlayerInformationCommandService {
                     messages.add(LocalizedMessage.of(
                             "commands.playerstate.near-header",
                             MessageArguments.builder()
-                                    .put("radius", radius)
-                                    .put("count", rows.size())
+                                    .add(rows.size())
+                                    .add(radius)
                                     .build()
                     ));
                     messages.addAll(rows);
@@ -277,20 +279,20 @@ public final class PlayerInformationCommandService {
                     if (matches.isEmpty()) {
                         return PlayerStateCommandResult.failure(
                                 "commands.playerstate.realname.none",
-                                MessageArguments.builder().put("query", rawQuery).build()
+                                MessageArguments.builder().add(rawQuery).build()
                         );
                     }
 
                     var messages = new ArrayList<LocalizedMessage>();
                     messages.add(LocalizedMessage.of(
                             "commands.playerstate.realname.header",
-                            MessageArguments.builder().put("count", matches.size()).build()
+                            MessageArguments.builder().add(matches.size()).build()
                     ));
                     matches.forEach(target -> messages.add(LocalizedMessage.of(
                             "commands.playerstate.realname.entry",
                             MessageArguments.builder()
-                                    .put("displayName", displayNames.displayName(target))
-                                    .put("username", target.name())
+                                    .add(displayNames.displayName(target))
+                                    .add(target.name())
                                     .build()
                     )));
                     return PlayerStateCommandResult.success(messages);
@@ -326,7 +328,7 @@ public final class PlayerInformationCommandService {
                     ) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                MessageArguments.builder().put("player", input).build()
+                                MessageArguments.builder().add(input).build()
                         ));
                     }
 
@@ -360,8 +362,8 @@ public final class PlayerInformationCommandService {
         return PlayerStateCommandResult.success(
                 "commands.playerstate.playtime",
                 MessageArguments.builder()
-                        .put("player", name)
-                        .put("playtime", duration(total))
+                        .add(name)
+                        .add(duration(total))
                         .build()
         );
     }
@@ -402,7 +404,7 @@ public final class PlayerInformationCommandService {
                     if (resolved.optionalUuid().isEmpty()) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                MessageArguments.builder().put("player", input).build()
+                                MessageArguments.builder().add(input).build()
                         ));
                     }
 
@@ -412,7 +414,7 @@ public final class PlayerInformationCommandService {
                     if (visibleOnline) {
                         return finish(PlayerStateCommandResult.success(
                                 "commands.playerstate.seen-online",
-                                MessageArguments.builder().put("player", resolved.name()).build()
+                                MessageArguments.empty()
                         ));
                     }
 
@@ -420,29 +422,13 @@ public final class PlayerInformationCommandService {
                                 if (user.timestamps().lastQuit() <= 0L) {
                                     return finish(PlayerStateCommandResult.success(
                                             "commands.playerstate.seen-never",
-                                            MessageArguments.builder()
-                                                    .put("player", resolved.name())
-                                                    .build()
+                                            MessageArguments.empty()
                                     ));
                                 }
 
                                 return finish(PlayerStateCommandResult.success(
                                         "commands.playerstate.seen-offline",
-                                        MessageArguments.builder()
-                                                .put("player", resolved.name())
-                                                .put(
-                                                        "timestamp", Instant
-                                                                .ofEpochMilli(user.timestamps().lastQuit())
-                                                                .toString()
-                                                ).put(
-                                                        "ago",
-                                                        duration(Math.max(
-                                                                0L,
-                                                                System.currentTimeMillis() - user
-                                                                        .timestamps()
-                                                                        .lastQuit()
-                                                        ))
-                                                ).build()
+                                        MessageArguments.empty()
                                 ));
                             })
                             .exceptionally(_ -> PlayerStateCommandResult.failed(
@@ -462,7 +448,7 @@ public final class PlayerInformationCommandService {
                     if (resolved.optionalUuid().isEmpty()) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                MessageArguments.builder().put("player", input).build()
+                                MessageArguments.builder().add(input).build()
                         ));
                     }
 
@@ -473,7 +459,7 @@ public final class PlayerInformationCommandService {
                     ) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
-                                MessageArguments.builder().put("player", input).build()
+                                MessageArguments.builder().add(input).build()
                         ));
                     }
 
@@ -487,30 +473,25 @@ public final class PlayerInformationCommandService {
                                 return finish(PlayerStateCommandResult.success(
                                         "commands.playerstate.whois",
                                         MessageArguments.builder()
-                                                .put("player", resolved.name())
-                                                .put(
-                                                        "uuid",
+                                                .add(resolved.name())
+                                                .add(
                                                         showUuid
                                                                 ? uuid.toString()
                                                                 : "-"
                                                 )
-                                                .put("online", resolved.online().isPresent())
-                                                .put("afk", user.state().afk())
-                                                .put(
-                                                        "firstJoin",
+                                                .add(resolved.online().isPresent())
+                                                .add(user.state().afk())
+                                                .add(
                                                         instantOrUnknown(user.timestamps().firstJoin())
                                                 )
-                                                .put(
-                                                        "lastJoin",
+                                                .add(
                                                         instantOrUnknown(user.timestamps().lastJoin())
                                                 )
-                                                .put(
-                                                        "lastQuit",
+                                                .add(
                                                         instantOrUnknown(user.timestamps().lastQuit())
                                                 )
-                                                .put("playtime", duration(total))
-                                                .put(
-                                                        "nickname",
+                                                .add(duration(total))
+                                                .add(
                                                         user.state().nickname() == null
                                                                 ? "-"
                                                                 : user.state().nickname()

@@ -239,7 +239,7 @@ public final class AdminModule implements CellulosesZModule {
                                         audience.locale(player),
                                         "service.admin.temp-ban-kick",
                                         MessageArguments.builder()
-                                                .put("reason", active.orElseThrow().reason())
+                                                .add(active.orElseThrow().reason())
                                                 .build()
                                 )
                         );

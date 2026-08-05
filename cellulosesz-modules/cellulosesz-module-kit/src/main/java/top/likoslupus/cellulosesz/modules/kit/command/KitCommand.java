@@ -13,7 +13,6 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.application.KitCooldown;
 import top.likoslupus.cellulosesz.modules.kit.command.argument.KitCooldownArgument;
@@ -321,9 +320,7 @@ public final class KitCommand implements CommandContributor {
                             && policy.currentPlayer().isEmpty()
                     ) {
                         policy.error(
-                                LocalizedMessage.of(
-                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
-                                )
+                                LocalizedMessage.of("common.player-only")
                         );
                         return CompletableFuture.completedFuture(
                                 CommandOutcome.rejected(0)
@@ -358,9 +355,7 @@ public final class KitCommand implements CommandContributor {
                             && policy.currentPlayer().isEmpty()
                     ) {
                         policy.error(
-                                LocalizedMessage.of(
-                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
-                                )
+                                LocalizedMessage.of("common.player-only")
                         );
                         return CompletableFuture.completedFuture(
                                 CommandOutcome.rejected(0)
@@ -383,9 +378,9 @@ public final class KitCommand implements CommandContributor {
         return new KitCommandService.Result(
                 false,
                 LocalizedMessage.of(
-                        GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                        "commands.common.player-offline",
                         MessageArguments.builder()
-                                .put("player", policy.playerName().orElse("unknown"))
+                                .add(policy.playerName().orElse("unknown"))
                                 .build()
                 )
         );

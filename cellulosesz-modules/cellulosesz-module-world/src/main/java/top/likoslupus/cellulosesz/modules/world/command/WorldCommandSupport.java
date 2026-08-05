@@ -95,12 +95,11 @@ final class WorldCommandSupport {
                                 ? "commands.world.operation.success"
                                 : "commands.world.operation.failed",
                         MessageArguments.builder()
-                                .put("command", command)
-                                .put("status", result.status().name().toLowerCase())
-                                .put(
-                                        "detail", result.detail().isBlank()
-                                                ? "-"
-                                                : result.detail()
+                                .add(command)
+                                .add(result.status().name().toLowerCase())
+                                .add(result.detail().isBlank()
+                                        ? "-"
+                                        : result.detail()
                                 )
                                 .build()
                 )

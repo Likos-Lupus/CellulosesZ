@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class ImmutableUserSnapshotTest {
 
     @Test
-    void stateDefensivelyCopiesNestedPowerToolCommandsAndUnlimitedItems() {
+    void construct_withNestedMutableValues_defensivelyCopies() {
         var commands = new ArrayList<>(List.of("home"));
         var commandMap = new HashMap<String, List<String>>();
         commandMap.put("minecraft:stick", commands);
@@ -47,7 +47,7 @@ final class ImmutableUserSnapshotTest {
     }
 
     @Test
-    void cellUserAndRelationsPublishDefensiveSnapshots() {
+    void publish_userAndRelations_returnsDefensiveSnapshots() {
         var uuid = UUID.randomUUID();
         var cooldowns = new HashMap<String, Long>();
         cooldowns.put("home", 5L);
@@ -68,7 +68,7 @@ final class ImmutableUserSnapshotTest {
     }
 
     @Test
-    void withersCreateNewSnapshotsWithoutMutatingTheOriginal() {
+    void withers_whenInvoked_doNotMutateOriginal() {
         var original = CellUser.create(UUID.randomUUID());
         var changed = original.withPreferences(original.preferences().withPowerToolsEnabled(false));
 

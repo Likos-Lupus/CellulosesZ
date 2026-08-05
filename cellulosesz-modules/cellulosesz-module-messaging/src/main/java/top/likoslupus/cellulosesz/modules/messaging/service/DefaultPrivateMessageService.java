@@ -81,6 +81,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                             .thenCompose(_ -> deliver(
                                     sender.uuid(),
                                     target.uuid(),
+                                    target.name(),
                                     message
                             ));
                 })
@@ -154,6 +155,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     private CompletableFuture<MessageResult> deliver(
             UUID senderUuid,
             UUID targetUuid,
+            String targetName,
             String message
     ) {
         return serverThread
@@ -174,8 +176,8 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                     audiences.locale(targetPlayer),
                                     "messaging.private-incoming",
                                     MessageArguments.builder()
-                                            .put("sender", displayNames.displayName(senderPlayer))
-                                            .put("message", message)
+                                            .add(displayNames.displayName(senderPlayer))
+                                            .add(message)
                                             .build()
                             )
                     );
@@ -185,8 +187,8 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                     audiences.locale(senderPlayer),
                                     "messaging.private-outgoing",
                                     MessageArguments.builder()
-                                            .put("target", displayNames.displayName(targetPlayer))
-                                            .put("message", message)
+                                            .add(displayNames.displayName(targetPlayer))
+                                            .add(message)
                                             .build()
                             )
                     );
@@ -200,7 +202,8 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                         names.isEmpty()
                                 ?
                                 CompletableFuture.completedFuture(MessageResult.failure(
-                                        "service.messaging.player-offline"
+                                        "service.messaging.player-offline",
+                                        MessageArguments.builder().add(targetName).build()
                                 ))
                                 : broadcastSpy(
                                         names.orElseThrow().sender(),
@@ -320,9 +323,9 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                                                 audiences.locale(candidate.player()),
                                                                 "messaging.social-spy",
                                                                 MessageArguments.builder()
-                                                                        .put("sender", sender)
-                                                                        .put("target", target)
-                                                                        .put("message", message)
+                                                                        .add(sender)
+                                                                        .add(target)
+                                                                        .add(message)
                                                                         .build()
                                                         )
                                                 ));

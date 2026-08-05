@@ -55,7 +55,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
                     "commands.admin.burn.invalid-seconds",
-                    MessageArguments.builder().put("maximum", config.maximumBurnSeconds()).build()
+                    MessageArguments.builder().add(config.maximumBurnSeconds()).build()
             ));
         }
 
@@ -70,8 +70,8 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                                 : "commands.admin.burn.success",
                         MessageArguments
                                 .builder()
-                                .put("player", target.orElseThrow().name())
-                                .put("seconds", seconds)
+                                .add(target.orElseThrow().name())
+                                .add(seconds)
                                 .build()
                 )
                 : AdminResult.failure(
@@ -99,7 +99,9 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.ext.success",
-                        MessageArguments.builder().put("player", value.orElseThrow().name()).build()
+                        MessageArguments.builder()
+                                .add(value.orElseThrow().name())
+                                .build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
@@ -126,7 +128,10 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                 ?
                 AdminResult.success(
                         "commands.admin.ice.success",
-                        MessageArguments.builder().put("player", value.orElseThrow().name()).build()
+                        MessageArguments.builder()
+                                .add(value.orElseThrow().name())
+                                .add(result.value().orElseThrow())
+                                .build()
                 )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
@@ -145,7 +150,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.FAILURE,
                     "commands.admin.kill.exempt",
-                    MessageArguments.builder().put("player", target.orElseThrow().name()).build()
+                    MessageArguments.builder().add(target.orElseThrow().name()).build()
             ));
         }
 
@@ -160,7 +165,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                         "commands.admin.kill.success",
                         MessageArguments
                                 .builder()
-                                .put("player", target.orElseThrow().name())
+                                .add(target.orElseThrow().name())
                                 .build()
                 )
                 : AdminResult.failure(
@@ -168,7 +173,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                         "commands.admin.kill.failed",
                         MessageArguments
                                 .builder()
-                                .put("player", target.orElseThrow().name())
+                                .add(target.orElseThrow().name())
                                 .build()
                 )
         );
@@ -183,10 +188,20 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         );
 
         return completed(result.successful()
-                ? AdminResult.success("commands.admin.suicide.success")
+                ?
+                AdminResult.success(
+                        "commands.admin.suicide.success",
+                        MessageArguments.builder().add(player.name()).build()
+                )
                 : AdminResult.failure(
                         AdminStatus.PLATFORM_FAILURE,
-                        "commands.admin.suicide.failed"
+                        "commands.admin.suicide.failed",
+                        MessageArguments.builder()
+                                .add(result.detail().isBlank()
+                                        ? result.status().name().toLowerCase()
+                                        : result.detail()
+                                )
+                                .build()
                 )
         );
     }
@@ -216,7 +231,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             return completed(AdminResult.failure(
                     AdminStatus.FAILURE,
                     "commands.admin.sudo.exempt",
-                    MessageArguments.builder().put("player", target.orElseThrow().name()).build()
+                    MessageArguments.builder().add(target.orElseThrow().name()).build()
             ));
         }
 
@@ -231,7 +246,8 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         ) {
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
-                    "commands.admin.sudo.invalid-command"
+                    "commands.admin.sudo.invalid-command",
+                    MessageArguments.builder().add(config.sudoMaximumCommandLength()).build()
             ));
         }
 
@@ -260,8 +276,8 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                         "commands.admin.sudo.success",
                         MessageArguments
                                 .builder()
-                                .put("player", target.orElseThrow().name())
-                                .put("result", result.commandResult())
+                                .add(target.orElseThrow().name())
+                                .add(result.commandResult())
                                 .build()
                 )
                 : AdminResult.failure(
@@ -269,7 +285,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
                         "commands.admin.sudo.failed",
                         MessageArguments
                                 .builder()
-                                .put("player", target.orElseThrow().name())
+                                .add(target.orElseThrow().name())
                                 .build()
                 )
         );
@@ -283,7 +299,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         return AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "commands.common.unknown-player",
-                MessageArguments.builder().put("player", player).build()
+                MessageArguments.builder().add(player).build()
         );
     }
 

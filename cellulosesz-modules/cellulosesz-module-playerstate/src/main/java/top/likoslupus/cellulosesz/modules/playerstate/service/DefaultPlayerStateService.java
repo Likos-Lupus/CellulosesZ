@@ -60,13 +60,13 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 AdminResult.success(
                         "service.playerstate.heal-success",
                         MessageArguments.builder()
-                                .put("player", displayNames.plainDisplayName(player))
+                                .add(displayNames.plainDisplayName(player))
                                 .build()
                 )
                 : AdminResult.failure(
                         "service.playerstate.heal-failed",
                         MessageArguments.builder()
-                                .put("player", displayNames.plainDisplayName(player))
+                                .add(displayNames.plainDisplayName(player))
                                 .build()
                 );
     }
@@ -79,13 +79,13 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 AdminResult.success(
                         "service.playerstate.feed-success",
                         MessageArguments.builder()
-                                .put("player", displayNames.plainDisplayName(player))
+                                .add(displayNames.plainDisplayName(player))
                                 .build()
                 )
                 : AdminResult.failure(
                         "service.playerstate.feed-failed",
                         MessageArguments.builder()
-                                .put("player", displayNames.plainDisplayName(player))
+                                .add(displayNames.plainDisplayName(player))
                                 .build()
                 );
     }
@@ -110,7 +110,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             afk
                                     ? "service.playerstate.afk-enabled"
                                     : "service.playerstate.afk-disabled",
-                            MessageArguments.builder().put("player", name).build()
+                            MessageArguments.builder().add(name).build()
                     );
                 })
                 .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
@@ -193,7 +193,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                                             .withPersonalTime(persistedTime(setting))
                                             )
                                     )
-                                    .thenApply(_ -> timeSuccess(player, setting))
+                                    .thenApply(_ -> timeSuccess(setting))
                                     .exceptionallyCompose(_ -> serverThread
                                             .submit(() -> platform.setPersonalTime(
                                                     player,
@@ -242,7 +242,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                                             ))
                                             )
                                     )
-                                    .thenApply(_ -> weatherSuccess(player, setting))
+                                    .thenApply(_ -> weatherSuccess(setting))
                                     .exceptionallyCompose(_ -> serverThread
                                             .submit(() -> platform.setPersonalWeather(
                                                     player,
@@ -270,19 +270,18 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 : setting.name().toLowerCase(Locale.ROOT);
     }
 
-    private static AdminResult weatherSuccess(CellPlayer player, PersonalWeatherSetting setting) {
+    private static AdminResult weatherSuccess(
+            PersonalWeatherSetting setting
+    ) {
         return setting == PersonalWeatherSetting.RESET
                 ?
                 AdminResult.success(
                         "commands.playerstate.pweather-reset",
-                        MessageArguments.builder().put("player", player.name()).build()
+                        MessageArguments.empty()
                 )
                 : AdminResult.success(
                         "commands.playerstate.pweather-set",
-                        MessageArguments.builder()
-                                .put("player", player.name())
-                                .put("weather", setting.name().toLowerCase(Locale.ROOT))
-                                .build()
+                        MessageArguments.empty()
                 );
     }
 
@@ -316,9 +315,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 .thenCompose(_ -> serverThread
                         .submit(() -> {
                             online.ifPresent(displayNames::refresh);
-                            return stored.map(value -> AdminResult.success(
+                            return stored
+                                    .map(value -> AdminResult.success(
                                             "player.nick-set",
-                                            MessageArguments.builder().put("nickname", value).build()
+                                            MessageArguments.builder().add(value).build()
                                     ))
                                     .orElseGet(() -> AdminResult.success("player.nick-cleared"));
                         })
@@ -341,20 +341,17 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         };
     }
 
-    private static AdminResult timeSuccess(CellPlayer player, PersonalTimeSetting setting) {
+    private static AdminResult timeSuccess(PersonalTimeSetting setting) {
         if (setting instanceof PersonalTimeSetting.Reset) {
             return AdminResult.success(
                     "commands.playerstate.ptime-reset",
-                    MessageArguments.builder().put("player", player.name()).build()
+                    MessageArguments.empty()
             );
         }
 
         return AdminResult.success(
                 "commands.playerstate.ptime-set",
-                MessageArguments.builder()
-                        .put("player", player.name())
-                        .put("time", requireNonNull(persistedTime(setting), "persisted time"))
-                        .build()
+                MessageArguments.empty()
         );
     }
 
@@ -429,20 +426,15 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                         ).thenApply(_ -> AdminResult.success(
                                                 flying
                                                         ?
-                                                        (
-                                                                enabled
-                                                                        ? "service.playerstate.fly-enabled"
-                                                                        : "service.playerstate.fly-disabled"
-                                                        )
-                                                        :
-                                                                (
-                                                                        enabled
-                                                                                ? "service.playerstate.god-enabled"
-                                                                                : "service.playerstate.god-disabled"
-                                                                ),
+                                                        enabled
+                                                                ? "service.playerstate.fly-enabled"
+                                                                : "service.playerstate.fly-disabled"
+
+                                                        : enabled
+                                                                ? "service.playerstate.god-enabled"
+                                                                : "service.playerstate.god-disabled",
                                                 MessageArguments.builder()
-                                                        .put(
-                                                                "player",
+                                                        .add(
                                                                 displayNames.plainDisplayName(player)
                                                         )
                                                         .build()
@@ -450,10 +442,11 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                         .exceptionallyCompose(_ -> serverThread
                                                 .submit(() ->
                                                         flying
-                                                                ? platform.setFlying(
-                                                                player,
-                                                                previous
-                                                        )
+                                                                ?
+                                                                platform.setFlying(
+                                                                        player,
+                                                                        previous
+                                                                )
                                                                 : platform.setInvulnerable(
                                                                         player,
                                                                         previous

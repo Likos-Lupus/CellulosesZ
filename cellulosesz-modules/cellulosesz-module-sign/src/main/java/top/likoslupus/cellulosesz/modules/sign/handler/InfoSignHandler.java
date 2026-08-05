@@ -33,7 +33,7 @@ public final class InfoSignHandler implements SynchronousSignHandler {
         return SignHandlerSupport.textPage(texts, context)
                 .map(value -> SignUseResult.success(
                         "service.sign.info",
-                        MessageArguments.builder().put("text", value).build()
+                        MessageArguments.builder().add(value).build()
                 ))
                 .orElseGet(() -> SignUseResult.failure("service.sign.info-format"));
     }

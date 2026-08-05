@@ -13,7 +13,6 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
 import top.likoslupus.cellulosesz.modules.warp.command.argument.WarpNameArgument;
 
@@ -296,9 +295,7 @@ public final class WarpCommand implements CommandContributor {
                             && policy.playerUuid().isEmpty()
                     ) {
                         policy.error(
-                                LocalizedMessage.of(
-                                        GeneratedMessageKeys.COMMON_PLAYER_ONLY
-                                )
+                                LocalizedMessage.of("common.player-only")
                         );
 
                         return CompletableFuture.completedFuture(

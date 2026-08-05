@@ -12,6 +12,7 @@ import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
 
 import java.net.InetAddress;
 import java.time.Duration;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -93,7 +94,6 @@ public final class DefaultBanCommandService implements BanCommandService {
                                             .thenApply(temp -> combineUnban(
                                                     permanent,
                                                     temp,
-                                                    "player",
                                                     value.name(),
                                                     "service.admin.unban-success",
                                                     "service.admin.unban-partial",
@@ -131,7 +131,6 @@ public final class DefaultBanCommandService implements BanCommandService {
                         .thenApply(temp -> combineUnban(
                                 permanent,
                                 temp,
-                                "address",
                                 canonical,
                                 "service.admin.unban-ip-success",
                                 "service.admin.unban-ip-partial",
@@ -215,35 +214,40 @@ public final class DefaultBanCommandService implements BanCommandService {
         return CompletableFuture.completedFuture(AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "service.admin.address-not-found",
-                MessageArguments.builder().put("player", label).build()
+                MessageArguments.builder().add(label).build()
         ));
     }
 
     private static AdminResult combineUnban(
             AdminResult permanent,
             AdminResult temporary,
-            String targetKey,
             String targetValue,
             String successKey,
             String partialKey,
             String notFoundKey,
             String failureKey
     ) {
-        var components = java.util.List.of(permanent, temporary);
-        var arguments = MessageArguments.builder()
-                .put(targetKey, targetValue)
-                .put("permanent", permanent.status().name())
-                .put("temporary", temporary.status().name())
+        var components = List.of(permanent, temporary);
+        var targetArguments = MessageArguments.builder()
+                .add(targetValue)
                 .build();
 
         if (permanent.status() == AdminStatus.SUCCESS
                 && temporary.status() == AdminStatus.SUCCESS
         ) {
-            return AdminResult.success(successKey, arguments, components);
+            return AdminResult.success(successKey, targetArguments, components);
         }
 
         if (permanent.success() || temporary.success()) {
-            return AdminResult.partial(partialKey, arguments, components);
+            return AdminResult.partial(
+                    partialKey,
+                    MessageArguments.builder()
+                            .add(targetValue)
+                            .add(permanent.status().name())
+                            .add(temporary.status().name())
+                            .build(),
+                    components
+            );
         }
 
         if (permanent.status() == AdminStatus.NOT_FOUND
@@ -252,7 +256,7 @@ public final class DefaultBanCommandService implements BanCommandService {
             return AdminResult.failure(
                     AdminStatus.NOT_FOUND,
                     notFoundKey,
-                    arguments,
+                    targetArguments,
                     components
             );
         }
@@ -260,7 +264,7 @@ public final class DefaultBanCommandService implements BanCommandService {
         return AdminResult.failure(
                 combinedFailureStatus(permanent.status(), temporary.status()),
                 failureKey,
-                arguments,
+                targetArguments,
                 components
         );
     }
@@ -312,7 +316,7 @@ public final class DefaultBanCommandService implements BanCommandService {
         return CompletableFuture.completedFuture(AdminResult.failure(
                 AdminStatus.NOT_FOUND,
                 "commands.common.player-not-found",
-                MessageArguments.builder().put("player", player).build()
+                MessageArguments.builder().add(player).build()
         ));
     }
 

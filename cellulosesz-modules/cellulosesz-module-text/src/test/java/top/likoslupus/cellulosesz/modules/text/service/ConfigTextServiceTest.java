@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 final class ConfigTextServiceTest {
 
     @Test
-    void snapshotIsDefensiveAndCaseNormalized() {
+    void snapshot_afterLoad_isDefensiveAndCaseNormalized() {
         var config = new TextConfig();
         var lines = new ArrayList<>(List.of("first"));
         config.custom = new LinkedHashMap<>();
@@ -25,12 +25,14 @@ final class ConfigTextServiceTest {
 
         assertEquals(List.of("first"), service.custom("rules-extra"));
         assertEquals(java.util.Set.of("rules-extra"), service.customNames());
-        assertThrows(UnsupportedOperationException.class,
-                () -> service.custom("rules-extra").add("illegal"));
+        assertThrows(
+                UnsupportedOperationException.class,
+                () -> service.custom("rules-extra").add("illegal")
+        );
     }
 
     @Test
-    void invalidReloadKeepsPreviousSnapshot() {
+    void reload_whenInvalid_keepsPreviousSnapshot() {
         var valid = new TextConfig();
         valid.info = List.of("stable");
         var service = new ConfigTextService(valid);

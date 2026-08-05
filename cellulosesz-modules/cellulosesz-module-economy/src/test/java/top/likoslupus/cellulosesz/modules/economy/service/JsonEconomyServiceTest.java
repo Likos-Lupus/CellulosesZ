@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
@@ -14,13 +12,15 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class JsonEconomyServiceTest {
 
     @Test
-    void failedSaveDoesNotPublishBalance() {
+    void save_whenPersistenceFails_doesNotPublishBalance() {
         var storage = new MemoryStorage();
         var service = new JsonEconomyService(
                 storage,
@@ -42,7 +42,7 @@ final class JsonEconomyServiceTest {
     }
 
     @Test
-    void multiRecipientTransferCommitsAsOneDocument() {
+    void transfer_toMultipleRecipients_commitsSingleDocument() {
         var storage = new MemoryStorage();
         var service = new JsonEconomyService(
                 storage,
@@ -87,7 +87,10 @@ final class JsonEconomyServiceTest {
                 Class<T> type,
                 Supplier<T> defaultSupplier
         ) {
-            if (document == null) return CompletableFuture.completedFuture(defaultSupplier.get());
+            if (document == null) {
+                return CompletableFuture.completedFuture(defaultSupplier.get());
+            }
+
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
@@ -97,13 +100,19 @@ final class JsonEconomyServiceTest {
                 Class<T> type,
                 Supplier<T> defaultSupplier
         ) {
-            if (document == null) document = defaultSupplier.get();
+            if (document == null) {
+                document = defaultSupplier.get();
+            }
+
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
         @Override
         public <T> CompletableFuture<Void> save(Path path, T value) {
-            if (failSaves) return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            if (failSaves) {
+                return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            }
+
             document = value;
             saves++;
             return CompletableFuture.completedFuture(null);

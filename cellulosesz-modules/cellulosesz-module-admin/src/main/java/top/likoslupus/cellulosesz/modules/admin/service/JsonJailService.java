@@ -144,7 +144,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
 
                         return AdminResult.success(
                                 "service.admin.jail-set",
-                                MessageArguments.builder().put("jail", normalized).build()
+                                MessageArguments.builder().add(normalized).build()
                         );
                     });
                 });
@@ -220,7 +220,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     return AdminResult.failure(
                             AdminStatus.INVALID_INPUT,
                             "service.admin.jail-in-use",
-                            MessageArguments.builder().put("jail", normalized).build()
+                            MessageArguments.builder().add(normalized).build()
                     );
                 }
 
@@ -230,12 +230,12 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         ?
                         AdminResult.success(
                                 "service.admin.jail-deleted",
-                                MessageArguments.builder().put("jail", normalized).build()
+                                MessageArguments.builder().add(normalized).build()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.jail-not-found",
-                                MessageArguments.builder().put("jail", normalized).build()
+                                MessageArguments.builder().add(normalized).build()
                         );
             });
         });
@@ -303,7 +303,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.player-not-jailed",
-                                MessageArguments.builder().put("player", player.name()).build()
+                                MessageArguments.builder().add(player.name()).build()
                         )
                 );
             }
@@ -396,12 +396,12 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                 ?
                                 AdminResult.success(
                                         "service.admin.player-unjailed",
-                                        MessageArguments.of("player", player.name())
+                                        MessageArguments.builder().add(player.name()).build()
                                 )
                                 : AdminResult.failure(
                                         AdminStatus.NOT_FOUND,
                                         "service.admin.player-not-jailed",
-                                        MessageArguments.of("player", player.name())
+                                        MessageArguments.builder().add(player.name()).build()
                                 );
                     });
         }
@@ -420,24 +420,26 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                 AdminStatus.PLATFORM_FAILURE,
                                                 "service.admin.unjail-teleport-failed",
                                                 MessageArguments.builder()
-                                                        .put("player", player.name())
+                                                        .add(player.name())
                                                         .build()
                                         )
                                 )
                                 : removeAccepted(record.uuid())
                                         .handle((removed, failure) ->
                                                 failure == null && removed
-                                                        ? AdminResult.success(
-                                                        "service.admin.player-unjailed",
-                                                        MessageArguments.of("player", player.name())
-                                                )
+                                                        ?
+                                                        AdminResult.success(
+                                                                "service.admin.player-unjailed",
+                                                                MessageArguments.builder()
+                                                                        .add(player.name())
+                                                                        .build()
+                                                        )
                                                         : AdminResult.failure(
                                                                 AdminStatus.ROLLBACK_FAILURE,
                                                                 "service.admin.unjail-remove-failed",
-                                                                MessageArguments.of(
-                                                                        "player",
-                                                                        player.name()
-                                                                )
+                                                                MessageArguments.builder()
+                                                                        .add(player.name())
+                                                                        .build()
                                                         )
                                         )
                 );
@@ -464,7 +466,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     AdminResult.failure(
                             AdminStatus.NOT_FOUND,
                             "service.admin.jail-not-found",
-                            MessageArguments.builder().put("jail", jailName).build()
+                            MessageArguments.builder().add(jailName).build()
                     )
             );
         }
@@ -508,11 +510,10 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                         AdminResult.success(
                                                                 "service.admin.player-jailed",
                                                                 MessageArguments.builder()
-                                                                        .put(
-                                                                                "player",
+                                                                        .add(
                                                                                 player.name()
                                                                         )
-                                                                        .put("jail", target.name())
+                                                                        .add(target.name())
                                                                         .build()
                                                         )
                                                 );
@@ -528,8 +529,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                                     AdminStatus.PLATFORM_FAILURE,
                                                                     "service.admin.jail-teleport-failed",
                                                                     MessageArguments.builder()
-                                                                            .put(
-                                                                                    "player",
+                                                                            .add(
                                                                                     player.name()
                                                                             )
                                                                             .build()
@@ -538,8 +538,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                                                                     AdminStatus.ROLLBACK_FAILURE,
                                                                     "service.admin.jail-rollback-failed",
                                                                     MessageArguments.builder()
-                                                                            .put(
-                                                                                    "player",
+                                                                            .add(
                                                                                     player.name()
                                                                             )
                                                                             .build()
@@ -561,7 +560,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     AdminResult.failure(
                             AdminStatus.NOT_FOUND,
                             "service.admin.player-not-jailed",
-                            MessageArguments.builder().put("player", name).build()
+                            MessageArguments.builder().add(name).build()
                     )
             );
         }
@@ -588,7 +587,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                         return completed(
                                 AdminResult.success(
                                         "service.admin.unjail-pending",
-                                        MessageArguments.builder().put("player", name).build()
+                                        MessageArguments.builder().add(name).build()
                                 )
                         );
                     }

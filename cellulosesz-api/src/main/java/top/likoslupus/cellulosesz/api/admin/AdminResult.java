@@ -38,29 +38,29 @@ public record AdminResult(
         return new AdminResult(AdminStatus.SUCCESS, LocalizedMessage.of(key));
     }
 
-    public static AdminResult success(String key, MessageArguments placeholders) {
-        return new AdminResult(AdminStatus.SUCCESS, LocalizedMessage.of(key, placeholders));
+    public static AdminResult success(String key, MessageArguments arguments) {
+        return new AdminResult(AdminStatus.SUCCESS, LocalizedMessage.of(key, arguments));
     }
 
     public static AdminResult success(
             String key,
-            MessageArguments placeholders,
+            MessageArguments arguments,
             List<AdminResult> components
     ) {
         return new AdminResult(
                 AdminStatus.SUCCESS,
-                LocalizedMessage.of(key, placeholders),
+                LocalizedMessage.of(key, arguments),
                 components
         );
     }
 
-    public static AdminResult partial(String key, MessageArguments placeholders) {
-        return new AdminResult(AdminStatus.PARTIAL_SUCCESS, LocalizedMessage.of(key, placeholders));
+    public static AdminResult partial(String key, MessageArguments arguments) {
+        return new AdminResult(AdminStatus.PARTIAL_SUCCESS, LocalizedMessage.of(key, arguments));
     }
 
     public static AdminResult partial(
             String key,
-            MessageArguments placeholders,
+            MessageArguments arguments,
             List<AdminResult> components
     ) {
         if (components.isEmpty()) {
@@ -70,7 +70,7 @@ public record AdminResult(
         }
         return new AdminResult(
                 AdminStatus.PARTIAL_SUCCESS,
-                LocalizedMessage.of(key, placeholders),
+                LocalizedMessage.of(key, arguments),
                 components
         );
     }
@@ -83,8 +83,8 @@ public record AdminResult(
         return new AdminResult(AdminStatus.FAILURE, LocalizedMessage.of(key));
     }
 
-    public static AdminResult failure(String key, MessageArguments placeholders) {
-        return new AdminResult(AdminStatus.FAILURE, LocalizedMessage.of(key, placeholders));
+    public static AdminResult failure(String key, MessageArguments arguments) {
+        return new AdminResult(AdminStatus.FAILURE, LocalizedMessage.of(key, arguments));
     }
 
     public static AdminResult failure(AdminStatus status, String key) {
@@ -97,18 +97,18 @@ public record AdminResult(
     public static AdminResult failure(
             AdminStatus status,
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
         if (status.successful()) {
             throw new IllegalArgumentException("Failure status must not be successful");
         }
-        return new AdminResult(status, LocalizedMessage.of(key, placeholders));
+        return new AdminResult(status, LocalizedMessage.of(key, arguments));
     }
 
     public static AdminResult failure(
             AdminStatus status,
             String key,
-            MessageArguments placeholders,
+            MessageArguments arguments,
             List<AdminResult> components
     ) {
         if (status.successful()) {
@@ -117,7 +117,7 @@ public record AdminResult(
         if (components.isEmpty()) {
             throw new IllegalArgumentException("Compound failure must contain component results");
         }
-        return new AdminResult(status, LocalizedMessage.of(key, placeholders), components);
+        return new AdminResult(status, LocalizedMessage.of(key, arguments), components);
     }
 
     public boolean success() {

@@ -24,13 +24,12 @@ public final class CellulosesZCommand implements CommandContributor {
 
     private static final String MODULE = "command";
 
-    private static final CommandDescriptor DESCRIPTOR =
-            new CommandDescriptor(
-                    MODULE,
-                    "cellulosesz",
-                    "cellulosesz.command.root",
-                    CommandSourceKind.ANY
-            );
+    private static final CommandDescriptor DESCRIPTOR = new CommandDescriptor(
+            MODULE,
+            "cellulosesz",
+            "cellulosesz.command.root",
+            CommandSourceKind.ANY
+    );
 
     private final RuntimeService runtime;
     private final ServerThreadExecutor serverThread;
@@ -59,7 +58,7 @@ public final class CellulosesZCommand implements CommandContributor {
                                     LocalizedMessage.of(
                                             "cellulosesz.version",
                                             MessageArguments.builder()
-                                                    .put("version", runtime.version())
+                                                    .add(runtime.version())
                                                     .build()
                                     )
                             );
@@ -84,7 +83,7 @@ public final class CellulosesZCommand implements CommandContributor {
                                             LocalizedMessage.of(
                                                     "cellulosesz.version",
                                                     MessageArguments.builder()
-                                                            .put("version", runtime.version())
+                                                            .add(runtime.version())
                                                             .build()
                                             )
                                     );
@@ -183,13 +182,11 @@ public final class CellulosesZCommand implements CommandContributor {
                                                             LocalizedMessage.of(
                                                                     "cellulosesz.module-row",
                                                                     MessageArguments.builder()
-                                                                            .put("id", info.id())
-                                                                            .put(
-                                                                                    "enabled",
+                                                                            .add(info.id())
+                                                                            .add(
                                                                                     info.enabled()
                                                                             )
-                                                                            .put(
-                                                                                    "phase",
+                                                                            .add(
                                                                                     info.phase()
                                                                                             .name()
                                                                             )
@@ -232,13 +229,11 @@ public final class CellulosesZCommand implements CommandContributor {
                                             LocalizedMessage.of(
                                                     "commands.command.cellulosesz.debug",
                                                     MessageArguments.builder()
-                                                            .put("version", runtime.version())
-                                                            .put(
-                                                                    "modules",
+                                                            .add(runtime.version())
+                                                            .add(
                                                                     runtime.modules().size()
                                                             )
-                                                            .put(
-                                                                    "commands",
+                                                            .add(
                                                                     catalog.commands().size()
                                                             )
                                                             .build()

@@ -74,7 +74,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
             return completed(failure(
                     NOT_FOUND,
                     "commands.common.player-offline",
-                    MessageArguments.of("player", targetName)
+                    MessageArguments.builder().add(targetName).build()
             ));
         }
 
@@ -91,7 +91,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                         return completed(failure(
                                 BLOCKED,
                                 "commands.teleport.request.blocked",
-                                MessageArguments.of("player", target.orElseThrow().name())
+                                MessageArguments.builder().add(target.orElseThrow().name()).build()
                         ));
                     }
 
@@ -101,11 +101,15 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             type,
                             settings.requestTimeoutSeconds()
                     );
+
                     if (!creation.created()) {
                         return completed(failure(
                                 REQUEST_CHANGED,
                                 "commands.teleport.request.already-pending",
-                                MessageArguments.of("request", creation.request().id())
+                                MessageArguments.builder()
+                                        .add(target.orElseThrow().name())
+                                        .add(creation.request().id())
+                                        .build()
                         ));
                     }
 
@@ -114,11 +118,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                             type == TeleportRequestType.REQUESTER_TO_TARGET
                                     ? "commands.teleport.request.received-tpa"
                                     : "commands.teleport.request.received-tpahere",
-                            MessageArguments.builder()
-                                    .put("player", requester.name())
-                                    .put("seconds", settings.requestTimeoutSeconds())
-                                    .put("request", creation.request().id())
-                                    .build()
+                            MessageArguments.empty()
                     );
 
                     users.load(target.orElseThrow().uuid())
@@ -137,8 +137,8 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                     return completed(TeleportCommandResult.success(
                             "commands.teleport.request.sent",
                             MessageArguments.builder()
-                                    .put("player", target.orElseThrow().name())
-                                    .put("request", creation.request().id())
+                                    .add(creation.request().id())
+                                    .add(target.orElseThrow().name())
                                     .build()
                     ));
                 });
@@ -161,41 +161,36 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
 
         CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
         for (var target : candidates) {
-            chain = chain
-                    .thenCompose(_ -> allowed(target, bypassPreference)
-                            .thenAccept(allowed -> {
-                                if (!allowed) {
-                                    counts[1]++;
-                                    return;
-                                }
+            chain = chain.thenCompose(_ -> allowed(target, bypassPreference)
+                    .thenAccept(allowed -> {
+                        if (!allowed) {
+                            counts[1]++;
+                            return;
+                        }
 
-                                var creation = requests.create(
-                                        requester,
-                                        target,
-                                        TeleportRequestType.TARGET_TO_REQUESTER,
-                                        settings.requestTimeoutSeconds()
-                                );
-                                if (!creation.created()) {
-                                    counts[2]++;
-                                    return;
-                                }
+                        var creation = requests.create(
+                                requester,
+                                target,
+                                TeleportRequestType.TARGET_TO_REQUESTER,
+                                settings.requestTimeoutSeconds()
+                        );
+                        if (!creation.created()) {
+                            counts[2]++;
+                            return;
+                        }
 
-                                counts[0]++;
-                                notify(
-                                        target,
-                                        "commands.teleport.request.received-tpahere",
-                                        MessageArguments.builder()
-                                                .put("player", requester.name())
-                                                .put("seconds", settings.requestTimeoutSeconds())
-                                                .put("request", creation.request().id())
-                                                .build()
-                                );
-                            })
-                            .exceptionally(_ -> {
-                                counts[3]++;
-                                return null;
-                            })
-                    );
+                        counts[0]++;
+                        notify(
+                                target,
+                                "commands.teleport.request.received-tpahere",
+                                MessageArguments.empty()
+                        );
+                    })
+                    .exceptionally(_ -> {
+                        counts[3]++;
+                        return null;
+                    })
+            );
         }
 
         return chain.thenApply(_ -> counts[3] == 0
@@ -203,19 +198,19 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                 TeleportCommandResult.success(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
                         MessageArguments.builder()
-                                .put("sent", counts[0])
-                                .put("blocked", counts[1])
-                                .put("existing", counts[2])
-                                .put("failed", counts[3])
+                                .add(counts[0])
+                                .add(counts[1])
+                                .add(counts[2])
+                                .add(counts[3])
                                 .build()
                 )
                 : TeleportCommandResult.partial(
                         "commands.teleport.tpa-all-command.reply.requests-sent",
                         MessageArguments.builder()
-                                .put("sent", counts[0])
-                                .put("blocked", counts[1])
-                                .put("existing", counts[2])
-                                .put("failed", counts[3])
+                                .add(counts[0])
+                                .add(counts[1])
+                                .add(counts[2])
+                                .add(counts[3])
                                 .build()
                 )
         );
@@ -298,20 +293,14 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
                                 notify(
                                         requester.orElseThrow(),
                                         "commands.teleport.request.accepted-by-target",
-                                        MessageArguments.builder()
-                                                .put("player", target.name())
-                                                .put("request", value.id())
-                                                .build()
+                                        MessageArguments.empty()
                                 );
 
                                 return TeleportCommandResult.success(
                                         automatic
                                                 ? "commands.teleport.request.auto-accepted"
                                                 : "commands.teleport.tp-accept-command.reply.teleport-request-accepted",
-                                        MessageArguments.builder()
-                                                .put("player", requester.orElseThrow().name())
-                                                .put("request", value.id())
-                                                .build()
+                                        MessageArguments.empty()
                                 );
                             });
                 });
@@ -322,43 +311,39 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
             CellPlayer target,
             Optional<TeleportRequestSelector> selector
     ) {
-        return selectIncoming(target, selector)
-                .thenApply(selection -> {
-                    if (selection instanceof TeleportRequestSelectionResult.None) {
-                        return failure(
-                                NOT_FOUND,
-                                "commands.teleport.tp-deny-command.error.no-pending-request"
-                        );
-                    }
+        return selectIncoming(target, selector).thenApply(selection -> {
+            if (selection instanceof TeleportRequestSelectionResult.None) {
+                return failure(
+                        NOT_FOUND,
+                        "commands.teleport.tp-deny-command.error.no-pending-request"
+                );
+            }
 
-                    if (selection instanceof TeleportRequestSelectionResult.Ambiguous ambiguous) {
-                        return ambiguous(ambiguous);
-                    }
+            if (selection instanceof TeleportRequestSelectionResult.Ambiguous ambiguous) {
+                return ambiguous(ambiguous);
+            }
 
-                    var request = ((TeleportRequestSelectionResult.Selected) selection).request();
+            var request = ((TeleportRequestSelectionResult.Selected) selection).request();
 
-                    if (!requests.remove(request.id())) {
-                        return failure(
-                                REQUEST_CHANGED,
-                                "commands.teleport.request.changed"
-                        );
-                    }
+            if (!requests.remove(request.id())) {
+                return failure(
+                        REQUEST_CHANGED,
+                        "commands.teleport.request.changed"
+                );
+            }
 
-                    players.onlinePlayer(request.requester())
-                            .ifPresent(player -> notify(
-                                    player,
-                                    "commands.teleport.request.denied-by-target",
-                                    MessageArguments.builder()
-                                            .put("player", target.name())
-                                            .put("request", request.id())
-                                            .build()
-                            ));
+            players.onlinePlayer(request.requester())
+                    .ifPresent(player -> notify(
+                            player,
+                            "commands.teleport.request.denied-by-target",
+                            MessageArguments.empty()
+                    ));
 
-                    return TeleportCommandResult.success(
-                            "commands.teleport.tp-deny-command.reply.denied",
-                            MessageArguments.builder().put("request", request.id()).build()
-                    );
-                });
+            return TeleportCommandResult.success(
+                    "commands.teleport.tp-deny-command.reply.denied",
+                    MessageArguments.builder().add(request.id()).build()
+            );
+        });
     }
 
     @Override
@@ -366,42 +351,41 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
             CellPlayer requester,
             Optional<TeleportRequestSelector> selector
     ) {
-        return selectOutgoing(requester, selector)
-                .thenApply(selection -> {
-                    if (selection instanceof TeleportRequestSelectionResult.None) {
-                        return failure(
-                                NOT_FOUND,
-                                "commands.teleport.tp-cancel-command.error.no-pending-request"
-                        );
-                    }
+        return selectOutgoing(requester, selector).thenApply(selection -> {
+            if (selection instanceof TeleportRequestSelectionResult.None) {
+                return failure(
+                        NOT_FOUND,
+                        "commands.teleport.tp-cancel-command.error.no-pending-request"
+                );
+            }
 
-                    if (selection instanceof TeleportRequestSelectionResult.Ambiguous ambiguous) {
-                        return ambiguous(ambiguous);
-                    }
+            if (selection instanceof TeleportRequestSelectionResult.Ambiguous ambiguous) {
+                return ambiguous(ambiguous);
+            }
 
-                    var request = ((TeleportRequestSelectionResult.Selected) selection).request();
+            var request = ((TeleportRequestSelectionResult.Selected) selection).request();
 
-                    if (!requests.remove(request.id())) {
-                        return failure(
-                                REQUEST_CHANGED,
-                                "commands.teleport.request.changed"
-                        );
-                    }
+            if (!requests.remove(request.id())) {
+                return failure(
+                        REQUEST_CHANGED,
+                        "commands.teleport.request.changed"
+                );
+            }
 
-                    players.onlinePlayer(request.target()).ifPresent(player -> notify(
-                            player,
-                            "commands.teleport.request.cancelled-by-requester",
-                            MessageArguments.builder()
-                                    .put("player", requester.name())
-                                    .put("request", request.id())
-                                    .build()
-                    ));
+            players.onlinePlayer(request.target()).ifPresent(player -> notify(
+                    player,
+                    "commands.teleport.request.cancelled-by-requester",
+                    MessageArguments.builder()
+                            .add(requester.name())
+                            .add(request.id())
+                            .build()
+            ));
 
-                    return TeleportCommandResult.success(
-                            "commands.teleport.tp-cancel-command.reply.cancelled",
-                            MessageArguments.builder().put("request", request.id()).build()
-                    );
-                });
+            return TeleportCommandResult.success(
+                    "commands.teleport.tp-cancel-command.reply.cancelled",
+                    MessageArguments.builder().add(request.id()).build()
+            );
+        });
     }
 
     private CompletableFuture<TeleportRequestSelectionResult> selectOutgoing(
@@ -473,7 +457,7 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
         return TeleportCommandResult.failure(
                 AMBIGUOUS,
                 "commands.teleport.request.ambiguous",
-                MessageArguments.builder().put("requests", String.join(", ", rows)).build()
+                MessageArguments.builder().add(String.join(", ", rows)).build()
         );
     }
 
@@ -504,7 +488,8 @@ public final class DefaultTeleportRequestCommandService implements TeleportReque
     }
 
     private String displayName(UUID uuid) {
-        return players.onlinePlayer(uuid).map(CellPlayer::name)
+        return players.onlinePlayer(uuid)
+                .map(CellPlayer::name)
                 .or(() -> users.cached(uuid)
                         .map(user -> user.lastKnownName() == null
                                 ? uuid.toString()

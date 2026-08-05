@@ -23,7 +23,6 @@ public final class MailSignHandler implements CellSignHandler {
         return "Mail";
     }
 
-
     @Override
     public SignUseResult validate(SignUseContext context) {
         return SignHandlerSupport.noArguments(context, "service.sign.mail-format");
@@ -31,10 +30,11 @@ public final class MailSignHandler implements CellSignHandler {
 
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
-        return mail.unreadCount(context.player().uuid())
+        return mail
+                .unreadCount(context.player().uuid())
                 .thenApply(unread -> SignUseResult.success(
                         "service.sign.mail",
-                        MessageArguments.builder().put("unread", unread).build()
+                        MessageArguments.builder().add(unread).build()
                 ));
     }
 

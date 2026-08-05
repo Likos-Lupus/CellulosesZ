@@ -9,11 +9,11 @@ public interface MessageRenderer {
     RichText render(
             String locale,
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     );
 
     default RichText render(String locale, LocalizedMessage message) {
-        return render(locale, message.key(), message.placeholders());
+        return render(locale, message.key(), message.arguments());
     }
 
     default RichText renderInline(String locale, String template) {
@@ -23,7 +23,7 @@ public interface MessageRenderer {
     RichText renderInline(
             String locale,
             String template,
-            MessageArguments placeholders
+            MessageArguments arguments
     );
 
 }

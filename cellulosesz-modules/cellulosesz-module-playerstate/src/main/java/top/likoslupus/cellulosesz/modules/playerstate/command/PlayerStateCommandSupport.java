@@ -109,7 +109,7 @@ final class PlayerStateCommandSupport {
         return CompletableFuture.completedFuture(
                 PlayerStateCommandResult.failure(
                         "commands.common.player-offline",
-                        MessageArguments.builder().put("player", name).build()
+                        MessageArguments.builder().add(name).build()
                 )
         );
     }

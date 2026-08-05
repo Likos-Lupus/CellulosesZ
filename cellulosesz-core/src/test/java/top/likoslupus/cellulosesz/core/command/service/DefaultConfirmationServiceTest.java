@@ -18,14 +18,23 @@ final class DefaultConfirmationServiceTest {
     private static final ConfirmationKey<String> TEXT = new ConfirmationKey<>("test", String.class);
 
     @Test
-    void consumesOnlyMatchingTokenAndType() {
+    void consume_whenTokenAndTypeMatch_removesEntry() {
         var clock = new AtomicLong(1_000L);
         var service = new DefaultConfirmationService(clock::get, () -> "token1");
-        var token = service.request(PLAYER, TEXT, "payload", Duration.ofSeconds(10));
+        var token = service.request(
+                PLAYER,
+                TEXT,
+                "payload",
+                Duration.ofSeconds(10)
+        );
 
         assertEquals(
                 ConfirmationConsumeStatus.TOKEN_MISMATCH,
-                service.consume(PLAYER, TEXT, new ConfirmationToken("wrong1")).status()
+                service.consume(
+                        PLAYER,
+                        TEXT,
+                        new ConfirmationToken("wrong1")
+                ).status()
         );
 
         var wrongType = service.consume(
@@ -45,10 +54,15 @@ final class DefaultConfirmationServiceTest {
     }
 
     @Test
-    void distinguishesExpiredAndMissingEntries() {
+    void lookup_afterExpiration_distinguishesExpiredFromMissing() {
         var clock = new AtomicLong(5_000L);
         var service = new DefaultConfirmationService(clock::get, () -> "token2");
-        var token = service.request(PLAYER, TEXT, "payload", Duration.ofMillis(25));
+        var token = service.request(
+                PLAYER,
+                TEXT,
+                "payload",
+                Duration.ofMillis(25)
+        );
 
         clock.addAndGet(25L);
         assertEquals(

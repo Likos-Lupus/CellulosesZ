@@ -69,14 +69,11 @@ public final class DefaultVanishService implements VanishService {
                                         ?
                                         AdminResult.failure(
                                                 "service.playerstate.vanish-failed",
-                                                MessageArguments.of("detail", applied.detail())
+                                                MessageArguments.empty()
                                         )
                                         : AdminResult.failure(
                                                 "service.user.rollback-failed",
-                                                MessageArguments.builder()
-                                                        .put("detail", applied.detail())
-                                                        .put("rollback", rolledBack.detail())
-                                                        .build()
+                                                MessageArguments.empty()
                                         )
                                 );
                     }
@@ -91,29 +88,20 @@ public final class DefaultVanishService implements VanishService {
                                             ? "service.playerstate.vanish-enabled"
                                             : "service.playerstate.vanish-disabled",
                                     MessageArguments.builder()
-                                            .put("player", displayNames.plainDisplayName(player))
+                                            .add(displayNames.plainDisplayName(player))
                                             .build()
                             ))
-                            .exceptionallyCompose(failure -> serverThread
+                            .exceptionallyCompose(_ -> serverThread
                                     .submit(() -> applyPlatform(player, previous))
                                     .thenApply(rolledBack -> rolledBack.successful()
                                             ?
                                             AdminResult.failure(
                                                     "service.user.persistence-failed",
-                                                    MessageArguments.of(
-                                                            "detail",
-                                                            failure.getMessage() == null
-                                                                    ? failure.getClass()
-                                                                    .getSimpleName()
-                                                                    : failure.getMessage()
-                                                    )
+                                                    MessageArguments.empty()
                                             )
                                             : AdminResult.failure(
                                                     "service.user.rollback-failed",
-                                                    MessageArguments.of(
-                                                            "detail",
-                                                            rolledBack.detail()
-                                                    )
+                                                    MessageArguments.empty()
                                             )
                                     )
                             );
@@ -146,9 +134,7 @@ public final class DefaultVanishService implements VanishService {
         return failures.isEmpty()
                 ? PlatformResult.success()
                 : PlatformResult.failure(
-                        failureStatus == null
-                                ? PlatformOperationStatus.INTERNAL_ERROR
-                                : failureStatus,
+                        failureStatus,
                         "Visibility updates failed: " + String.join("; ", failures)
                 );
     }

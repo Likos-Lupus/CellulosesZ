@@ -27,13 +27,13 @@ public record TransactionResult(
 
     public static TransactionResult success(
             String key,
-            MessageArguments placeholders,
+            MessageArguments arguments,
             BigDecimal amount,
             BigDecimal balance
     ) {
         return new TransactionResult(
                 true,
-                LocalizedMessage.of(key, placeholders),
+                LocalizedMessage.of(key, arguments),
                 amount,
                 balance
         );
@@ -54,13 +54,13 @@ public record TransactionResult(
 
     public static TransactionResult failure(
             String key,
-            MessageArguments placeholders,
+            MessageArguments arguments,
             BigDecimal amount,
             BigDecimal balance
     ) {
         return new TransactionResult(
                 false,
-                LocalizedMessage.of(key, placeholders),
+                LocalizedMessage.of(key, arguments),
                 amount,
                 balance
         );

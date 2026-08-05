@@ -4,23 +4,23 @@ import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBla
 
 import static java.util.Objects.requireNonNull;
 
-/** Platform-neutral reference to a localized message template and typed placeholders. */
+/** Platform-neutral reference to a localized message template and ordered arguments. */
 public record LocalizedMessage(
         String key,
-        MessageArguments placeholders
+        MessageArguments arguments
 ) {
 
     public LocalizedMessage {
         key = requireNonBlank(requireNonNull(key, "key").trim(), "key");
-        requireNonNull(placeholders, "placeholders");
+        requireNonNull(arguments, "arguments");
     }
 
     public static LocalizedMessage of(String key) {
         return new LocalizedMessage(key, MessageArguments.empty());
     }
 
-    public static LocalizedMessage of(String key, MessageArguments placeholders) {
-        return new LocalizedMessage(key, placeholders);
+    public static LocalizedMessage of(String key, MessageArguments arguments) {
+        return new LocalizedMessage(key, arguments);
     }
 
 }

@@ -43,6 +43,7 @@ public final class GameModeSignHandler implements SynchronousSignHandler {
     @Override
     public SignUseResult useSynchronously(SignUseContext context) {
         var mode = mode(context);
+
         if (mode.isEmpty()) {
             return SignUseResult.failure("service.sign.gamemode-format");
         }
@@ -55,7 +56,7 @@ public final class GameModeSignHandler implements SynchronousSignHandler {
                 SignUseResult.success(
                         "service.sign.gamemode-success",
                         MessageArguments.builder()
-                                .put("mode", mode.orElseThrow().name().toLowerCase(Locale.ROOT))
+                                .add(mode.orElseThrow().name().toLowerCase(Locale.ROOT))
                                 .build()
                 )
                 : SignUseResult.failure("service.sign.gamemode-failed");

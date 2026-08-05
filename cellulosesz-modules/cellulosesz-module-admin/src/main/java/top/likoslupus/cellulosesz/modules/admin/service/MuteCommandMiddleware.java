@@ -7,7 +7,6 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
 import java.util.Locale;
@@ -46,7 +45,7 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
                 && context.playerUuid().filter(mutes::muted).isPresent()
         ) {
             context.error(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_ADMIN_MUTE_COMMAND_MIDDLEWARE_ERROR_MUTED_CANNOT_USE_COMMAND
+                    "commands.admin.mute-command-middleware.error.muted-cannot-use-command"
             ));
             return CompletableFuture.completedFuture(CommandOutcome.rejected());
         }

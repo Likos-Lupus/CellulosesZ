@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class JsonTempBanServiceTest {
 
     @Test
-    void expirationAdditionOverflowIsRejectedWithoutSaving() throws Exception {
+    void tempBan_whenExpirationOverflows_rejectsWithoutSaving() throws Exception {
         var storage = new MemoryStorage();
         var clock = new MutableClock(Instant.MAX.minusSeconds(1));
         var service = service(storage, clock);
@@ -156,20 +156,20 @@ final class JsonTempBanServiceTest {
     }
 
     @Test
-    void expiredBanIsRemovedByExplicitPurge() throws Exception {
+    void purge_whenBanExpired_removesEntry() throws Exception {
         var storage = new MemoryStorage();
         var clock = new MutableClock(Instant.parse("2026-07-30T00:00:00Z"));
         var service = service(storage, clock);
         var address = InetAddress.getByAddress(new byte[]{(byte) 192, 0, 2, 2});
 
         assertTrue(service.tempBanIp(
-                        address,
-                        AdminActor.console("console"),
-                        Duration.ofSeconds(1),
-                        "test"
-                )
-                .join()
-                .success()
+                                address,
+                                AdminActor.console("console"),
+                                Duration.ofSeconds(1),
+                                "test"
+                        )
+                        .join()
+                        .success()
         );
         assertTrue(service.activeIp(address).isPresent());
         clock.advance(Duration.ofSeconds(2));

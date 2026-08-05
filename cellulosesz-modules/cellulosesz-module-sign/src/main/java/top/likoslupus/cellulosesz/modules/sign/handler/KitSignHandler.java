@@ -17,7 +17,10 @@ public final class KitSignHandler implements CellSignHandler {
     private final KitService kits;
     private final PermissionService permissions;
 
-    public KitSignHandler(KitService kits, PermissionService permissions) {
+    public KitSignHandler(
+            KitService kits,
+            PermissionService permissions
+    ) {
         this.kits = requireNonNull(kits, "kits");
         this.permissions = requireNonNull(permissions, "permissions");
     }
@@ -30,38 +33,48 @@ public final class KitSignHandler implements CellSignHandler {
     @Override
     public SignUseResult validate(SignUseContext context) {
         var id = context.line(1).toLowerCase(Locale.ROOT);
+
         if (id.isBlank()) {
             return SignUseResult.failure("service.sign.kit-name-required");
         }
+
         return kits.kit(id).isPresent()
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure(
                         "service.sign.kit-not-found",
-                        MessageArguments.builder().put("kit", id).build()
+                        MessageArguments.builder().add(id).build()
                 );
     }
 
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
         var id = context.line(1).toLowerCase(Locale.ROOT);
+
         if (id.isBlank()) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.kit-name-required"));
         }
+
         var kit = kits.kit(id);
+
         if (kit.isEmpty()) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.kit-not-found",
-                    MessageArguments.builder().put("kit", id).build()
+                    MessageArguments.builder().add(id).build()
             ));
         }
+
         var permission = kit.orElseThrow().permission();
         if (permission.isPresent()
-                && !permissions.has(context.player(), permission.orElseThrow())) {
+                && !permissions.has(context.player(), permission.orElseThrow())
+        ) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
-                    "service.sign.kit-no-permission"));
+                    "service.sign.kit-no-permission"
+            ));
         }
-        return kits.claim(context.player(), kit.orElseThrow())
+
+        return kits
+                .claim(context.player(), kit.orElseThrow())
                 .thenApply(result -> result.success()
                         ? SignUseResult.success(result.message())
                         : SignUseResult.failure(result.message()));

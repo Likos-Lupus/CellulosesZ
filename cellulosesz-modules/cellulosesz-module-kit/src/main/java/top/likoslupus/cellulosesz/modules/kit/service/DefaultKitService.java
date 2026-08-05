@@ -32,6 +32,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
@@ -91,7 +92,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
 
     private static Throwable unwrap(Throwable failure) {
         var current = failure;
-        while (current instanceof java.util.concurrent.CompletionException
+        while (current instanceof CompletionException
                 && current.getCause() != null
         ) {
             current = current.getCause();
@@ -376,7 +377,9 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                                     if (grantResult.successful()) {
                                         return CompletableFuture.completedFuture(KitClaimResult.success(
                                                 "service.kit.claimed",
-                                                MessageArguments.of("kit", kit.displayName())
+                                                MessageArguments.builder()
+                                                        .add(kit.displayName())
+                                                        .build()
                                         ));
                                     }
 
@@ -390,17 +393,11 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                                             ?
                                             KitClaimResult.failure(
                                                     "service.kit.inventory-unavailable",
-                                                    MessageArguments.of(
-                                                            "detail",
-                                                            grantResult.detail()
-                                                    )
+                                                    MessageArguments.empty()
                                             )
                                             : KitClaimResult.failure(
                                                     "service.kit.rollback-failed",
-                                                    MessageArguments.of(
-                                                            "detail",
-                                                            grantResult.detail()
-                                                    )
+                                                    MessageArguments.empty()
                                             )
                                     );
                                 });
@@ -435,7 +432,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                     CooldownReservation.rejected(
                             KitClaimResult.failure(
                                     "service.kit.cooldown",
-                                    MessageArguments.of("seconds", seconds)
+                                    MessageArguments.builder().add(seconds).build()
                             )
                     )
             );
@@ -723,7 +720,9 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                 return CompletableFuture.completedFuture(null);
             }
 
-            return storage.delete(path("starter")).thenApply(_ -> null);
+            return storage
+                    .delete(path("starter"))
+                    .thenApply(_ -> null);
         }
 
         @Override

@@ -26,9 +26,9 @@ public record MessageResult(
 
     public static MessageResult success(
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
-        return success(LocalizedMessage.of(key, placeholders));
+        return success(LocalizedMessage.of(key, arguments));
     }
 
     public static MessageResult failure(String key) {
@@ -41,9 +41,9 @@ public record MessageResult(
 
     public static MessageResult failure(
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
-        return failure(LocalizedMessage.of(key, placeholders));
+        return failure(LocalizedMessage.of(key, arguments));
     }
 
     public static MessageResult failed(String key) {
@@ -56,9 +56,9 @@ public record MessageResult(
 
     public static MessageResult failed(
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
-        return failed(LocalizedMessage.of(key, placeholders));
+        return failed(LocalizedMessage.of(key, arguments));
     }
 
     public boolean success() {

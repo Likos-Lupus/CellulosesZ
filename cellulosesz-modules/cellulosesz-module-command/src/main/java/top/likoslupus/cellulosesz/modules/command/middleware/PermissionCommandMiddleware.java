@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -22,7 +21,7 @@ public final class PermissionCommandMiddleware implements CommandMiddleware {
         if (!descriptor.permission().isBlank()
                 && !context.hasPermission(descriptor.permission())
         ) {
-            context.error(LocalizedMessage.of(GeneratedMessageKeys.COMMON_NO_PERMISSION));
+            context.error(LocalizedMessage.of("common.no-permission"));
             return CompletableFuture.completedFuture(CommandOutcome.rejected());
         }
 

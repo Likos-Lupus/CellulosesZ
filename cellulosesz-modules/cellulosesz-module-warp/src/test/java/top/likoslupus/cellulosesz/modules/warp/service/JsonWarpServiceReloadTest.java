@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class JsonWarpServiceReloadTest {
 
     @Test
-    void stagedReloadPublishesOnlyOnCommitAndRollbackRestoresPreviousSnapshot() {
+    void reload_whenCommitted_publishesAndRollbackRestores() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);
@@ -60,7 +60,7 @@ final class JsonWarpServiceReloadTest {
     }
 
     @Test
-    void stalePreparedReloadCannotOverwriteNewerMutation() {
+    void reload_whenPreparedStateStale_doesNotOverwriteNewerMutation() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);
@@ -84,7 +84,7 @@ final class JsonWarpServiceReloadTest {
     }
 
     @Test
-    void failedPreparationLeavesLiveSnapshotUntouched() {
+    void reload_whenPrepareFails_keepsLiveSnapshot() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(WarpMapper.fromDomain(warp("old", 1.0)));
         var service = service(storage);

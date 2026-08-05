@@ -80,21 +80,20 @@ public final class JailsCommand implements CommandContributor {
                         AdminResult.success(
                                 "service.admin.jails-list",
                                 MessageArguments.builder()
-                                        .put("page", page)
-                                        .put(
-                                                "jails",
-                                                service.jails().stream()
-                                                        .skip((long) (page - 1) * 10)
-                                                        .limit(10)
-                                                        .map(jail ->
-                                                                "%s@%s".formatted(
-                                                                        jail.name(),
-                                                                        jail.location().world()
-                                                                )
+                                        .add(page)
+                                        .add(service.jails().stream()
+                                                .skip((long) (page - 1) * 10)
+                                                .limit(10)
+                                                .map(jail ->
+                                                        "%s@%s".formatted(
+                                                                jail.name(),
+                                                                jail.location().world()
                                                         )
-                                                        .toList()
-                                                        .toString()
-                                        ).build()
+                                                )
+                                                .toList()
+                                                .toString()
+                                        )
+                                        .build()
                         )
                 )
         );

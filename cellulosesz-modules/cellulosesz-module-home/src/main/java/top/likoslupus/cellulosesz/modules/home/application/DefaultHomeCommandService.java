@@ -11,7 +11,6 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
 
 import java.time.Duration;
@@ -61,17 +60,17 @@ public final class DefaultHomeCommandService implements HomeCommandService {
     public CompletableFuture<Result> list(UUID playerUuid) {
         return homes.homes(playerUuid).handle((known, failure) -> {
             if (failure != null) {
-                return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                return failed("common.persistence-failed");
             }
 
             if (known.isEmpty()) {
-                return success(GeneratedMessageKeys.COMMANDS_HOME_LIST_EMPTY);
+                return success("commands.home.list-empty");
             }
 
             return success(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_HOME_LIST,
+                    "commands.home.list",
                     MessageArguments.builder()
-                            .put("homes", String.join(", ", known.keySet()))
+                            .add(String.join(", ", known.keySet()))
                             .build()
             ));
         });
@@ -96,8 +95,8 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                 );
 
                 return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                        GeneratedMessageKeys.COMMANDS_HOME_COOLDOWN,
-                        MessageArguments.builder().put("seconds", seconds).build()
+                        "commands.home.cooldown",
+                        MessageArguments.builder().add(seconds).build()
                 )));
             }
         }
@@ -106,14 +105,14 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                 .handle((location, loadFailure) -> {
                     if (loadFailure != null) {
                         return CompletableFuture.completedFuture(failed(
-                                GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED
+                                "common.persistence-failed"
                         ));
                     }
 
                     if (location.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_HOME_COMMAND_ERROR_HOME_DOES_NOT_EXIST,
-                                MessageArguments.builder().put("home", name).build()
+                                "commands.home.home-command.error.home-does-not-exist",
+                                MessageArguments.builder().add(name).build()
                         )));
                     }
 
@@ -139,8 +138,8 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                             && !bypassLimit
                     ) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_SET_HOME_COMMAND_ERROR_REACHED_HOME_LIMIT,
-                                MessageArguments.builder().put("limit", current.maxHomes()).build()
+                                "commands.home.set-home-command.error.reached-home-limit",
+                                MessageArguments.builder().add(current.maxHomes()).build()
                         )));
                     }
 
@@ -151,9 +150,9 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                                 if (online.isEmpty()) {
                                     return CompletableFuture.completedFuture(failure(
                                             LocalizedMessage.of(
-                                                    GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                                    "commands.common.player-offline",
                                                     MessageArguments.builder()
-                                                            .put("player", request.playerName())
+                                                            .add(request.playerName())
                                                             .build()
                                             )));
                                 }
@@ -166,12 +165,12 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                                                 homes.setHome(request.playerUuid(), name, location)
                                         )
                                         .thenApply(_ -> success(LocalizedMessage.of(
-                                                GeneratedMessageKeys.COMMANDS_HOME_SET_HOME_COMMAND_REPLY_SET_HOME,
-                                                MessageArguments.builder().put("home", name).build()
+                                                "commands.home.set-home-command.reply.set-home",
+                                                MessageArguments.builder().add(name).build()
                                         )));
                             });
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed("common.persistence-failed"));
     }
 
     @Override
@@ -186,19 +185,19 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.deleteHome(playerUuid, name)
                 .handle((deleted, failure) -> {
                     if (failure != null) {
-                        return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                        return failed("common.persistence-failed");
                     }
 
                     if (!deleted) {
                         return failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_DEL_HOME_COMMAND_ERROR_HOME_DOES_NOT_EXIST,
-                                MessageArguments.builder().put("home", name).build()
+                                "commands.home.del-home-command.error.home-does-not-exist",
+                                MessageArguments.builder().add(name).build()
                         ));
                     }
 
                     return success(LocalizedMessage.of(
-                            GeneratedMessageKeys.COMMANDS_HOME_DEL_HOME_COMMAND_REPLY_DELETED_HOME,
-                            MessageArguments.builder().put("home", name).build()
+                            "commands.home.del-home-command.reply.deleted-home",
+                            MessageArguments.builder().add(name).build()
                     ));
                 });
     }
@@ -211,6 +210,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
     ) {
         var oldName = rawOldName.trim();
         var newName = rawNewName.trim();
+
         var invalidOld = validateName(oldName);
         if (invalidOld != null) {
             return CompletableFuture.completedFuture(failure(invalidOld));
@@ -224,24 +224,24 @@ public final class DefaultHomeCommandService implements HomeCommandService {
         return homes.renameHomeDetailed(playerUuid, oldName, newName)
                 .handle((status, failure) -> {
                     if (failure != null) {
-                        return failed(GeneratedMessageKeys.COMMON_PERSISTENCE_FAILED);
+                        return failed("common.persistence-failed");
                     }
 
                     return switch (status) {
                         case RENAMED -> success(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_RENAME_HOME_COMMAND_REPLY_RENAMED_HOME,
+                                "commands.home.rename-home-command.reply.renamed-home",
                                 MessageArguments.builder()
-                                        .put("old_name", oldName)
-                                        .put("new_name", newName)
+                                        .add(oldName)
+                                        .add(newName)
                                         .build()
                         ));
                         case SOURCE_MISSING -> failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_RENAME_HOME_COMMAND_ERROR_SOURCE_MISSING,
-                                MessageArguments.builder().put("home", oldName).build()
+                                "commands.home.rename-home-command.error.source-missing",
+                                MessageArguments.builder().add(oldName).build()
                         ));
                         case TARGET_EXISTS -> failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_HOME_RENAME_HOME_COMMAND_ERROR_TARGET_EXISTS,
-                                MessageArguments.builder().put("home", newName).build()
+                                "commands.home.rename-home-command.error.target-exists",
+                                MessageArguments.builder().add(newName).build()
                         ));
                     };
                 });
@@ -263,17 +263,17 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                 || name.length() > current.maxLength()
         ) {
             return LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_HOME_ABSTRACT_HOME_COMMAND_ERROR_HOME_NAMES_MUST_BETWEEN_CHARACTERS_LONG,
+                    "commands.home.abstract-home-command.error.home-names-must-between-characters-long",
                     MessageArguments.builder()
-                            .put("minimum_length", current.minLength())
-                            .put("maximum_length", current.maxLength())
+                            .add(current.minLength())
+                            .add(current.maxLength())
                             .build()
             );
         }
 
         if (!current.pattern().matcher(name).matches()) {
             return LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_HOME_ABSTRACT_HOME_COMMAND_ERROR_HOME_NAMES_MAY_ONLY_CONTAIN_CONFIGURED_CHARACTERS
+                    "commands.home.abstract-home-command.error.home-names-may-only-contain-configured-characters"
             );
         }
 
@@ -307,9 +307,9 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                 .thenCompose(online -> {
                     if (online.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                "commands.common.player-offline",
                                 MessageArguments.builder()
-                                        .put("player", request.playerName())
+                                        .add(request.playerName())
                                         .build()
                         )));
                     }
@@ -341,12 +341,12 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                                 }
 
                                 return success(LocalizedMessage.of(
-                                        GeneratedMessageKeys.COMMANDS_HOME_HOME_COMMAND_REPLY_TELEPORTED_HOME,
-                                        MessageArguments.builder().put("home", name).build()
+                                        "commands.home.home-command.reply.teleported-home",
+                                        MessageArguments.builder().add(name).build()
                                 ));
                             });
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
+                .exceptionally(_ -> failed("commands.teleport.request.failed"));
     }
 
     private Result failed(String key) {

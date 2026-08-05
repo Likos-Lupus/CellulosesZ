@@ -75,14 +75,16 @@ public final class EditSignCommand implements CommandContributor {
                                 command,
                                 descriptor,
                                 policy -> copy(policy, target(policy))
-                        )))
+                        ))
+                )
                 .then(Commands.literal("paste")
                         .executes(command -> executeAsync(
                                 context,
                                 command,
                                 descriptor,
                                 policy -> paste(policy, target(policy))
-                        )))
+                        ))
+                )
                 .then(Commands.literal("clear")
                         .then(Commands.argument("line", IntegerArgumentType.integer(1, 4))
                                 .executes(command -> executeAsync(
@@ -94,7 +96,9 @@ public final class EditSignCommand implements CommandContributor {
                                                 target(policy),
                                                 IntegerArgumentType.getInteger(command, "line") - 1
                                         )
-                                ))))
+                                ))
+                        )
+                )
                 .then(Commands.literal("set")
                         .then(Commands.argument("line", IntegerArgumentType.integer(1, 4))
                                 .then(Commands.argument("text", StringArgumentType.greedyString())
@@ -114,7 +118,10 @@ public final class EditSignCommand implements CommandContributor {
                                                                 "text"
                                                         )
                                                 )
-                                        )))));
+                                        ))
+                                )
+                        )
+                );
 
         context.registerDirect(
                 moduleId(),
@@ -144,7 +151,10 @@ public final class EditSignCommand implements CommandContributor {
                 command,
                 descriptor,
                 "edit sign",
-                policy -> SignCommandSupport.respond(policy, operation.apply(policy))
+                policy -> SignCommandSupport.respond(
+                        policy,
+                        operation.apply(policy)
+                )
         );
     }
 
@@ -193,7 +203,7 @@ public final class EditSignCommand implements CommandContributor {
         clipboards.put(player.uuid(), new Clipboard(target.lines()));
         policy.reply(LocalizedMessage.of(
                 "commands.sign.editsign.copied",
-                MessageArguments.builder().put("side", side(target.front())).build()
+                MessageArguments.builder().add(side(target.front())).build()
         ));
 
         return PlatformResult.success(target);

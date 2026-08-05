@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
-import org.jspecify.annotations.NullMarked;
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
@@ -12,13 +10,15 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import org.jspecify.annotations.NullMarked;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 final class JsonMailServiceTest {
 
     @Test
-    void failedSaveRollsBackMailbox() {
+    void send_whenSaveFails_rollsBackMailbox() {
         var storage = new MemoryStorage();
         var service = new JsonMailService(storage, new MessagingConfig(), Path.of("mail.json"));
         var recipient = UUID.randomUUID();
@@ -31,19 +31,32 @@ final class JsonMailServiceTest {
 
     private static MailMessage message(UUID recipient, Long expiresAt) {
         var now = System.currentTimeMillis();
-        return new MailMessage(UUID.randomUUID(), null, "Console", recipient, "body", now, expiresAt, false);
+        return new MailMessage(
+                UUID.randomUUID(),
+                null,
+                "Console",
+                recipient,
+                "body",
+                now,
+                expiresAt,
+                false
+        );
     }
 
     @Test
-    void sendAllAndExpiryArePersisted() {
+    void persistence_afterSendAllAndExpiry_preservesState() {
         var storage = new MemoryStorage();
         var service = new JsonMailService(storage, new MessagingConfig(), Path.of("mail.json"));
         var first = UUID.randomUUID();
         var second = UUID.randomUUID();
         var now = System.currentTimeMillis();
 
-        assertEquals(2, service.sendAll(List.of(first, second), recipient ->
-                message(recipient, now + 1000L)).join());
+        assertEquals(
+                2, service.sendAll(
+                        List.of(first, second), recipient ->
+                                message(recipient, now + 1000L)
+                ).join()
+        );
         assertEquals(1, service.unreadCount(first).join());
         assertEquals(2, service.purgeExpired(now + 2000L).join());
         assertEquals(0, service.unreadCount(first).join());
@@ -61,7 +74,10 @@ final class JsonMailServiceTest {
                 Class<T> type,
                 Supplier<T> defaultSupplier
         ) {
-            if (document == null) return CompletableFuture.completedFuture(defaultSupplier.get());
+            if (document == null) {
+                return CompletableFuture.completedFuture(defaultSupplier.get());
+            }
+
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
@@ -71,13 +87,19 @@ final class JsonMailServiceTest {
                 Class<T> type,
                 Supplier<T> defaultSupplier
         ) {
-            if (document == null) document = defaultSupplier.get();
+            if (document == null) {
+                document = defaultSupplier.get();
+            }
+
             return CompletableFuture.completedFuture(type.cast(document));
         }
 
         @Override
         public <T> CompletableFuture<Void> save(Path path, T value) {
-            if (failSaves) return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            if (failSaves) {
+                return CompletableFuture.failedFuture(new IllegalStateException("disk failure"));
+            }
+
             document = value;
             return CompletableFuture.completedFuture(null);
         }

@@ -58,7 +58,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         .orElseGet(() -> AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.kick-failed",
-                                MessageArguments.builder().put("player", player).build()
+                                MessageArguments.builder().add(player).build()
                         ))
                 );
     }
@@ -70,7 +70,6 @@ public final class DefaultModerationCommandService implements ModerationCommandS
 
             var kicked = 0;
             var exempt = 0;
-            var offline = 0;
             var failed = 0;
 
             for (var player : snapshot) {
@@ -89,22 +88,25 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                 }
             }
 
-            var values = MessageArguments.builder()
-                    .put("kicked", kicked)
-                    .put("exempt", exempt)
-                    .put("alreadyOffline", offline)
-                    .put("failed", failed)
-                    .build();
+            if (failed == 0) {
+                return AdminResult.success(
+                        "service.admin.kick-all-success",
+                        MessageArguments.builder().add(kicked).build()
+                );
+            }
 
-            return failed == 0
-                    ? AdminResult.success("service.admin.kick-all-success", values)
-                    : kicked > 0
-                            ? AdminResult.partial("service.admin.kick-all-partial", values)
-                            : AdminResult.failure(
-                                    AdminStatus.PLATFORM_FAILURE,
-                                    "service.admin.kick-all-failed",
-                                    values
-                            );
+            var failureArguments = MessageArguments.builder()
+                    .add(kicked)
+                    .add(exempt)
+                    .add(failed)
+                    .build();
+            return kicked > 0
+                    ? AdminResult.partial("service.admin.kick-all-partial", failureArguments)
+                    : AdminResult.failure(
+                            AdminStatus.PLATFORM_FAILURE,
+                            "service.admin.kick-all-failed",
+                            failureArguments
+                    );
         });
     }
 
@@ -125,7 +127,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                 return completed(AdminResult.failure(
                         AdminStatus.NOT_FOUND,
                         "commands.common.player-not-found",
-                        MessageArguments.builder().put("player", player).build()
+                        MessageArguments.builder().add(player).build()
                 ));
             }
 
@@ -165,7 +167,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
-                                MessageArguments.builder().put("player", player).build()
+                                MessageArguments.builder().add(player).build()
                         ))
                         : mutes.unmute(
                                 value.optionalUuid().orElseThrow(),

@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.playerstate.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
-import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
@@ -145,11 +144,11 @@ public final class PlayerAbilityCommandService {
         return PlayerStateCommandResult.success(
                 "commands.playerstate.exp.result",
                 MessageArguments.builder()
-                        .put("player", player.name())
-                        .put("total", snapshot.totalPoints())
-                        .put("level", snapshot.level())
-                        .put("progress", Math.round(snapshot.progress() * 1000.0D) / 10.0D)
-                        .put("next", snapshot.pointsToNextLevel())
+                        .add(player.name())
+                        .add(snapshot.totalPoints())
+                        .add(snapshot.level())
+                        .add(Math.round(snapshot.progress() * 1000.0D) / 10.0D)
+                        .add(snapshot.pointsToNextLevel())
                         .build()
         );
     }
@@ -179,20 +178,14 @@ public final class PlayerAbilityCommandService {
             if (!result.successful() || result.value().isEmpty()) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.gamemode-invalid",
-                        MessageArguments.builder()
-                                .put("mode", mode.name().toLowerCase(Locale.ROOT))
-                                .build()
+                        MessageArguments.empty()
                 );
             }
 
             var change = result.value().orElseThrow();
             return PlayerStateCommandResult.success(
                     "commands.playerstate.gamemode-set",
-                    MessageArguments.builder()
-                            .put("player", player.name())
-                            .put("previous", change.previous().name().toLowerCase(Locale.ROOT))
-                            .put("mode", change.current().name().toLowerCase(Locale.ROOT))
-                            .build()
+                    MessageArguments.empty()
             );
         });
     }
@@ -238,14 +231,9 @@ public final class PlayerAbilityCommandService {
                 );
             }
 
-            var change = result.value().orElseThrow();
             return PlayerStateCommandResult.success(
                     "commands.playerstate.speed-set",
-                    MessageArguments.builder()
-                            .put("player", player.name())
-                            .put("speed", change.current())
-                            .put("type", type.name().toLowerCase(Locale.ROOT))
-                            .build()
+                    MessageArguments.empty()
             );
         });
     }
@@ -256,11 +244,11 @@ public final class PlayerAbilityCommandService {
                         ?
                         PlayerStateCommandResult.success(
                                 "commands.playerstate.rest.success",
-                                MessageArguments.builder().put("player", player.name()).build()
+                                MessageArguments.builder().add(player.name()).build()
                         )
                         : PlayerStateCommandResult.failure(
                                 "commands.playerstate.rest.failed",
-                                MessageArguments.builder().put("player", player.name()).build()
+                                MessageArguments.builder().add(player.name()).build()
                         )
         );
     }

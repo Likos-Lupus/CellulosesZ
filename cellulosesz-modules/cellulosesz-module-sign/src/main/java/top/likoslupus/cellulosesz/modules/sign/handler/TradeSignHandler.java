@@ -19,7 +19,10 @@ public final class TradeSignHandler implements SynchronousSignHandler {
     private final ItemService items;
     private final InventoryPlatformService inventory;
 
-    public TradeSignHandler(ItemService items, InventoryPlatformService inventory) {
+    public TradeSignHandler(
+            ItemService items,
+            InventoryPlatformService inventory
+    ) {
         this.items = requireNonNull(items, "items");
         this.inventory = requireNonNull(inventory, "inventory");
     }
@@ -36,6 +39,7 @@ public final class TradeSignHandler implements SynchronousSignHandler {
         if (!costResult.success()) {
             return costResult;
         }
+
         var reward = reward(context);
         var rewardResult = SignHandlerSupport.validateItem(
                 items,
@@ -45,6 +49,7 @@ public final class TradeSignHandler implements SynchronousSignHandler {
         if (!rewardResult.success()) {
             return rewardResult;
         }
+
         return SignUseResult.success("service.sign.valid");
     }
 
@@ -60,15 +65,21 @@ public final class TradeSignHandler implements SynchronousSignHandler {
     public SignUseResult useSynchronously(SignUseContext context) {
         var costResult = cost(context);
         var rewardResult = reward(context);
+
         if (!costResult.successful() || costResult.value().isEmpty()) {
-            return SignHandlerSupport.itemFailure(costResult.status(), "service.sign.trade-format");
+            return SignHandlerSupport.itemFailure(
+                    costResult.status(),
+                    "service.sign.trade-format"
+            );
         }
+
         if (!rewardResult.successful() || rewardResult.value().isEmpty()) {
             return SignHandlerSupport.itemFailure(
                     rewardResult.status(),
                     "service.sign.trade-format"
             );
         }
+
         var cost = costResult.value().orElseThrow();
         var reward = rewardResult.value().orElseThrow();
         var prepared = inventory.prepareExchange(
@@ -76,18 +87,21 @@ public final class TradeSignHandler implements SynchronousSignHandler {
                 List.of(request(cost)),
                 List.of(request(reward))
         );
+
         if (!prepared.successful() || prepared.value().isEmpty()) {
             return SignUseResult.failure("service.sign.trade-inventory-full");
         }
+
         var committed = prepared.value().orElseThrow().commit();
         if (!committed.successful()) {
             return SignUseResult.failure("service.sign.trade-inventory-changed");
         }
+
         return SignUseResult.success(
                 "service.sign.trade-success",
                 MessageArguments.builder()
-                        .put("cost", cost.normalizedArgument())
-                        .put("reward", reward.normalizedArgument())
+                        .add(cost.normalizedArgument())
+                        .add(reward.normalizedArgument())
                         .build()
         );
     }

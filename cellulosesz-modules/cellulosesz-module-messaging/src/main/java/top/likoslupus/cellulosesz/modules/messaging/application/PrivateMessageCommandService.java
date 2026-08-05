@@ -71,7 +71,7 @@ public final class PrivateMessageCommandService {
                     ) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "service.messaging.player-offline",
-                                MessageArguments.builder().put("player", targetToken).build()
+                                MessageArguments.builder().add(targetToken).build()
                         ));
                     }
                     if (target.optionalUuid().orElseThrow().equals(sender.uuid())) {
@@ -94,7 +94,7 @@ public final class PrivateMessageCommandService {
         if (message.length() > config.maxMessageLength) {
             return Optional.of(MessageResult.failure(
                     "commands.messaging.message-too-long",
-                    MessageArguments.builder().put("maximum", config.maxMessageLength).build()
+                    MessageArguments.builder().add(config.maxMessageLength).build()
             ));
         }
         return Optional.empty();
@@ -158,7 +158,7 @@ public final class PrivateMessageCommandService {
                     if (target.optionalUuid().isEmpty()) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "commands.common.player-not-found",
-                                MessageArguments.builder().put("player", targetToken).build()
+                                MessageArguments.builder().add(targetToken).build()
                         ));
                     }
 
@@ -182,7 +182,7 @@ public final class PrivateMessageCommandService {
                                                     ? "commands.messaging.ignore-disabled"
                                                     : "commands.messaging.ignore-enabled",
                                             MessageArguments.builder()
-                                                    .put("player", target.name())
+                                                    .add(target.name())
                                                     .build()
                                     ))
                             );
@@ -213,7 +213,7 @@ public final class PrivateMessageCommandService {
                         enabled
                                 ? "commands.messaging.reply-toggle.recipient"
                                 : "commands.messaging.reply-toggle.sender",
-                        MessageArguments.builder().put("player", targetName).build()
+                        MessageArguments.empty()
                 ));
     }
 
@@ -238,7 +238,7 @@ public final class PrivateMessageCommandService {
                         enabled
                                 ? "commands.messaging.social-spy-enabled"
                                 : "commands.messaging.social-spy-disabled",
-                        MessageArguments.builder().put("player", targetName).build()
+                        MessageArguments.empty()
                 ));
     }
 

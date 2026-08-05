@@ -43,7 +43,7 @@ public final class BalanceCommandService {
         return CompletableFuture.completedFuture(EconomyCommandResult.success(
                 "commands.economy.balance-command.reply.balance",
                 MessageArguments.builder()
-                        .put("balance", economy.format(economy.balance(player.uuid())))
+                        .add(economy.format(economy.balance(player.uuid())))
                         .build()
         ));
     }
@@ -57,17 +57,15 @@ public final class BalanceCommandService {
                         ?
                         EconomyCommandResult.failure(
                                 "commands.economy.abstract-economy-command.error.player-not-found",
-                                MessageArguments.builder().put("player", input).build()
+                                MessageArguments.builder().add(input).build()
                         )
                         : EconomyCommandResult.success(
                                 "commands.economy.balance-other",
                                 MessageArguments.builder()
-                                        .put("player", target.name())
-                                        .put(
-                                                "balance",
-                                                economy.format(economy.balance(target.optionalUuid()
-                                                        .orElseThrow()))
-                                        )
+                                        .add(target.name())
+                                        .add(economy.format(economy.balance(
+                                                target.optionalUuid().orElseThrow()
+                                        )))
                                         .build()
                         )
         );
@@ -99,7 +97,10 @@ public final class BalanceCommandService {
             ));
         }
 
-        var entries = economy.topBalances(limit, new BalanceFilter(minimum, maximum));
+        var entries = economy.topBalances(
+                limit,
+                new BalanceFilter(minimum, maximum)
+        );
         if (entries.isEmpty() && page == 1) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.balance-top.empty"
@@ -116,7 +117,7 @@ public final class BalanceCommandService {
         var messages = new ArrayList<LocalizedMessage>();
         messages.add(LocalizedMessage.of(
                 "commands.economy.balance-top-header",
-                MessageArguments.builder().put("page", page).build()
+                MessageArguments.builder().add(page).build()
         ));
 
         var end = Math.min(
@@ -128,11 +129,14 @@ public final class BalanceCommandService {
                     var entry = entries.get(index);
                     messages.add(LocalizedMessage.of(
                             "commands.economy.balance-top-row",
-                            MessageArguments.builder().put("rank", index + 1).put(
-                                    "player", Optional.ofNullable(nameSnapshot.get(entry.uuid()))
+                            MessageArguments.builder()
+                                    .add(index + 1)
+                                    .add(Optional.ofNullable(nameSnapshot.get(entry.uuid()))
                                             .filter(value -> !value.isBlank())
                                             .orElse(entry.uuid().toString())
-                            ).put("balance", economy.format(entry.balance())).build()
+                                    )
+                                    .add(economy.format(entry.balance()))
+                                    .build()
                     ));
                 });
 
@@ -149,7 +153,7 @@ public final class BalanceCommandService {
             if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.abstract-economy-command.error.player-not-found",
-                        MessageArguments.builder().put("player", input).build()
+                        MessageArguments.builder().add(input).build()
                 ));
             }
 
@@ -169,9 +173,8 @@ public final class BalanceCommandService {
                             EconomyCommandResult.success(
                                     "commands.economy.eco-result",
                                     MessageArguments.builder()
-                                            .put("player", target.name())
-                                            .put("result", transaction.message())
-                                            .put("balance", economy.format(transaction.balance()))
+                                            .add(transaction.message())
+                                            .add(economy.format(transaction.balance()))
                                             .build()
                             )
                             : EconomyCommandResult.failure(transaction.message()));

@@ -98,8 +98,8 @@ public final class ItemValueCommandService {
                 messages.add(LocalizedMessage.of(
                         "commands.economy.worth-row-missing",
                         MessageArguments.builder()
-                                .put("item", entry.getKey())
-                                .put("count", entry.getValue())
+                                .add(entry.getKey())
+                                .add(entry.getValue())
                                 .build()
                 ));
                 continue;
@@ -111,22 +111,27 @@ public final class ItemValueCommandService {
             messages.add(LocalizedMessage.of(
                     "commands.economy.worth-row",
                     MessageArguments.builder()
-                            .put("item", entry.getKey())
-                            .put("count", entry.getValue())
-                            .put("amount", economy.format(line))
+                            .add(entry.getKey())
+                            .add(entry.getValue())
+                            .add(economy.format(line))
                             .build()
             ));
         }
 
         if (found == 0) {
-            return EconomyCommandResult.failure("commands.economy.worth-missing");
+            return EconomyCommandResult.failure(
+                    "commands.economy.worth-missing",
+                    MessageArguments.builder()
+                            .add(String.join(", ", quantities.keySet()))
+                            .build()
+            );
         }
 
         messages.add(LocalizedMessage.of(
                 "commands.economy.worth-total",
                 MessageArguments.builder()
-                        .put("found", found)
-                        .put("total", economy.format(total))
+                        .add(found)
+                        .add(economy.format(total))
                         .build()
         ));
 
@@ -142,7 +147,7 @@ public final class ItemValueCommandService {
 
         var parsed = items.parse(itemInput);
         if (!parsed.successful()) {
-            return CompletableFuture.completedFuture(itemParseFailure(parsed, itemInput));
+            return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
         var canonical = parsed.value().orElseThrow().normalizedItem();
@@ -150,7 +155,7 @@ public final class ItemValueCommandService {
         if (unit.isEmpty()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                     "commands.economy.worth-missing",
-                    MessageArguments.builder().put("item", canonical).build()
+                    MessageArguments.builder().add(canonical).build()
             ));
         }
 
@@ -159,38 +164,27 @@ public final class ItemValueCommandService {
                 LocalizedMessage.of(
                         "commands.economy.worth-row",
                         MessageArguments.builder()
-                                .put("item", canonical)
-                                .put("count", requested)
-                                .put("amount", economy.format(amount))
+                                .add(canonical)
+                                .add(requested)
+                                .add(economy.format(amount))
                                 .build()
                 ),
                 LocalizedMessage.of(
                         "commands.economy.worth-total",
                         MessageArguments.builder()
-                                .put("found", 1)
-                                .put("total", economy.format(amount))
+                                .add(1)
+                                .add(economy.format(amount))
                                 .build()
                 )
         )));
     }
 
-    private static EconomyCommandResult itemParseFailure(
-            PlatformResult<?> result,
-            String input
-    ) {
-        var arguments = MessageArguments.builder()
-                .put("item", input)
-                .put("detail", result.detail())
-                .build();
+    private static EconomyCommandResult itemParseFailure(PlatformResult<?> result) {
         return switch (result.status()) {
             case INVALID_ARGUMENT, INVALID_INPUT, NOT_FOUND -> EconomyCommandResult.failure(
-                    "commands.economy.sell.invalid-item",
-                    arguments
+                    "commands.economy.sell.invalid-item"
             );
-            default -> EconomyCommandResult.failed(
-                    "service.economy.persistence-failed",
-                    arguments
-            );
+            default -> EconomyCommandResult.failed("service.economy.persistence-failed");
         };
     }
 
@@ -226,13 +220,8 @@ public final class ItemValueCommandService {
                                     return CompletableFuture.completedFuture(EconomyCommandResult.success(
                                             "commands.economy.sell.success",
                                             MessageArguments.builder()
-                                                    .put("count", prepared.count())
-                                                    .put("amount", economy.format(prepared.total()))
-                                                    .put(
-                                                            "balance",
-                                                            economy.format(outcome.result()
-                                                                    .balance())
-                                                    )
+                                                    .add(prepared.count())
+                                                    .add(economy.format(prepared.total()))
                                                     .build()
                                     ));
                                 }
@@ -294,12 +283,15 @@ public final class ItemValueCommandService {
                 var input = itemInput.orElseThrow();
                 var parsed = items.parse(input);
                 if (!parsed.successful()) {
-                    return SalePreparation.failure(itemParseFailure(parsed, input));
+                    return SalePreparation.failure(itemParseFailure(parsed));
                 }
+
                 var canonical = parsed.value().orElseThrow().normalizedItem();
 
                 candidates = all.stream()
-                        .filter(view -> view.descriptor().normalizedItem().equals(canonical))
+                        .filter(view ->
+                                view.descriptor().normalizedItem().equals(canonical)
+                        )
                         .toList();
             }
             default -> candidates = all;
@@ -354,7 +346,7 @@ public final class ItemValueCommandService {
                     selector == SellSelector.ITEM
                             ? "commands.economy.worth-missing"
                             : "commands.economy.sell.no-sellable-items",
-                    itemInput.map(item -> MessageArguments.of("item", item))
+                    itemInput.map(_ -> MessageArguments.empty())
                             .orElseGet(MessageArguments::empty)
             ));
         }
@@ -363,8 +355,9 @@ public final class ItemValueCommandService {
             return SalePreparation.failure(EconomyCommandResult.failure(
                     "commands.economy.sell.not-enough",
                     MessageArguments.builder()
-                            .put("requested", requested)
-                            .put("available", requested - remaining)
+                            .add(requested - remaining)
+                            .add(itemInput.orElse("items"))
+                            .add(requested)
                             .build()
             ));
         }
@@ -381,7 +374,7 @@ public final class ItemValueCommandService {
         if (!committed.successful()) {
             return SalePreparation.failure(EconomyCommandResult.failed(
                     "commands.economy.sell.inventory-changed",
-                    MessageArguments.of("detail", committed.detail())
+                    MessageArguments.empty()
             ));
         }
 
@@ -391,7 +384,7 @@ public final class ItemValueCommandService {
     public CompletableFuture<EconomyCommandResult> setWorth(String input, BigDecimal amount) {
         var parsed = items.parse(input);
         if (!parsed.successful()) {
-            return CompletableFuture.completedFuture(itemParseFailure(parsed, input));
+            return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
         var canonical = parsed.value().orElseThrow().normalizedItem();
@@ -400,8 +393,8 @@ public final class ItemValueCommandService {
                 .thenApply(_ -> EconomyCommandResult.success(
                         "commands.economy.set-worth-command.reply.set-worth",
                         MessageArguments.builder()
-                                .put("item", canonical)
-                                .put("amount", amount.stripTrailingZeros().toPlainString())
+                                .add(canonical)
+                                .add(amount.stripTrailingZeros().toPlainString())
                                 .build()
                 ));
     }
@@ -409,7 +402,7 @@ public final class ItemValueCommandService {
     public CompletableFuture<EconomyCommandResult> removeWorth(String input) {
         var parsed = items.parse(input);
         if (!parsed.successful()) {
-            return CompletableFuture.completedFuture(itemParseFailure(parsed, input));
+            return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
         var canonical = parsed.value().orElseThrow().normalizedItem();
@@ -417,13 +410,14 @@ public final class ItemValueCommandService {
                 .removeWorth(canonical)
                 .thenApply(removed ->
                         removed
-                                ? EconomyCommandResult.success(
-                                "commands.economy.worth-removed",
-                                MessageArguments.builder().put("item", canonical).build()
-                        )
+                                ?
+                                EconomyCommandResult.success(
+                                        "commands.economy.worth-removed",
+                                        MessageArguments.builder().add(canonical).build()
+                                )
                                 : EconomyCommandResult.failure(
                                         "commands.economy.worth-missing",
-                                        MessageArguments.builder().put("item", canonical).build()
+                                        MessageArguments.builder().add(canonical).build()
                                 )
                 );
     }

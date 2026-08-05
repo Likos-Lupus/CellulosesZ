@@ -34,7 +34,7 @@ final class DefaultBanServiceTest {
     );
 
     @Test
-    void recordsTypedActorReasonAndDisconnectsAfterFirstUserBan() {
+    void ban_whenFirstAttemptSucceeds_recordsActorAndDisconnects() {
         var platform = new RecordingBanPlatform();
         var result = service(platform).ban(
                 TARGET_ID,
@@ -94,7 +94,7 @@ final class DefaultBanServiceTest {
     }
 
     @Test
-    void duplicateBanDoesNotDisconnectAndMapsToAlreadyExists() {
+    void ban_whenDuplicate_doesNotDisconnectAndReturnsAlreadyExists() {
         var platform = new RecordingBanPlatform();
         platform.banUserResult = BanPlatformResult.failure(BanPlatformStatus.ALREADY_BANNED);
 
@@ -110,7 +110,7 @@ final class DefaultBanServiceTest {
     }
 
     @Test
-    void disconnectFailureIsReportedAsPartialSuccess() {
+    void ban_whenDisconnectFails_returnsPartialSuccess() {
         var platform = new RecordingBanPlatform();
         platform.disconnectResult = BanPlatformResult.failure(BanPlatformStatus.PLATFORM_FAILURE);
 
@@ -125,7 +125,7 @@ final class DefaultBanServiceTest {
     }
 
     @Test
-    void pardonMissingUserMapsToNotFound() {
+    void unban_whenMissing_returnsNotFound() {
         var platform = new RecordingBanPlatform();
         platform.pardonUserResult = BanPlatformResult.failure(BanPlatformStatus.NOT_FOUND);
 
@@ -136,7 +136,7 @@ final class DefaultBanServiceTest {
     }
 
     @Test
-    void preservesTypedIpv6AndDisconnectsMatchingPlayers() throws Exception {
+    void banIp_withIpv6_preservesAddressAndDisconnectsMatches() throws Exception {
         var platform = new RecordingBanPlatform();
         var address = InetAddress.getByName("2001:db8::1");
 
@@ -150,7 +150,7 @@ final class DefaultBanServiceTest {
     }
 
     @Test
-    void persistenceFailureIsNotReportedAsSuccess() throws Exception {
+    void ban_whenPersistenceFails_doesNotReportSuccess() throws Exception {
         var platform = new RecordingBanPlatform();
         platform.banIpResult = BanPlatformResult.failure(BanPlatformStatus.PERSISTENCE_FAILURE);
 

@@ -38,14 +38,22 @@ public final class EnchantSignHandler implements SynchronousSignHandler {
         }
 
         if (!context.line(2).isBlank()
-                && SignHandlerSupport.count(context.line(2), 1, 255).isEmpty()
+                && SignHandlerSupport.count(
+                context.line(2),
+                1,
+                255
+        ).isEmpty()
         ) {
             return Optional.empty();
         }
 
         return Optional.of(new Parameters(
                 name,
-                SignHandlerSupport.count(context.line(2), 1, 255).orElse(1)
+                SignHandlerSupport.count(
+                        context.line(2),
+                        1,
+                        255
+                ).orElse(1)
         ));
     }
 
@@ -62,12 +70,11 @@ public final class EnchantSignHandler implements SynchronousSignHandler {
                                 SignUseResult.success(
                                         "service.sign.enchant-success",
                                         MessageArguments.builder()
-                                                .put("enchantment", parameters.name())
-                                                .put("level", parameters.level())
+                                                .add(parameters.name())
+                                                .add(parameters.level())
                                                 .build()
                                 )
-                                :
-                                        SignUseResult.failure("service.sign.enchant-failed")
+                                : SignUseResult.failure("service.sign.enchant-failed")
                 )
                 .orElseGet(() -> SignUseResult.failure("service.sign.enchant-format"));
     }

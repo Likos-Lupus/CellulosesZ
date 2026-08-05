@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class ChecksTest {
 
     @Test
-    void returnsAcceptedValuesAndInclusiveBoundaries() {
+    void require_whenValueValid_returnsValue() {
         var text = "plain";
         assertSame(text, TextChecks.requireNonBlank(text, "text"));
         assertSame(text, TextChecks.requireMaxLength(text, 5, "text"));
@@ -32,7 +32,7 @@ final class ChecksTest {
     }
 
     @Test
-    void rejectsInvalidNumericValues() {
+    void numericChecks_whenValueInvalid_rejectValue() {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> NumericChecks.requirePositive(0, "count")
@@ -72,13 +72,19 @@ final class ChecksTest {
     }
 
     @Test
-    void rejectsBlankLongAndControlText() {
-        assertThrows(IllegalArgumentException.class, () -> TextChecks.requireNonBlank("", "name"));
+    void textChecks_whenValueInvalid_rejectValue() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> TextChecks.requireNonBlank("", "name")
+        );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> TextChecks.requireNonBlank(" \t", "name")
         );
-        assertEquals("abc", TextChecks.requireMaxLength("abc", 3, "name"));
+        assertEquals(
+                "abc",
+                TextChecks.requireMaxLength("abc", 3, "name")
+        );
         assertThrows(
                 IllegalArgumentException.class,
                 () -> TextChecks.requireMaxLength("abcd", 3, "name")
@@ -94,11 +100,12 @@ final class ChecksTest {
     }
 
     @Test
-    void failuresIdentifyTheParameter() {
+    void require_whenValueInvalid_identifiesParameter() {
         var failure = assertThrows(
                 IllegalArgumentException.class,
                 () -> RangeChecks.requireInRange(8, 3, 7, "count")
         );
+
         assertTrue(failure.getMessage().contains("count"));
         assertTrue(failure.getMessage().contains("[3, 7]"));
         assertTrue(failure.getMessage().contains("8"));

@@ -37,20 +37,23 @@ public final class WarpSignHandler implements CellSignHandler {
     @Override
     public SignUseResult validate(SignUseContext context) {
         var name = context.line(1);
+
         if (name.isBlank()) {
             return SignUseResult.failure("service.sign.warp-name-required");
         }
+
         return warps.cachedWarp(name).isPresent()
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure(
                         "service.sign.warp-not-found",
-                        MessageArguments.builder().put("warp", name).build()
+                        MessageArguments.builder().add(name).build()
                 );
     }
 
     @Override
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
         var name = context.line(1);
+
         if (name.isBlank()) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.warp-name-required"
@@ -61,11 +64,12 @@ public final class WarpSignHandler implements CellSignHandler {
             if (warp.isEmpty()) {
                 return CompletableFuture.completedFuture(SignUseResult.failure(
                         "service.sign.warp-not-found",
-                        MessageArguments.builder().put("warp", name).build()
+                        MessageArguments.builder().add(name).build()
                 ));
             }
 
             var value = warp.orElseThrow();
+
             var requiredPermission = warps.requiredPermission(value);
             if (requiredPermission.isPresent()
                     && !permissions.has(context.player(), requiredPermission.orElseThrow())
@@ -75,7 +79,8 @@ public final class WarpSignHandler implements CellSignHandler {
                 ));
             }
 
-            return teleports.teleport(
+            return teleports
+                    .teleport(
                             context.player(),
                             value.location(),
                             TeleportOptions.defaults().withSafe(true).withWarmup(0)
@@ -85,11 +90,11 @@ public final class WarpSignHandler implements CellSignHandler {
                             SignUseResult.success(
                                     "service.sign.warp-success",
                                     MessageArguments.builder()
-                                            .put("warp", value.displayName())
+                                            .add(value.displayName())
                                             .build()
                             )
-                            :
-                                    SignUseResult.failure(result.message()));
+                            : SignUseResult.failure(result.message())
+                    );
         });
     }
 

@@ -26,7 +26,7 @@ final class DefaultTeleportRequestServiceTest {
     );
 
     @Test
-    void differentRequestTypesForSamePairCoexistAndPlayerSelectionIsAmbiguous() {
+    void create_whenDifferentTypesSamePair_preservesBothAndSelectionAmbiguous() {
         var service = new DefaultTeleportRequestService(CLOCK);
         var requester = player("requester");
         var target = player("target");
@@ -73,7 +73,7 @@ final class DefaultTeleportRequestServiceTest {
     }
 
     @Test
-    void duplicateRequestIsReportedWithoutReplacingStableId() {
+    void create_whenDuplicate_keepsStableRequestId() {
         var service = new DefaultTeleportRequestService(CLOCK);
         var requester = player("requester");
         var target = player("target");
@@ -98,7 +98,7 @@ final class DefaultTeleportRequestServiceTest {
     }
 
     @Test
-    void claimIsAtomicAndReleaseMakesFailureRetryable() throws Exception {
+    void claim_whenConcurrent_isAtomicAndReleaseAllowsRetry() throws Exception {
         var service = new DefaultTeleportRequestService(CLOCK);
         var request = service.create(
                 player("requester"),
@@ -130,7 +130,7 @@ final class DefaultTeleportRequestServiceTest {
     }
 
     @Test
-    void outgoingPlayerSelectionIsAmbiguousWhenBothTypesExist() {
+    void selectOutgoing_whenBothTypesExist_isAmbiguous() {
         var service = new DefaultTeleportRequestService(CLOCK);
         var requester = player("requester");
         var target = player("target");

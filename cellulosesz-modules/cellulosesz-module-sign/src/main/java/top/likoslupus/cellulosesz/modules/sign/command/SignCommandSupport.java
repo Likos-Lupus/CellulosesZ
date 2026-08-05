@@ -31,21 +31,18 @@ final class SignCommandSupport {
                 ? "commands.sign.editsign.success"
                 : "commands.sign.editsign.failed";
 
-        policy.respond(
-                result.successful(),
-                LocalizedMessage.of(
+        var message = result.successful()
+                ? LocalizedMessage.of(key)
+                : LocalizedMessage.of(
                         key,
                         MessageArguments.builder()
-                                .put("status", result.status().name().toLowerCase())
-                                .put(
-                                        "reason",
-                                        result.detail().isBlank()
-                                                ? "-"
-                                                : result.detail()
+                                .add(result.detail().isBlank()
+                                        ? result.status().name().toLowerCase()
+                                        : result.detail()
                                 )
                                 .build()
-                )
-        );
+                );
+        policy.respond(result.successful(), message);
         return result.successful()
                 ? 1
                 : 0;

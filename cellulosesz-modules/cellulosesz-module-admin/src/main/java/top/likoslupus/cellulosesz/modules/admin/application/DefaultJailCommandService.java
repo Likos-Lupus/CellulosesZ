@@ -84,7 +84,7 @@ public final class DefaultJailCommandService implements JailCommandService {
             return completed(AdminResult.failure(
                     AdminStatus.NOT_FOUND,
                     "commands.common.unknown-player",
-                    MessageArguments.builder().put("player", player).build()
+                    MessageArguments.builder().add(player).build()
             ));
         }
 
@@ -125,7 +125,7 @@ public final class DefaultJailCommandService implements JailCommandService {
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "commands.common.player-not-found",
-                                MessageArguments.builder().put("player", player).build()
+                                MessageArguments.builder().add(player).build()
                         ))
                         : jails.unjail(
                                 value.optionalUuid().orElseThrow(),

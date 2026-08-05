@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
 final class DefaultKitServiceTest {
 
     @Test
-    void savePublishesOnlyAfterPersistenceAndKeepsImmutableDefinition() {
+    void save_whenPersistenceSucceeds_publishesImmutableDefinition() {
         var storage = new DelayedStorage();
         var config = new KitConfig();
 
@@ -115,7 +115,7 @@ final class DefaultKitServiceTest {
     }
 
     @Test
-    void failedSaveDoesNotPublishKit() {
+    void save_whenPersistenceFails_doesNotPublishKit() {
         var storage = new DelayedStorage();
         var config = new KitConfig();
         config.createStarterKitWhenEmpty = false;
@@ -137,7 +137,7 @@ final class DefaultKitServiceTest {
     }
 
     @Test
-    void stagedReloadPublishesOnlyOnCommitAndRollbackRestoresPreviousSnapshot() {
+    void reload_whenCommitted_publishesAndRollbackRestores() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
 
@@ -173,7 +173,7 @@ final class DefaultKitServiceTest {
     }
 
     @Test
-    void stalePreparedReloadCannotOverwriteNewerDefinitionMutation() {
+    void reload_whenPreparedStateStale_doesNotOverwriteNewerDefinition() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
         var service = service(storage);
@@ -192,7 +192,7 @@ final class DefaultKitServiceTest {
     }
 
     @Test
-    void failedPreparationLeavesLiveSnapshotUntouched() {
+    void reload_whenPrepareFails_keepsLiveSnapshot() {
         var storage = new ReloadStorage();
         storage.loaded = List.of(KitMapper.fromDomain(kit("old", "Old")));
         var service = service(storage);

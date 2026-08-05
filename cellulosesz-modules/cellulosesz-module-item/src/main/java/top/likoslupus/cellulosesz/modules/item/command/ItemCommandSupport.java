@@ -66,21 +66,22 @@ final class ItemCommandSupport {
                 ? "commands.item.operation.success"
                 : "commands.item.operation.failed";
 
+        var arguments = result.successful()
+                ?
+                MessageArguments.builder()
+                        .add(command)
+                        .build()
+                : MessageArguments.builder()
+                        .add(command)
+                        .add(result.status().name().toLowerCase())
+                        .add(result.detail().isBlank()
+                                ? "-"
+                                : result.detail()
+                        )
+                        .build();
         policy.respond(
                 result.successful(),
-                LocalizedMessage.of(
-                        key,
-                        MessageArguments.builder()
-                                .put("command", command)
-                                .put("status", result.status().name().toLowerCase())
-                                .put(
-                                        "detail",
-                                        result.detail().isBlank()
-                                                ? "-"
-                                                : result.detail()
-                                )
-                                .build()
-                )
+                LocalizedMessage.of(key, arguments)
         );
 
         return result.successful()

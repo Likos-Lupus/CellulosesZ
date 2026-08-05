@@ -130,7 +130,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
         if (result.success()) {
             return TeleportCommandResult.success(
                     result.message().key(),
-                    result.message().placeholders()
+                    result.message().arguments()
             );
         }
 
@@ -153,7 +153,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
         return TeleportCommandResult.failure(
                 status,
                 result.message().key(),
-                result.message().placeholders()
+                result.message().arguments()
         );
     }
 
@@ -177,9 +177,8 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                             ? "commands.teleport.set-tpr-command.reply.minrange"
                             : "commands.teleport.set-tpr-command.reply.maxrange",
                     MessageArguments.builder()
-                            .put("world", resolved.orElseThrow())
-                            .put(
-                                    "radius",
+                            .add(resolved.orElseThrow())
+                            .add(
                                     minimum
                                             ? current.minRadius()
                                             : current.maxRadius()
@@ -207,8 +206,8 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                                 ? "commands.teleport.set-tpr-command.reply.minrange"
                                 : "commands.teleport.set-tpr-command.reply.maxrange",
                         MessageArguments.builder()
-                                .put("world", resolved.orElseThrow())
-                                .put("radius", value)
+                                .add(resolved.orElseThrow())
+                                .add(value)
                                 .build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(
@@ -234,9 +233,9 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                 .thenApply(_ -> TeleportCommandResult.success(
                         "commands.teleport.set-tpr-command.reply.center",
                         MessageArguments.builder()
-                                .put("world", world)
-                                .put("x", coordinates.x())
-                                .put("z", coordinates.z())
+                                .add(world)
+                                .add(coordinates.x())
+                                .add(coordinates.z())
                                 .build()
                 ))
                 .exceptionally(_ -> TeleportCommandResult.failure(

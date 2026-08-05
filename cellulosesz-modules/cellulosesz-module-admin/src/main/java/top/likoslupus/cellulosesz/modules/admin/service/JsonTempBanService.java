@@ -194,9 +194,10 @@ public final class JsonTempBanService
 
                 return AdminResult.success(
                         "service.admin.temp-ban-success",
-                        MessageArguments.builder().put("player", name).build()
+                        MessageArguments.builder().add(name).build()
                 );
-            }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
+            }).thenCompose(result -> !result.success()
+                    || !settings.tempBanKickOnlinePlayers()
                     ? completed(result)
                     : disconnectUser(
                             uuid,
@@ -239,9 +240,10 @@ public final class JsonTempBanService
 
                 return AdminResult.success(
                         "service.admin.temp-ban-ip-success",
-                        MessageArguments.builder().put("address", canonical).build()
+                        MessageArguments.builder().add(canonical).build()
                 );
-            }).thenCompose(result -> (!result.success() || !settings.tempBanKickOnlinePlayers())
+            }).thenCompose(result -> !result.success()
+                    || !settings.tempBanKickOnlinePlayers()
                     ? completed(result)
                     : disconnectAddress(
                             address,
@@ -268,12 +270,12 @@ public final class JsonTempBanService
                         ?
                         AdminResult.success(
                                 "service.admin.temp-unban-success",
-                                MessageArguments.builder().put("player", name).build()
+                                MessageArguments.empty()
                         )
                         : AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
                                 "service.admin.temp-ban-not-found",
-                                MessageArguments.builder().put("player", name).build()
+                                MessageArguments.empty()
                         )
         ));
     }
@@ -289,12 +291,12 @@ public final class JsonTempBanService
                             ?
                             AdminResult.success(
                                     "service.admin.temp-unban-ip-success",
-                                    MessageArguments.builder().put("address", canonical).build()
+                                    MessageArguments.empty()
                             )
                             : AdminResult.failure(
                                     AdminStatus.NOT_FOUND,
                                     "service.admin.temp-ban-ip-not-found",
-                                    MessageArguments.builder().put("address", canonical).build()
+                                    MessageArguments.empty()
                             )
             );
         });
@@ -379,13 +381,13 @@ public final class JsonTempBanService
                                 ? success
                                 : AdminResult.partial(
                                         "service.admin.temp-ban-ip-success",
-                                        success.message().placeholders()
+                                        success.message().arguments()
                                 )
                 )
                 .exceptionally(_ ->
                         AdminResult.partial(
                                 "service.admin.temp-ban-ip-success",
-                                success.message().placeholders()
+                                success.message().arguments()
                         )
                 );
     }
@@ -459,13 +461,13 @@ public final class JsonTempBanService
                                 ? success
                                 : AdminResult.partial(
                                         "service.admin.temp-ban-success",
-                                        success.message().placeholders()
+                                        success.message().arguments()
                                 )
                 )
                 .exceptionally(_ ->
                         AdminResult.partial(
                                 "service.admin.temp-ban-success",
-                                success.message().placeholders()
+                                success.message().arguments()
                         )
                 );
     }
@@ -497,7 +499,7 @@ public final class JsonTempBanService
         return renderer.render(
                 audience.locale(player),
                 "service.admin.temp-ban-kick",
-                MessageArguments.builder().put("reason", reason).build()
+                MessageArguments.builder().add(reason).build()
         );
     }
 

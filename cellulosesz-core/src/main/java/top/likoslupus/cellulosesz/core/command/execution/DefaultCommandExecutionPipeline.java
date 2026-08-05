@@ -8,7 +8,6 @@ import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.Comparator;
 import java.util.List;
@@ -16,6 +15,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,11 +46,12 @@ public final class DefaultCommandExecutionPipeline
 
     private static Throwable unwrap(Throwable failure) {
         var current = failure;
-        while ((
-                current instanceof CompletionException
-                        || current instanceof java.util.concurrent.ExecutionException
-        )
-                && current.getCause() != null
+        while (
+                (
+                        current instanceof CompletionException
+                                || current instanceof ExecutionException
+                )
+                        && current.getCause() != null
         ) {
             current = current.getCause();
         }
@@ -143,7 +144,7 @@ public final class DefaultCommandExecutionPipeline
                 failure
         );
         var task = (Runnable) () -> context.error(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_COMMON_PLATFORM_INTERNAL_ERROR
+                "commands.common.platform.internal-error"
         ));
         var serverThread = services
                 .optional(ServerThreadExecutor.class)

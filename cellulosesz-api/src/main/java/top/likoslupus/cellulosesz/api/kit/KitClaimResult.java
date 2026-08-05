@@ -17,8 +17,8 @@ public record KitClaimResult(
         return new KitClaimResult(true, LocalizedMessage.of(key));
     }
 
-    public static KitClaimResult success(String key, MessageArguments placeholders) {
-        return new KitClaimResult(true, LocalizedMessage.of(key, placeholders));
+    public static KitClaimResult success(String key, MessageArguments arguments) {
+        return new KitClaimResult(true, LocalizedMessage.of(key, arguments));
     }
 
     public static KitClaimResult failure(LocalizedMessage message) {
@@ -29,8 +29,8 @@ public record KitClaimResult(
         return new KitClaimResult(false, LocalizedMessage.of(key));
     }
 
-    public static KitClaimResult failure(String key, MessageArguments placeholders) {
-        return new KitClaimResult(false, LocalizedMessage.of(key, placeholders));
+    public static KitClaimResult failure(String key, MessageArguments arguments) {
+        return new KitClaimResult(false, LocalizedMessage.of(key, arguments));
     }
 
 }

@@ -54,11 +54,13 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
                 descriptor,
                 "service.sign.sell-format"
         );
+
         if (!itemResult.success() || price(context).isEmpty()) {
             return itemResult.success()
                     ? SignUseResult.failure("service.sign.sell-format")
                     : itemResult;
         }
+
         return SignUseResult.success("service.sign.valid");
     }
 
@@ -66,8 +68,11 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
     public CompletableFuture<SignUseResult> use(SignUseContext context) {
         var descriptorResult = item(context);
         var price = price(context);
-        if (!descriptorResult.successful() || descriptorResult.value().isEmpty()
-                || price.isEmpty()) {
+
+        if (!descriptorResult.successful()
+                || descriptorResult.value().isEmpty()
+                || price.isEmpty()
+        ) {
             return CompletableFuture.completedFuture(
                     SignHandlerSupport.itemFailure(
                             descriptorResult.status(),
@@ -75,6 +80,7 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
                     )
             );
         }
+
         var descriptor = descriptorResult.value().orElseThrow();
         var prepared = inventory.prepareExchange(
                 context.player(),
@@ -84,19 +90,24 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
                 )),
                 List.of()
         );
+
         if (!prepared.successful() || prepared.value().isEmpty()) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
-                    "service.sign.sell-not-enough"));
+                    "service.sign.sell-not-enough"
+            ));
         }
 
         var mutation = prepared.value().orElseThrow();
+
         var committed = mutation.commit();
         if (!committed.successful()) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
-                    "service.sign.sell-not-enough"));
+                    "service.sign.sell-not-enough"
+            ));
         }
 
-        return economy.deposit(
+        return economy
+                .deposit(
                         context.player().uuid(),
                         price.orElseThrow(),
                         TransactionCause.command(
@@ -109,21 +120,36 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
                         return CompletableFuture.completedFuture(SignUseResult.success(
                                 "service.sign.sell-success",
                                 MessageArguments.builder()
-                                        .put("count", descriptor.count())
-                                        .put("item", descriptor.normalizedItem())
-                                        .put("price", economy.format(price.orElseThrow()))
+                                        .add(descriptor.count())
+                                        .add(descriptor.normalizedItem())
+                                        .add(economy.format(price.orElseThrow()))
                                         .build()
                         ));
                     }
-                    return rollback(context, mutation, null)
-                            .thenApply(rollback -> rollback.successful()
-                                    ? SignUseResult.failure(deposit.message())
-                                    : SignUseResult.failure("service.sign.sell-rollback-failed"));
+
+                    return rollback(
+                            context,
+                            mutation,
+                            null
+                    ).thenApply(rollback -> rollback.successful()
+                            ? SignUseResult.failure(deposit.message())
+                            : SignUseResult.failure("service.sign.sell-rollback-failed")
+                    );
                 })
-                .exceptionallyCompose(failure -> rollback(context, mutation, failure)
-                        .thenApply(rollback -> rollback.successful()
-                                ? SignUseResult.failure("service.sign.execution-failed")
-                                : SignUseResult.failure("service.sign.sell-rollback-failed")));
+                .exceptionallyCompose(failure -> rollback(
+                                context,
+                                mutation,
+                                failure
+                        ).thenApply(rollback -> rollback.successful()
+                                ?
+                                SignUseResult.failure(
+                                        "service.sign.execution-failed",
+                                        MessageArguments.builder()
+                                                .add(failure.getClass().getSimpleName())
+                                                .build()
+                                )
+                                : SignUseResult.failure("service.sign.sell-rollback-failed"))
+                );
     }
 
     private CompletableFuture<PlatformResult<Void>> rollback(
@@ -133,14 +159,18 @@ public final class SellSignHandler extends AbstractTradeSignHandler implements C
     ) {
         return serverThread.submit(mutation::rollback).thenApply(result -> {
             if (!result.successful()) {
-                var message = "Failed to restore exact inventory after Sell sign failure for "
-                        + context.player().uuid() + ": " + result.detail();
+                var message = "Failed to restore exact inventory after Sell sign failure for %s: %s".formatted(
+                        context.player().uuid(),
+                        result.detail()
+                );
+
                 if (failure == null) {
                     logger.error(message);
                 } else {
                     logger.error(message, failure);
                 }
             }
+
             return result;
         });
     }

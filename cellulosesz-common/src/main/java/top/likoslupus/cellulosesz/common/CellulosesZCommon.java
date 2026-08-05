@@ -24,6 +24,7 @@ import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.*;
 import top.likoslupus.cellulosesz.common.playerstate.MinecraftPlayerStateService;
 import top.likoslupus.cellulosesz.common.teleport.MinecraftTeleportOperations;
+import top.likoslupus.cellulosesz.common.text.MinecraftLanguageResources;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorldDirectory;
 
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -53,6 +54,13 @@ public final class CellulosesZCommon {
         var commands = new CommandRegistry();
         var serverThread = new MinecraftServerThreadExecutor(server);
         var treeRefresh = new CommandTreeRefreshService(server);
+        var languageResources = new MinecraftLanguageResources(
+                bootstrap.messageService(),
+                bootstrap.logger()
+        );
+
+        languageResources.loadBundledFallback();
+        languageResources.register();
 
         bootstrap.registerService(
                 MinecraftServerHandle.class,

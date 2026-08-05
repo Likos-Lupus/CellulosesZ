@@ -3,11 +3,11 @@ package top.likoslupus.cellulosesz.modules.text.application;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.TextService;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.IntStream;
 
 import static java.util.Objects.requireNonNull;
 
@@ -22,7 +22,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     @Override
     public PageResult info(int page) {
         return page(
-                GeneratedMessageKeys.COMMANDS_TEXT_INFO_TITLE,
+                "commands.text.info-title",
                 MessageArguments.empty(),
                 texts.info(),
                 page
@@ -32,7 +32,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     @Override
     public PageResult motd(int page) {
         return page(
-                GeneratedMessageKeys.COMMANDS_TEXT_MOTD_TITLE,
+                "commands.text.motd-title",
                 MessageArguments.empty(),
                 texts.motd(),
                 page
@@ -42,7 +42,7 @@ public final class DefaultTextCommandService implements TextCommandService {
     @Override
     public PageResult rules(int page) {
         return page(
-                GeneratedMessageKeys.COMMANDS_TEXT_RULES_TITLE,
+                "commands.text.rules-title",
                 MessageArguments.empty(),
                 texts.rules(),
                 page
@@ -54,14 +54,14 @@ public final class DefaultTextCommandService implements TextCommandService {
         var lines = texts.custom(name);
         if (lines.isEmpty()) {
             return failure(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_TEXT_CUSTOM_MISSING,
-                    MessageArguments.builder().put("name", name).build()
+                    "commands.text.custom-missing",
+                    MessageArguments.empty()
             ));
         }
 
         return page(
-                GeneratedMessageKeys.COMMANDS_TEXT_CUSTOM_TITLE,
-                MessageArguments.of("name", name),
+                "commands.text.custom-title",
+                MessageArguments.builder().add(name).build(),
                 lines,
                 page
         );
@@ -74,15 +74,16 @@ public final class DefaultTextCommandService implements TextCommandService {
 
     private PageResult page(
             String titleKey,
-            MessageArguments titlePlaceholders,
+            MessageArguments titleArguments,
             List<String> lines,
             int requestedPage
     ) {
         if (requestedPage < 1) {
-            return failure(LocalizedMessage.of(GeneratedMessageKeys.COMMANDS_COMMON_INVALID_PAGE));
+            return failure(LocalizedMessage.of("commands.common.invalid-page"));
         }
+
         if (lines.isEmpty()) {
-            return failure(LocalizedMessage.of(GeneratedMessageKeys.COMMANDS_TEXT_EMPTY));
+            return failure(LocalizedMessage.of("commands.text.empty"));
         }
 
         var pageSize = Math.max(1, texts.pageSize());
@@ -90,8 +91,8 @@ public final class DefaultTextCommandService implements TextCommandService {
 
         if (requestedPage > pages) {
             return failure(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                    MessageArguments.builder().put("pages", pages).build()
+                    "commands.common.page-out-of-range",
+                    MessageArguments.builder().add(pages).build()
             ));
         }
 
@@ -100,26 +101,26 @@ public final class DefaultTextCommandService implements TextCommandService {
             start = Math.multiplyExact(requestedPage - 1, pageSize);
         } catch (ArithmeticException _) {
             return failure(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                    MessageArguments.builder().put("pages", pages).build()
+                    "commands.common.page-out-of-range",
+                    MessageArguments.builder().add(pages).build()
             ));
         }
 
         var messages = new ArrayList<LocalizedMessage>();
         var titleValues = MessageArguments.builder()
-                .putAll(titlePlaceholders)
-                .put("page", requestedPage)
-                .put("pages", pages)
+                .addAll(titleArguments)
+                .add(requestedPage)
+                .add(pages)
                 .build();
         messages.add(LocalizedMessage.of(titleKey, titleValues));
 
         var end = (int) Math.min((long) start + pageSize, lines.size());
-        for (var index = start; index < end; index++) {
-            messages.add(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_TEXT_LINE,
-                    MessageArguments.of("line", lines.get(index))
-            ));
-        }
+        IntStream.range(start, end)
+                .mapToObj(index -> LocalizedMessage.of(
+                        "commands.text.line",
+                        MessageArguments.builder().add(lines.get(index)).build()
+                ))
+                .forEach(messages::add);
 
         return new PageResult(true, messages);
     }

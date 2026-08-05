@@ -74,7 +74,7 @@ public final class ChatCommandService {
                 .submit(() -> deliver(
                         players.onlinePlayers(),
                         "messaging.broadcast",
-                        MessageArguments.of("message", message)
+                        MessageArguments.builder().add(message).build()
                 ))
                 .thenApply(counts -> deliveryResult(
                         "commands.messaging.broadcast-result",
@@ -90,7 +90,7 @@ public final class ChatCommandService {
         if (message.length() > config.maxMessageLength) {
             return Optional.of(MessageResult.failure(
                     "commands.messaging.message-too-long",
-                    MessageArguments.builder().put("maximum", config.maxMessageLength).build()
+                    MessageArguments.builder().add(config.maxMessageLength).build()
             ));
         }
 
@@ -100,14 +100,14 @@ public final class ChatCommandService {
     private Counts deliver(
             List<CellPlayer> recipients,
             String key,
-            MessageArguments placeholders
+            MessageArguments arguments
     ) {
         var sent = 0;
         var failed = 0;
         for (var player : recipients) {
             var result = audiences.send(
                     player,
-                    renderer.render(audiences.locale(player), key, placeholders)
+                    renderer.render(audiences.locale(player), key, arguments)
             );
             if (result.successful()) {
                 sent++;
@@ -128,9 +128,9 @@ public final class ChatCommandService {
             MessageArguments extra
     ) {
         var values = MessageArguments.builder()
-                .putAll(extra)
-                .put("sent", counts.sent())
-                .put("failed", counts.failed())
+                .addAll(extra)
+                .add(counts.sent())
+                .add(counts.failed())
                 .build();
         return counts.sent() > 0
                 ? MessageResult.success(key, values)
@@ -162,21 +162,20 @@ public final class ChatCommandService {
                             deliver(
                                     recipients,
                                     "messaging.broadcast",
-                                    MessageArguments.of("message", message)
+                                    MessageArguments.builder().add(message).build()
                             )
                     );
                 })
                 .thenApply(result -> switch (result.resolution().status()) {
                     case NOT_FOUND -> MessageResult.failure(
                             "commands.messaging.broadcast-world-command.world",
-                            MessageArguments.builder().put("world", input).build()
+                            MessageArguments.builder().add(input).build()
                     );
                     case AMBIGUOUS -> MessageResult.failure(
                             "commands.messaging.broadcast-world-command.ambiguous",
                             MessageArguments.builder()
-                                    .put("world", input)
-                                    .put(
-                                            "candidates",
+                                    .add(input)
+                                    .add(
                                             String.join(", ", result.resolution().candidates())
                                     )
                                     .build()
@@ -184,10 +183,9 @@ public final class ChatCommandService {
                     case RESOLVED -> deliveryResult(
                             "commands.messaging.broadcast-world-result",
                             result.counts(),
-                            MessageArguments.of(
-                                    "world",
-                                    result.resolution().worldId().orElseThrow()
-                            )
+                            MessageArguments.builder()
+                                    .add(result.resolution().worldId().orElseThrow())
+                                    .build()
                     );
                 });
     }
@@ -218,8 +216,8 @@ public final class ChatCommandService {
                             recipients,
                             "messaging.helpop",
                             MessageArguments.builder()
-                                    .put("sender", senderName)
-                                    .put("message", message)
+                                    .add(senderName)
+                                    .add(message)
                                     .build()
                     );
                 })
@@ -244,12 +242,14 @@ public final class ChatCommandService {
                             recipients,
                             "messaging.me",
                             MessageArguments.builder()
-                                    .put("player", displayNames.displayName(actor))
-                                    .put("action", action)
+                                    .add(displayNames.displayName(actor))
+                                    .add(action)
                                     .build()
                     );
                 })
-                .thenApply(counts -> deliveryResult("commands.messaging.me-result", counts));
+                .thenApply(counts ->
+                        deliveryResult("commands.messaging.me-result", counts)
+                );
     }
 
     private boolean canSee(CellPlayer viewer, CellPlayer target) {
@@ -279,8 +279,8 @@ public final class ChatCommandService {
             return MessageResult.success(
                     "player.list",
                     MessageArguments.builder()
-                            .put("count", visible.size())
-                            .put("players", text)
+                            .add(visible.size())
+                            .add(text)
                             .build()
             );
         });

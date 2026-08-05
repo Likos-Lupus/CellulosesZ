@@ -50,7 +50,7 @@ public final class MinecraftCommandResponder {
                 renderer.render(
                         locale(source),
                         message.key(),
-                        message.placeholders()
+                        message.arguments()
                 ),
                 error
         ));

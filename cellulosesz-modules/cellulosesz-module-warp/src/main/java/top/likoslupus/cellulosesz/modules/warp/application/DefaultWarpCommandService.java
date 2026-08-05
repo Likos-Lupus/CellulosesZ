@@ -11,7 +11,6 @@ import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
-import top.likoslupus.cellulosesz.core.i18n.GeneratedMessageKeys;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
 import java.time.Duration;
@@ -67,7 +66,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
         return warps.warps()
                 .handle((available, failure) -> {
                     if (failure != null) {
-                        return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                        return failed("service.warp.persistence-failed");
                     }
 
                     var visible = available.stream()
@@ -77,15 +76,15 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             .sorted(Comparator.comparing(Warp::name))
                             .toList();
                     if (visible.isEmpty()) {
-                        return success(GeneratedMessageKeys.COMMANDS_WARP_LIST_EMPTY);
+                        return success("commands.warp.list-empty");
                     }
 
                     var pageSize = current.pageSize();
                     var pages = Math.max(1, (visible.size() + pageSize - 1) / pageSize);
                     if (requestedPage < 1 || requestedPage > pages) {
                         return failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                                MessageArguments.builder().put("pages", pages).build()
+                                "commands.common.page-out-of-range",
+                                MessageArguments.builder().add(pages).build()
                         ));
                     }
 
@@ -94,8 +93,8 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                         from = Math.multiplyExact(requestedPage - 1, pageSize);
                     } catch (ArithmeticException _) {
                         return failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_COMMON_PAGE_OUT_OF_RANGE,
-                                MessageArguments.builder().put("pages", pages).build()
+                                "commands.common.page-out-of-range",
+                                MessageArguments.builder().add(pages).build()
                         ));
                     }
 
@@ -105,11 +104,11 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             .toList();
 
                     return success(LocalizedMessage.of(
-                            GeneratedMessageKeys.COMMANDS_WARP_LIST_PAGE,
+                            "commands.warp.list-page",
                             MessageArguments.builder()
-                                    .put("warps", String.join(", ", names))
-                                    .put("page", requestedPage)
-                                    .put("pages", pages)
+                                    .add(requestedPage)
+                                    .add(pages)
+                                    .add(String.join(", ", names))
                                     .build()
                     ));
                 });
@@ -123,6 +122,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     ) {
         var name = normalize(rawName);
         var current = config;
+
         if (!request.bypassCooldown()) {
             var remaining = cooldowns.remaining(request.playerUuid(), COOLDOWN_KEY);
             if (!remaining.isZero()) {
@@ -134,9 +134,10 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                                         : 0
                         )
                 );
+
                 return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                        GeneratedMessageKeys.COMMANDS_WARP_COOLDOWN,
-                        MessageArguments.builder().put("seconds", seconds).build()
+                        "commands.warp.cooldown",
+                        MessageArguments.builder().add(seconds).build()
                 )));
             }
         }
@@ -152,7 +153,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                 .handle((found, loadFailure) -> {
                     if (loadFailure != null) {
                         return CompletableFuture.completedFuture(failed(
-                                GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED
+                                "service.warp.persistence-failed"
                         ));
                     }
 
@@ -163,7 +164,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                     var warp = found.orElseThrow();
                     if (!allowed(warp, hasPermission)) {
                         return CompletableFuture.completedFuture(failure(
-                                GeneratedMessageKeys.COMMANDS_WARP_WARP_COMMAND_ERROR_DO_NOT_PERMISSION_USE_WARP
+                                "commands.warp.warp-command.error.do-not-permission-use-warp"
                         ));
                     }
 
@@ -180,20 +181,22 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     ) {
         var name = rawName.trim();
         var invalid = validateName(name);
+
         if (invalid != null) {
             return CompletableFuture.completedFuture(failure(invalid));
         }
 
         var key = normalize(name);
-        return warps.warp(key)
+        return warps
+                .warp(key)
                 .thenCompose(existing -> {
                     if (existing.isPresent()
                             && !hasPermission.test("cellulosesz.warp.overwrite")
                             && !hasPermission.test("cellulosesz.warp.overwrite." + key)
                     ) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_WARP_SET_WARP_COMMAND_ERROR_EXISTS,
-                                MessageArguments.builder().put("warp", name).build()
+                                "commands.warp.set-warp-command.error.exists",
+                                MessageArguments.builder().add(name).build()
                         )));
                     }
 
@@ -206,53 +209,57 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                                 if (online.isEmpty()) {
                                     return CompletableFuture.completedFuture(failure(
                                             LocalizedMessage.of(
-                                                    GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                                    "commands.common.player-offline",
                                                     MessageArguments.builder()
-                                                            .put("player", request.playerName())
+                                                            .add(request.playerName())
                                                             .build()
                                             )
                                     ));
                                 }
 
                                 return serverThread
-                                        .submit(() -> locations.currentLocation(online.orElseThrow()))
+                                        .submit(() ->
+                                                locations.currentLocation(online.orElseThrow())
+                                        )
                                         .thenCompose(location ->
                                                 warps.setWarp(key, location, request.playerUuid())
                                         )
                                         .thenApply(_ -> success(LocalizedMessage.of(
-                                                GeneratedMessageKeys.COMMANDS_WARP_SET_WARP_COMMAND_REPLY_SET_WARP,
-                                                MessageArguments.builder().put("warp", name).build()
+                                                "commands.warp.set-warp-command.reply.set-warp",
+                                                MessageArguments.builder().add(name).build()
                                         )));
                             });
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED));
+                .exceptionally(_ -> failed("service.warp.persistence-failed"));
     }
 
     @Override
     public CompletableFuture<Result> delete(String rawName) {
         var name = rawName.trim();
         var invalid = validateName(name);
+
         if (invalid != null) {
             return CompletableFuture.completedFuture(failure(invalid));
         }
 
         try {
-            return warps.deleteWarp(name)
+            return warps
+                    .deleteWarp(name)
                     .handle((deleted, failure) -> {
                         if (failure != null) {
-                            return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                            return failed("service.warp.persistence-failed");
                         }
 
                         if (!deleted) {
                             return failure(LocalizedMessage.of(
-                                    GeneratedMessageKeys.COMMANDS_WARP_DEL_WARP_COMMAND_ERROR_WARP_DOES_NOT_EXIST,
-                                    MessageArguments.builder().put("warp", name).build()
+                                    "commands.warp.del-warp-command.error.warp-does-not-exist",
+                                    MessageArguments.builder().add(name).build()
                             ));
                         }
 
                         return success(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_WARP_DEL_WARP_COMMAND_REPLY_DELETED_WARP,
-                                MessageArguments.builder().put("warp", name).build()
+                                "commands.warp.del-warp-command.reply.deleted-warp",
+                                MessageArguments.builder().add(name).build()
                         ));
                     });
         } catch (IllegalArgumentException _) {
@@ -264,37 +271,39 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     public CompletableFuture<Result> info(String rawName) {
         var name = rawName.trim();
         var invalid = validateName(name);
+
         if (invalid != null) {
             return CompletableFuture.completedFuture(failure(invalid));
         }
 
         try {
-            return warps.warp(name)
+            return warps
+                    .warp(name)
                     .handle((warp, failure) -> {
                         if (failure != null) {
-                            return failed(GeneratedMessageKeys.SERVICE_WARP_PERSISTENCE_FAILED);
+                            return failed("service.warp.persistence-failed");
                         }
 
                         if (warp.isEmpty()) {
                             return failure(LocalizedMessage.of(
-                                    GeneratedMessageKeys.COMMANDS_WARP_WARP_INFO_COMMAND_ERROR_WARP_DOES_NOT_EXIST,
-                                    MessageArguments.builder().put("warp", name).build()
+                                    "commands.warp.warp-info-command.error.warp-does-not-exist",
+                                    MessageArguments.builder().add(name).build()
                             ));
                         }
 
                         var value = warp.orElseThrow();
                         return success(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_WARP_WARP_INFO_COMMAND_REPLY_WARP_AT,
+                                "commands.warp.warp-info-command.reply.warp-at",
                                 MessageArguments.builder()
-                                        .put("warp", value.name())
-                                        .put("location", value.location().compact())
+                                        .add(value.name())
+                                        .add(value.location().compact())
                                         .build()
                         ));
                     });
         } catch (IllegalArgumentException _) {
             return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_WARP_WARP_INFO_COMMAND_ERROR_WARP_DOES_NOT_EXIST,
-                    MessageArguments.builder().put("warp", name).build()
+                    "commands.warp.warp-info-command.error.warp-does-not-exist",
+                    MessageArguments.builder().add(name).build()
             )));
         }
     }
@@ -324,16 +333,17 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
     private @Nullable LocalizedMessage validateName(String name) {
         var current = config;
+
         if (name.isBlank() || name.length() > current.maxLength()) {
             return LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_WARP_ABSTRACT_WARP_COMMAND_ERROR_WARP_NAMES_CANNOT_EMPTY_LONGER_THAN_CHARACTERS,
-                    MessageArguments.builder().put("maximum_length", current.maxLength()).build()
+                    "commands.warp.abstract-warp-command.error.warp-names-cannot-empty-longer-than-characters",
+                    MessageArguments.builder().add(current.maxLength()).build()
             );
         }
 
         if (!current.pattern().matcher(name).matches()) {
             return LocalizedMessage.of(
-                    GeneratedMessageKeys.COMMANDS_WARP_ABSTRACT_WARP_COMMAND_ERROR_WARP_NAMES_MAY_ONLY_CONTAIN_CONFIGURED_CHARACTERS
+                    "commands.warp.abstract-warp-command.error.warp-names-may-only-contain-configured-characters"
             );
         }
 
@@ -346,8 +356,8 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
     private Result missing(String name) {
         return failure(LocalizedMessage.of(
-                GeneratedMessageKeys.COMMANDS_WARP_WARP_COMMAND_ERROR_WARP_DOES_NOT_EXIST,
-                MessageArguments.builder().put("warp", name).build()
+                "commands.warp.warp-command.error.warp-does-not-exist",
+                MessageArguments.builder().add(name).build()
         ));
     }
 
@@ -365,9 +375,9 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                 .thenCompose(online -> {
                     if (online.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
-                                GeneratedMessageKeys.COMMANDS_COMMON_PLAYER_OFFLINE,
+                                "commands.common.player-offline",
                                 MessageArguments.builder()
-                                        .put("player", request.playerName())
+                                        .add(request.playerName())
                                         .build()
                         )));
                     }
@@ -401,14 +411,14 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                                 }
 
                                 return success(LocalizedMessage.of(
-                                        GeneratedMessageKeys.COMMANDS_WARP_WARP_COMMAND_REPLY_TELEPORTED_WARP,
+                                        "commands.warp.warp-command.reply.teleported-warp",
                                         MessageArguments.builder()
-                                                .put("target", warp.displayName())
+                                                .add(warp.displayName())
                                                 .build()
                                 ));
                             });
                 })
-                .exceptionally(_ -> failed(GeneratedMessageKeys.COMMANDS_TELEPORT_REQUEST_FAILED));
+                .exceptionally(_ -> failed("commands.teleport.request.failed"));
     }
 
     private Result failed(String key) {

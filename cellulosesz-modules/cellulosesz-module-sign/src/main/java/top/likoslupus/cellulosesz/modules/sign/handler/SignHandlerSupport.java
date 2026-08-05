@@ -35,27 +35,40 @@ final class SignHandlerSupport {
         if (!parsed.successful() || parsed.value().isEmpty()) {
             return itemFailure(parsed.status(), formatKey);
         }
+
         var item = parsed.value().orElseThrow();
         var valid = items.valid(item);
+
         if (!valid.successful() || valid.value().isEmpty()) {
             return itemFailure(valid.status(), formatKey);
         }
+
         if (!valid.value().orElseThrow()) {
             return SignUseResult.failure(formatKey);
         }
+
         if (items.blacklisted(item)) {
             return SignUseResult.failure(
                     "service.sign.item-blacklisted",
-                    MessageArguments.of("item", item.normalizedItem())
+                    MessageArguments.empty()
             );
         }
+
         return SignUseResult.success("service.sign.valid");
     }
 
-    static SignUseResult itemFailure(PlatformOperationStatus status, String formatKey) {
+    static SignUseResult itemFailure(
+            PlatformOperationStatus status,
+            String formatKey
+    ) {
         return switch (status) {
             case INVALID_ARGUMENT, INVALID_INPUT, NOT_FOUND -> SignUseResult.failure(formatKey);
-            default -> SignUseResult.failure("service.sign.execution-failed");
+            default -> SignUseResult.failure(
+                    "service.sign.execution-failed",
+                    MessageArguments.builder()
+                            .add(status.name().toLowerCase(Locale.ROOT))
+                            .build()
+            );
         };
     }
 
@@ -88,36 +101,46 @@ final class SignHandlerSupport {
             case "rules" -> texts.rules();
             default -> texts.custom(section);
         };
+
         if (lines.isEmpty()) {
             return Optional.empty();
         }
+
         var page = count(context.line(2), 1, Integer.MAX_VALUE).orElse(1);
         var pageSize = Math.max(1, texts.pageSize());
         final int from;
+
         try {
             from = Math.multiplyExact(page - 1, pageSize);
         } catch (ArithmeticException exception) {
             return Optional.empty();
         }
+
         if (from >= lines.size()) {
             return Optional.empty();
         }
+
         return Optional.of(String.join(
                 "\n",
                 lines.subList(from, Math.min(lines.size(), from + pageSize))
         ));
     }
 
-    static Optional<Integer> count(String input, int minimum, int maximum) {
+    static Optional<Integer> count(
+            String input,
+            int minimum,
+            int maximum
+    ) {
         if (input.isBlank()) {
             return Optional.empty();
         }
+
         try {
             var value = Integer.parseInt(input);
             return value >= minimum && value <= maximum
                     ? Optional.of(value)
                     : Optional.empty();
-        } catch (NumberFormatException exception) {
+        } catch (NumberFormatException _) {
             return Optional.empty();
         }
     }
@@ -128,10 +151,10 @@ final class SignHandlerSupport {
                 : SignUseResult.failure(result.message());
     }
 
-    static MessageArguments itemPlaceholders(ItemDescriptor item) {
+    static MessageArguments itemArguments(ItemDescriptor item) {
         return MessageArguments.builder()
-                .put("count", item.count())
-                .put("item", item.normalizedItem())
+                .add(item.count())
+                .add(item.normalizedItem())
                 .build();
     }
 

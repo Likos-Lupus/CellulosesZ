@@ -128,7 +128,10 @@ public final class FabricGameplayHooks {
         return InteractionResult.PASS;
     }
 
-    private InteractionResult usePowerTool(ServerPlayer player, String clickedPlayerName) {
+    private InteractionResult usePowerTool(
+            ServerPlayer player,
+            String clickedPlayerName
+    ) {
         var automation = services.optional(ItemAutomationService.class);
         if (automation.isEmpty()) {
             return InteractionResult.PASS;
@@ -218,7 +221,7 @@ public final class FabricGameplayHooks {
                                                 "service.sign.execution-failed",
                                                 MessageArguments
                                                         .builder()
-                                                        .put("reason", safeReason(failure))
+                                                        .add(safeReason(failure))
                                                         .build()
                                         )
                                 );
@@ -231,7 +234,7 @@ public final class FabricGameplayHooks {
                                             renderer.render(
                                                     locales.locale(wrapped),
                                                     message.key(),
-                                                    message.placeholders()
+                                                    message.arguments()
                                             )
                                     )
                             );
