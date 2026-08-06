@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.item.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.ResourceArgument;
@@ -77,7 +78,12 @@ public final class EnchantCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             int level
-    ) {
+    ) throws CommandSyntaxException {
+        var enchantment = ResourceArgument.getEnchantment(command, "enchantment")
+                .key()
+                .identifier()
+                .toString();
+
         return ItemCommandSupport.sync(
                 context,
                 command,
@@ -100,10 +106,7 @@ public final class EnchantCommand implements CommandContributor {
 
                     return service.enchant(
                             player.orElseThrow(),
-                            ResourceArgument.getEnchantment(command, "enchantment")
-                                    .key()
-                                    .identifier()
-                                    .toString(),
+                            enchantment,
                             level,
                             unsafe
                     );

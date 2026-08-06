@@ -316,7 +316,12 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            spawner.getSpawner().setEntityId(type, nativePlayer.level().getRandom());
+            spawner.getSpawner().setEntityId(
+                    type,
+                    nativePlayer.level(),
+                    nativePlayer.level().getRandom(),
+                    blockHit.getBlockPos()
+            );
             ((BaseSpawnerAccessor) spawner.getSpawner()).cellulosesz$setSpawnDelay(request.delayTicks());
             spawner.setChanged();
 
@@ -425,7 +430,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
             }
 
             var target = level.orElseThrow();
-            target.setWeatherParameters(
+            server.requireRunning().setWeatherParameters(
                     request.enabled()
                             ? 0
                             : request.durationTicks(),
@@ -468,7 +473,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            bolt.moveTo(
+            bolt.setPos(
                     request.location().x(),
                     request.location().y(),
                     request.location().z()

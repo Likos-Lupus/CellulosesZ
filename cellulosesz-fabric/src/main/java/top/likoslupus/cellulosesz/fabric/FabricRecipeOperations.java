@@ -2,8 +2,10 @@ package top.likoslupus.cellulosesz.fabric;
 
 import net.fabricmc.fabric.api.recipe.v1.FabricRecipeManager;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.*;
+import net.minecraft.world.item.crafting.display.SlotDisplayContext;
 import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -54,7 +56,13 @@ final class FabricRecipeOperations implements RecipePlatformService {
         }
 
         var normalized = normalize(itemId);
-        if (!items.validItem(normalized)) {
+        var validity = items.validItem(normalized);
+
+        if (!validity.successful()) {
+            return PlatformResult.failure(validity.status(), validity.detail());
+        }
+
+        if (!validity.value().orElse(false)) {
             return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "unknown item");
         }
 
@@ -169,12 +177,15 @@ final class FabricRecipeOperations implements RecipePlatformService {
     }
 
     private List<RecipeDescription> allDescriptions(int candidateLimit) {
-        var manager = (FabricRecipeManager) server.requireRunning().getRecipeManager();
+        var minecraftServer = server.requireRunning();
+        var manager = (FabricRecipeManager) minecraftServer.getRecipeManager();
+        var displayContext = SlotDisplayContext.fromLevel(minecraftServer.overworld());
         var result = new ArrayList<RecipeDescription>();
 
         STANDARD_TYPES.forEach(type -> appendType(
                 manager,
                 type,
+                displayContext,
                 candidateLimit,
                 result
         ));
@@ -185,25 +196,37 @@ final class FabricRecipeOperations implements RecipePlatformService {
     private static void appendType(
             FabricRecipeManager manager,
             RecipeType type,
+            ContextMap displayContext,
             int candidateLimit,
             List<RecipeDescription> result
     ) {
         for (var entry : manager.getAllOfType(type)) {
             result.add(describe(
                     (RecipeHolder<?>) entry,
+                    displayContext,
                     candidateLimit
             ));
         }
     }
 
-    private static RecipeDescription describe(RecipeHolder<?> holder, int candidateLimit) {
+    private static RecipeDescription describe(
+            RecipeHolder<?> holder,
+            ContextMap displayContext,
+            int candidateLimit
+    ) {
         var recipe = holder.value();
         var output = fixedResult(recipe);
         var ingredients = recipe.placementInfo().ingredients().stream()
                 .map(ingredient -> new RecipeIngredient(
                         Optional.empty(),
-                        ingredient.items()
-                                .map(item -> BuiltInRegistries.ITEM.getKey(item.value()).toString())
+                        ingredient.display()
+                                .resolveForStacks(displayContext)
+                                .stream()
+                                .map(stack ->
+                                        BuiltInRegistries.ITEM
+                                                .getKey(stack.getItem())
+                                                .toString()
+                                )
                                 .distinct()
                                 .limit(candidateLimit)
                                 .toList()
@@ -212,7 +235,7 @@ final class FabricRecipeOperations implements RecipePlatformService {
         var dimensions = dimensions(recipe, ingredients.size());
 
         return new RecipeDescription(
-                holder.id().location().toString(),
+                holder.id().identifier().toString(),
                 typeName(recipe),
                 dimensions[0],
                 dimensions[1],

@@ -113,7 +113,7 @@ final class MessageTemplateArguments {
         }
 
         return IntStream.range(start, end)
-                .noneMatch(index -> {
+                .allMatch(index -> {
                     var character = value.charAt(index);
                     return character >= '0' && character <= '9';
                 });

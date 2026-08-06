@@ -2,7 +2,6 @@ plugins {
     alias(libs.plugins.architectury.plugin) apply false
     alias(libs.plugins.architectury.loom.no.remap) apply false
     alias(libs.plugins.shadow) apply false
-    alias(libs.plugins.spotless)
     `maven-publish`
 }
 
@@ -32,7 +31,6 @@ allprojects {
 
 subprojects {
     apply(plugin = "java-library")
-    apply(plugin = "com.diffplug.spotless")
 
     extensions.configure<BasePluginExtension> {
         archivesName.set(

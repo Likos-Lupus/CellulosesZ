@@ -8,8 +8,6 @@ loom = "1.17-SNAPSHOT"
 architectury-api = "21.0.6"
 architectury-plugin = "3.5.169"
 shadow = "9.6.1"
-spotless = "8.9.0"
-palantir-java-format = "2.96.0"
 
 jackson = "3.2.1"
 jspecify = "1.0.1"
@@ -42,4 +40,3 @@ luckperms-api = { module = "net.luckperms:api", version.ref = "luckperms" }
 architectury-plugin = { id = "architectury-plugin", version.ref = "architectury-plugin" }
 architectury-loom-no-remap = { id = "dev.architectury.loom-no-remap", version.ref = "loom" }
 shadow = { id = "com.gradleup.shadow", version.ref = "shadow" }
-spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
