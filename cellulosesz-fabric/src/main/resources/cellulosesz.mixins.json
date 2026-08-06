@@ -9,7 +9,6 @@
     "FishingHookEventMixin",
     "ItemEntityPickupMixin",
     "PlayerDisplayNameMixin",
-    "RecipeResultAccessor",
     "ServerGamePacketListenerEventMixin",
     "ServerPlayerDisplayNameMixin"
   ],

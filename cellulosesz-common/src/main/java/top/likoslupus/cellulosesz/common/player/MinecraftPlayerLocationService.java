@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.common.player;
 
+import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -17,7 +18,11 @@ public final class MinecraftPlayerLocationService implements PlayerLocationPlatf
 
     @Override
     public CellLocation currentLocation(CellPlayer player) {
-        var nativePlayer = MinecraftPlayers.requireOnline(server, player);
+        return snapshot(MinecraftPlayers.requireOnline(server, player));
+    }
+
+    public static CellLocation snapshot(ServerPlayer player) {
+        var nativePlayer = requireNonNull(player, "player");
         var level = nativePlayer.level();
 
         return new CellLocation(

@@ -18,6 +18,7 @@ import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
@@ -258,8 +259,14 @@ public final class CellulosesZBootstrap {
         events.fire(new PlayerJoinEvent(requireNonNull(player, "player")));
     }
 
-    public void onPlayerDisconnect(CellPlayer player) {
-        events.fire(new PlayerDisconnectEvent(requireNonNull(player, "player")));
+    public void onPlayerDisconnect(
+            CellPlayer player,
+            CellLocation location
+    ) {
+        events.fire(new PlayerDisconnectEvent(
+                requireNonNull(player, "player"),
+                requireNonNull(location, "location")
+        ));
     }
 
     public void tick() {

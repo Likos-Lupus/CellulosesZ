@@ -14,7 +14,6 @@ import top.likoslupus.cellulosesz.api.recipe.RecipeDescription;
 import top.likoslupus.cellulosesz.api.recipe.RecipeIngredient;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
-import top.likoslupus.cellulosesz.fabric.mixin.RecipeResultAccessor;
 
 import java.util.*;
 
@@ -215,7 +214,7 @@ final class FabricRecipeOperations implements RecipePlatformService {
             int candidateLimit
     ) {
         var recipe = holder.value();
-        var output = fixedResult(recipe);
+        var output = fixedResult(recipe, displayContext);
         var ingredients = recipe.placementInfo().ingredients().stream()
                 .map(ingredient -> new RecipeIngredient(
                         Optional.empty(),
@@ -246,19 +245,31 @@ final class FabricRecipeOperations implements RecipePlatformService {
         );
     }
 
-    private static Optional<ItemStack> fixedResult(Recipe<?> recipe) {
-        if (recipe instanceof ShapedRecipe
-                || recipe instanceof ShapelessRecipe
-                || recipe instanceof SingleItemRecipe
-                || recipe instanceof SmithingTransformRecipe
-        ) {
-            var stack = ((RecipeResultAccessor) recipe).cellulosesz$result();
-            return stack.isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(stack.copy());
+    private static Optional<ItemStack> fixedResult(
+            Recipe<?> recipe,
+            ContextMap displayContext
+    ) {
+        var fixed = ItemStack.EMPTY;
+        for (var display : recipe.display()) {
+            for (var candidate : display.result().resolveForStacks(displayContext)) {
+                if (candidate.isEmpty()) {
+                    continue;
+                }
+
+                if (fixed.isEmpty()) {
+                    fixed = candidate.copy();
+                    continue;
+                }
+
+                if (!ItemStack.matches(fixed, candidate)) {
+                    return Optional.empty();
+                }
+            }
         }
 
-        return Optional.empty();
+        return fixed.isEmpty()
+                ? Optional.empty()
+                : Optional.of(fixed);
     }
 
     private static int[] dimensions(Recipe<?> recipe, int ingredientCount) {

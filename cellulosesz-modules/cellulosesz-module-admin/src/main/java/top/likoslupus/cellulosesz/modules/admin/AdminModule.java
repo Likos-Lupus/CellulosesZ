@@ -40,7 +40,7 @@ import static java.util.Objects.requireNonNull;
         name = "Admin",
         description = "Administration, punishments, mute, and jail services.",
         phase = ModulePhase.FEATURE,
-        requires = {"user", "command", "permission"}
+        requires = {"user", "command", "permission", "teleport"}
 )
 public final class AdminModule implements CellulosesZModule {
 

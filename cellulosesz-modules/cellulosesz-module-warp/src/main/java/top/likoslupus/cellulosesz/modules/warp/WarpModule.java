@@ -25,7 +25,7 @@ import static java.util.Objects.requireNonNull;
         name = "Warp",
         description = "Named shared teleport locations.",
         phase = ModulePhase.FEATURE,
-        requires = {"teleport", "command"}
+        requires = {"teleport", "command", "user"}
 )
 public final class WarpModule implements CellulosesZModule {
 

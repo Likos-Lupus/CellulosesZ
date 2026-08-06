@@ -38,7 +38,8 @@ import static java.util.Objects.requireNonNull;
         name = "Teleport",
         description = "Teleport, request, back and random teleport services.",
         phase = ModulePhase.FEATURE,
-        requires = {"user", "command"}
+        requires = {"user", "command"},
+        optional = {"playerstate"}
 )
 public final class TeleportModule implements CellulosesZModule {
 
@@ -185,7 +186,6 @@ public final class TeleportModule implements CellulosesZModule {
         var audience = context.services().require(PlayerAudienceService.class);
         var renderer = context.services().require(MessageRenderer.class);
         var serverThread = context.services().require(ServerThreadExecutor.class);
-        var locations = context.services().require(PlayerLocationPlatformService.class);
 
         context.events().listen(
                 PlayerMoveEvent.class,
@@ -244,10 +244,9 @@ public final class TeleportModule implements CellulosesZModule {
                             TeleportStatus.CANCELLED_DISCONNECT
                     );
                     requestService.clearFor(event.player().uuid());
-                    var logoutLocation = locations.currentLocation(event.player());
                     offline.remember(
                             event.player().uuid(),
-                            logoutLocation
+                            event.location()
                     ).whenComplete((_, failure) -> {
                         if (failure != null) {
                             context.logger().error(

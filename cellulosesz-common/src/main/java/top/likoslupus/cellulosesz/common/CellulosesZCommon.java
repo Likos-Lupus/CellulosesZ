@@ -164,8 +164,10 @@ public final class CellulosesZCommon {
             bootstrap.onPlayerJoin(MinecraftPlayers.wrap(player));
         });
         PlayerEvent.PLAYER_QUIT.register(player -> {
+            var identity = MinecraftPlayers.wrap(player);
+            var location = MinecraftPlayerLocationService.snapshot(player);
             runtime.hooks().afterPlayerQuit(player);
-            bootstrap.onPlayerDisconnect(MinecraftPlayers.wrap(player));
+            bootstrap.onPlayerDisconnect(identity, location);
         });
     }
 
