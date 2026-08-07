@@ -4,7 +4,7 @@ java = "25"
 
 fabric-loader = "0.19.3"
 fabric-api = "0.154.0+26.1.2"
-loom = "1.17-SNAPSHOT"
+loom = "1.17.491"
 architectury-api = "20.0.12"
 architectury-plugin = "3.5.169"
 shadow = "9.6.1"
