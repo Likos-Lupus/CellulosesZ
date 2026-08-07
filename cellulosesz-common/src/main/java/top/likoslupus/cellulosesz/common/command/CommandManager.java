@@ -16,6 +16,7 @@ import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
 
 import java.util.Locale;
+import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -33,6 +34,7 @@ public final class CommandManager implements CommandTreeService {
     private final PlayerDirectory players;
     private final CommandAvailabilityService availability;
     private final CommandTreeRefreshService refreshService;
+    private final CommandTreeProtocolValidator protocolValidator = new CommandTreeProtocolValidator();
     private volatile @Nullable CommandDispatcher<CommandSourceStack> dispatcher;
     private volatile @Nullable CommandBuildContext buildContext;
     private volatile Commands.@Nullable CommandSelection environment;
@@ -91,6 +93,13 @@ public final class CommandManager implements CommandTreeService {
             );
             registry.snapshot().forEach(contributor -> contributor.register(context));
             registerConfiguredAliases(context);
+
+            protocolValidator.validate(leases.ownedLeases());
+            var requiredDescriptions = context.entries().stream()
+                    .map(entry -> entry.description().trim())
+                    .filter(description -> description.startsWith("commands.description."))
+                    .collect(Collectors.toUnmodifiableSet());
+            bootstrap.messageService().validateAndSetRequiredKeys(requiredDescriptions);
 
             bootstrap.serviceRegistry().require(CommandCatalog.class).replace(context.entries());
             transaction.commit();

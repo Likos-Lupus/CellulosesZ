@@ -1,11 +1,17 @@
 package top.likoslupus.cellulosesz.modules.teleport.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleModes;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportPreferenceCommandService;
 
 import java.util.List;
@@ -43,20 +49,15 @@ public final class TpAutoCommand implements CommandContributor {
                         players,
                         player -> service.autoAccept(player, Optional.empty())
                 ))
-                .then(Commands.argument("state", ToggleArgument.toggle())
-                        .executes(command -> TeleportCommandResults.player(
+                .then(Commands.argument("state", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                ToggleModes::suggestions,
+                                builder
+                        ))
+                        .executes(command -> setState(
                                 context,
                                 command,
-                                descriptor,
-                                "tpauto set",
-                                players,
-                                player -> service.autoAccept(
-                                        player,
-                                        Optional.of(ToggleArgument.get(
-                                                command,
-                                                "state"
-                                        ).enabled())
-                                )
+                                descriptor
                         ))
                 );
 
@@ -67,6 +68,24 @@ public final class TpAutoCommand implements CommandContributor {
                 "commands.description.tpauto",
                 "/tpauto [on|off]",
                 root
+        );
+    }
+
+    private int setState(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) throws CommandSyntaxException {
+        var enabled = ToggleModes.parse(
+                StringArgumentType.getString(command, "state")
+        ).enabled();
+        return TeleportCommandResults.player(
+                context,
+                command,
+                descriptor,
+                "tpauto set",
+                players,
+                player -> service.autoAccept(player, Optional.of(enabled))
         );
     }
 

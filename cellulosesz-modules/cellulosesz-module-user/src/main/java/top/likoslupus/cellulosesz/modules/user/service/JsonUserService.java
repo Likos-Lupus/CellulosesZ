@@ -192,7 +192,7 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     }
 
     @Override
-    public <T> CompletableFuture<T> update(
+    public <T extends @Nullable Object> CompletableFuture<T> update(
             UUID uuid,
             Function<CellUser, UserUpdate<T>> mutation
     ) {
@@ -208,7 +208,6 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
                             .save(userPath(key), UserMapper.fromDomain(update.user()))
                             .thenApply(_ -> {
                                 publish(key, update.user());
-                                // FIXME: result() is nullable
                                 return update.result();
                             });
                 })
@@ -268,7 +267,7 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
 
     private <T> CompletableFuture<T> enqueueUserOperation(
             UUID uuid,
-            Supplier<? extends CompletableFuture<T>> operation
+            Supplier<? extends CompletableFuture<@Nullable T>> operation
     ) {
         synchronized (lifecycleLock) {
             if (!accepting) {

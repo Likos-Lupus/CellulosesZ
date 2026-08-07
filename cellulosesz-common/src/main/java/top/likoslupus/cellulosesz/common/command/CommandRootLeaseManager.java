@@ -173,6 +173,10 @@ public final class CommandRootLeaseManager {
         return leases.size();
     }
 
+    synchronized List<Lease> ownedLeases() {
+        return List.copyOf(leases.values());
+    }
+
     public synchronized long generation() {
         return generation;
     }

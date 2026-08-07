@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
@@ -11,10 +11,12 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleModes;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -43,16 +45,18 @@ public final class PowerToolToggleCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                 "state",
-                                ToggleArgument.toggle()
+                                StringArgumentType.word()
                         )
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                ToggleModes::suggestions,
+                                builder
+                        ))
                         .executes(command -> execute(
                                 context,
                                 command,
                                 descriptor,
-                                ToggleArgument.get(
-                                        command,
-                                        "state"
-                                ).enabled()
+                                ToggleModes.parse(StringArgumentType.getString(command, "state"))
+                                        .enabled()
                         )));
 
         context.registerDirect(

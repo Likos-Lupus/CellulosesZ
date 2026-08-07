@@ -1,14 +1,18 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
 import top.likoslupus.cellulosesz.modules.economy.application.ItemValueCommandService;
-import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyAmounts;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -68,30 +72,14 @@ public final class SetWorthCommand implements CommandContributor {
                                 )
                                 .then(Commands.argument(
                                                         "amount",
-                                                        MoneyArgument.nonNegative(
-                                                                snapshot.scale(),
-                                                                snapshot.maximumBalance()
-                                                        )
+                                                        StringArgumentType.word()
                                                 )
-                                                .executes(command ->
-                                                        EconomyCommandSupport.async(
-                                                                context,
-                                                                command,
-                                                                descriptor,
-                                                                "set worth",
-                                                                _ -> service.setWorth(
-                                                                        StringArgumentType
-                                                                                .getString(
-                                                                                        command,
-                                                                                        "item"
-                                                                                ),
-                                                                        MoneyArgument.get(
-                                                                                command,
-                                                                                "amount"
-                                                                        )
-                                                                )
-                                                        )
-                                                )
+                                                .executes(command -> setWorth(
+                                                        context,
+                                                        command,
+                                                        descriptor,
+                                                        snapshot
+                                                ))
                                 )
                 );
 
@@ -102,6 +90,30 @@ public final class SetWorthCommand implements CommandContributor {
                 "commands.description.setworth",
                 "/setworth <item> <amount|remove>",
                 root
+        );
+    }
+
+    private int setWorth(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            EconomyCommandSettings snapshot
+    ) throws CommandSyntaxException {
+        var amount = MoneyAmounts.nonNegative(
+                StringArgumentType.getString(command, "amount"),
+                snapshot.scale(),
+                snapshot.maximumBalance()
+        );
+
+        return EconomyCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "set worth",
+                _ -> service.setWorth(
+                        StringArgumentType.getString(command, "item"),
+                        amount
+                )
         );
     }
 

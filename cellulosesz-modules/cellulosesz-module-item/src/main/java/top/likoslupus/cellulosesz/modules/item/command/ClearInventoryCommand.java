@@ -3,11 +3,13 @@ package top.likoslupus.cellulosesz.modules.item.command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
@@ -22,8 +24,9 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -248,50 +251,76 @@ public final class ClearInventoryCommand implements CommandContributor {
         );
 
         parent.then(Commands.literal("item")
-                .then(Commands.argument(
-                                        "item",
-                                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
-                                )
-                                .executes(command -> execute(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        target(command, fixedTarget),
-                                        InventoryClearFilter.item(
-                                                ItemDescriptorArgument.get(command, "item").normalizedItem()
-                                        ),
-                                        0,
-                                        false
-                                ))
-                                .then(Commands.argument(
-                                                        "amount",
-                                                        IntegerArgumentType.integer(
-                                                                1,
-                                                                1_000_000
-                                                        )
-                                                )
-                                                .executes(command -> execute(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        target(command, fixedTarget),
-                                                        InventoryClearFilter.item(
-                                                                ItemDescriptorArgument.get(
-                                                                        command,
-                                                                        "item"
-                                                                ).normalizedItem()
-                                                        ),
-                                                        IntegerArgumentType.getInteger(
-                                                                command,
-                                                                "amount"
-                                                        ),
-                                                        false
-                                                ))
-                                )
-                )
+                .then(clearItemArgument(
+                        context,
+                        descriptor,
+                        fixedTarget,
+                        Commands.argument("item", ItemArgument.item(context.buildContext())),
+                        "item",
+                        true
+                ))
+                .then(clearItemArgument(
+                        context,
+                        descriptor,
+                        fixedTarget,
+                        Commands.argument("itemAlias", StringArgumentType.word())
+                                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                        items::itemNames,
+                                        builder
+                                )),
+                        "itemAlias",
+                        false
+                ))
         );
 
         return parent;
+    }
+
+    private RequiredArgumentBuilder<CommandSourceStack, ?> clearItemArgument(
+            CommandRegistrationContext context,
+            CommandDescriptor descriptor,
+            @Nullable Target fixedTarget,
+            RequiredArgumentBuilder<CommandSourceStack, ?> argument,
+            String argumentName,
+            boolean vanilla
+    ) {
+        return argument
+                .executes(command -> execute(
+                        context,
+                        command,
+                        descriptor,
+                        target(command, fixedTarget),
+                        InventoryClearFilter.item(
+                                item(command, argumentName, vanilla).normalizedItem()
+                        ),
+                        0,
+                        false
+                ))
+                .then(Commands.argument(
+                                "amount",
+                                IntegerArgumentType.integer(1, 1_000_000)
+                        )
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                target(command, fixedTarget),
+                                InventoryClearFilter.item(
+                                        item(command, argumentName, vanilla).normalizedItem()
+                                ),
+                                IntegerArgumentType.getInteger(command, "amount"),
+                                false
+                        )));
+    }
+
+    private ItemDescriptor item(
+            CommandContext<CommandSourceStack> command,
+            String argumentName,
+            boolean vanilla
+    ) throws CommandSyntaxException {
+        return vanilla
+                ? ItemDescriptors.vanilla(command, argumentName)
+                : ItemDescriptors.custom(command, argumentName, items);
     }
 
     private int confirm(
@@ -621,6 +650,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
     @Override
     public void register(CommandRegistrationContext context) {
+        ItemDescriptors.prepare(items);
         var descriptor = ItemCommandSupport.descriptor(
                 "clearinventory",
                 "cellulosesz.command.clearinventory",

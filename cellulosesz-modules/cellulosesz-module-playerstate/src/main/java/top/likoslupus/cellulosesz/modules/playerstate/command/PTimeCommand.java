@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
@@ -11,10 +12,11 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.PersonalTimeSetting;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
-import top.likoslupus.cellulosesz.modules.playerstate.command.argument.PersonalTimeArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.command.argument.PersonalTimes;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -43,39 +45,29 @@ public final class PTimeCommand implements CommandContributor {
         );
 
         var root = Commands.literal("ptime")
-                .then(Commands.argument(
-                                        "time",
-                                        PersonalTimeArgument.time()
-                                )
-                                .executes(command -> self(
+                .then(Commands.argument("time", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                PersonalTimes.suggestions(),
+                                builder
+                        ))
+                        .executes(command -> self(
+                                context,
+                                command,
+                                descriptor,
+                                setting(command)
+                        ))
+                        .then(Commands.argument("player", EntityArgument.player())
+                                .requires(source -> context.hasPermission(
+                                        source,
+                                        "cellulosesz.playerstate.ptime.others"
+                                ))
+                                .executes(command -> other(
                                         context,
                                         command,
                                         descriptor,
-                                        PersonalTimeArgument.get(
-                                                command,
-                                                "time"
-                                        )
+                                        setting(command)
                                 ))
-                                .then(Commands.argument(
-                                                        "player",
-                                                        EntityArgument.player()
-                                                )
-                                                .requires(source ->
-                                                        context.hasPermission(
-                                                                source,
-                                                                "cellulosesz.playerstate.ptime.others"
-                                                        )
-                                                )
-                                                .executes(command -> other(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        PersonalTimeArgument.get(
-                                                                command,
-                                                                "time"
-                                                        )
-                                                ))
-                                )
+                        )
                 );
 
         context.registerDirect(
@@ -85,6 +77,14 @@ public final class PTimeCommand implements CommandContributor {
                 "commands.description.ptime",
                 "/ptime <day|night|dawn|noon|midnight|reset|ticks> [player]",
                 root
+        );
+    }
+
+    private static PersonalTimeSetting setting(
+            CommandContext<CommandSourceStack> command
+    ) throws CommandSyntaxException {
+        return PersonalTimes.parse(
+                StringArgumentType.getString(command, "time")
         );
     }
 
@@ -104,18 +104,11 @@ public final class PTimeCommand implements CommandContributor {
                                 players
                         )
                         .map(player ->
-                                service.personalTime(
-                                        player,
-                                        setting
-                                )
+                                service.personalTime(player, setting)
                         )
-                        .orElseGet(() ->
-                                CompletableFuture.completedFuture(
-                                        PlayerStateCommandResult.failure(
-                                                "common.player-only"
-                                        )
-                                )
-                        )
+                        .orElseGet(() -> CompletableFuture.completedFuture(
+                                PlayerStateCommandResult.failure("common.player-only")
+                        ))
         );
     }
 
@@ -128,16 +121,12 @@ public final class PTimeCommand implements CommandContributor {
         var target = MinecraftPlayers.wrap(
                 EntityArgument.getPlayer(command, "player")
         );
-
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "ptime other",
-                _ -> service.personalTime(
-                        target,
-                        setting
-                )
+                _ -> service.personalTime(target, setting)
         );
     }
 

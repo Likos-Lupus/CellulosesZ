@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.modules.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -19,7 +21,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-import top.likoslupus.cellulosesz.modules.command.argument.HelpQueryArgument;
+import top.likoslupus.cellulosesz.modules.command.argument.HelpSelectors;
 
 import java.util.*;
 
@@ -34,78 +36,39 @@ public final class HelpCommand implements CommandContributor {
             CommandSourceKind.ANY
     );
 
-    private record HelpEntry(
-            String name,
-            List<String> aliases,
-            String description,
-            String usage
-    ) {
-
-    }
-
-    @Override
-    public void register(CommandRegistrationContext context) {
-        var root = Commands.literal("help")
-                .executes(command -> execute(
-                        context,
-                        command,
-                        "",
-                        1
-                ))
-                .then(Commands.argument(
-                                        "page",
-                                        IntegerArgumentType.integer(1)
-                                )
-                                .executes(command -> execute(
-                                        context,
-                                        command,
-                                        "",
-                                        IntegerArgumentType.getInteger(
-                                                command,
-                                                "page"
-                                        )
-                                ))
-                )
-                .then(Commands.argument(
-                                        "query",
-                                        HelpQueryArgument.query()
-                                )
-                                .executes(command -> execute(
-                                        context,
-                                        command,
-                                        HelpQueryArgument.get(
-                                                command,
-                                                "query"
-                                        ),
-                                        1
-                                ))
-                                .then(Commands.argument(
-                                                        "queryPage",
-                                                        IntegerArgumentType.integer(1)
-                                                )
-                                                .executes(command -> execute(
-                                                        context,
-                                                        command,
-                                                        HelpQueryArgument.get(
-                                                                command,
-                                                                "query"
-                                                        ),
-                                                        IntegerArgumentType.getInteger(
-                                                                command,
-                                                                "queryPage"
-                                                        )
-                                                ))
-                                )
-                );
-
-        context.registerDirect(
-                moduleId(),
-                DESCRIPTOR,
-                List.of(),
-                "commands.description.help",
-                "/help [page|query] [page]",
-                root
+    private int executeSelector(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            int page,
+            boolean explicitQueryPage
+    ) throws CommandSyntaxException {
+        var selector = HelpSelectors.parse(
+                StringArgumentType.getString(command, "queryOrPage")
         );
+
+        if (explicitQueryPage) {
+            return execute(
+                    registration,
+                    command,
+                    HelpSelectors.requireQuery(selector),
+                    page
+            );
+        }
+
+        return switch (selector) {
+            case HelpSelectors.Selection.Page(var value) -> execute(
+                    registration,
+                    command,
+                    "",
+                    value
+            );
+            case HelpSelectors.Selection.Query(var value) -> execute(
+                    registration,
+                    command,
+                    value,
+                    1
+            );
+        };
     }
 
     private int execute(
@@ -336,6 +299,60 @@ public final class HelpCommand implements CommandContributor {
     @Override
     public String moduleId() {
         return MODULE;
+    }
+
+    @Override
+    public void register(CommandRegistrationContext context) {
+        var root = Commands.literal("help")
+                .executes(command -> execute(
+                        context,
+                        command,
+                        "",
+                        1
+                ))
+                .then(Commands.argument(
+                                        "queryOrPage",
+                                        StringArgumentType.word()
+                                )
+                                .executes(command -> executeSelector(
+                                        context,
+                                        command,
+                                        1,
+                                        false
+                                ))
+                                .then(Commands.argument(
+                                                        "queryPage",
+                                                        IntegerArgumentType.integer(1)
+                                                )
+                                                .executes(command -> executeSelector(
+                                                        context,
+                                                        command,
+                                                        IntegerArgumentType.getInteger(
+                                                                command,
+                                                                "queryPage"
+                                                        ),
+                                                        true
+                                                ))
+                                )
+                );
+
+        context.registerDirect(
+                moduleId(),
+                DESCRIPTOR,
+                List.of(),
+                "commands.description.help",
+                "/help [page|query] [page]",
+                root
+        );
+    }
+
+    private record HelpEntry(
+            String name,
+            List<String> aliases,
+            String description,
+            String usage
+    ) {
+
     }
 
 }

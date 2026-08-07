@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -13,7 +14,8 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.command.argument.ProjectileTypeArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.ProjectileTypes;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -41,12 +43,18 @@ public final class FireballCommand implements CommandContributor {
                 "cellulosesz.command.fireball",
                 CommandSourceKind.PLAYER_ONLY
         );
-        var type = Commands.argument("projectile", ProjectileTypeArgument.projectileType())
+        var type = Commands.argument("projectile", StringArgumentType.word())
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        ProjectileTypes.suggestions(),
+                        builder
+                ))
                 .executes(command -> execute(
                         context,
                         command,
                         descriptor,
-                        ProjectileTypeArgument.get(command, "projectile"),
+                        ProjectileTypes.parse(
+                                StringArgumentType.getString(command, "projectile")
+                        ),
                         config.defaultProjectileSpeed()
                 ))
                 .then(Commands.argument(
@@ -57,10 +65,13 @@ public final class FireballCommand implements CommandContributor {
                                         context,
                                         command,
                                         descriptor,
-                                        ProjectileTypeArgument.get(command, "projectile"),
+                                        ProjectileTypes.parse(
+                                                StringArgumentType.getString(command, "projectile")
+                                        ),
                                         DoubleArgumentType.getDouble(command, "speed")
                                 ))
                 );
+
         var root = Commands.literal("fireball")
                 .executes(command -> execute(
                         context,
@@ -95,9 +106,7 @@ public final class FireballCommand implements CommandContributor {
                 "fireball " + type,
                 policy -> {
                     var permission = "cellulosesz.command.fireball.projectile."
-                            + type
-                            .name()
-                            .toLowerCase(Locale.ROOT)
+                            + type.name().toLowerCase(Locale.ROOT)
                             .replace("experience_bottle", "expbottle")
                             .replace("splash_potion", "splashpotion")
                             .replace("lingering_potion", "lingeringpotion");
@@ -108,8 +117,7 @@ public final class FireballCommand implements CommandContributor {
                         );
                     }
 
-                    var player = WorldCommandSupport.current(policy);
-                    return player
+                    return WorldCommandSupport.current(policy)
                             .<PlatformResult<?>>map(value -> entities.launchProjectile(
                                     new ProjectileRequest(
                                             value,

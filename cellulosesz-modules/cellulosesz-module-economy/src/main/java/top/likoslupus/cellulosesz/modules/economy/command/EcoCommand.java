@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.modules.economy.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -11,7 +13,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
 import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
-import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyAmounts;
 
 import java.util.List;
 import java.util.function.Supplier;
@@ -81,16 +83,6 @@ public final class EcoCommand implements CommandContributor {
     ) {
         var snapshot = settings.get();
 
-        var money = positive
-                ? MoneyArgument.positive(
-                snapshot.scale(),
-                snapshot.maximumBalance()
-        )
-                : MoneyArgument.nonNegative(
-                        snapshot.scale(),
-                        snapshot.maximumBalance()
-                );
-
         return Commands.literal(literal)
                 .then(Commands.argument(
                                         "player",
@@ -102,32 +94,46 @@ public final class EcoCommand implements CommandContributor {
                                                 builder
                                         )
                                 )
-                                .then(Commands.argument("amount", money)
-                                        .executes(command ->
-                                                EconomyCommandSupport.async(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        "eco " + literal,
-                                                        policy -> service.mutate(
-                                                                mutation,
-                                                                StringArgumentType.getString(
-                                                                        command,
-                                                                        "player"
-                                                                ),
-                                                                MoneyArgument.get(
-                                                                        command,
-                                                                        "amount"
-                                                                ),
-                                                                policy.playerName()
-                                                                        .orElse(
-                                                                                "console"
-                                                                        )
-                                                        )
-                                                )
-                                        )
+                                .then(Commands.argument("amount", StringArgumentType.word())
+                                        .executes(command -> executeMutation(
+                                                context,
+                                                command,
+                                                descriptor,
+                                                literal,
+                                                mutation,
+                                                positive,
+                                                snapshot
+                                        ))
                                 )
                 );
+    }
+
+    private int executeMutation(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            String literal,
+            BalanceCommandService.Mutation mutation,
+            boolean positive,
+            EconomyCommandSettings snapshot
+    ) throws CommandSyntaxException {
+        var raw = StringArgumentType.getString(command, "amount");
+        var amount = positive
+                ? MoneyAmounts.positive(raw, snapshot.scale(), snapshot.maximumBalance())
+                : MoneyAmounts.nonNegative(raw, snapshot.scale(), snapshot.maximumBalance());
+
+        return EconomyCommandSupport.async(
+                context,
+                command,
+                descriptor,
+                "eco " + literal,
+                policy -> service.mutate(
+                        mutation,
+                        StringArgumentType.getString(command, "player"),
+                        amount,
+                        policy.playerName().orElse("console")
+                )
+        );
     }
 
     @Override

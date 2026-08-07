@@ -1,50 +1,43 @@
 package top.likoslupus.cellulosesz.modules.world.command.argument;
 
 import com.mojang.brigadier.LiteralMessage;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import top.likoslupus.cellulosesz.api.world.TreeType;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-public final class TreeTypeArgument implements ArgumentType<TreeType> {
+public final class TreeTypes {
 
     private static final SimpleCommandExceptionType INVALID = new SimpleCommandExceptionType(
             new LiteralMessage("Unsupported tree type")
     );
-    private final Set<TreeType> allowed;
-    private final boolean large;
+    private static final List<String> NORMAL_SUGGESTIONS = List.of(
+            "oak", "tree", "birch", "redwood", "spruce", "redmushroom", "red_mushroom",
+            "brownmushroom", "brown_mushroom", "jungle", "junglebush", "jungle_bush", "swamp"
+    );
+    private static final List<String> LARGE_SUGGESTIONS = List.of(
+            "oak", "tree", "redwood", "spruce", "jungle", "darkoak", "dark_oak"
+    );
 
-    private TreeTypeArgument(
+    private TreeTypes() {
+    }
+
+    public static TreeType parseNormal(
+            String raw,
+            Set<TreeType> allowed
+    ) throws CommandSyntaxException {
+        return parse(raw, allowed, false);
+    }
+
+    private static TreeType parse(
+            String raw,
             Set<TreeType> allowed,
             boolean large
-    ) {
-        this.allowed = Set.copyOf(allowed);
-        this.large = large;
-    }
-
-    public static TreeTypeArgument treeType(Set<TreeType> allowed) {
-        return new TreeTypeArgument(allowed, false);
-    }
-
-    public static TreeTypeArgument bigTreeType(Set<TreeType> allowed) {
-        return new TreeTypeArgument(allowed, true);
-    }
-
-    public static TreeType get(CommandContext<?> context, String name) {
-        return context.getArgument(name, TreeType.class);
-    }
-
-    @Override
-    public TreeType parse(StringReader reader) throws CommandSyntaxException {
-        var start = reader.getCursor();
-        var value = reader.readUnquotedString().toLowerCase(Locale.ROOT);
+    ) throws CommandSyntaxException {
+        var value = raw.toLowerCase(Locale.ROOT);
         var type = large
                 ?
                 switch (value) {
@@ -67,15 +60,25 @@ public final class TreeTypeArgument implements ArgumentType<TreeType> {
                 };
 
         if (type == null || !allowed.contains(type)) {
-            reader.setCursor(start);
-            throw INVALID.createWithContext(reader);
+            throw INVALID.create();
         }
+
         return type;
     }
 
-    @Override
-    public Collection<String> getExamples() {
-        return List.of("oak", "spruce", "jungle");
+    public static TreeType parseLarge(
+            String raw,
+            Set<TreeType> allowed
+    ) throws CommandSyntaxException {
+        return parse(raw, allowed, true);
+    }
+
+    public static List<String> normalSuggestions() {
+        return NORMAL_SUGGESTIONS;
+    }
+
+    public static List<String> largeSuggestions() {
+        return LARGE_SUGGESTIONS;
     }
 
 }

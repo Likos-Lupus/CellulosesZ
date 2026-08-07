@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.admin.application.ModerationCommandService;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.AdminDurations;
 
 import java.time.Duration;
 import java.util.List;
@@ -97,16 +97,19 @@ public final class MuteCommand implements CommandContributor {
 
         player.then(Commands.argument(
                                 "duration",
-                                DurationArgument.duration(maximum)
+                                StringArgumentType.word()
                         )
                         .executes(command -> mute(
                                 context,
                                 command,
                                 descriptor,
                                 Optional.of(
-                                        DurationArgument.get(
-                                                command,
-                                                "duration"
+                                        AdminDurations.parse(
+                                                StringArgumentType.getString(
+                                                        command,
+                                                        "duration"
+                                                ),
+                                                maximum
                                         )
                                 ),
                                 ""
@@ -120,9 +123,12 @@ public final class MuteCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 Optional.of(
-                                                        DurationArgument.get(
-                                                                command,
-                                                                "duration"
+                                                        AdminDurations.parse(
+                                                                StringArgumentType.getString(
+                                                                        command,
+                                                                        "duration"
+                                                                ),
+                                                                maximum
                                                         )
                                                 ),
                                                 StringArgumentType.getString(

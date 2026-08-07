@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
@@ -9,12 +11,12 @@ import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.command.argument.WeatherTypeArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.WeatherTypes;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -48,7 +50,11 @@ public final class WeatherCommand implements CommandContributor {
                 "cellulosesz.world.weather",
                 CommandSourceKind.ANY
         );
-        var type = Commands.argument("type", WeatherTypeArgument.weatherType())
+        var type = Commands.argument("type", StringArgumentType.word())
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        WeatherTypes.suggestions(),
+                        builder
+                ))
                 .executes(command -> execute(
                         context,
                         command,
@@ -81,10 +87,7 @@ public final class WeatherCommand implements CommandContributor {
                 );
 
         context.registerDirect(
-                moduleId(),
-                descriptor,
-                List.of(),
-                "commands.description.weather",
+                moduleId(), descriptor, List.of(), "commands.description.weather",
                 "/weather <clear|rain|thunder> [seconds] [world]",
                 Commands.literal("weather").then(type)
         );
@@ -96,8 +99,8 @@ public final class WeatherCommand implements CommandContributor {
             CommandDescriptor descriptor,
             int seconds,
             Optional<String> explicitWorld
-    ) {
-        WeatherType type = WeatherTypeArgument.get(command, "type");
+    ) throws CommandSyntaxException {
+        var type = WeatherTypes.parse(StringArgumentType.getString(command, "type"));
         return WorldCommandSupport.admin(
                 registration,
                 command,
@@ -109,10 +112,10 @@ public final class WeatherCommand implements CommandContributor {
                                 locations,
                                 explicitWorld
                         )
-                        .map(world -> service.setWeather(world, type, seconds))
-                        .orElseGet(() -> AdminResult.failure(
-                                "service.world.world-required"
-                        ))
+                        .map(world ->
+                                service.setWeather(world, type, seconds)
+                        )
+                        .orElseGet(() -> AdminResult.failure("service.world.world-required"))
         );
     }
 

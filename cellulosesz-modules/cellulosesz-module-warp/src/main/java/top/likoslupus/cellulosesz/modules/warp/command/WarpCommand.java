@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.modules.warp.command;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -14,7 +15,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
-import top.likoslupus.cellulosesz.modules.warp.command.argument.WarpNameArgument;
+import top.likoslupus.cellulosesz.modules.warp.command.argument.WarpSelectors;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -70,51 +71,22 @@ public final class WarpCommand implements CommandContributor {
                                 policy::hasPermission
                         )
                 ))
-                .then(Commands.argument(
-                                        "page",
-                                        IntegerArgumentType.integer(1)
-                                )
-                                .executes(command -> executeAsync(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        policy -> service.list(
-                                                IntegerArgumentType.getInteger(
-                                                        command,
-                                                        "page"
-                                                ),
-                                                policy::hasPermission
+                .then(Commands.argument("nameOrPage", StringArgumentType.word())
+                        .suggests((command, builder) -> CommandSuggestionSupport.suggest(
+                                () -> service.usableNames(
+                                        permission -> context.hasPermission(
+                                                command.getSource(),
+                                                permission
                                         )
-                                ))
-                )
-                .then(Commands.argument(
-                                        "name",
-                                        WarpNameArgument.warpName()
-                                )
-                                .suggests((command, builder) ->
-                                        CommandSuggestionSupport.suggest(
-                                                () -> service.usableNames(
-                                                        permission -> context.hasPermission(
-                                                                command.getSource(),
-                                                                permission
-                                                        )
-                                                ),
-                                                builder
-                                        )
-                                )
-                                .executes(command -> executeAsync(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        policy -> service.teleport(
-                                                request(policy),
-                                                WarpNameArgument.get(
-                                                        command,
-                                                        "name"
-                                                ),
-                                                policy::hasPermission
-                                        )
-                                ))
+                                ),
+                                builder
+                        ))
+                        .executes(command -> executeWarpSelection(
+                                context,
+                                command,
+                                descriptor,
+                                service
+                        ))
                 );
 
         context.registerDirect(
@@ -140,24 +112,49 @@ public final class WarpCommand implements CommandContributor {
                                         policy::hasPermission
                                 )
                         ))
-                        .then(Commands.argument(
-                                                "page",
-                                                IntegerArgumentType.integer(1)
+                        .then(Commands.argument("page", IntegerArgumentType.integer(1))
+                                .executes(command -> executeAsync(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        policy -> service.list(
+                                                IntegerArgumentType.getInteger(command, "page"),
+                                                policy::hasPermission
                                         )
-                                        .executes(command -> executeAsync(
-                                                context,
-                                                command,
-                                                descriptor,
-                                                policy -> service.list(
-                                                        IntegerArgumentType.getInteger(
-                                                                command,
-                                                                "page"
-                                                        ),
-                                                        policy::hasPermission
-                                                )
-                                        ))
+                                ))
                         )
         );
+    }
+
+    private int executeWarpSelection(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor,
+            WarpCommandService service
+    ) throws CommandSyntaxException {
+        return switch (WarpSelectors.parse(
+                StringArgumentType.getString(command, "nameOrPage")
+        )) {
+            case WarpSelectors.Selection.Page page -> executeAsync(
+                    context,
+                    command,
+                    descriptor,
+                    policy -> service.list(
+                            page.value(),
+                            policy::hasPermission
+                    )
+            );
+            case WarpSelectors.Selection.Name name -> executeAsync(
+                    context,
+                    command,
+                    descriptor,
+                    policy -> service.teleport(
+                            request(policy),
+                            name.value(),
+                            policy::hasPermission
+                    )
+            );
+        };
     }
 
     private void registerSet(

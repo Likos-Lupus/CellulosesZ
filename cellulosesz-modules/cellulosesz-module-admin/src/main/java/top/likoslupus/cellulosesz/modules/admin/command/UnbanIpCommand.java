@@ -1,13 +1,17 @@
 package top.likoslupus.cellulosesz.modules.admin.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargets;
 
 import java.util.List;
 
@@ -36,24 +40,12 @@ public final class UnbanIpCommand implements CommandContributor {
 
         var argument = Commands.argument(
                         "address",
-                        NetworkTargetArgument.addressOnly()
+                        StringArgumentType.greedyString()
                 )
-                .executes(command -> AdminCommandResults.async(
+                .executes(command -> execute(
                         context,
                         command,
-                        descriptor,
-                        "unbanip",
-                        policy -> service.unbanIp(
-                                ((NetworkTargetInput.Address)
-                                        NetworkTargetArgument.get(
-                                                command,
-                                                "address"
-                                        )).address(),
-                                AdminCommandResults.actor(
-                                        policy,
-                                        players
-                                )
-                        )
+                        descriptor
                 ));
 
         context.registerDirect(
@@ -63,6 +55,26 @@ public final class UnbanIpCommand implements CommandContributor {
                 "commands.description.unbanip",
                 "/unbanip <address>",
                 Commands.literal("unbanip").then(argument)
+        );
+    }
+
+    private int execute(
+            CommandRegistrationContext registration,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) throws CommandSyntaxException {
+        var target = NetworkTargets.addressOnly(
+                StringArgumentType.getString(command, "address")
+        );
+        return AdminCommandResults.async(
+                registration,
+                command,
+                descriptor,
+                "unbanip",
+                policy -> service.unbanIp(
+                        target.address(),
+                        AdminCommandResults.actor(policy, players)
+                )
         );
     }
 

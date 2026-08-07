@@ -1,17 +1,21 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
 import java.util.List;
 
@@ -32,6 +36,7 @@ public final class ItemDbCommand implements CommandContributor {
 
     @Override
     public void register(CommandRegistrationContext context) {
+        ItemDescriptors.prepare(items);
         var descriptor = ItemCommandSupport.descriptor(
                 "itemdb",
                 "cellulosesz.command.itemdb",
@@ -44,15 +49,25 @@ public final class ItemDbCommand implements CommandContributor {
                         command,
                         descriptor
                 ))
-                .then(Commands.argument(
-                                        "item",
-                                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
-                                )
-                                .executes(command -> lookup(
-                                        context,
-                                        command,
-                                        descriptor
-                                ))
+                .then(Commands.argument("item", ItemArgument.item(context.buildContext()))
+                        .executes(command -> lookup(
+                                context,
+                                command,
+                                descriptor,
+                                ItemDescriptors.vanilla(command, "item")
+                        ))
+                )
+                .then(Commands.argument("itemAlias", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                items::itemNames,
+                                builder
+                        ))
+                        .executes(command -> lookup(
+                                context,
+                                command,
+                                descriptor,
+                                ItemDescriptors.custom(command, "itemAlias", items)
+                        ))
                 );
 
         context.registerDirect(
@@ -75,23 +90,20 @@ public final class ItemDbCommand implements CommandContributor {
                 command,
                 descriptor,
                 "itemdb held",
-                policy -> {
-                    var player = ItemCommandSupport.current(policy);
-
-                    return player
-                            .<PlatformResult<?>>map(inventory::heldItemDetails)
-                            .orElseGet(() -> PlatformResult.failure(
-                                    PlatformOperationStatus.INVALID_SOURCE,
-                                    "item-required"
-                            ));
-                }
+                policy -> ItemCommandSupport.current(policy)
+                        .<PlatformResult<?>>map(inventory::heldItemDetails)
+                        .orElseGet(() -> PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "item-required"
+                        ))
         );
     }
 
     private int lookup(
             CommandRegistrationContext context,
             CommandContext<CommandSourceStack> command,
-            CommandDescriptor descriptor
+            CommandDescriptor descriptor,
+            ItemDescriptor descriptorInput
     ) {
         return ItemCommandSupport.sync(
                 context,
@@ -99,9 +111,7 @@ public final class ItemDbCommand implements CommandContributor {
                 descriptor,
                 "itemdb item",
                 _ -> {
-                    var item = ItemDescriptorArgument.get(command, "item").normalizedItem();
-                    var parsed = items.parse(item);
-
+                    var parsed = items.parse(descriptorInput.normalizedItem());
                     if (!parsed.successful()) {
                         return PlatformResult.failure(parsed.status(), parsed.detail());
                     }

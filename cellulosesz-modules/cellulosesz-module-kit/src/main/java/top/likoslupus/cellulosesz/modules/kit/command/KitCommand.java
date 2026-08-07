@@ -15,7 +15,7 @@ import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.application.KitCooldown;
-import top.likoslupus.cellulosesz.modules.kit.command.argument.KitCooldownArgument;
+import top.likoslupus.cellulosesz.modules.kit.command.argument.KitCooldowns;
 
 import java.util.List;
 import java.util.Optional;
@@ -165,23 +165,24 @@ public final class KitCommand implements CommandContributor {
     ) {
         var descriptor = player("createkit", "cellulosesz.kit.create");
 
+        var cooldown = Commands.argument("cooldown", StringArgumentType.word())
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        KitCooldowns::suggestions,
+                        builder
+                ))
+                .executes(command -> create(
+                        context,
+                        command,
+                        descriptor,
+                        service,
+                        KitCooldowns.parse(
+                                StringArgumentType.getString(command, "cooldown")
+                        )
+                ));
+
         var root = Commands.literal("createkit")
                 .then(Commands.argument("name", StringArgumentType.word())
-                        .then(Commands.argument(
-                                                "cooldown",
-                                                KitCooldownArgument.cooldown()
-                                        )
-                                        .executes(command -> create(
-                                                context,
-                                                command,
-                                                descriptor,
-                                                service,
-                                                KitCooldownArgument.get(
-                                                        command,
-                                                        "cooldown"
-                                                )
-                                        ))
-                        )
+                        .then(cooldown)
                 );
 
         context.registerDirect(
@@ -189,7 +190,7 @@ public final class KitCommand implements CommandContributor {
                 descriptor,
                 List.of(),
                 "",
-                "/createkit <name> <seconds|once>",
+                "/createkit <name> <seconds|once|one-time>",
                 root
         );
     }

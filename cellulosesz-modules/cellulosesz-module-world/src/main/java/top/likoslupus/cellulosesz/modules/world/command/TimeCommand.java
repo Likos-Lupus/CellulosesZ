@@ -1,6 +1,8 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
@@ -12,7 +14,8 @@ import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.command.argument.TimeValueArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.TimeValues;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +45,11 @@ public final class TimeCommand implements CommandContributor {
                 "cellulosesz.world.time",
                 CommandSourceKind.ANY
         );
-        var time = Commands.argument("time", TimeValueArgument.timeValue())
+        var time = Commands.argument("time", StringArgumentType.word())
+                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                        TimeValues.suggestions(),
+                        builder
+                ))
                 .executes(command -> execute(
                         context,
                         command,
@@ -60,8 +67,7 @@ public final class TimeCommand implements CommandContributor {
                                                 .identifier()
                                                 .toString()
                                 )
-                        ))
-                );
+                        )));
 
         context.registerDirect(
                 moduleId(),
@@ -78,7 +84,8 @@ public final class TimeCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             Optional<String> explicitWorld
-    ) {
+    ) throws CommandSyntaxException {
+        var time = TimeValues.parse(StringArgumentType.getString(command, "time"));
         return WorldCommandSupport.admin(
                 registration,
                 command,
@@ -90,10 +97,9 @@ public final class TimeCommand implements CommandContributor {
                                 locations,
                                 explicitWorld
                         )
-                        .map(world -> service.setTime(
-                                world,
-                                TimeValueArgument.get(command, "time")
-                        ))
+                        .map(world ->
+                                service.setTime(world, time)
+                        )
                         .orElseGet(() -> AdminResult.failure(
                                 "service.world.world-required"
                         ))

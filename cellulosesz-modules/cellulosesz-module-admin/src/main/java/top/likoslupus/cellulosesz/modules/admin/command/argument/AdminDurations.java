@@ -1,46 +1,30 @@
 package top.likoslupus.cellulosesz.modules.admin.command.argument;
 
 import com.mojang.brigadier.LiteralMessage;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 
 import java.time.Duration;
-import java.util.Collection;
-import java.util.List;
 import java.util.Locale;
 
 import static java.util.Objects.requireNonNull;
 
-public final class DurationArgument implements ArgumentType<Duration> {
+public final class AdminDurations {
 
     private static final DynamicCommandExceptionType INVALID = new DynamicCommandExceptionType(
             value -> new LiteralMessage("Invalid positive duration: " + value)
     );
-    private final Duration maximum;
 
-    private DurationArgument(Duration maximum) {
-        this.maximum = requireNonNull(maximum, "maximum");
+    private AdminDurations() {
+    }
+
+    public static Duration parse(String raw, Duration maximum) throws CommandSyntaxException {
+        requireNonNull(maximum, "maximum");
         if (maximum.isZero() || maximum.isNegative()) {
             throw new IllegalArgumentException("maximum must be positive");
         }
-    }
 
-    public static DurationArgument duration(Duration maximum) {
-        return new DurationArgument(maximum);
-    }
-
-    public static Duration get(CommandContext<?> context, String name) {
-        return context.getArgument(name, Duration.class);
-    }
-
-    @Override
-    public Duration parse(StringReader reader) throws CommandSyntaxException {
-        var start = reader.getCursor();
-        var token = reader.readUnquotedString().trim().toLowerCase(Locale.ROOT);
-
+        var token = raw.trim().toLowerCase(Locale.ROOT);
         try {
             if (token.isEmpty()) {
                 throw new IllegalArgumentException();
@@ -72,21 +56,8 @@ public final class DurationArgument implements ArgumentType<Duration> {
             }
             return duration;
         } catch (ArithmeticException | IllegalArgumentException failure) {
-            reader.setCursor(start);
-            throw INVALID.createWithContext(reader, token);
+            throw INVALID.create(raw);
         }
-    }
-
-    @Override
-    public Collection<String> getExamples() {
-        return List.of(
-                "30",
-                "500ms",
-                "10m",
-                "2h",
-                "7d",
-                "2w"
-        );
     }
 
 }

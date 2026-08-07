@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -11,8 +12,8 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.DurationArgument;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.AdminDurations;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargets;
 
 import java.time.Duration;
 import java.util.List;
@@ -45,7 +46,7 @@ public final class TempBanIpCommand implements CommandContributor {
 
         var duration = Commands.argument(
                         "duration",
-                        DurationArgument.duration(maximum)
+                        StringArgumentType.word()
                 )
                 .executes(command -> execute(
                         context,
@@ -70,7 +71,7 @@ public final class TempBanIpCommand implements CommandContributor {
 
         var target = Commands.argument(
                         "target",
-                        NetworkTargetArgument.addressOrPlayer()
+                        StringArgumentType.string()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -85,7 +86,7 @@ public final class TempBanIpCommand implements CommandContributor {
                 descriptor,
                 List.of(),
                 "commands.description.tempbanip",
-                "/tempbanip <address-or-player> <duration> [reason]",
+                "/tempbanip <address-or-player|\"ipv6\"> <duration> [reason]",
                 Commands.literal("tempbanip").then(target)
         );
     }
@@ -95,16 +96,23 @@ public final class TempBanIpCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String reason
-    ) {
+    ) throws CommandSyntaxException {
+        var target = NetworkTargets.addressOrPlayer(
+                StringArgumentType.getString(command, "target")
+        );
+        var duration = AdminDurations.parse(
+                StringArgumentType.getString(command, "duration"),
+                maximum
+        );
         return AdminCommandResults.async(
                 registration,
                 command,
                 descriptor,
                 "tempbanip reason-present=" + !reason.isBlank(),
                 policy -> service.tempBanIp(
-                        NetworkTargetArgument.get(command, "target"),
+                        target,
                         AdminCommandResults.actor(policy, players),
-                        DurationArgument.get(command, "duration"),
+                        duration,
                         reason
                 )
         );

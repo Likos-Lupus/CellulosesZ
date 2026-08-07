@@ -12,10 +12,7 @@ import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.text.RichText;
 
-import java.util.LinkedHashMap;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
@@ -33,6 +30,7 @@ public final class DefaultMessageService implements MessageRenderer {
 
     private final CellulosesZLogger logger;
     private final MiniMessage miniMessage;
+    private volatile Set<String> requiredKeys = Set.of();
     private volatile RuntimeState state = new RuntimeState(
             Map.of(),
             DEFAULT_LOCALE,
@@ -240,6 +238,7 @@ public final class DefaultMessageService implements MessageRenderer {
         try {
             var compiled = compileCatalogs(catalogs);
             validateCatalogRelations(compiled);
+            validateRequiredKeys(compiled, requiredKeys);
             var current = state;
             validateRenderedCatalogs(new RuntimeState(
                     compiled,
@@ -325,6 +324,46 @@ public final class DefaultMessageService implements MessageRenderer {
                         ));
             }
         }));
+    }
+
+    private static void validateRequiredKeys(
+            Map<String, Map<String, MessageTemplateArguments.CompiledTemplate>> catalogs,
+            Set<String> required
+    ) {
+        if (required.isEmpty()) {
+            return;
+        }
+
+        var english = catalogs.get(DEFAULT_FALLBACK);
+        if (english == null) {
+            throw new IllegalArgumentException("The en_us language catalog is required");
+        }
+
+        var missing = required.stream()
+                .filter(key -> !english.containsKey(key))
+                .sorted()
+                .toList();
+        if (!missing.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Missing required message keys in en_us (" + missing.size() + "):\n- "
+                            + String.join("\n- ", missing)
+            );
+        }
+    }
+
+    public synchronized void validateAndSetRequiredKeys(Collection<String> keys) {
+        requireNonNull(keys, "keys");
+        var normalized = new TreeSet<String>();
+        keys.forEach(key -> {
+            var value = requireNonNull(key, "required message key").trim();
+            if (value.isBlank()) {
+                throw new IllegalArgumentException("Required message key must not be blank");
+            }
+            normalized.add(value);
+        });
+        var candidate = Set.copyOf(normalized);
+        validateRequiredKeys(state.locales(), candidate);
+        requiredKeys = candidate;
     }
 
     public MessageState snapshot() {

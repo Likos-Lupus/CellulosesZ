@@ -6,6 +6,7 @@ import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.UuidArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
@@ -17,8 +18,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.messaging.application.MailCommandService;
-import top.likoslupus.cellulosesz.modules.messaging.command.argument.MailDurationArgument;
-import top.likoslupus.cellulosesz.modules.messaging.command.argument.MailIdArgument;
+import top.likoslupus.cellulosesz.modules.messaging.command.argument.MailDurations;
 
 import java.time.Duration;
 import java.util.List;
@@ -114,6 +114,21 @@ public final class MailCommand implements CommandContributor {
         );
     }
 
+    private int delete(
+            CommandRegistrationContext context,
+            CommandContext<CommandSourceStack> command,
+            CommandDescriptor descriptor
+    ) {
+        var id = UuidArgument.getUuid(command, "id");
+        return self(
+                context,
+                command,
+                descriptor,
+                "mail delete",
+                uuid -> service.delete(uuid, id)
+        );
+    }
+
     private int self(
             CommandRegistrationContext context,
             CommandContext<CommandSourceStack> command,
@@ -201,20 +216,12 @@ public final class MailCommand implements CommandContributor {
                 .then(Commands.literal("delete")
                         .then(Commands.argument(
                                                 "id",
-                                                MailIdArgument.mailId()
+                                                UuidArgument.uuid()
                                         )
-                                        .executes(command -> self(
+                                        .executes(command -> delete(
                                                 context,
                                                 command,
-                                                descriptor,
-                                                "mail delete",
-                                                uuid -> service.delete(
-                                                        uuid,
-                                                        MailIdArgument.get(
-                                                                command,
-                                                                "id"
-                                                        )
-                                                )
+                                                descriptor
                                         ))
                         )
                 )
@@ -244,26 +251,25 @@ public final class MailCommand implements CommandContributor {
                 )
                 .then(Commands.literal("sendtemp")
                         .then(playerArgument()
-                                .then(Commands.argument(
-                                                        "duration",
-                                                        MailDurationArgument.duration()
-                                                )
-                                                .then(Commands.argument(
-                                                                        "message",
-                                                                        StringArgumentType.greedyString()
-                                                                )
-                                                                .executes(command -> send(
-                                                                        context,
-                                                                        command,
-                                                                        descriptor,
-                                                                        Optional.of(
-                                                                                MailDurationArgument.get(
+                                .then(Commands.argument("duration", StringArgumentType.word())
+                                        .then(Commands.argument(
+                                                                "message",
+                                                                StringArgumentType.greedyString()
+                                                        )
+                                                        .executes(command -> send(
+                                                                context,
+                                                                command,
+                                                                descriptor,
+                                                                Optional.of(
+                                                                        MailDurations.parse(
+                                                                                StringArgumentType.getString(
                                                                                         command,
                                                                                         "duration"
                                                                                 )
                                                                         )
-                                                                ))
-                                                )
+                                                                )
+                                                        ))
+                                        )
                                 )
                         )
                 )
@@ -272,45 +278,42 @@ public final class MailCommand implements CommandContributor {
                                 source,
                                 "cellulosesz.messaging.mail.sendall"
                         ))
-                        .then(Commands.argument(
-                                                "message",
-                                                StringArgumentType.greedyString()
-                                        )
-                                        .executes(command -> CommandExecutions.async(
-                                                context,
-                                                command,
-                                                descriptor,
-                                                "mail sendall body redacted",
-                                                policy -> {
-                                                    if (!policy.hasPermission(
-                                                            "cellulosesz.messaging.mail.sendall"
-                                                    )) {
-                                                        return CompletableFuture
-                                                                .completedFuture(
-                                                                        MailCommandService.Result.failure(
-                                                                                LocalizedMessage.of(
-                                                                                        "common.no-permission"
-                                                                                )
+                        .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .executes(command -> CommandExecutions.async(
+                                        context,
+                                        command,
+                                        descriptor,
+                                        "mail sendall body redacted",
+                                        policy -> {
+                                            if (!policy.hasPermission(
+                                                    "cellulosesz.messaging.mail.sendall"
+                                            )) {
+                                                return CompletableFuture
+                                                        .completedFuture(
+                                                                MailCommandService.Result.failure(
+                                                                        LocalizedMessage.of(
+                                                                                "common.no-permission"
                                                                         )
-                                                                );
-                                                    }
+                                                                )
+                                                        );
+                                            }
 
-                                                    return service.sendAll(
-                                                            MessagingCommandSupport.player(
-                                                                    policy,
-                                                                    players
-                                                            ),
-                                                            StringArgumentType.getString(
-                                                                    command,
-                                                                    "message"
-                                                            )
-                                                    );
-                                                },
-                                                (policy, result) -> {
-                                                    respond(policy, result);
-                                                    return CommandOutcome.fromSuccess(result.success());
-                                                }
-                                        ))
+                                            return service.sendAll(
+                                                    MessagingCommandSupport.player(
+                                                            policy,
+                                                            players
+                                                    ),
+                                                    StringArgumentType.getString(
+                                                            command,
+                                                            "message"
+                                                    )
+                                            );
+                                        },
+                                        (policy, result) -> {
+                                            respond(policy, result);
+                                            return CommandOutcome.fromSuccess(result.success());
+                                        }
+                                ))
                         )
                 );
 

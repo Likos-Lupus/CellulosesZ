@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,7 +12,8 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.common.command.argument.ToggleArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.ToggleModes;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -52,16 +54,20 @@ public final class ClearInventoryConfirmToggleCommand implements CommandContribu
                 ))
                 .then(Commands.argument(
                                         "state",
-                                        ToggleArgument.toggle()
+                                        StringArgumentType.word()
                                 )
+                                .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                        ToggleModes::suggestions,
+                                        builder
+                                ))
                                 .executes(command -> execute(
                                         context,
                                         command,
                                         descriptor,
-                                        ToggleArgument.get(
+                                        ToggleModes.parse(StringArgumentType.getString(
                                                 command,
                                                 "state"
-                                        ).enabled()
+                                        )).enabled()
                                 ))
                 );
 

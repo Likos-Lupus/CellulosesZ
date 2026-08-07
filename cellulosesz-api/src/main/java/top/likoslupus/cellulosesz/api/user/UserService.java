@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.api.user;
 
+import org.jspecify.annotations.Nullable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Collection;
@@ -34,7 +35,7 @@ public interface UserService {
         });
     }
 
-    <T> CompletableFuture<T> update(
+    <T extends @Nullable Object> CompletableFuture<T> update(
             UUID uuid,
             Function<CellUser, UserUpdate<T>> mutation
     );

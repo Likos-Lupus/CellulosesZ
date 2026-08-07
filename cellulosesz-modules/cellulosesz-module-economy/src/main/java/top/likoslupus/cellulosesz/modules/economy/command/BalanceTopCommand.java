@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.modules.economy.command;
 
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -10,7 +12,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.economy.application.BalanceCommandService;
 import top.likoslupus.cellulosesz.modules.economy.application.EconomyCommandSettings;
-import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyArgument;
+import top.likoslupus.cellulosesz.modules.economy.command.argument.MoneyAmounts;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -59,10 +61,7 @@ public final class BalanceTopCommand implements CommandContributor {
                 ))
                 .then(Commands.argument(
                                         "minimum",
-                                        MoneyArgument.nonNegative(
-                                                snapshot.scale(),
-                                                snapshot.maximumBalance()
-                                        )
+                                        StringArgumentType.word()
                                 )
                                 .executes(command -> execute(
                                         context,
@@ -73,19 +72,13 @@ public final class BalanceTopCommand implements CommandContributor {
                                                 "page"
                                         ),
                                         Optional.of(
-                                                MoneyArgument.get(
-                                                        command,
-                                                        "minimum"
-                                                )
+                                                amount(command, "minimum", snapshot)
                                         ),
                                         Optional.empty()
                                 ))
                                 .then(Commands.argument(
                                                         "maximum",
-                                                        MoneyArgument.nonNegative(
-                                                                snapshot.scale(),
-                                                                snapshot.maximumBalance()
-                                                        )
+                                                        StringArgumentType.word()
                                                 )
                                                 .executes(command -> execute(
                                                         context,
@@ -96,16 +89,10 @@ public final class BalanceTopCommand implements CommandContributor {
                                                                 "page"
                                                         ),
                                                         Optional.of(
-                                                                MoneyArgument.get(
-                                                                        command,
-                                                                        "minimum"
-                                                                )
+                                                                amount(command, "minimum", snapshot)
                                                         ),
                                                         Optional.of(
-                                                                MoneyArgument.get(
-                                                                        command,
-                                                                        "maximum"
-                                                                )
+                                                                amount(command, "maximum", snapshot)
                                                         )
                                                 ))
                                 )
@@ -136,6 +123,18 @@ public final class BalanceTopCommand implements CommandContributor {
                 descriptor,
                 "baltop",
                 node
+        );
+    }
+
+    private static BigDecimal amount(
+            CommandContext<CommandSourceStack> command,
+            String name,
+            EconomyCommandSettings settings
+    ) throws CommandSyntaxException {
+        return MoneyAmounts.nonNegative(
+                StringArgumentType.getString(command, name),
+                settings.scale(),
+                settings.maximumBalance()
         );
     }
 

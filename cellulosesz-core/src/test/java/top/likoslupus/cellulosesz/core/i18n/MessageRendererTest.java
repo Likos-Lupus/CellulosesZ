@@ -4,9 +4,11 @@ import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 final class MessageRendererTest {
 
@@ -79,6 +81,28 @@ final class MessageRendererTest {
         );
 
         assertEquals(unsafe, result.plainText());
+    }
+
+    @Test
+    void prepareCatalogs_missingRequiredKey_rejectsCandidateAndKeepsActiveCatalog() {
+        var renderer = renderer(Map.of("required", "active"));
+        renderer.validateAndSetRequiredKeys(List.of("required"));
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> renderer.prepareCatalogs(Map.of(
+                        "en_us", Map.of("other", "candidate"),
+                        "zh_cn", Map.of("other", "candidate")
+                ))
+        );
+        assertEquals(
+                "active",
+                renderer.render(
+                        "en_us",
+                        "required",
+                        MessageArguments.empty()
+                ).plainText()
+        );
     }
 
     private static final class SilentLogger implements CellulosesZLogger {

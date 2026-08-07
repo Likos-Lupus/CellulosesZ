@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,7 +12,8 @@ import top.likoslupus.cellulosesz.api.world.TreeType;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.command.argument.TreeTypeArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.TreeTypes;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -52,12 +54,19 @@ public final class BigTreeCommand implements CommandContributor {
                         descriptor,
                         TreeType.LARGE_OAK
                 ))
-                .then(Commands.argument("type", TreeTypeArgument.bigTreeType(ALLOWED))
+                .then(Commands.argument("type", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                TreeTypes.largeSuggestions(),
+                                builder
+                        ))
                         .executes(command -> execute(
                                 context,
                                 command,
                                 descriptor,
-                                TreeTypeArgument.get(command, "type")
+                                TreeTypes.parseLarge(
+                                        StringArgumentType.getString(command, "type"),
+                                        ALLOWED
+                                )
                         ))
                 );
 
@@ -82,19 +91,16 @@ public final class BigTreeCommand implements CommandContributor {
                 command,
                 descriptor,
                 "bigtree " + type,
-                policy -> {
-                    var player = WorldCommandSupport.current(policy);
-                    return player
-                            .<PlatformResult<?>>map(value -> worlds.generateTree(
-                                    value,
-                                    config.treeTargetDistance(),
-                                    type
-                            ))
-                            .orElseGet(() -> PlatformResult.failure(
-                                    PlatformOperationStatus.INVALID_SOURCE,
-                                    "player-only"
-                            ));
-                }
+                policy -> WorldCommandSupport.current(policy)
+                        .<PlatformResult<?>>map(value -> worlds.generateTree(
+                                value,
+                                config.treeTargetDistance(),
+                                type
+                        ))
+                        .orElseGet(() -> PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        ))
         );
     }
 

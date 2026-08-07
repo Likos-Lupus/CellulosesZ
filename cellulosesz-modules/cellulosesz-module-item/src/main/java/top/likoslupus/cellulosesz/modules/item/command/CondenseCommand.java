@@ -1,8 +1,10 @@
 package top.likoslupus.cellulosesz.modules.item.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
@@ -14,8 +16,9 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
-import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptorArgument;
+import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,6 +49,7 @@ public final class CondenseCommand implements CommandContributor {
 
     @Override
     public void register(CommandRegistrationContext context) {
+        ItemDescriptors.prepare(items);
         var descriptor = ItemCommandSupport.descriptor(
                 "condense",
                 "cellulosesz.command.condense",
@@ -59,21 +63,33 @@ public final class CondenseCommand implements CommandContributor {
                         descriptor,
                         Optional.empty()
                 ))
-                .then(Commands.argument(
-                                        "item",
-                                        ItemDescriptorArgument.itemDescriptor(items, context.buildContext())
+                .then(Commands.argument("item", ItemArgument.item(context.buildContext()))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(
+                                        ItemDescriptors.vanilla(command, "item").normalizedItem()
                                 )
-                                .executes(command -> execute(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        Optional.of(
-                                                ItemDescriptorArgument.get(
-                                                        command,
-                                                        "item"
-                                                ).normalizedItem()
-                                        )
-                                ))
+                        ))
+                )
+                .then(Commands.argument("itemAlias", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                items::itemNames,
+                                builder
+                        ))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                Optional.of(
+                                        ItemDescriptors.custom(
+                                                command,
+                                                "itemAlias",
+                                                items
+                                        ).normalizedItem()
+                                )
+                        ))
                 );
 
         context.registerDirect(

@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -11,7 +12,8 @@ import top.likoslupus.cellulosesz.api.world.TreeType;
 import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
-import top.likoslupus.cellulosesz.modules.world.command.argument.TreeTypeArgument;
+import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.modules.world.command.argument.TreeTypes;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -44,49 +46,40 @@ public final class TreeCommand implements CommandContributor {
 
     @Override
     public void register(CommandRegistrationContext context) {
-        register(context, "tree", "cellulosesz.command.tree", false);
-    }
-
-    private void register(
-            CommandRegistrationContext context,
-            String rootName,
-            String permission,
-            boolean large
-    ) {
         var descriptor = WorldCommandSupport.descriptor(
-                rootName,
-                permission,
+                "tree",
+                "cellulosesz.command.tree",
                 CommandSourceKind.PLAYER_ONLY
         );
-        var root = Commands.literal(rootName)
+        var root = Commands.literal("tree")
                 .executes(command -> execute(
                         context,
                         command,
                         descriptor,
-                        large
-                                ? TreeType.LARGE_OAK
-                                : TreeType.OAK
+                        TreeType.OAK
                 ))
-                .then(Commands.argument(
-                                        "type",
-                                        large
-                                                ? TreeTypeArgument.bigTreeType(ALLOWED)
-                                                : TreeTypeArgument.treeType(ALLOWED)
+                .then(Commands.argument("type", StringArgumentType.word())
+                        .suggests((_, builder) -> CommandSuggestionSupport.suggest(
+                                TreeTypes.normalSuggestions(),
+                                builder
+                        ))
+                        .executes(command -> execute(
+                                context,
+                                command,
+                                descriptor,
+                                TreeTypes.parseNormal(
+                                        StringArgumentType.getString(command, "type"),
+                                        ALLOWED
                                 )
-                                .executes(command -> execute(
-                                        context,
-                                        command,
-                                        descriptor,
-                                        TreeTypeArgument.get(command, "type")
-                                ))
+                        ))
                 );
 
         context.registerDirect(
                 moduleId(),
                 descriptor,
                 List.of(),
-                "commands.description." + rootName,
-                "/" + rootName + " [type]",
+                "commands.description.tree",
+                "/tree [type]",
                 root
         );
     }
@@ -102,19 +95,16 @@ public final class TreeCommand implements CommandContributor {
                 command,
                 descriptor,
                 "tree " + type,
-                policy -> {
-                    var player = WorldCommandSupport.current(policy);
-                    return player
-                            .<PlatformResult<?>>map(value -> worlds.generateTree(
-                                    value,
-                                    config.treeTargetDistance(),
-                                    type
-                            ))
-                            .orElseGet(() -> PlatformResult.failure(
-                                    PlatformOperationStatus.INVALID_SOURCE,
-                                    "player-only"
-                            ));
-                }
+                policy -> WorldCommandSupport.current(policy)
+                        .<PlatformResult<?>>map(value -> worlds.generateTree(
+                                value,
+                                config.treeTargetDistance(),
+                                type
+                        ))
+                        .orElseGet(() -> PlatformResult.failure(
+                                PlatformOperationStatus.INVALID_SOURCE,
+                                "player-only"
+                        ))
         );
     }
 

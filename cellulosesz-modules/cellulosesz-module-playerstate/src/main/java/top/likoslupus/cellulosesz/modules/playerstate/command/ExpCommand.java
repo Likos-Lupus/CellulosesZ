@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.modules.playerstate.command;
 
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
@@ -18,7 +19,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandResult;
-import top.likoslupus.cellulosesz.modules.playerstate.command.argument.ExperienceAmountArgument;
+import top.likoslupus.cellulosesz.modules.playerstate.command.argument.ExperienceAmounts;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -56,12 +57,11 @@ public final class ExpCommand implements CommandContributor {
                         .then(playerArgument(
                                         context,
                                         "cellulosesz.command.exp.others"
-                                )
-                                        .executes(command -> otherShow(
-                                                context,
-                                                command,
-                                                descriptor
-                                        ))
+                                ).executes(command -> otherShow(
+                                        context,
+                                        command,
+                                        descriptor
+                                ))
                         )
                 )
                 .then(mutation(
@@ -112,68 +112,54 @@ public final class ExpCommand implements CommandContributor {
     ) {
         var branch = Commands.literal(literal)
                 .requires(source ->
-                        context.hasPermission(
-                                source,
-                                permission
-                        )
+                        context.hasPermission(source, permission)
                 );
 
         if (action == ExperienceAction.RESET) {
+            var request = new ExperienceRequest(action, ExperienceUnit.POINTS, 0);
             return branch
                     .executes(command -> selfMutation(
                             context,
                             command,
                             descriptor,
-                            new ExperienceRequest(
-                                    action,
-                                    ExperienceUnit.POINTS,
-                                    0
-                            )
+                            request
                     ))
                     .then(playerArgument(
                                     context,
                                     permission + ".others"
-                            )
-                                    .executes(command -> otherMutation(
-                                            context,
-                                            command,
-                                            descriptor,
-                                            new ExperienceRequest(
-                                                    action,
-                                                    ExperienceUnit.POINTS,
-                                                    0
-                                            )
-                                    ))
+                            ).executes(command -> otherMutation(
+                                    context,
+                                    command,
+                                    descriptor,
+                                    request
+                            ))
                     );
         }
 
         return branch
                 .then(Commands.argument(
+                                "amount",
+                                StringArgumentType.word()
+                        ).executes(command -> selfMutation(
+                                context,
+                                command,
+                                descriptor,
+                                request(command, action)
+                        ))
+                )
+                .then(playerArgument(
+                                context,
+                                permission + ".others"
+                        ).then(Commands.argument(
                                         "amount",
-                                        ExperienceAmountArgument.amount()
-                                )
-                                .executes(command -> selfMutation(
+                                        StringArgumentType.word()
+                                ).executes(command -> otherMutation(
                                         context,
                                         command,
                                         descriptor,
                                         request(command, action)
                                 ))
-                )
-                .then(playerArgument(
-                                context,
-                                permission + ".others"
                         )
-                                .then(Commands.argument(
-                                                        "amount",
-                                                        ExperienceAmountArgument.amount()
-                                                )
-                                                .executes(command -> otherMutation(
-                                                        context,
-                                                        command,
-                                                        descriptor,
-                                                        request(command, action)
-                                                ))
-                                )
                 );
     }
 
@@ -181,32 +167,20 @@ public final class ExpCommand implements CommandContributor {
             CommandRegistrationContext context,
             String permission
     ) {
-        return Commands.argument(
-                        "player",
-                        EntityArgument.player()
-                )
+        return Commands.argument("player", EntityArgument.player())
                 .requires(source ->
-                        context.hasPermission(
-                                source,
-                                permission
-                        )
+                        context.hasPermission(source, permission)
                 );
     }
 
     private static ExperienceRequest request(
             CommandContext<CommandSourceStack> command,
             ExperienceAction action
-    ) {
-        var amount = ExperienceAmountArgument.get(
-                command,
-                "amount"
+    ) throws CommandSyntaxException {
+        var amount = ExperienceAmounts.parse(
+                StringArgumentType.getString(command, "amount")
         );
-
-        return new ExperienceRequest(
-                action,
-                amount.unit(),
-                amount.amount()
-        );
+        return new ExperienceRequest(action, amount.unit(), amount.amount());
     }
 
     private int selfShow(
@@ -224,13 +198,11 @@ public final class ExpCommand implements CommandContributor {
                                 players
                         )
                         .map(service::experience)
-                        .orElseGet(() ->
-                                CompletableFuture.completedFuture(
-                                        PlayerStateCommandResult.failure(
-                                                "commands.playerstate.exp.console-target-required"
-                                        )
+                        .orElseGet(() -> CompletableFuture.completedFuture(
+                                PlayerStateCommandResult.failure(
+                                        "commands.playerstate.exp.console-target-required"
                                 )
-                        )
+                        ))
         );
     }
 
@@ -242,7 +214,6 @@ public final class ExpCommand implements CommandContributor {
         var target = MinecraftPlayers.wrap(
                 EntityArgument.getPlayer(command, "player")
         );
-
         return PlayerStateCommandSupport.async(
                 context,
                 command,
@@ -268,18 +239,13 @@ public final class ExpCommand implements CommandContributor {
                                 players
                         )
                         .map(player ->
-                                service.mutateExperience(
-                                        player,
-                                        request
-                                )
+                                service.mutateExperience(player, request)
                         )
-                        .orElseGet(() ->
-                                CompletableFuture.completedFuture(
-                                        PlayerStateCommandResult.failure(
-                                                "commands.playerstate.exp.console-target-required"
-                                        )
+                        .orElseGet(() -> CompletableFuture.completedFuture(
+                                PlayerStateCommandResult.failure(
+                                        "commands.playerstate.exp.console-target-required"
                                 )
-                        )
+                        ))
         );
     }
 
@@ -292,16 +258,12 @@ public final class ExpCommand implements CommandContributor {
         var target = MinecraftPlayers.wrap(
                 EntityArgument.getPlayer(command, "player")
         );
-
         return PlayerStateCommandSupport.async(
                 context,
                 command,
                 descriptor,
                 "exp mutation other",
-                _ -> service.mutateExperience(
-                        target,
-                        request
-                )
+                _ -> service.mutateExperience(target, request)
         );
     }
 

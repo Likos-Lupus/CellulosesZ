@@ -1,36 +1,26 @@
 package top.likoslupus.cellulosesz.modules.world.command.argument;
 
 import com.mojang.brigadier.LiteralMessage;
-import com.mojang.brigadier.StringReader;
-import com.mojang.brigadier.arguments.ArgumentType;
-import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
-public final class TimeValueArgument implements ArgumentType<Long> {
+public final class TimeValues {
 
     private static final SimpleCommandExceptionType INVALID = new SimpleCommandExceptionType(
             new LiteralMessage(
                     "Time must be day, noon, night, midnight, or a non-negative tick value"
             )
     );
+    private static final List<String> SUGGESTIONS = List.of("day", "noon", "night", "midnight");
 
-    public static TimeValueArgument timeValue() {
-        return new TimeValueArgument();
+    private TimeValues() {
     }
 
-    public static long get(CommandContext<?> context, String name) {
-        return context.getArgument(name, Long.class);
-    }
-
-    @Override
-    public Long parse(StringReader reader) throws CommandSyntaxException {
-        var start = reader.getCursor();
-        var value = reader.readUnquotedString().toLowerCase(Locale.ROOT);
+    public static long parse(String raw) throws CommandSyntaxException {
+        var value = raw.toLowerCase(Locale.ROOT);
         var literal = switch (value) {
             case "day" -> 1_000L;
             case "noon" -> 6_000L;
@@ -51,18 +41,12 @@ public final class TimeValueArgument implements ArgumentType<Long> {
 
             return ticks;
         } catch (NumberFormatException failure) {
-            reader.setCursor(start);
-            throw INVALID.createWithContext(reader);
+            throw INVALID.create();
         }
     }
 
-    @Override
-    public Collection<String> getExamples() {
-        return List.of(
-                "day",
-                "18000",
-                "0"
-        );
+    public static List<String> suggestions() {
+        return SUGGESTIONS;
     }
 
 }

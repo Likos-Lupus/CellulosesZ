@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
@@ -11,7 +12,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.admin.application.BanCommandService;
-import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetArgument;
+import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargets;
 
 import java.util.List;
 
@@ -40,7 +41,7 @@ public final class BanIpCommand implements CommandContributor {
 
         var argument = Commands.argument(
                         "target",
-                        NetworkTargetArgument.addressOrPlayer()
+                        StringArgumentType.string()
                 )
                 .suggests((_, builder) ->
                         CommandSuggestionSupport.suggest(
@@ -74,7 +75,7 @@ public final class BanIpCommand implements CommandContributor {
                 descriptor,
                 List.of(),
                 "commands.description.banip",
-                "/banip <address-or-player> [reason]",
+                "/banip <address-or-player|\"ipv6\"> [reason]",
                 Commands.literal("banip").then(argument)
         );
     }
@@ -84,14 +85,17 @@ public final class BanIpCommand implements CommandContributor {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String reason
-    ) {
+    ) throws CommandSyntaxException {
+        var target = NetworkTargets.addressOrPlayer(
+                StringArgumentType.getString(command, "target")
+        );
         return AdminCommandResults.async(
                 registration,
                 command,
                 descriptor,
                 "banip reason-present=" + !reason.isBlank(),
                 policy -> service.banIp(
-                        NetworkTargetArgument.get(command, "target"),
+                        target,
                         AdminCommandResults.actor(policy, players),
                         reason
                 )

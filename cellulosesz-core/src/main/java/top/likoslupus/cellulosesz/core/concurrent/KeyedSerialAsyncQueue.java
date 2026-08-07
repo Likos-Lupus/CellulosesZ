@@ -40,7 +40,7 @@ public final class KeyedSerialAsyncQueue<K> implements AutoCloseable {
         requireNonNull(key, "key");
         requireNonNull(operation, "operation");
 
-        final CompletableFuture<Void> accepted = new CompletableFuture<>();
+        final var accepted = new CompletableFuture<Void>();
         final CompletableFuture<T> result;
         synchronized (lifecycleLock) {
             if (!accepting) {
