@@ -13,7 +13,7 @@ jackson = "3.2.1"
 jspecify = "1.0.1"
 lombok = "1.18.46"
 classgraph = "4.8.187"
-junit = "6.1.2"
+junit = "6.1.3"
 adventure = "5.2.0"
 luckperms = "5.5"
 
