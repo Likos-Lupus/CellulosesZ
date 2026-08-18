@@ -9,7 +9,7 @@ architectury-api = "20.0.12"
 architectury-plugin = "3.5.169"
 shadow = "9.6.1"
 
-jackson = "3.2.1"
+jackson = "3.2.2"
 jspecify = "1.0.1"
 lombok = "1.18.46"
 classgraph = "4.8.192"
