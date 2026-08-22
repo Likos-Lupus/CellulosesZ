@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.core.config;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.dataformat.yaml.YAMLMapper;
+import tools.jackson.module.kotlin.KotlinModule;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,9 +14,11 @@ import java.nio.file.*;
 public final class JacksonCodecs {
 
     private static final YAMLMapper YAML = YAMLMapper.builder()
+            .addModule(new KotlinModule.Builder().build())
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
     private static final JsonMapper JSON = JsonMapper.builder()
+            .addModule(new KotlinModule.Builder().build())
             .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .build();
 
