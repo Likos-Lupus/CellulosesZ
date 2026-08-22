@@ -33,7 +33,7 @@ import kotlin.coroutines.CoroutineContext
  * 5. Closes all [SuspendCloseable] resources in reverse registration order.
  * 6. Closes all synchronous [Registration] handles in reverse registration order.
  * 7. Completes the module job.
- * 8. Aggregates all teardown failures into a single exception with suppressed causes.
+ * 8. Aggregates all teardown failures (including stop-acceptance failures) into a single exception with suppressed causes.
  */
 class DefaultModuleScope(
     private val owner: String,
@@ -55,6 +55,7 @@ class DefaultModuleScope(
 
     private val resources = Collections.synchronizedList(ArrayList<Any>())
     private val uniqueResources = Collections.newSetFromMap(IdentityHashMap<Any, Boolean>())
+    private val stopAcceptingFailures = Collections.synchronizedList(ArrayList<Throwable>())
 
     override fun owner(): String = owner
 
@@ -71,58 +72,88 @@ class DefaultModuleScope(
             )
         }
 
-        if (!isAccepting.get()) {
-            registration.close()
-            throw LifecycleClosedException("Module scope '$owner' is closing")
+        synchronized(resources) {
+            if (!isAccepting.get()) {
+                registration.close()
+                throw LifecycleClosedException("Module scope '$owner' is closing")
+            }
+            resources.add(registration)
         }
-
-        resources.add(registration)
         return registration
     }
 
     fun <T : SuspendCloseable> own(closeable: T): T {
-        if (!isAccepting.get()) {
-            throw LifecycleClosedException("Module scope '$owner' is closing")
+        synchronized(resources) {
+            if (!isAccepting.get()) {
+                throw LifecycleClosedException("Module scope '$owner' is closing")
+            }
+            if (uniqueResources.add(closeable)) {
+                resources.add(closeable)
+            }
         }
-
-        if (uniqueResources.add(closeable)) {
-            resources.add(closeable)
-        }
-
         return closeable
     }
 
     fun <T : DrainableResource> own(drainable: T): T {
-        if (!isAccepting.get()) {
-            drainable.stopAccepting()
-            throw LifecycleClosedException("Module scope '$owner' is closing")
-        }
+        synchronized(resources) {
+            if (!isAccepting.get()) {
+                try {
+                    drainable.stopAccepting()
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        stopAcceptingFailures.add(t)
+                    }
+                }
+                throw LifecycleClosedException("Module scope '$owner' is closing")
+            }
 
-        if (uniqueResources.add(drainable)) {
-            resources.add(drainable)
+            if (uniqueResources.add(drainable)) {
+                resources.add(drainable)
+            }
         }
 
         return drainable
     }
 
-    fun own(closeable: AsyncCloseable) {
-        if (!isAccepting.get()) {
-            closeable.stopAccepting()
-            closeable.drain()
-            throw LifecycleClosedException("Module scope '$owner' is closing")
-        }
+    @Deprecated(
+        "Legacy AsyncCloseable lifecycle registration",
+        ReplaceWith("own(drainable)")
+    )
+    override fun own(closeable: AsyncCloseable) {
+        synchronized(resources) {
+            if (!isAccepting.get()) {
+                var drainFailure: Throwable? = null
+                try {
+                    closeable.stopAccepting()
+                    val drainFuture = closeable.drain()
+                    drainFuture.whenComplete { _, failure ->
+                        if (failure != null && failure !is CancellationException) {
+                            stopAcceptingFailures.add(failure)
+                        }
+                    }
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        drainFailure = t
+                        stopAcceptingFailures.add(t)
+                    }
+                }
 
-        if (uniqueResources.add(closeable)) {
-            resources.add(closeable)
+                throw LifecycleClosedException("Module scope '$owner' is closing", drainFailure)
+            }
+
+            if (uniqueResources.add(closeable)) {
+                resources.add(closeable)
+            }
         }
     }
 
     fun own(job: Job): Job {
-        if (!isAccepting.get()) {
-            job.cancel()
-            throw LifecycleClosedException("Module scope '$owner' is closing")
+        synchronized(resources) {
+            if (!isAccepting.get()) {
+                job.cancel()
+                throw LifecycleClosedException("Module scope '$owner' is closing")
+            }
         }
-
         return job
     }
 
@@ -135,8 +166,10 @@ class DefaultModuleScope(
                         is DrainableResource -> resource.stopAccepting()
                         is AsyncCloseable -> resource.stopAccepting()
                     }
-                } catch (_: Throwable) {
-                    // Stop acceptance errors should not prevent other resources from stopping
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        stopAcceptingFailures.add(t)
+                    }
                 }
             }
         }
@@ -175,6 +208,7 @@ class DefaultModuleScope(
 
         try {
             stopAccepting()
+            failures.addAll(synchronized(stopAcceptingFailures) { stopAcceptingFailures.toList() })
 
             val snapshot = synchronized(resources) { resources.toList() }
             val reverse = snapshot.asReversed()
@@ -252,8 +286,12 @@ class DefaultModuleScope(
     /**
      * Legacy interop bridge to close the module scope asynchronously from Java orchestration.
      */
-    fun closeAsync(): CompletableFuture<Void?> {
-        return LegacyFutureLifecycleAdapter.future(parentContext) {
+    @Deprecated(
+        "Legacy future lifecycle closeAsync",
+        ReplaceWith("close()")
+    )
+    override fun closeAsync(): CompletableFuture<Void> {
+        return LegacyFutureLifecycleAdapter.futureVoid(parentContext) {
             close()
         }
     }

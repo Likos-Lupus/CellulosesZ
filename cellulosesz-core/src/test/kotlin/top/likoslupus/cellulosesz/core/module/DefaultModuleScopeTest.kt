@@ -75,6 +75,7 @@ class DefaultModuleScopeTest {
         scope.own(reg1)
         scope.own(suspendCloseable)
         scope.own(drainable)
+        @Suppress("DEPRECATION")
         scope.own(asyncCloseable)
         scope.own(failingReg)
 
@@ -164,6 +165,79 @@ class DefaultModuleScopeTest {
         c3.await()
 
         assertEquals(1, closeCount.get())
+        assertFalse(scope.accepting)
+    }
+
+    @Test
+    fun `stopAccepting failure is aggregated during close`() = runTest {
+        val scope = DefaultModuleScope("test")
+        scope.own(object : DrainableResource {
+            override fun stopAccepting() {
+                throw IllegalStateException("Stop acceptance failed")
+            }
+
+            override suspend fun drain() {}
+        })
+
+        var failure: IllegalStateException? = null
+        try {
+            scope.close()
+            fail<Unit>("Expected IllegalStateException")
+        } catch (e: IllegalStateException) {
+            failure = e
+        }
+        assertNotNull(failure)
+        assertEquals(1, failure!!.suppressedExceptions.size)
+        assertEquals("Stop acceptance failed", failure.suppressedExceptions[0].message)
+    }
+
+    @Test
+    fun `own AsyncCloseable after stopAccepting propagates drain failure as cause`() = runTest {
+        val scope = DefaultModuleScope("test")
+        scope.stopAccepting()
+
+        val failingCloseable = object : AsyncCloseable {
+            override fun stopAccepting() {
+                throw IllegalStateException("Sync failure on close")
+            }
+
+            override fun drain(): CompletableFuture<Void> {
+                return CompletableFuture.completedFuture(null)
+            }
+        }
+
+        val ex = assertThrows(LifecycleClosedException::class.java) {
+            @Suppress("DEPRECATION")
+            scope.own(failingCloseable)
+        }
+        assertNotNull(ex.cause)
+        assertEquals("Sync failure on close", ex.cause!!.message)
+    }
+
+    @Test
+    fun `concurrent registration and close race does not leak registrations`() = runTest {
+        val scope = DefaultModuleScope("race-test")
+        val order = Collections.synchronizedList(ArrayList<String>())
+        val totalRegs = 100
+
+        val regJobs = (1..totalRegs).map { i ->
+            async(Dispatchers.Default) {
+                try {
+                    scope.own(TestRegistration("race-test", "reg-$i", order, false))
+                } catch (_: LifecycleClosedException) {
+                    // Registration was rejected because close() won the race
+                }
+            }
+        }
+
+        val closeJob = async(Dispatchers.Default) {
+            scope.close()
+        }
+
+        regJobs.awaitAll()
+        closeJob.await()
+
+        // Every registration that was accepted MUST have been closed
         assertFalse(scope.accepting)
     }
 

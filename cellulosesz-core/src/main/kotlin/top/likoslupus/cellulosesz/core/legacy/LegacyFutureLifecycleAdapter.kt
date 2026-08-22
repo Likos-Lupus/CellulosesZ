@@ -25,4 +25,16 @@ object LegacyFutureLifecycleAdapter {
         null
     }
 
+    /**
+     * Bridges a suspending block to a [CompletableFuture] returning Java [Void].
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun futureVoid(
+        context: CoroutineContext = EmptyCoroutineContext,
+        block: suspend CoroutineScope.() -> Unit,
+    ): CompletableFuture<Void> = CoroutineScope(context).future {
+        block()
+        null
+    } as CompletableFuture<Void>
+
 }
