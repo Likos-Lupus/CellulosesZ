@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.core.config.ModulesConfig;
+import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
@@ -40,6 +41,7 @@ public final class DefaultModuleManager {
     private final Map<String, ModuleDescriptor> descriptors = new LinkedHashMap<>();
     private final Map<String, LoadedModule> loaded = new LinkedHashMap<>();
     private final AtomicBoolean reloadPrepared = new AtomicBoolean();
+    private final CellulosesRuntime runtime;
     private @Nullable ModulesConfig modulesConfig;
     private @Nullable Registration modulesConfigRegistration;
     private boolean serverStarting;
@@ -56,6 +58,30 @@ public final class DefaultModuleManager {
             CommandMiddlewareRegistry middlewares,
             CellulosesZLogger logger
     ) {
+        this(
+                scanner,
+                dataDirectory,
+                services,
+                configs,
+                events,
+                scheduler,
+                middlewares,
+                logger,
+                new CellulosesRuntime(logger)
+        );
+    }
+
+    public DefaultModuleManager(
+            ModuleScanner scanner,
+            Path dataDirectory,
+            ServiceRegistry services,
+            ConfigRegistry configs,
+            EventRegistry events,
+            Scheduler scheduler,
+            CommandMiddlewareRegistry middlewares,
+            CellulosesZLogger logger,
+            CellulosesRuntime runtime
+    ) {
         this.scanner = requireNonNull(scanner, "scanner");
         this.dataDirectory = requireNonNull(dataDirectory, "dataDirectory");
         this.services = requireNonNull(services, "services");
@@ -64,6 +90,7 @@ public final class DefaultModuleManager {
         this.scheduler = requireNonNull(scheduler, "scheduler");
         this.middlewares = requireNonNull(middlewares, "middlewares");
         this.logger = requireNonNull(logger, "logger");
+        this.runtime = requireNonNull(runtime, "runtime");
     }
 
     private static <T> CompletableFuture<T> invoke(
@@ -410,7 +437,8 @@ public final class DefaultModuleManager {
                     scheduler,
                     middlewares,
                     logger,
-                    this::moduleEnabled
+                    this::moduleEnabled,
+                    runtime
             );
         } catch (InstantiationException
                  | IllegalAccessException

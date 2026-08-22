@@ -11,10 +11,18 @@ public interface ModuleScope {
 
     <R extends Registration> R own(R registration);
 
-    void own(AsyncCloseable closeable);
+    @Deprecated(forRemoval = true)
+    default void own(AsyncCloseable closeable) {
+        throw new UnsupportedOperationException(
+                "AsyncCloseable registration is deprecated in ModuleScope"
+        );
+    }
 
     boolean closing();
 
-    CompletableFuture<Void> closeAsync();
+    @Deprecated(forRemoval = true)
+    default CompletableFuture<Void> closeAsync() {
+        return CompletableFuture.completedFuture(null);
+    }
 
 }
