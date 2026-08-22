@@ -5,8 +5,9 @@ import com.mojang.brigadier.arguments.ArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import net.minecraft.SharedConstants;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -41,7 +42,8 @@ class CommandTreeProtocolValidatorTest {
     }
 
     private static void initializeArgumentTypes() {
-        BuiltInRegistries.COMMAND_ARGUMENT_TYPE.size();
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
     }
 
     @Test

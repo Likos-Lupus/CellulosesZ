@@ -34,11 +34,9 @@ subprojects {
 
     extensions.configure<BasePluginExtension> {
         archivesName.set(
-            providers.gradleProperty("archives_base_name")
-                .map { baseName ->
-                    if (project.name == "cellulosesz-fabric") baseName else "${baseName}-${project.name}"
-                }
-        )
+            providers.gradleProperty("archives_base_name").map { baseName ->
+                if (project.name == "cellulosesz-fabric") baseName else "${baseName}-${project.name}"
+            })
     }
 
     extensions.configure<JavaPluginExtension> {
@@ -51,9 +49,7 @@ subprojects {
         options.release.set(cellulosesJavaVersion)
         options.compilerArgs.addAll(
             listOf(
-                "-parameters",
-                "-Xlint:unchecked",
-                "-Xlint:deprecation"
+                "-parameters", "-Xlint:unchecked", "-Xlint:deprecation"
             )
         )
     }
@@ -73,3 +69,4 @@ subprojects {
         useJUnitPlatform()
     }
 }
+
