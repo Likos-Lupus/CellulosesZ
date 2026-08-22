@@ -33,7 +33,7 @@ configurations.named("testCompileClasspath") { extendsFrom(commonConfiguration) 
 configurations.named("testRuntimeClasspath") { extendsFrom(commonConfiguration) }
 developmentFabric.configure { extendsFrom(commonConfiguration) }
 
-val commonProjects = listOf(
+val loomCommonProjects = listOf(
     ":cellulosesz-common",
     ":cellulosesz-modules:cellulosesz-module-text",
     ":cellulosesz-modules:cellulosesz-module-home",
@@ -49,7 +49,7 @@ val commonProjects = listOf(
     ":cellulosesz-modules:cellulosesz-module-world",
     ":cellulosesz-modules:cellulosesz-module-sign"
 )
-val pureJavaProjects = listOf(
+val plainJvmProjects = listOf(
     ":cellulosesz-api",
     ":cellulosesz-core",
     ":cellulosesz-modules:cellulosesz-module-user",
@@ -60,31 +60,28 @@ dependencies {
     minecraft(libs.minecraft)
     implementation(libs.fabric.loader)
     implementation(libs.fabric.api)
+    implementation(libs.fabric.language.kotlin)
     implementation(libs.architectury.fabric)
 
-    commonProjects.forEach { path ->
+    loomCommonProjects.forEach { path ->
         add(
-            commonConfiguration.name,
-            project(path = path)
+            commonConfiguration.name, project(path = path)
         ) {
             isTransitive = false
         }
         add(
-            shadowBundle.name,
-            project(
-                path = path,
-                configuration = "transformProductionFabric"
+            shadowBundle.name, project(
+                path = path, configuration = "transformProductionFabric"
             )
         ) {
             isTransitive = false
         }
     }
 
-    pureJavaProjects.forEach { path ->
+    plainJvmProjects.forEach { path ->
         implementation(project(path))
         add(
-            shadowBundle.name,
-            project(path)
+            shadowBundle.name, project(path)
         ) {
             isTransitive = false
         }
@@ -92,9 +89,13 @@ dependencies {
 
     implementation(libs.jackson.databind)
     implementation(libs.jackson.yaml)
+    implementation(libs.jackson.kotlin)
     implementation(libs.classgraph)
     add(shadowBundle.name, libs.jackson.databind)
     add(shadowBundle.name, libs.jackson.yaml)
+    add(shadowBundle.name, dependencies.create(libs.jackson.kotlin.get()).apply {
+        (this as? ModuleDependency)?.isTransitive = false
+    })
     add(shadowBundle.name, libs.classgraph)
 }
 
@@ -129,6 +130,7 @@ tasks.named<ProcessResources>("processResources") {
         "minecraft_version" to libs.versions.minecraft.get(),
         "loader_version" to libs.versions.fabric.loader.get(),
         "fabric_version" to libs.versions.fabric.api.get(),
+        "fabric_language_kotlin_version" to libs.versions.fabric.language.kotlin.get(),
         "architectury_version" to libs.versions.architectury.api.get()
     )
     values.forEach(inputs::property)

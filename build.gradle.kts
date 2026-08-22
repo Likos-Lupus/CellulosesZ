@@ -1,4 +1,8 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
+
 plugins {
+    alias(libs.plugins.kotlin.jvm) apply false
     alias(libs.plugins.architectury.plugin) apply false
     alias(libs.plugins.architectury.loom.no.remap) apply false
     alias(libs.plugins.shadow) apply false
@@ -7,7 +11,6 @@ plugins {
 
 val cellulosesJavaVersion = libs.versions.java.get().toInt()
 val jspecifyDependency = libs.jspecify
-val lombokDependency = libs.lombok
 val junitDependency = libs.junit.jupiter
 val junitPlatformLauncherDependency = libs.junit.platform.launcher
 
@@ -31,6 +34,7 @@ allprojects {
 
 subprojects {
     apply(plugin = "java-library")
+    apply(plugin = "org.jetbrains.kotlin.jvm")
 
     extensions.configure<BasePluginExtension> {
         archivesName.set(
@@ -42,6 +46,14 @@ subprojects {
     extensions.configure<JavaPluginExtension> {
         toolchain.languageVersion.set(JavaLanguageVersion.of(cellulosesJavaVersion))
         withSourcesJar()
+    }
+
+    extensions.configure<KotlinJvmProjectExtension> {
+        jvmToolchain(cellulosesJavaVersion)
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_25)
+            javaParameters.set(true)
+        }
     }
 
     tasks.withType<JavaCompile>().configureEach {
@@ -56,10 +68,6 @@ subprojects {
 
     dependencies {
         "compileOnly"(jspecifyDependency)
-        "compileOnly"(lombokDependency)
-        "annotationProcessor"(lombokDependency)
-        "testCompileOnly"(lombokDependency)
-        "testAnnotationProcessor"(lombokDependency)
         "testCompileOnly"(jspecifyDependency)
         "testImplementation"(junitDependency)
         "testRuntimeOnly"(junitPlatformLauncherDependency)

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-test:
-    name: Build & Test (Java ${{ matrix.java }})
+    name: Build & Test (JDK ${{ matrix.java }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
