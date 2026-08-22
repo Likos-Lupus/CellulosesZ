@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.sign;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
@@ -42,25 +41,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "sign",
-        name = "Sign",
-        description = "Persistent validated interactive sign handlers.",
-        phase = ModulePhase.FEATURE,
-        requires = {
-                "permission",
-                "economy",
-                "item",
-                "teleport",
-                "warp",
-                "kit",
-                "playerstate",
-                "world",
-                "text",
-                "messaging",
-                "command"
-        }
-)
 public final class SignModule implements CellulosesZModule {
 
     private @Nullable SignConfig config;

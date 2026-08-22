@@ -90,13 +90,11 @@ dependencies {
     implementation(libs.jackson.databind)
     implementation(libs.jackson.yaml)
     implementation(libs.jackson.kotlin)
-    implementation(libs.classgraph)
     add(shadowBundle.name, libs.jackson.databind)
     add(shadowBundle.name, libs.jackson.yaml)
     add(shadowBundle.name, dependencies.create(libs.jackson.kotlin.get()).apply {
         (this as? ModuleDependency)?.isTransitive = false
     })
-    add(shadowBundle.name, libs.classgraph)
 }
 
 val archiveBaseName = providers.gradleProperty("archives_base_name")

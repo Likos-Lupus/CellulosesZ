@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.messaging;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
 import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
@@ -32,13 +31,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "messaging",
-        name = "Messaging",
-        description = "Private messages, replies, ignore, mail, social spy, helpop, broadcast, and list commands.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command"}
-)
 public final class MessagingModule implements CellulosesZModule {
 
     private @Nullable MessagingConfig config;

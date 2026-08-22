@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.item;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
@@ -29,13 +28,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "item",
-        name = "Item",
-        description = "Complex item descriptors, inventory utilities, power tools, and unlimited items.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command"}
-)
 public final class ItemModule implements CellulosesZModule {
 
     private @Nullable ItemConfig config;

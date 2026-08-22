@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.text;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.text.*;
@@ -17,13 +16,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "text",
-        name = "Text",
-        description = "Info, MOTD, rules, and custom paged text commands.",
-        phase = ModulePhase.FEATURE,
-        requires = {"command"}
-)
 public final class TextModule implements CellulosesZModule {
 
     private @Nullable TextConfig config;

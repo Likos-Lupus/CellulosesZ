@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.command;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
 import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
@@ -18,13 +17,6 @@ import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePos
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "command",
-        name = "Command",
-        description = "Registers the CellulosesZ root command and command infrastructure.",
-        phase = ModulePhase.CORE,
-        priority = 0
-)
 public final class CommandModule implements CellulosesZModule {
 
     private @Nullable CommandConfig config;

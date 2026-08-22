@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.user;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.module.*;
@@ -27,13 +26,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "user",
-        name = "User",
-        description = "User cache and profile foundation.",
-        phase = ModulePhase.FEATURE,
-        requires = {"command", "permission"}
-)
 public final class UserModule implements CellulosesZModule {
 
     private volatile @Nullable UserConfig config;

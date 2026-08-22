@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.admin;
 
 import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
@@ -35,13 +34,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "admin",
-        name = "Admin",
-        description = "Administration, punishments, mute, and jail services.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command", "permission", "teleport"}
-)
 public final class AdminModule implements CellulosesZModule {
 
     private @Nullable AdminConfig config;

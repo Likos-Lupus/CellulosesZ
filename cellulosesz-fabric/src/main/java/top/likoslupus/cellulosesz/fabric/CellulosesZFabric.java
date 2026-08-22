@@ -32,6 +32,7 @@ import top.likoslupus.cellulosesz.core.permission.CompositePermissionBackend;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.fabric.bridge.FabricCommandRootMutator;
 import top.likoslupus.cellulosesz.fabric.lifecycle.FabricCommonRuntimeHooks;
+import top.likoslupus.cellulosesz.fabric.module.BuiltInModules;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 
 import java.util.ArrayList;
@@ -62,7 +63,8 @@ public final class CellulosesZFabric implements DedicatedServerModInitializer {
         var currentBootstrap = new CellulosesZBootstrap(
                 configDirectory,
                 version,
-                logger
+                logger,
+                BuiltInModules.catalog()
         );
         bootstrap = currentBootstrap;
 

@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.permission;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
@@ -11,12 +10,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "permission",
-        name = "Permission",
-        description = "Permission provider integration and cache.",
-        phase = ModulePhase.CORE
-)
 public final class PermissionModule implements CellulosesZModule {
 
     private @Nullable PermissionConfig config;

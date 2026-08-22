@@ -1,10 +1,8 @@
 package top.likoslupus.cellulosesz.modules.world;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
 import top.likoslupus.cellulosesz.api.module.*;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
@@ -23,13 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "world",
-        name = "World",
-        description = "World time, weather, and entity cleanup commands.",
-        phase = ModulePhase.FEATURE,
-        requires = {"command"}
-)
 public final class WorldModule implements CellulosesZModule {
 
     private @Nullable WorldConfig config;

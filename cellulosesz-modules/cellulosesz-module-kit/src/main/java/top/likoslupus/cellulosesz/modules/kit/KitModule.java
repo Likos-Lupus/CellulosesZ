@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.kit;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
@@ -22,14 +21,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "kit",
-        name = "Kit",
-        description = "Kit storage, preview, claim, cooldown, and cost services.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command"},
-        optional = {"economy"}
-)
 public final class KitModule implements CellulosesZModule {
 
     private @Nullable KitConfig config;
