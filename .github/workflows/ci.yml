@@ -35,6 +35,11 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
+      - name: Print Toolchain Info
+        run: |
+          java -version
+          ./gradlew --version
+
       - name: Build (includes tests & checks)
         run: ./gradlew --no-daemon build --stacktrace
 
