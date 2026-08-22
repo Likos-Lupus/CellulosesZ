@@ -248,7 +248,94 @@ class DefaultModuleManagerTest {
         assertEquals(0, fixture.manager.activeCount())
         assertFalse(fixture.manager.moduleEnabled("a"))
         assertFalse(fixture.manager.moduleEnabled("b"))
+        assertEquals(
+            DefaultModuleManager.ManagerState.STOPPED,
+            fixture.manager.state
+        )
     }
+
+    @Test
+    fun `reconcile failure unwinds newly started modules from that reconciliation`() = runTest {
+        val catalog = moduleCatalog {
+            feature(
+                key = ModuleKey("a"),
+                name = "A",
+                description = "A",
+                enabledByDefault = true,
+                factory = ::DependencyModule,
+            )
+            feature(
+                key = ModuleKey("b"),
+                name = "B",
+                description = "B",
+                enabledByDefault = false,
+                factory = ::DependencyModule,
+            ) {
+                requires(ModuleKey("a"))
+            }
+            feature(
+                key = ModuleKey("c"),
+                name = "C",
+                description = "C",
+                enabledByDefault = false,
+                factory = ::FailingModule,
+            ) {
+                requires(ModuleKey("b"))
+            }
+        }
+
+        val fixture = fixture(catalog)
+        fixture.manager.start()
+        LOG.clear()
+
+        val ex = assertThrows<IllegalStateException> {
+            fixture.manager.reconcile(
+                setOf(
+                    ModuleKey("a"),
+                    ModuleKey("b"),
+                    ModuleKey("c")
+                )
+            )
+        }
+        assertTrue(ex.message!!.contains("Failed during module reconciliation"))
+        // B was started during reconcile, then C failed, so B must be unwound
+        assertEquals(listOf("load:b", "unload:b"), LOG.toList())
+        assertFalse(fixture.manager.moduleEnabled("b"))
+        assertFalse(fixture.manager.moduleEnabled("c"))
+        assertTrue(fixture.manager.moduleEnabled("a"))
+    }
+
+    @Test
+    fun `synchronous cancellation during runPhase propagates CancellationException directly`() =
+        runTest {
+            class CancellingModule : CellulosesZModule {
+
+                override fun registerServices(context: ModuleContext) {
+                    throw CancellationException("Simulated coroutine cancellation")
+                }
+
+            }
+
+            val catalog = moduleCatalog {
+                feature(
+                    key = ModuleKey("cancelling"),
+                    name = "Cancelling",
+                    description = "Cancelling",
+                    enabledByDefault = true,
+                    factory = { CancellingModule() },
+                )
+            }
+
+            val fixture = fixture(catalog)
+            assertThrows<CancellationException> {
+                fixture.manager.start()
+            }
+            assertEquals(
+                DefaultModuleManager.ManagerState.STOPPED,
+                fixture.manager.state
+            )
+            assertFalse(fixture.manager.moduleEnabled("cancelling"))
+        }
 
     @Test
     fun `factory failure does not leak scope and marks module failed`() = runTest {

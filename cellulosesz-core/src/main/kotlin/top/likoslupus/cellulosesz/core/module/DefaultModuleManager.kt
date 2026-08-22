@@ -129,27 +129,27 @@ class DefaultModuleManager(
 
             managerState = ManagerState.STARTING
 
-            val reg = configs.register(
-                "modules",
-                ModulesConfig::class.java,
-                "modules.yml",
-                { defaultModulesConfig(catalog) },
-                "core"
-            )
-            modulesConfigRegistration = reg
-            val loadedConfig = copyModulesConfig(
-                configs.require(
-                    "modules",
-                    ModulesConfig::class.java
-                )
-            )
-            modulesConfig = loadedConfig
-
-            val desired = desiredEnabledKeys(loadedConfig)
-            val plan = planReconciliation(desired)
-
             val startedThisTransaction = mutableListOf<ModuleKey>()
             try {
+                val reg = configs.register(
+                    "modules",
+                    ModulesConfig::class.java,
+                    "modules.yml",
+                    { defaultModulesConfig(catalog) },
+                    "core"
+                )
+                modulesConfigRegistration = reg
+                val loadedConfig = copyModulesConfig(
+                    configs.require(
+                        "modules",
+                        ModulesConfig::class.java
+                    )
+                )
+                modulesConfig = loadedConfig
+
+                val desired = desiredEnabledKeys(loadedConfig)
+                val plan = planReconciliation(desired)
+
                 plan.loadOrder.forEach {
                     startModule(it)
                     startedThisTransaction.add(it)
@@ -166,6 +166,12 @@ class DefaultModuleManager(
                             unwindFailures.add(t)
                         }
                     }
+                    try {
+                        modulesConfigRegistration?.close()
+                    } catch (t: Throwable) {
+                        unwindFailures.add(t)
+                    }
+                    modulesConfigRegistration = null
                     managerState = ManagerState.STOPPED
                     if (failure !is CancellationException) {
                         val aggregate = failure as? ModuleLoadException
@@ -239,7 +245,32 @@ class DefaultModuleManager(
                 }
             }
 
-            plan.loadOrder.forEach { startModule(it) }
+            val startedThisReconciliation = mutableListOf<ModuleKey>()
+            try {
+                plan.loadOrder.forEach {
+                    startModule(it)
+                    startedThisReconciliation.add(it)
+                }
+            } catch (failure: Throwable) {
+                withContext(NonCancellable) {
+                    startedThisReconciliation.asReversed().forEach {
+                        try {
+                            stopModule(it, serverShutdown = false)
+                        } catch (t: Throwable) {
+                            failures.add(t)
+                        }
+                    }
+                    if (failure !is CancellationException) {
+                        failures.add(failure)
+                    }
+                }
+                val aggregate = IllegalStateException("Failed during module reconciliation")
+                failures.forEach { aggregate.addSuppressed(it) }
+                if (failure is CancellationException) {
+                    throw failure
+                }
+                throw aggregate
+            }
 
             if (failures.isNotEmpty()) {
                 val aggregate = IllegalStateException("Failed during module reconciliation")
@@ -708,8 +739,11 @@ class DefaultModuleManager(
     ) {
         try {
             action()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
         } catch (failure: Throwable) {
             throw ModuleLoadException("Module '$key' failed during startup stage '$phase'", failure)
         }
     }
+
 }

@@ -77,13 +77,13 @@ class ModuleGraph(
 
             visiting.add(key)
 
-            descriptor.requires.forEach {
+            descriptor.requires.sortedBy { it.value }.forEach {
                 val dep = byKey[it]
                     ?: throw ModuleLoadException("Module '$key' requires missing module '$it'")
                 visit(dep)
             }
 
-            descriptor.optional.forEach {
+            descriptor.optional.sortedBy { it.value }.forEach {
                 val dep = byKey[it]
                 if (dep != null) {
                     visit(dep)

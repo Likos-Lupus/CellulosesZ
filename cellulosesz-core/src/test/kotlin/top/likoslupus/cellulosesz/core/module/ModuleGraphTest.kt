@@ -190,6 +190,44 @@ class ModuleGraphTest {
     }
 
     @Test
+    fun `multiple required dependencies are sorted deterministically regardless of set iteration order`() {
+        val catalog1 = ModuleCatalog.of(
+            listOf(
+                testDefinition("consumer", requires = linkedSetOf("z_dep", "a_dep", "m_dep")),
+                testDefinition("z_dep"),
+                testDefinition("a_dep"),
+                testDefinition("m_dep"),
+            )
+        )
+        val catalog2 = ModuleCatalog.of(
+            listOf(
+                testDefinition("consumer", requires = linkedSetOf("a_dep", "z_dep", "m_dep")),
+                testDefinition("z_dep"),
+                testDefinition("a_dep"),
+                testDefinition("m_dep"),
+            )
+        )
+
+        val keys = setOf(
+            ModuleKey("consumer"),
+            ModuleKey("z_dep"),
+            ModuleKey("a_dep"),
+            ModuleKey("m_dep")
+        )
+        val order1 = ModuleGraph(catalog1).resolve(keys).startKeys.map { it.value }
+        val order2 = ModuleGraph(catalog2).resolve(keys).startKeys.map { it.value }
+
+        assertEquals(
+            order1,
+            order2
+        )
+        assertEquals(
+            listOf("a_dep", "m_dep", "z_dep", "consumer"),
+            order1
+        )
+    }
+
+    @Test
     fun `base ordering respects phase then priority then key`() {
         val catalog = ModuleCatalog.of(
             listOf(
