@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.playerstate;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.event.*;
@@ -33,13 +32,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "playerstate",
-        name = "PlayerState",
-        description = "Persistent player state, AFK automation, player lookup, and per-player world settings.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "permission", "command"}
-)
 public final class PlayerStateModule implements CellulosesZModule {
 
     private final Map<UUID, PersonalTimeSetting> lastTime = new ConcurrentHashMap<>();

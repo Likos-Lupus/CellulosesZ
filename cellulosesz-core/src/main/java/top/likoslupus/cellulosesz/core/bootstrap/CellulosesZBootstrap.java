@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.LoadedModuleInfo;
+import top.likoslupus.cellulosesz.api.module.ModuleCatalog;
 import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
@@ -31,7 +32,6 @@ import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry;
 import top.likoslupus.cellulosesz.core.i18n.DefaultLocaleResolver;
 import top.likoslupus.cellulosesz.core.i18n.DefaultMessageService;
 import top.likoslupus.cellulosesz.core.legacy.LegacyFutureLifecycleAdapter;
-import top.likoslupus.cellulosesz.core.module.ClassGraphModuleScanner;
 import top.likoslupus.cellulosesz.core.module.DefaultModuleManager;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
@@ -77,6 +77,7 @@ public final class CellulosesZBootstrap {
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final Object lifecycleLock = new Object();
     private final CellulosesRuntime runtime;
+    private final ModuleCatalog catalog;
     private volatile CompletableFuture<Void> activeReload = CompletableFuture.completedFuture(null);
     private @Nullable DefaultLocaleResolver localeResolver;
     private @Nullable DefaultModuleManager modules;
@@ -86,11 +87,13 @@ public final class CellulosesZBootstrap {
     public CellulosesZBootstrap(
             Path configDirectory,
             String version,
-            CellulosesZLogger logger
+            CellulosesZLogger logger,
+            ModuleCatalog catalog
     ) {
         this.configDirectory = configDirectory;
         this.version = version;
         this.logger = logger;
+        this.catalog = catalog;
         this.runtime = new CellulosesRuntime(logger, new RuntimeDispatchers());
         this.scheduler = new DefaultScheduler(logger);
         this.commandPipeline = new DefaultCommandExecutionPipeline(logger, services);
@@ -160,7 +163,7 @@ public final class CellulosesZBootstrap {
         services.register(RuntimeService.class, new DefaultRuntimeService(this));
 
         modules = new DefaultModuleManager(
-                new ClassGraphModuleScanner(),
+                catalog,
                 configDirectory.resolve("data"),
                 services,
                 configs,
@@ -192,7 +195,10 @@ public final class CellulosesZBootstrap {
 
     public void onServerStarting(Object server) {
         logger.info("CellulosesZ server starting.");
-        requireModules().onServerStarting();
+        awaitLifecycle(
+                "server-starting lifecycle",
+                requireModules().onServerStartingAsync()
+        );
     }
 
     private DefaultModuleManager requireModules() {
@@ -201,7 +207,10 @@ public final class CellulosesZBootstrap {
 
     public void onServerStarted(Object server) {
         logger.info("CellulosesZ server started.");
-        requireModules().onServerStarted();
+        awaitLifecycle(
+                "server-started lifecycle",
+                requireModules().onServerStartedAsync()
+        );
     }
 
     public CompletableFuture<Void> onServerStopping(Object server) {

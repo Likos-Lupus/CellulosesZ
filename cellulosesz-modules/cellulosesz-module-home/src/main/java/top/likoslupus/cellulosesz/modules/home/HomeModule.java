@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.home;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.home.HomeService;
@@ -21,13 +20,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "home",
-        name = "Home",
-        description = "Player home storage and teleport commands.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "teleport", "command"}
-)
 public final class HomeModule implements CellulosesZModule {
 
     private @Nullable HomeConfig config;

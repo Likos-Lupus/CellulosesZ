@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.teleport;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.event.PlayerDamageEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerDeathEvent;
@@ -33,14 +32,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "teleport",
-        name = "Teleport",
-        description = "Teleport, request, back and random teleport services.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command"},
-        optional = {"playerstate"}
-)
 public final class TeleportModule implements CellulosesZModule {
 
     private @Nullable TeleportConfig config;

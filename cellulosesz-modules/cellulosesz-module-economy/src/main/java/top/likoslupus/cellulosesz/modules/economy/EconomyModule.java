@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
@@ -33,13 +32,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "economy",
-        name = "Economy",
-        description = "Internal economy, balance, payments, balance top, and worth services.",
-        phase = ModulePhase.FEATURE,
-        requires = {"user", "command", "item"}
-)
 public final class EconomyModule implements CellulosesZModule {
 
     private final AtomicLong configVersion = new AtomicLong();

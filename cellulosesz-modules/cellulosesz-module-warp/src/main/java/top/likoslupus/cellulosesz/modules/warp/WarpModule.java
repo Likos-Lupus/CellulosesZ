@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.modules.warp;
 
-import top.likoslupus.cellulosesz.api.annotation.CellulosesModule;
 import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.module.*;
@@ -20,13 +19,6 @@ import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
-@CellulosesModule(
-        id = "warp",
-        name = "Warp",
-        description = "Named shared teleport locations.",
-        phase = ModulePhase.FEATURE,
-        requires = {"teleport", "command", "user"}
-)
 public final class WarpModule implements CellulosesZModule {
 
     private @Nullable WarpConfig config;
