@@ -6,9 +6,9 @@ import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModuleScope;
 import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
+import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -36,11 +36,36 @@ public final class DefaultModuleContext implements ModuleContext {
             Scheduler scheduler,
             CommandMiddlewareRegistry middlewares,
             CellulosesZLogger logger,
-            Predicate<String> enabledPredicate
+            Predicate<String> enabledPredicate,
+            CellulosesRuntime runtime
     ) {
         this.moduleId = moduleId;
         this.dataDirectory = dataDirectory;
-        this.scope = new DefaultModuleScope(moduleId);
+        this.scope = runtime.createModuleScope(moduleId);
+        this.services = new ModuleScopedServiceRegistry(moduleId, services, scope);
+        this.configs = new ModuleScopedConfigRegistry(moduleId, configs, scope);
+        this.events = new ModuleScopedEventRegistry(moduleId, events, scope);
+        this.scheduler = new ModuleScopedScheduler(moduleId, scheduler, scope);
+        this.middlewares = new ModuleScopedCommandMiddlewareRegistry(moduleId, middlewares, scope);
+        this.logger = logger;
+        this.enabledPredicate = enabledPredicate;
+    }
+
+    public DefaultModuleContext(
+            String moduleId,
+            Path dataDirectory,
+            ServiceRegistry services,
+            ConfigRegistry configs,
+            EventRegistry events,
+            Scheduler scheduler,
+            CommandMiddlewareRegistry middlewares,
+            CellulosesZLogger logger,
+            Predicate<String> enabledPredicate,
+            DefaultModuleScope scope
+    ) {
+        this.moduleId = moduleId;
+        this.dataDirectory = dataDirectory;
+        this.scope = scope;
         this.services = new ModuleScopedServiceRegistry(moduleId, services, scope);
         this.configs = new ModuleScopedConfigRegistry(moduleId, configs, scope);
         this.events = new ModuleScopedEventRegistry(moduleId, events, scope);
@@ -61,7 +86,7 @@ public final class DefaultModuleContext implements ModuleContext {
     }
 
     @Override
-    public ModuleScope scope() {
+    public DefaultModuleScope scope() {
         return scope;
     }
 

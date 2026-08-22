@@ -30,11 +30,14 @@ import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
 import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry;
 import top.likoslupus.cellulosesz.core.i18n.DefaultLocaleResolver;
 import top.likoslupus.cellulosesz.core.i18n.DefaultMessageService;
+import top.likoslupus.cellulosesz.core.legacy.LegacyFutureLifecycleAdapter;
 import top.likoslupus.cellulosesz.core.module.ClassGraphModuleScanner;
 import top.likoslupus.cellulosesz.core.module.DefaultModuleManager;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
+import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime;
 import top.likoslupus.cellulosesz.core.runtime.DefaultRuntimeService;
+import top.likoslupus.cellulosesz.core.runtime.RuntimeDispatchers;
 import top.likoslupus.cellulosesz.core.scheduler.DefaultScheduler;
 import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
 import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
@@ -73,6 +76,7 @@ public final class CellulosesZBootstrap {
     private final AtomicBoolean reloadRunning = new AtomicBoolean();
     private final AtomicBoolean stopping = new AtomicBoolean();
     private final Object lifecycleLock = new Object();
+    private final CellulosesRuntime runtime;
     private volatile CompletableFuture<Void> activeReload = CompletableFuture.completedFuture(null);
     private @Nullable DefaultLocaleResolver localeResolver;
     private @Nullable DefaultModuleManager modules;
@@ -87,6 +91,7 @@ public final class CellulosesZBootstrap {
         this.configDirectory = configDirectory;
         this.version = version;
         this.logger = logger;
+        this.runtime = new CellulosesRuntime(logger, new RuntimeDispatchers());
         this.scheduler = new DefaultScheduler(logger);
         this.commandPipeline = new DefaultCommandExecutionPipeline(logger, services);
         this.configs = new JacksonConfigRegistry(configDirectory, logger);
@@ -162,7 +167,8 @@ public final class CellulosesZBootstrap {
                 events,
                 scheduler,
                 commandPipeline,
-                logger
+                logger,
+                runtime
         );
         awaitLifecycle("module initialization", modules.loadAsync());
         initialized = true;
@@ -233,6 +239,18 @@ public final class CellulosesZBootstrap {
                             return (Void) null;
                         })
                 )
+                .thenCompose(_ -> LegacyFutureLifecycleAdapter.INSTANCE
+                        .future(
+                                runtime.getDispatchers().getApplication(),
+                                (_, continuation) -> runtime.shutdown(continuation)
+                        )
+                        .handle((_, failure) -> {
+                            if (failure != null) {
+                                failures.add(unwrap(failure));
+                            }
+                            return (Void) null;
+                        })
+                )
                 .thenCompose(_ -> {
                     scheduler.close();
                     if (failures.isEmpty()) {
@@ -253,6 +271,10 @@ public final class CellulosesZBootstrap {
             current = current.getCause();
         }
         return current;
+    }
+
+    public CellulosesRuntime runtime() {
+        return runtime;
     }
 
     public void onPlayerJoin(CellPlayer player) {
