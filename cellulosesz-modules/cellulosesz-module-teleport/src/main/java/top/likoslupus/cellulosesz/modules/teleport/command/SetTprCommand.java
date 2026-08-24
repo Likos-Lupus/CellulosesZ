@@ -91,7 +91,10 @@ public final class SetTprCommand implements CommandContributor {
                                 "settpr min set",
                                 _ -> service.minimum(
                                         StringArgumentType.getString(command, "world"),
-                                        Optional.of(IntegerArgumentType.getInteger(command, "radius"))
+                                        Optional.of(IntegerArgumentType.getInteger(
+                                                command,
+                                                "radius"
+                                        ))
                                 )
                         ))
                 );
@@ -115,7 +118,10 @@ public final class SetTprCommand implements CommandContributor {
                                 "settpr max set",
                                 _ -> service.maximum(
                                         StringArgumentType.getString(command, "world"),
-                                        Optional.of(IntegerArgumentType.getInteger(command, "radius"))
+                                        Optional.of(IntegerArgumentType.getInteger(
+                                                command,
+                                                "radius"
+                                        ))
                                 )
                         ))
                 );

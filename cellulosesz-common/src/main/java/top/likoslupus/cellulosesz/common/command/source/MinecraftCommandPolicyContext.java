@@ -16,6 +16,7 @@ import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -67,17 +68,17 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     }
 
     @Override
-    public Optional<UUID> playerUuid() {
+    public @Nullable UUID playerUuid() {
         return source.getEntity() instanceof ServerPlayer player
-                ? Optional.of(player.getUUID())
-                : Optional.empty();
+                ? player.getUUID()
+                : null;
     }
 
     @Override
-    public Optional<String> playerName() {
+    public @Nullable String playerName() {
         return source.getEntity() instanceof ServerPlayer player
-                ? Optional.of(player.getGameProfile().name())
-                : Optional.empty();
+                ? player.getGameProfile().name()
+                : null;
     }
 
     @Override
@@ -111,7 +112,10 @@ public final class MinecraftCommandPolicyContext implements CommandPolicyContext
     }
 
     public Optional<CellPlayer> currentPlayer() {
-        return playerUuid().flatMap(players::onlinePlayer);
+        var uuid = playerUuid();
+        return uuid == null
+                ? Optional.empty()
+                : Optional.ofNullable(players.onlinePlayer(uuid));
     }
 
     public int intPermissionOption(String key, int fallback) {

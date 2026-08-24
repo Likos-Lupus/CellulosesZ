@@ -2,12 +2,12 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
-import top.likoslupus.cellulosesz.api.admin.Jail;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
+import top.likoslupus.cellulosesz.modules.admin.domain.Jail;
 
 import java.util.List;
 

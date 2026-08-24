@@ -1,15 +1,13 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.user.data.NameCacheDocument;
 
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,19 +41,21 @@ public final class DefaultNameCacheService implements NameCacheService, AsyncIni
 
     @Override
     public void remember(UUID uuid, String name) {
-        if (name.isBlank()) return;
+        if (name.isBlank()) {
+            return;
+        }
         nameToUuid.put(normalize(name), uuid);
         uuidToName.put(uuid, name);
     }
 
     @Override
-    public Optional<UUID> findUuid(String name) {
-        return Optional.ofNullable(nameToUuid.get(normalize(name)));
+    public UUID findUuid(String name) {
+        return nameToUuid.get(normalize(name));
     }
 
     @Override
-    public Optional<String> findName(UUID uuid) {
-        return Optional.ofNullable(uuidToName.get(uuid));
+    public String findName(UUID uuid) {
+        return uuidToName.get(uuid);
     }
 
     @Override

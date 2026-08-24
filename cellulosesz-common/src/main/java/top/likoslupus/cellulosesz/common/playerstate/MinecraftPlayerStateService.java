@@ -7,11 +7,13 @@ import net.minecraft.stats.Stats;
 import net.minecraft.world.clock.ClockNetworkState;
 import net.minecraft.world.level.GameType;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.playerstate.*;
+import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
+import top.likoslupus.cellulosesz.api.playerstate.PersonalTimeSetting;
+import top.likoslupus.cellulosesz.api.playerstate.PersonalWeatherSetting;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
@@ -268,7 +270,7 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
             var target = MinecraftPlayers.requireOnline(server, player);
             var level = target.level();
             var currentTime = level.getDefaultClockTime();
-            var applied = (PersonalTimeSetting) switch (setting) {
+            var applied = switch (setting) {
                 case PersonalTimeSetting.Fixed fixed ->
                         new PersonalTimeSetting.Fixed(Math.floorMod(fixed.ticks(), 24_000L));
                 case PersonalTimeSetting.Relative relative ->
@@ -276,10 +278,11 @@ public final class MinecraftPlayerStateService implements PlayerStatePlatformSer
                                 currentTime + relative.offset(),
                                 24_000L
                         ));
-                case PersonalTimeSetting.Reset _ -> new PersonalTimeSetting.Reset();
+                case PersonalTimeSetting.Reset _ -> PersonalTimeSetting.reset();
+                default -> throw new IllegalStateException("Unexpected value: " + setting);
             };
 
-            if (applied instanceof PersonalTimeSetting.Fixed(long ticks)) {
+            if (applied instanceof PersonalTimeSetting.Fixed(var ticks)) {
                 var clock = level.dimensionType().defaultClock();
                 if (clock.isEmpty()) {
                     return PlatformResult.failure(

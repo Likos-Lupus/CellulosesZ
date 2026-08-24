@@ -1,14 +1,14 @@
 package top.likoslupus.cellulosesz.modules.warp;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.command.service.CooldownService;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.warp.application.DefaultWarpCommandService;
 import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
 import top.likoslupus.cellulosesz.modules.warp.command.WarpCommand;

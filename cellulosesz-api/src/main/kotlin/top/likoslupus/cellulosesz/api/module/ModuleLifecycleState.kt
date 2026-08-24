@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.module
 
-enum class ModuleLifecycleState {
+public enum class ModuleLifecycleState {
 
     DISCOVERED,
     RESOLVED,
@@ -10,6 +10,6 @@ enum class ModuleLifecycleState {
     STOPPED,
     FAILED;
 
-    val isActive: Boolean get() = this == ACTIVE
+    public val isActive: Boolean get() = this == ACTIVE
 
 }

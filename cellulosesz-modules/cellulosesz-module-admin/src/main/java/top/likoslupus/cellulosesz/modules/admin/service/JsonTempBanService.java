@@ -1,21 +1,25 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.admin.Expiration;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.admin.data.TempBanDocument;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
+import top.likoslupus.cellulosesz.modules.admin.domain.BanRecord;
 
 import java.net.InetAddress;
 import java.nio.file.Path;
@@ -358,10 +362,9 @@ public final class JsonTempBanService
                     var canonical = IpAddresses.canonical(address);
 
                     for (var player : players.onlinePlayers()) {
-                        if (networks.address(player)
-                                .map(IpAddresses::canonical)
-                                .filter(canonical::equals)
-                                .isEmpty()
+                        var playerAddress = networks.address(player);
+                        if (playerAddress == null
+                                || !canonical.equals(IpAddresses.canonical(playerAddress))
                         ) {
                             continue;
                         }
@@ -449,13 +452,14 @@ public final class JsonTempBanService
             AdminResult success
     ) {
         return serverThread
-                .submit(() -> players.onlinePlayer(uuid)
-                        .map(player -> connections.disconnect(
-                                player,
-                                kickMessage(player, reason)
-                        ).successful())
-                        .orElse(true)
-                )
+                .submit(() -> {
+                    var player = players.onlinePlayer(uuid);
+                    return player == null
+                            || connections.disconnect(
+                            player,
+                            kickMessage(player, reason)
+                    ).successful();
+                })
                 .thenApply(disconnected ->
                         disconnected
                                 ? success

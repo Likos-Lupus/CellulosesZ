@@ -13,8 +13,9 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.ItemLore;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
-import top.likoslupus.cellulosesz.api.item.*;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
+import top.likoslupus.cellulosesz.api.item.ItemGrantResult;
+import top.likoslupus.cellulosesz.api.item.RepairScope;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -23,6 +24,7 @@ import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.List;
 import java.util.Locale;
@@ -151,7 +153,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 return PlatformResult.failure(prepared.status(), prepared.detail());
             }
 
-            var committed = prepared.value().orElseThrow().commit();
+            var committed = prepared.value().commit();
             if (!committed.successful()) {
                 return PlatformResult.failure(
                         committed.status(),
@@ -208,7 +210,7 @@ public final class MinecraftItemOperations implements ItemPlatformService {
                 return PlatformResult.failure(prepared.status(), prepared.detail());
             }
 
-            return prepared.value().orElseThrow().commit();
+            return prepared.value().commit();
         });
     }
 
@@ -468,13 +470,14 @@ public final class MinecraftItemOperations implements ItemPlatformService {
         return onServerThread(() -> {
             var descriptor = new ItemDescriptor(normalize(itemId), 1);
             var current = count(player, descriptor);
+            var currentCount = current.value();
             if (!current.successful()
-                    || current.value().isEmpty()
+                    || currentCount == null
             ) {
                 return PlatformResult.failure(current.status(), current.detail());
             }
 
-            var missing = Math.max(0, minimum - current.value().orElseThrow());
+            var missing = Math.max(0, minimum - currentCount);
             if (missing == 0) {
                 return PlatformResult.success();
             }

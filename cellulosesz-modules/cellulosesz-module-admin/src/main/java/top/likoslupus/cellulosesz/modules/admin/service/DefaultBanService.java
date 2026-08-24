@@ -1,14 +1,16 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.admin.*;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.admin.*;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
 
 import java.net.InetAddress;
 import java.time.Clock;

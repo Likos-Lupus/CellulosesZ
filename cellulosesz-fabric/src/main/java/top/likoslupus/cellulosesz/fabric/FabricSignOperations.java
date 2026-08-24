@@ -9,14 +9,14 @@ import net.minecraft.world.phys.HitResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignBreakRequest;
-import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
-import top.likoslupus.cellulosesz.api.sign.SignSnapshot;
-import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.sign.SignBreakRequest;
+import top.likoslupus.cellulosesz.common.sign.SignPlatformService;
+import top.likoslupus.cellulosesz.common.sign.SignSnapshot;
+import top.likoslupus.cellulosesz.common.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
 

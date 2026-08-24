@@ -5,7 +5,6 @@ import top.likoslupus.cellulosesz.api.kit.KitItem;
 
 import java.math.BigDecimal;
 import java.time.Duration;
-import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -29,7 +28,7 @@ public final class KitMapper {
             return new KitDefinition(
                     requireNonNull(document.id, "id"),
                     requireNonNull(document.displayName, "displayName"),
-                    Optional.ofNullable(document.permission),
+                    document.permission,
                     Duration.ofSeconds(document.cooldownSeconds),
                     new BigDecimal(requireNonNull(document.cost, "cost")),
                     items
@@ -47,7 +46,9 @@ public final class KitMapper {
         var document = new KitDocument();
         document.id = kit.id();
         document.displayName = kit.displayName();
-        document.permission = kit.permission().orElse("");
+        document.permission = kit.permission() != null
+                ? kit.permission()
+                : "";
         document.cooldownSeconds = kit.cooldown().getSeconds();
         document.cost = kit.cost().toPlainString();
         document.items = kit.items().stream()

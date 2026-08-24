@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.core.i18n;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.List;
 import java.util.Map;

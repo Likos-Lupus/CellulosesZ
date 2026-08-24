@@ -5,6 +5,7 @@ import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldResolution;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
@@ -57,11 +58,13 @@ public final class WorldCommand implements CommandContributor {
                                 player -> {
                                     var input = StringArgumentType.getString(command, "world");
                                     var resolution = worlds.resolve(input);
+                                    var worldId = resolution instanceof WorldResolution.Resolved resolved
+                                            ? resolved.worldId()
+                                            : null;
 
-                                    if (resolution.worldId().isPresent()) {
+                                    if (worldId != null) {
                                         var permission = "cellulosesz.teleport.world."
-                                                + resolution.worldId()
-                                                .orElseThrow()
+                                                + worldId
                                                 .replace(':', '.');
 
                                         if (!context.hasPermission(

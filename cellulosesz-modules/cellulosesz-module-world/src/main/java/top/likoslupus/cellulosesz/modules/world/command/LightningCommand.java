@@ -11,12 +11,12 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.world.LightningRequest;
-import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.world.LightningRequest;
+import top.likoslupus.cellulosesz.common.world.PlayerTargetingService;
+import top.likoslupus.cellulosesz.common.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -108,10 +108,10 @@ public final class LightningCommand implements CommandContributor {
                             player.orElseThrow(),
                             config.targetDistance()
                     );
-                    return target.successful() && target.value().isPresent()
+                    return target.successful() && target.value() != null
                             ?
                             worlds.strikeLightning(new LightningRequest(
-                                    target.value().orElseThrow(),
+                                    target.value(),
                                     false,
                                     0.0D
                             ))

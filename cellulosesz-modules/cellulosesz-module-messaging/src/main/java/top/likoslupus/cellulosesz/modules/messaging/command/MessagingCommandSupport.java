@@ -6,13 +6,13 @@ import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.modules.messaging.domain.MessageResult;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -43,7 +43,7 @@ final class MessagingCommandSupport {
             PlayerDirectory players
     ) {
         return source.getEntity() instanceof ServerPlayer nativePlayer
-                ? players.onlinePlayer(nativePlayer.getUUID())
+                ? Optional.ofNullable(players.onlinePlayer(nativePlayer.getUUID()))
                 : Optional.empty();
     }
 
@@ -104,8 +104,10 @@ final class MessagingCommandSupport {
             MinecraftCommandPolicyContext policy,
             PlayerDirectory players
     ) {
-        return policy.playerUuid()
-                .flatMap(players::onlinePlayer);
+        var uuid = policy.playerUuid();
+        return uuid == null
+                ? Optional.empty()
+                : Optional.ofNullable(players.onlinePlayer(uuid));
     }
 
 }

@@ -1,8 +1,5 @@
 package top.likoslupus.cellulosesz.modules.economy.application;
 
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationToken;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
@@ -11,10 +8,13 @@ import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
 import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationKey;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationToken;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -118,10 +118,11 @@ public final class PaymentCommandService {
 
         return future.thenApply(resolved -> {
             var unique = new LinkedHashMap<UUID, ResolvedPlayer>();
-            resolved.forEach(target ->
-                    target.optionalUuid()
-                            .ifPresent(uuid -> unique.putIfAbsent(uuid, target))
-            );
+            resolved.forEach(target -> {
+                if (target.uuid() != null) {
+                    unique.putIfAbsent(target.uuid(), target);
+                }
+            });
             return List.copyOf(unique.values());
         });
     }
@@ -145,14 +146,14 @@ public final class PaymentCommandService {
         }
 
         for (var target : resolved) {
-            if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
+            if (target.state() == ResolvedPlayerState.UNKNOWN || target.uuid() == null) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.abstract-economy-command.error.player-not-found",
                         MessageArguments.builder().add(target.name()).build()
                 ));
             }
 
-            if (target.optionalUuid().orElseThrow().equals(sender.uuid())) {
+            if (target.uuid().equals(sender.uuid())) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.pay-self"
                 ));
@@ -171,7 +172,7 @@ public final class PaymentCommandService {
 
         var ids = new ArrayList<UUID>();
         ids.add(sender.uuid());
-        resolved.forEach(target -> ids.add(target.optionalUuid().orElseThrow()));
+        resolved.forEach(target -> ids.add(target.uuid()));
         return loadUsers(ids).thenCompose(loaded -> continuePayment(
                 sender,
                 resolved,
@@ -207,7 +208,7 @@ public final class PaymentCommandService {
             Map<UUID, CellUser> loaded
     ) {
         for (var target : resolved) {
-            var recipient = loaded.get(target.optionalUuid().orElseThrow());
+            var recipient = loaded.get(target.uuid());
             if (recipient == null) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "service.user.load-failed"
@@ -239,7 +240,7 @@ public final class PaymentCommandService {
         }
 
         var recipientIds = resolved.stream()
-                .map(target -> target.optionalUuid().orElseThrow())
+                .map(ResolvedPlayer::uuid)
                 .sorted(Comparator.comparing(UUID::toString))
                 .toList();
         var total = amount.multiply(BigDecimal.valueOf(recipientIds.size()));
@@ -316,19 +317,23 @@ public final class PaymentCommandService {
                     if (!transaction.success()) {
                         return EconomyCommandResult.failure(transaction.message());
                     }
-                    resolved.forEach(target ->
-                            target.online().ifPresent(player -> audiences.send(
-                                    player,
-                                    messages.render(
-                                            audiences.locale(player),
-                                            "commands.economy.pay-received",
-                                            MessageArguments.builder()
-                                                    .add(sender.name())
-                                                    .add(economy.format(amount))
-                                                    .build()
-                                    )
-                            ))
-                    );
+                    resolved.forEach(target -> {
+                        var player = target.onlinePlayer();
+                        if (player == null) {
+                            return;
+                        }
+                        audiences.send(
+                                player,
+                                messages.render(
+                                        audiences.locale(player),
+                                        "commands.economy.pay-received",
+                                        MessageArguments.builder()
+                                                .add(sender.name())
+                                                .add(economy.format(amount))
+                                                .build()
+                                )
+                        );
+                    });
                     return EconomyCommandResult.success(
                             "commands.economy.pay-command.reply.paid-current-balance",
                             MessageArguments.builder()

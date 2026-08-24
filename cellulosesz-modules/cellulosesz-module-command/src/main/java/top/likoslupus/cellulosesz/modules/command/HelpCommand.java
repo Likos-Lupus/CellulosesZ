@@ -7,11 +7,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.service.CommandAliasRegistry;
-import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
@@ -20,8 +16,12 @@ import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.command.argument.HelpSelectors;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
-import top.likoslupus.cellulosesz.modules.command.argument.HelpSelectors;
+import top.likoslupus.cellulosesz.core.command.catalog.CommandCatalog;
+import top.likoslupus.cellulosesz.core.command.catalog.CommandCatalogEntry;
+import top.likoslupus.cellulosesz.core.command.service.CommandAliasRegistry;
+import top.likoslupus.cellulosesz.core.config.ConfigRegistry;
 
 import java.util.*;
 
@@ -286,14 +286,16 @@ public final class HelpCommand implements CommandContributor {
         var resolver = registration.services()
                 .require(LocaleResolver.class);
 
-        return policy.playerUuid()
-                .flatMap(
-                        registration.services()
-                                .require(PlayerDirectory.class)
-                                ::onlinePlayer
-                )
-                .map(resolver::locale)
-                .orElseGet(resolver::consoleLocale);
+        var uuid = policy.playerUuid();
+        var online = uuid == null
+                ? null
+                : registration.services()
+                        .require(PlayerDirectory.class)
+                        .onlinePlayer(uuid);
+
+        return online != null
+                ? resolver.locale(online)
+                : resolver.consoleLocale();
     }
 
     @Override

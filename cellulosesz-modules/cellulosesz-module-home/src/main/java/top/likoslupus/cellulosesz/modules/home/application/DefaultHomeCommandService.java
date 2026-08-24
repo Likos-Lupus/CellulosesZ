@@ -1,9 +1,6 @@
 package top.likoslupus.cellulosesz.modules.home.application;
 
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
-import top.likoslupus.cellulosesz.api.home.HomeService;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -11,7 +8,10 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.command.service.CooldownService;
 import top.likoslupus.cellulosesz.modules.home.HomeConfig;
+import top.likoslupus.cellulosesz.modules.home.service.HomeService;
 
 import java.time.Duration;
 import java.util.Locale;
@@ -21,8 +21,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -144,10 +144,10 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                     }
 
                     return serverThread.submit(() ->
-                                    players.resolveKnown(request.playerUuid(), null).online()
+                                    players.resolveKnown(request.playerUuid(), null).onlinePlayer()
                             )
                             .thenCompose(online -> {
-                                if (online.isEmpty()) {
+                                if (online == null) {
                                     return CompletableFuture.completedFuture(failure(
                                             LocalizedMessage.of(
                                                     "commands.common.player-offline",
@@ -159,7 +159,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
 
                                 return serverThread
                                         .submit(() ->
-                                                locations.currentLocation(online.orElseThrow())
+                                                locations.currentLocation(online)
                                         )
                                         .thenCompose(location ->
                                                 homes.setHome(request.playerUuid(), name, location)
@@ -302,10 +302,10 @@ public final class DefaultHomeCommandService implements HomeCommandService {
                         players.resolveKnown(
                                 request.playerUuid(),
                                 null
-                        ).online()
+                        ).onlinePlayer()
                 )
                 .thenCompose(online -> {
-                    if (online.isEmpty()) {
+                    if (online == null) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                                 "commands.common.player-offline",
                                 MessageArguments.builder()
@@ -322,7 +322,7 @@ public final class DefaultHomeCommandService implements HomeCommandService {
 
                     return serverThread
                             .submit(() -> teleports.teleport(
-                                    online.orElseThrow(),
+                                    online,
                                     location,
                                     options
                             ))

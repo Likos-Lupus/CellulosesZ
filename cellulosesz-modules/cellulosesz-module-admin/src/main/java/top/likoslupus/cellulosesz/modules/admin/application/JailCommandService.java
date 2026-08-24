@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.admin.Jail;
-import top.likoslupus.cellulosesz.api.admin.JailedPlayer;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.Jail;
+import top.likoslupus.cellulosesz.modules.admin.domain.JailedPlayer;
 
 import java.time.Duration;
 import java.util.List;

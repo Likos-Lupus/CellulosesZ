@@ -1,17 +1,17 @@
 package top.likoslupus.cellulosesz.modules.playerstate.service;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.playerstate.VanishPlatformService;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStateResult;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.playerstate.VanishPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.util.ArrayList;
 import java.util.UUID;
@@ -50,14 +50,12 @@ public final class DefaultVanishService implements VanishService {
 
     @Override
     public boolean vanished(UUID uuid) {
-        return users
-                .cached(uuid)
-                .map(user -> user.state().vanished())
-                .orElse(false);
+        var user = users.cached(uuid);
+        return user != null && user.state().vanished();
     }
 
     @Override
-    public CompletableFuture<AdminResult> setVanished(CellPlayer player, boolean vanished) {
+    public CompletableFuture<PlayerStateResult> setVanished(CellPlayer player, boolean vanished) {
         var previous = vanished(player.uuid());
         return serverThread
                 .submit(() -> applyPlatform(player, vanished))
@@ -67,11 +65,11 @@ public final class DefaultVanishService implements VanishService {
                                 .submit(() -> applyPlatform(player, previous))
                                 .thenApply(rolledBack -> rolledBack.successful()
                                         ?
-                                        AdminResult.failure(
+                                        PlayerStateResult.failure(
                                                 "service.playerstate.vanish-failed",
                                                 MessageArguments.empty()
                                         )
-                                        : AdminResult.failure(
+                                        : PlayerStateResult.failure(
                                                 "service.user.rollback-failed",
                                                 MessageArguments.empty()
                                         )
@@ -83,7 +81,7 @@ public final class DefaultVanishService implements VanishService {
                                     player.uuid(),
                                     user -> user.withState(user.state().withVanished(vanished))
                             )
-                            .thenApply(_ -> AdminResult.success(
+                            .thenApply(_ -> PlayerStateResult.success(
                                     vanished
                                             ? "service.playerstate.vanish-enabled"
                                             : "service.playerstate.vanish-disabled",
@@ -95,11 +93,11 @@ public final class DefaultVanishService implements VanishService {
                                     .submit(() -> applyPlatform(player, previous))
                                     .thenApply(rolledBack -> rolledBack.successful()
                                             ?
-                                            AdminResult.failure(
+                                            PlayerStateResult.failure(
                                                     "service.user.persistence-failed",
                                                     MessageArguments.empty()
                                             )
-                                            : AdminResult.failure(
+                                            : PlayerStateResult.failure(
                                                     "service.user.rollback-failed",
                                                     MessageArguments.empty()
                                             )

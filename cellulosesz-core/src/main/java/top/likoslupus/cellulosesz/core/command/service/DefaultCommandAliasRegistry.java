@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
-import top.likoslupus.cellulosesz.api.command.service.CommandAliasRegistry;
-
 import java.util.*;
 
 public final class DefaultCommandAliasRegistry implements CommandAliasRegistry {

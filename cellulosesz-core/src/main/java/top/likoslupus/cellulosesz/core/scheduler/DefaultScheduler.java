@@ -1,8 +1,6 @@
 package top.likoslupus.cellulosesz.core.scheduler;
 
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -12,7 +10,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -154,14 +152,14 @@ public final class DefaultScheduler implements Scheduler, AutoCloseable {
         }
 
         @Override
-        public void cancel() {
-            cancelled = true;
-            closed.set(true);
+        public boolean cancelled() {
+            return cancelled;
         }
 
         @Override
-        public boolean cancelled() {
-            return cancelled;
+        public void cancel() {
+            cancelled = true;
+            closed.set(true);
         }
 
         private void complete() {

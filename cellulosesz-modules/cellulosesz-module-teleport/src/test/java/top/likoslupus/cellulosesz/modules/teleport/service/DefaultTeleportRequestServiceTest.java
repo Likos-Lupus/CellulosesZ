@@ -2,8 +2,8 @@ package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestSelectionResult;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestSelectionResult;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestType;
 
 import java.time.Clock;
 import java.time.Instant;

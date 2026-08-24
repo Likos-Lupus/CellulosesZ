@@ -10,10 +10,10 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.world.ThunderRequest;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.world.ThunderRequest;
+import top.likoslupus.cellulosesz.common.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;

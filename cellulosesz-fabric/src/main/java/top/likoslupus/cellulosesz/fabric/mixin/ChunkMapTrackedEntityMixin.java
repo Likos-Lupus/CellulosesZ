@@ -25,7 +25,10 @@ public abstract class ChunkMapTrackedEntityMixin {
             cancellable = true
     )
     private void cellulosesz$filterVanishedPlayer(ServerPlayer player, CallbackInfo callback) {
-        if (entity instanceof ServerPlayer target && FabricVanishBridge.hiddenFrom(player, target)) {
+        if (entity instanceof ServerPlayer target && FabricVanishBridge.hiddenFrom(
+                player,
+                target
+        )) {
             removePlayer(player);
             callback.cancel();
         }

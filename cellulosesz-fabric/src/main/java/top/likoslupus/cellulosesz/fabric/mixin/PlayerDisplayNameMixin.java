@@ -18,9 +18,13 @@ public abstract class PlayerDisplayNameMixin {
             cancellable = true
     )
     private void cellulosesz$displayName(CallbackInfoReturnable<Component> callback) {
-        if (!((Object) this instanceof ServerPlayer player)) return;
+        if (!((Object) this instanceof ServerPlayer player)) {
+            return;
+        }
         var displayName = FabricDisplayNameBridge.displayName(player.getUUID());
-        if (displayName != null) callback.setReturnValue(displayName);
+        if (displayName != null) {
+            callback.setReturnValue(displayName);
+        }
     }
 
 }

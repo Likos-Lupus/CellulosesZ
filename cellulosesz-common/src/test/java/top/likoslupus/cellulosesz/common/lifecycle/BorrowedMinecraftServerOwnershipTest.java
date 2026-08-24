@@ -7,8 +7,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -62,20 +60,13 @@ final class BorrowedMinecraftServerOwnershipTest {
             }
         }
 
-        assertTrue(violations.isEmpty(),
+        assertTrue(
+                violations.isEmpty(),
                 () -> "Found forbidden borrowed Minecraft object ownership:\n" + String.join(
                         "\n",
                         violations
                 )
         );
-    }
-
-    @Test
-    void serverHandle_attachDetachLifecycle_managesStateWithoutClosing() {
-        var handle = new MinecraftServerHandle();
-        assertTrue(handle.current().isEmpty());
-        assertThrows(IllegalStateException.class, handle::requireRunning);
-        assertFalse(handle.serverThread());
     }
 
     private static Path projectRoot() {
@@ -87,6 +78,14 @@ final class BorrowedMinecraftServerOwnershipTest {
             throw new IllegalStateException("Unable to locate project root");
         }
         return current;
+    }
+
+    @Test
+    void serverHandle_attachDetachLifecycle_managesStateWithoutClosing() {
+        var handle = new MinecraftServerHandle();
+        assertTrue(handle.current().isEmpty());
+        assertThrows(IllegalStateException.class, handle::requireRunning);
+        assertFalse(handle.serverThread());
     }
 
 }

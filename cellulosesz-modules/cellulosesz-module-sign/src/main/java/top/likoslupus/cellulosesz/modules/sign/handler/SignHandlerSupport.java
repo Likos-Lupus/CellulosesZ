@@ -1,14 +1,16 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStateResult;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.TextService;
+import top.likoslupus.cellulosesz.api.world.WorldResult;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -32,18 +34,19 @@ final class SignHandlerSupport {
             PlatformResult<ItemDescriptor> parsed,
             String formatKey
     ) {
-        if (!parsed.successful() || parsed.value().isEmpty()) {
+        if (!parsed.successful() || parsed.value() == null) {
             return itemFailure(parsed.status(), formatKey);
         }
 
-        var item = parsed.value().orElseThrow();
+        var item = parsed.value();
         var valid = items.valid(item);
 
-        if (!valid.successful() || valid.value().isEmpty()) {
+        if (!valid.successful()) {
             return itemFailure(valid.status(), formatKey);
         }
 
-        if (!valid.value().orElseThrow()) {
+        var validValue = valid.value();
+        if (validValue == null || !validValue) {
             return SignUseResult.failure(formatKey);
         }
 
@@ -145,10 +148,18 @@ final class SignHandlerSupport {
         }
     }
 
-    static SignUseResult admin(AdminResult result) {
-        return result.success()
-                ? SignUseResult.success(result.message())
-                : SignUseResult.failure(result.message());
+    static SignUseResult outcome(PlayerStateResult result) {
+        return outcome(result.success(), result.message());
+    }
+
+    static SignUseResult outcome(boolean success, LocalizedMessage message) {
+        return success
+                ? SignUseResult.success(message)
+                : SignUseResult.failure(message);
+    }
+
+    static SignUseResult outcome(WorldResult result) {
+        return outcome(result.success(), result.message());
     }
 
     static MessageArguments itemArguments(ItemDescriptor item) {

@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.modules.item.application;
 
 import top.likoslupus.cellulosesz.api.item.WorkstationKind;
-import top.likoslupus.cellulosesz.api.item.WorkstationPlatformService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.item.WorkstationPlatformService;
 
 import static java.util.Objects.requireNonNull;
 

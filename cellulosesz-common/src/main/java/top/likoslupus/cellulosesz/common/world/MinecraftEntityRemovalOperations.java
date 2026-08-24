@@ -15,9 +15,6 @@ import net.minecraft.world.entity.vehicle.minecart.AbstractMinecart;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.world.EntityRemovalPlatformService;
-import top.likoslupus.cellulosesz.api.world.EntityRemovalRequest;
-import top.likoslupus.cellulosesz.api.world.EntityRemovalResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 

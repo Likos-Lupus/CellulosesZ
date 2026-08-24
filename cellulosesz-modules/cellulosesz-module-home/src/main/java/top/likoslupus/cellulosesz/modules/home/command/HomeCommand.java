@@ -108,7 +108,7 @@ public final class HomeCommand implements CommandContributor {
                                 command,
                                 descriptor,
                                 policy -> service.list(
-                                        policy.playerUuid().orElseThrow()
+                                        policy.playerUuid()
                                 )
                         ))
         );
@@ -190,7 +190,7 @@ public final class HomeCommand implements CommandContributor {
                                 command,
                                 descriptor,
                                 policy -> service.delete(
-                                        policy.playerUuid().orElseThrow(),
+                                        policy.playerUuid(),
                                         StringArgumentType.getString(
                                                 command,
                                                 "name"
@@ -239,8 +239,7 @@ public final class HomeCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 policy -> service.rename(
-                                                        policy.playerUuid()
-                                                                .orElseThrow(),
+                                                        policy.playerUuid(),
                                                         StringArgumentType.getString(
                                                                 command,
                                                                 "old"
@@ -290,7 +289,7 @@ public final class HomeCommand implements CommandContributor {
                 descriptor,
                 "home request",
                 policy -> {
-                    if (policy.playerUuid().isEmpty()) {
+                    if (policy.playerUuid() == null) {
                         policy.error(
                                 LocalizedMessage.of("common.player-only")
                         );
@@ -314,8 +313,8 @@ public final class HomeCommand implements CommandContributor {
             MinecraftCommandPolicyContext context
     ) {
         return new HomeCommandService.Request(
-                context.playerUuid().orElseThrow(),
-                context.playerName().orElse(""),
+                context.playerUuid(),
+                context.playerName(),
                 context.hasPermission(
                         "cellulosesz.home.bypass-cooldown"
                 ),

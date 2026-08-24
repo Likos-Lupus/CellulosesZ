@@ -6,12 +6,12 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
+import top.likoslupus.cellulosesz.modules.messaging.domain.MessageResult;
 
 import java.util.List;
 import java.util.Optional;

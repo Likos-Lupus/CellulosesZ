@@ -1,16 +1,16 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewarePhase;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReservation;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReserveResult;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.core.command.CommandContinuation;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewarePhase;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostReservation;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostReserveResult;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostService;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -36,13 +36,14 @@ public final class CommandCostMiddleware implements CommandMiddleware {
             CommandContinuation continuation
     ) {
         var cost = costs.cost(descriptor.canonicalName());
-        if (cost.signum() <= 0 || context.playerUuid().isEmpty()) {
+        var playerUuid = context.playerUuid();
+        if (cost.signum() <= 0 || playerUuid == null) {
             return continuation.proceed();
         }
 
         return costs
                 .reserve(
-                        context.playerUuid().orElseThrow(),
+                        playerUuid,
                         descriptor.canonicalName()
                 )
                 .thenCompose(result -> {

@@ -6,8 +6,8 @@ import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -38,20 +38,21 @@ public final class MinecraftPlayerDirectory implements PlayerDirectory {
     }
 
     @Override
-    public Optional<CellPlayer> onlinePlayer(UUID uuid) {
+    public @Nullable CellPlayer onlinePlayer(UUID uuid) {
         return onlinePlayers().stream()
                 .filter(player -> player.uuid().equals(uuid))
-                .findFirst();
+                .findFirst()
+                .orElse(null);
     }
 
     @Override
-    public Optional<CellPlayer> onlinePlayer(String name) {
-        if (name.isBlank()) {
-            return Optional.empty();
-        }
-        return onlinePlayers().stream()
-                .filter(player -> player.name().equalsIgnoreCase(name))
-                .findFirst();
+    public @Nullable CellPlayer onlinePlayer(String name) {
+        return name.isBlank()
+                ? null
+                : onlinePlayers().stream()
+                        .filter(player -> player.name().equalsIgnoreCase(name))
+                        .findFirst()
+                        .orElse(null);
     }
 
     @Override

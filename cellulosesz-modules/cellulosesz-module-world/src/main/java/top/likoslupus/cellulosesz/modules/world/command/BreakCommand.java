@@ -4,9 +4,9 @@ import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.world.WorldPlatformService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;

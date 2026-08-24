@@ -1,20 +1,20 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.messaging.MessageResult;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.modules.messaging.domain.MessageResult;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -147,7 +147,7 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
                                 if (rollbackFailure != null) {
                                     update.failure().addSuppressed(rollbackFailure);
                                 }
-                                throw new java.util.concurrent.CompletionException(update.failure());
+                                throw new CompletionException(update.failure());
                             });
                 });
     }
@@ -160,15 +160,13 @@ public final class DefaultPrivateMessageService implements PrivateMessageService
     ) {
         return serverThread
                 .submit(() -> {
-                    var sender = players.onlinePlayer(senderUuid);
-                    var target = players.onlinePlayer(targetUuid);
+                    var senderPlayer = players.onlinePlayer(senderUuid);
+                    var targetPlayer = players.onlinePlayer(targetUuid);
 
-                    if (sender.isEmpty() || target.isEmpty()) {
+                    if (senderPlayer == null || targetPlayer == null) {
                         return Optional.<DeliveredNames>empty();
                     }
 
-                    var senderPlayer = sender.orElseThrow();
-                    var targetPlayer = target.orElseThrow();
 
                     audiences.send(
                             targetPlayer,

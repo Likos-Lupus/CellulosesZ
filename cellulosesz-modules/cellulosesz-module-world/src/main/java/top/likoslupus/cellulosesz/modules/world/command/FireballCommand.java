@@ -7,14 +7,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
-import top.likoslupus.cellulosesz.api.entity.ProjectileRequest;
-import top.likoslupus.cellulosesz.api.entity.ProjectileType;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.entity.EntityPlatformService;
+import top.likoslupus.cellulosesz.common.entity.ProjectileRequest;
+import top.likoslupus.cellulosesz.common.entity.ProjectileType;
 import top.likoslupus.cellulosesz.modules.world.command.argument.ProjectileTypes;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 

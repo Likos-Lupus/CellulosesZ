@@ -1,9 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.config;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
-import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
-
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public final class WorldConfig {
 

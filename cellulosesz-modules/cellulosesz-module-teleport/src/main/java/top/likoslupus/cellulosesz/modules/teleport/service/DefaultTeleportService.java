@@ -1,13 +1,14 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.scheduler.Scheduler;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
 
 import java.time.Clock;
 import java.util.*;
@@ -161,8 +162,8 @@ public final class DefaultTeleportService implements TeleportService, AsyncClose
     }
 
     @Override
-    public Optional<CellLocation> backLocation(UUID uuid) {
-        return backLocations.location(uuid);
+    public CellLocation backLocation(UUID uuid) {
+        return backLocations.location(uuid).orElse(null);
     }
 
     @Override
@@ -229,7 +230,7 @@ public final class DefaultTeleportService implements TeleportService, AsyncClose
         }
 
         var safe = operations.safeLocation(requested);
-        if (!safe.successful() || safe.value().isEmpty()) {
+        if (!safe.successful() || safe.value() == null) {
             return PreparedResult.failure(TeleportResult.failed(
                     TeleportStatus.UNSAFE_DESTINATION,
                     "service.teleport.unsafe"
@@ -238,7 +239,7 @@ public final class DefaultTeleportService implements TeleportService, AsyncClose
 
         return PreparedResult.success(new Prepared(
                 origin,
-                safe.value().orElseThrow()
+                safe.value()
         ));
     }
 

@@ -26,7 +26,9 @@ public final class CompassCommand implements CommandContributor {
 
     public static double normalizeDegrees(double yaw) {
         return PlayerInformationCommandService.normalizeDegrees(yaw);
-    }    @Override
+    }
+
+    @Override
     public void register(CommandRegistrationContext context) {
         var descriptor = PlayerStateCommandSupport.descriptor(
                 "compass",
@@ -55,7 +57,6 @@ public final class CompassCommand implements CommandContributor {
                 root
         );
     }
-
 
 
     @Override

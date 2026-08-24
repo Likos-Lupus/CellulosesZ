@@ -2,18 +2,18 @@ package top.likoslupus.cellulosesz.modules.user;
 
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.DisplayNamePlatformService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultDisplayNameService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultNameCacheService;
 import top.likoslupus.cellulosesz.modules.user.service.DefaultPlayerResolver;
@@ -21,7 +21,6 @@ import top.likoslupus.cellulosesz.modules.user.service.JsonUserService;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;

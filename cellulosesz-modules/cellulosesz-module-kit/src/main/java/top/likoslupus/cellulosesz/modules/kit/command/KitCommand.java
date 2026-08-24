@@ -381,7 +381,9 @@ public final class KitCommand implements CommandContributor {
                 LocalizedMessage.of(
                         "commands.common.player-offline",
                         MessageArguments.builder()
-                                .add(policy.playerName().orElse("unknown"))
+                                .add(policy.playerName() == null
+                                        ? "unknown"
+                                        : policy.playerName())
                                 .build()
                 )
         );

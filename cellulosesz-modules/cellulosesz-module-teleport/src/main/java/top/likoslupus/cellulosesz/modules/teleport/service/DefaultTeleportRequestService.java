@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.modules.teleport.domain.*;
 
 import java.time.Clock;
 import java.util.Comparator;
@@ -10,7 +10,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 

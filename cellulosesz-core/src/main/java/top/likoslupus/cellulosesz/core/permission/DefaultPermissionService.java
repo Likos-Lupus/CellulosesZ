@@ -4,7 +4,7 @@ import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.Map;
-import java.util.Optional;
+
 import java.util.concurrent.ConcurrentHashMap;
 
 import static java.util.Objects.requireNonNull;
@@ -78,7 +78,7 @@ public final class DefaultPermissionService implements PermissionService {
     }
 
     @Override
-    public Optional<String> stringOption(CellPlayer player, String key) {
+    public String stringOption(CellPlayer player, String key) {
         return cached(
                 player,
                 key,

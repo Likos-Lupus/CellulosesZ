@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.user.persistence.UserDocument;
 import top.likoslupus.cellulosesz.modules.user.persistence.UserMapper;
 
@@ -45,7 +45,7 @@ final class JsonUserServiceTest {
                 )
                 .join();
 
-        var snapshot = service.cached(uuid).orElseThrow();
+        var snapshot = service.cached(uuid);
         assertFalse(snapshot.preferences().confirmInventoryClears());
         assertFalse(snapshot.preferences().payments());
         assertTrue(snapshot.preferences().privateMessages());
@@ -139,7 +139,7 @@ final class JsonUserServiceTest {
         saveGate.complete(null);
         accepted.join();
         close.join();
-        assertFalse(service.cached(uuid).orElseThrow().preferences().payments());
+        assertFalse(service.cached(uuid).preferences().payments());
     }
 
     @Test
@@ -187,7 +187,7 @@ final class JsonUserServiceTest {
                 ).join()
         );
 
-        var cached = service.cached(uuid).orElseThrow();
+        var cached = service.cached(uuid);
         assertFalse(cached.preferences().payments());
         assertTrue(cached.preferences().privateMessages());
     }
@@ -219,7 +219,7 @@ final class JsonUserServiceTest {
                 ))
                 .join();
 
-        var snapshot = service.cached(uuid).orElseThrow();
+        var snapshot = service.cached(uuid);
         assertEquals(Long.MAX_VALUE, snapshot.timestamps().playTimeMillis());
         assertNull(snapshot.timestamps().activeSessionStartedAt());
     }
@@ -311,16 +311,17 @@ final class JsonUserServiceTest {
         }
 
         @Override
-        public Optional<UUID> findUuid(String name) {
+        public UUID findUuid(String name) {
             return names.entrySet().stream()
                     .filter(e -> e.getValue().equalsIgnoreCase(name))
                     .map(Map.Entry::getKey)
-                    .findFirst();
+                    .findFirst()
+                    .orElse(null);
         }
 
         @Override
-        public Optional<String> findName(UUID uuid) {
-            return Optional.ofNullable(names.get(uuid));
+        public String findName(UUID uuid) {
+            return names.get(uuid);
         }
 
         @Override

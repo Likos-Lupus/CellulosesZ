@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.common.command;
 
 import net.minecraft.network.chat.Component;
-import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.command.service.PlayerChatDispatchService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 

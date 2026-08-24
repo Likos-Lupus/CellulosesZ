@@ -1,14 +1,12 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
-import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
-
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

@@ -2,11 +2,15 @@ package top.likoslupus.cellulosesz.common.command;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.text.*;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import static java.util.Objects.requireNonNull;
 
@@ -76,14 +80,14 @@ public final class MinecraftCommandResponder {
         try {
             if (source.getEntity() instanceof ServerPlayer player) {
                 var audience = players.onlinePlayer(player.getUUID());
-                if (audience.isEmpty()) {
+                if (audience == null) {
                     logger.debug("Dropping command response for disconnected player "
                             + player.getUUID()
                     );
                     return;
                 }
 
-                audiences.send(audience.orElseThrow(), message);
+                audiences.send(audience, message);
                 return;
             }
 
@@ -100,9 +104,10 @@ public final class MinecraftCommandResponder {
 
     private String locale(CommandSourceStack source) {
         if (source.getEntity() instanceof ServerPlayer player) {
-            return players.onlinePlayer(player.getUUID())
-                    .map(locales::locale)
-                    .orElseGet(locales::consoleLocale);
+            var resolved = players.onlinePlayer(player.getUUID());
+            return resolved != null
+                    ? locales.locale(resolved)
+                    : locales.consoleLocale();
         }
         return locales.consoleLocale();
     }

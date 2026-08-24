@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import top.likoslupus.cellulosesz.api.module.*
+import top.likoslupus.cellulosesz.api.module.ModuleDescriptor
+import top.likoslupus.cellulosesz.api.module.ModuleKey
+import top.likoslupus.cellulosesz.api.module.ModulePhase
 
 class ModuleGraphTest {
 

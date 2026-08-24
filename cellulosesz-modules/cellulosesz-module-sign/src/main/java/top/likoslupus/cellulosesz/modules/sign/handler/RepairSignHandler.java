@@ -1,11 +1,10 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.item.RepairScope;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.Locale;
 import java.util.Set;
@@ -40,13 +39,15 @@ public final class RepairSignHandler implements SynchronousSignHandler {
                 ? RepairScope.ALL
                 : RepairScope.HAND;
         var result = items.repair(context.player(), scope);
-        var count = (int) result.value().orElse(0);
+        var repairedCount = result.value() == null
+                ? 0
+                : (int) result.value();
 
-        return result.successful() && count > 0
+        return result.successful() && repairedCount > 0
                 ?
                 SignUseResult.success(
                         "service.sign.repair-success",
-                        MessageArguments.builder().add(count).build()
+                        MessageArguments.builder().add(repairedCount).build()
                 )
                 : SignUseResult.failure("service.sign.repair-nothing");
     }

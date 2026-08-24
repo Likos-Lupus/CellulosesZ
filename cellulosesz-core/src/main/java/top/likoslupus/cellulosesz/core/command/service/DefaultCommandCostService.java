@@ -1,10 +1,8 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReservation;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReserveResult;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
+import top.likoslupus.cellulosesz.api.economy.TransactionResult;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 
 import java.math.BigDecimal;
@@ -163,7 +161,7 @@ public final class DefaultCommandCostService implements CommandCostService {
             state = State.REFUNDING;
             var refundFuture = new CompletableFuture<Void>();
             terminal = refundFuture;
-            final CompletionStage<top.likoslupus.cellulosesz.api.economy.TransactionResult> refund;
+            final CompletionStage<TransactionResult> refund;
             try {
                 refund = economy.deposit(
                         uuid,
@@ -229,8 +227,8 @@ public final class DefaultCommandCostService implements CommandCostService {
             ));
         }
 
-        var economy = services.optional(EconomyService.class);
-        if (economy.isEmpty()) {
+        var economy = services.find(EconomyService.class);
+        if (economy == null) {
             return CompletableFuture.completedFuture(new CommandCostReserveResult.Rejected(
                     amount,
                     CommandCostReserveResult.Reason.ECONOMY_UNAVAILABLE
@@ -238,13 +236,13 @@ public final class DefaultCommandCostService implements CommandCostService {
         }
 
         var cause = TransactionCause.command("cellulosesz", canonicalCommand);
-        return economy.orElseThrow()
+        return economy
                 .withdraw(uuid, amount, cause)
                 .thenApply(result -> result.success()
                         ?
                         new CommandCostReserveResult.Reserved(
                                 new EconomyReservation(
-                                        economy.orElseThrow(),
+                                        economy,
                                         uuid,
                                         canonicalCommand,
                                         amount,

@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.world.service;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
+import top.likoslupus.cellulosesz.api.world.WorldResult;
 import top.likoslupus.cellulosesz.api.world.WorldService;
-import top.likoslupus.cellulosesz.api.world.WorldStatePlatformService;
+import top.likoslupus.cellulosesz.common.world.WorldStatePlatformService;
 
 import static java.util.Objects.requireNonNull;
 
@@ -17,33 +17,33 @@ public final class DefaultWorldService implements WorldService {
     }
 
     @Override
-    public AdminResult setTime(String world, long time) {
+    public WorldResult setTime(String world, long time) {
         var result = platform.setTime(world, time);
         return result.successful()
                 ?
-                AdminResult.success(
+                WorldResult.success(
                         "service.world.time-set",
                         MessageArguments.builder().add(world).add(time).build()
                 )
-                : AdminResult.failure(
+                : WorldResult.failure(
                         "service.world.time-failed",
                         MessageArguments.builder().add(world).build()
                 );
     }
 
     @Override
-    public AdminResult setWeather(String world, WeatherType type, int seconds) {
+    public WorldResult setWeather(String world, WeatherType type, int seconds) {
         var result = platform.setWeather(world, type, seconds);
         return result.successful()
                 ?
-                AdminResult.success(
+                WorldResult.success(
                         "service.world.weather-set",
                         MessageArguments.builder()
                                 .add(world)
                                 .add(type.name().toLowerCase())
                                 .build()
                 )
-                : AdminResult.failure(
+                : WorldResult.failure(
                         "service.world.weather-failed",
                         MessageArguments.builder().add(world).build()
                 );

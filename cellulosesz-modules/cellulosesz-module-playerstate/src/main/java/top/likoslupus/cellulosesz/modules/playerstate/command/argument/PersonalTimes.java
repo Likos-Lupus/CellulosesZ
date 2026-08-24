@@ -28,7 +28,7 @@ public final class PersonalTimes {
             case "noon" -> new PersonalTimeSetting.Fixed(6_000L);
             case "night" -> new PersonalTimeSetting.Fixed(13_000L);
             case "midnight" -> new PersonalTimeSetting.Fixed(18_000L);
-            case "reset" -> new PersonalTimeSetting.Reset();
+            case "reset" -> PersonalTimeSetting.reset();
             default -> parseTicks(raw, token);
         };
     }

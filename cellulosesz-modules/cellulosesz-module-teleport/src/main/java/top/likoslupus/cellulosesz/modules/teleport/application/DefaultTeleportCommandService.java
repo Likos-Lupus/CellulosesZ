@@ -1,17 +1,22 @@
 package top.likoslupus.cellulosesz.modules.teleport.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.teleport.*;
+import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
+import top.likoslupus.cellulosesz.api.teleport.TeleportResult;
+import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.teleport.service.OfflineLocationService;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -71,7 +76,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 return completed(failure(INVALID_INPUT, "common.player-only"));
             }
 
-            var destination = players.onlinePlayer(first);
+            var destination = Optional.ofNullable(players.onlinePlayer(first));
             if (destination.isEmpty()) {
                 return offline(first);
             }
@@ -85,8 +90,8 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
             );
         }
 
-        var mover = players.onlinePlayer(first);
-        var destination = players.onlinePlayer(second.orElseThrow());
+        var mover = Optional.ofNullable(players.onlinePlayer(first));
+        var destination = Optional.ofNullable(players.onlinePlayer(second.orElseThrow()));
 
         if (mover.isEmpty()) {
             return offline(first);
@@ -115,7 +120,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
             boolean override,
             boolean bypassPreference
     ) {
-        var mover = players.onlinePlayer(target);
+        var mover = Optional.ofNullable(players.onlinePlayer(target));
         if (mover.isEmpty()) {
             return offline(target);
         }
@@ -144,7 +149,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                     var current = locations.currentLocation(actor);
                     var worldId = world.isEmpty()
                             ? Optional.of(current.world())
-                            : worlds.resolveLoadedWorld(world.orElseThrow());
+                            : Optional.ofNullable(worlds.resolveLoadedWorld(world.orElseThrow()));
 
                     return worldId.map(value -> new CellLocation(
                             value,
@@ -173,7 +178,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         final Optional<CellPlayer> destination;
 
         if (destinationName.isPresent()) {
-            destination = players.onlinePlayer(destinationName.orElseThrow());
+            destination = Optional.ofNullable(players.onlinePlayer(destinationName.orElseThrow()));
             if (destination.isEmpty()) {
                 return offline(destinationName.orElseThrow());
             }
@@ -261,7 +266,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         return resolver
                 .resolve(target, actor)
                 .thenCompose(resolved -> {
-                    if (resolved.optionalUuid().isEmpty()) {
+                    if (resolved.uuid() == null) {
                         return completed(failure(
                                 NOT_FOUND,
                                 "commands.common.player-not-found",
@@ -269,9 +274,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                         ));
                     }
 
-                    var location = offlineLocations.location(
-                            resolved.optionalUuid().orElseThrow()
-                    );
+                    var location = offlineLocations.location(resolved.uuid());
 
                     if (location.isEmpty()) {
                         return completed(failure(
@@ -295,7 +298,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
     public CompletableFuture<TeleportCommandResult> back(CellPlayer actor) {
         var location = teleports.backLocation(actor.uuid());
 
-        if (location.isEmpty()) {
+        if (location == null) {
             return completed(failure(
                     NOT_FOUND,
                     "commands.teleport.back-command.error.no-location"
@@ -304,7 +307,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         return teleports
                 .teleport(
                         actor,
-                        location.orElseThrow(),
+                        location,
                         TeleportOptions.defaults().withoutBackMemory()
                 )
                 .thenApply(DefaultTeleportCommandService::mapTeleport);
@@ -337,12 +340,13 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
     @Override
     public CompletableFuture<TeleportCommandResult> world(CellPlayer actor, String world) {
         var resolution = worlds.resolve(world);
-        if (resolution.worldId().isEmpty()) {
+        if (!(resolution instanceof WorldResolution.Resolved resolved)) {
+            var ambiguous = resolution instanceof WorldResolution.Ambiguous;
             return completed(failure(
-                    resolution.status() == WorldResolution.Status.AMBIGUOUS
+                    ambiguous
                             ? AMBIGUOUS
                             : NOT_FOUND,
-                    resolution.status() == WorldResolution.Status.AMBIGUOUS
+                    ambiguous
                             ? "commands.teleport.world-ambiguous"
                             : "commands.teleport.world-not-found"
             ));
@@ -352,7 +356,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                 .submit(() ->
                         locations
                                 .currentLocation(actor)
-                                .withWorld(resolution.worldId().orElseThrow())
+                                .withWorld(resolved.worldId())
                 )
                 .thenCompose(destination ->
                         teleports.teleport(
@@ -371,7 +375,8 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
         return serverThread
                 .submit(operation)
                 .thenCompose(result -> {
-                    if (!result.successful() || result.value().isEmpty()) {
+                    var destination = result.value();
+                    if (!result.successful() || destination == null) {
                         return completed(failure(
                                 PLATFORM_FAILURE,
                                 "commands.teleport.location-search-failed"
@@ -381,7 +386,7 @@ public final class DefaultTeleportCommandService implements TeleportCommandServi
                     return teleports
                             .teleport(
                                     actor,
-                                    result.value().orElseThrow(),
+                                    destination,
                                     TeleportOptions.defaults().withSafe(false)
                             )
                             .thenApply(DefaultTeleportCommandService::mapTeleport);

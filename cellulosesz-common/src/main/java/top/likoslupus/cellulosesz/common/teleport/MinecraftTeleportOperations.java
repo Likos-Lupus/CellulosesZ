@@ -8,7 +8,6 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 
@@ -45,7 +44,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
             );
         }
 
-        if (!finite(destination)) {
+        if (destination.isFinite()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
                     "non-finite-destination"
@@ -84,7 +83,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
     @Override
     public PlatformResult<CellLocation> safeLocation(CellLocation requested) {
-        if (!finite(requested)) {
+        if (requested.isFinite()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
                     "non-finite-destination"
@@ -119,7 +118,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
     @Override
     public PlatformResult<CellLocation> highestSafeLocation(CellLocation column) {
-        if (!finite(column)) {
+        if (column.isFinite()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
                     "non-finite-column"
@@ -154,7 +153,7 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
     @Override
     public PlatformResult<CellLocation> lowestSafeLocation(CellLocation column) {
-        if (!finite(column)) {
+        if (column.isFinite()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
                     "non-finite-column"
@@ -232,15 +231,6 @@ public final class MinecraftTeleportOperations implements TeleportOperations {
 
     private Optional<MinecraftServer> running() {
         return server.current();
-    }
-
-    private static boolean finite(CellLocation location) {
-        return !location.world().isBlank()
-                && Double.isFinite(location.x())
-                && Double.isFinite(location.y())
-                && Double.isFinite(location.z())
-                && Float.isFinite(location.yaw())
-                && Float.isFinite(location.pitch());
     }
 
     private Optional<ServerLevel> level(String world) {

@@ -6,7 +6,7 @@ import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -19,12 +19,13 @@ public final class MinecraftPlayerNetworkService implements PlayerNetworkService
     }
 
     @Override
-    public Optional<InetAddress> address(CellPlayer player) {
-        var remote = MinecraftPlayers.requireOnline(server, player).connection.getRemoteAddress();
-        if (remote instanceof InetSocketAddress socket) {
-            return Optional.ofNullable(socket.getAddress());
-        }
-        return Optional.empty();
+    public @Nullable InetAddress address(CellPlayer player) {
+        var remote = MinecraftPlayers
+                .requireOnline(server, player)
+                .connection.getRemoteAddress();
+        return remote instanceof InetSocketAddress socket
+                ? socket.getAddress()
+                : null;
     }
 
 }

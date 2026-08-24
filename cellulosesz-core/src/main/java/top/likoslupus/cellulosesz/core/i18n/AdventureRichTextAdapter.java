@@ -30,12 +30,23 @@ final class AdventureRichTextAdapter {
         var builder = Style.style()
                 .decoration(TextDecoration.BOLD, TextDecoration.State.byBoolean(source.bold()))
                 .decoration(TextDecoration.ITALIC, TextDecoration.State.byBoolean(source.italic()))
-                .decoration(TextDecoration.UNDERLINED, TextDecoration.State.byBoolean(source.underlined()))
-                .decoration(TextDecoration.STRIKETHROUGH, TextDecoration.State.byBoolean(source.strikethrough()))
-                .decoration(TextDecoration.OBFUSCATED, TextDecoration.State.byBoolean(source.obfuscated()));
+                .decoration(
+                        TextDecoration.UNDERLINED,
+                        TextDecoration.State.byBoolean(source.underlined())
+                )
+                .decoration(
+                        TextDecoration.STRIKETHROUGH,
+                        TextDecoration.State.byBoolean(source.strikethrough())
+                )
+                .decoration(
+                        TextDecoration.OBFUSCATED,
+                        TextDecoration.State.byBoolean(source.obfuscated())
+                );
         if (!source.color().isBlank()) {
             var color = TextColor.fromHexString(source.color());
-            if (color != null) builder.color(color);
+            if (color != null) {
+                builder.color(color);
+            }
         }
         return builder.build();
     }

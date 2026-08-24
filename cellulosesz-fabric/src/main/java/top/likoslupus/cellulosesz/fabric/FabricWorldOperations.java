@@ -8,6 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
@@ -18,21 +19,17 @@ import net.minecraft.world.phys.HitResult;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignPlatformService;
-import top.likoslupus.cellulosesz.api.sign.SignWriteRequest;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.world.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayerUnavailableException;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
-import top.likoslupus.cellulosesz.common.world.MinecraftWorlds;
+import top.likoslupus.cellulosesz.common.sign.SignPlatformService;
+import top.likoslupus.cellulosesz.common.sign.SignWriteRequest;
+import top.likoslupus.cellulosesz.common.world.*;
 import top.likoslupus.cellulosesz.fabric.mixin.BaseSpawnerAccessor;
 
 import java.lang.management.ManagementFactory;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import java.util.*;
 import java.util.function.Supplier;
 
 import static java.util.Objects.requireNonNull;
@@ -214,7 +211,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                             ? sign.getFrontText()
                             : sign.getBackText()
             ).getMessages(false);
-            var lines = java.util.Arrays
+            var lines = Arrays
                     .stream(messages)
                     .map(Component::getString)
                     .toList();
@@ -260,7 +257,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
                 );
             }
 
-            var snapshot = changed.value().orElseThrow();
+            var snapshot = changed.value();
             return PlatformResult.success(new SignTarget(
                     snapshot.location(),
                     snapshot.front(),
@@ -463,7 +460,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
             var targetLevel = level.orElseThrow();
             var bolt = EntityType.LIGHTNING_BOLT.create(
                     targetLevel,
-                    net.minecraft.world.entity.EntitySpawnReason.COMMAND
+                    EntitySpawnReason.COMMAND
             );
 
             if (bolt == null) {
@@ -512,7 +509,7 @@ public final class FabricWorldOperations implements WorldPlatformService {
     }
 
     private static String normalize(String id) {
-        var value = id.strip().toLowerCase(java.util.Locale.ROOT);
+        var value = id.strip().toLowerCase(Locale.ROOT);
         return value.contains(":")
                 ? value
                 : "minecraft:" + value;

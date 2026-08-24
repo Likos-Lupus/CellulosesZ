@@ -1,8 +1,6 @@
 package top.likoslupus.cellulosesz.common.world;
 
 import net.minecraft.world.level.storage.LevelResource;
-import top.likoslupus.cellulosesz.api.world.BackupPlatformService;
-import top.likoslupus.cellulosesz.api.world.BackupResult;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.io.IOException;
@@ -35,18 +33,17 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
     MinecraftBackupOperations(MinecraftServerHandle server, Clock clock) {
         this.server = requireNonNull(server, "server");
         this.clock = requireNonNull(clock, "clock");
-        this.executor = Executors.newSingleThreadExecutor(
-                Thread.ofVirtual().name("cellulosesz-backup-", 0).factory()
-        );
+        this.executor = Executors.newSingleThreadExecutor(Thread.ofVirtual()
+                .name("cellulosesz-backup-", 0)
+                .factory());
     }
 
     @Override
     public CompletableFuture<BackupResult> create(Path destinationDirectory) {
         requireNonNull(destinationDirectory, "destinationDirectory");
         if (!running.compareAndSet(false, true)) {
-            return CompletableFuture.failedFuture(
-                    new IllegalStateException("A backup is already running")
-            );
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "A backup is already running"));
         }
 
         var barrier = new CompletableFuture<Path>();
@@ -56,12 +53,10 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
                 try {
                     if (!currentServer.saveEverything(false, true, true)) {
                         throw new IllegalStateException(
-                                "Minecraft reported that the world save failed"
-                        );
+                                "Minecraft reported that the world save failed");
                     }
 
-                    barrier.complete(currentServer
-                            .getWorldPath(LevelResource.ROOT)
+                    barrier.complete(currentServer.getWorldPath(LevelResource.ROOT)
                             .toAbsolutePath()
                             .normalize());
                 } catch (Throwable failure) {
@@ -73,10 +68,11 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
             return CompletableFuture.failedFuture(failure);
         }
 
-        return barrier
-                .thenCompose(worldRoot -> CompletableFuture.supplyAsync(
-                        () -> createArchive(worldRoot, destinationDirectory),
-                        executor
+        return barrier.thenCompose(worldRoot -> CompletableFuture.supplyAsync(
+                        () -> createArchive(
+                                worldRoot,
+                                destinationDirectory
+                        ), executor
                 ))
                 .whenComplete((ignored, _) -> running.set(false));
     }
@@ -96,8 +92,7 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
             var realWorldRoot = worldRoot.toRealPath();
             var realDestinationRoot = destinationRoot.toRealPath();
             var filename = "backup-%s-%s.zip".formatted(
-                    DateTimeFormatter
-                            .ofPattern("yyyyMMdd-HHmmss-SSS")
+                    DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
                             .format(LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)),
                     UUID.randomUUID().toString().substring(0, 8)
             );
@@ -118,9 +113,7 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
                             temporary,
                             StandardOpenOption.WRITE,
                             StandardOpenOption.TRUNCATE_EXISTING
-                    );
-                    var zip = new ZipOutputStream(output);
-                    var paths = Files.walk(realWorldRoot)
+                    ); var zip = new ZipOutputStream(output); var paths = Files.walk(realWorldRoot)
             ) {
                 paths.filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
                         .filter(path -> excludedRoot == null || !path.startsWith(excludedRoot))
@@ -150,12 +143,7 @@ public final class MinecraftBackupOperations implements BackupPlatformService {
         }
     }
 
-    private static void addEntry(
-            Path worldRoot,
-            Path path,
-            ZipOutputStream zip,
-            long[] counters
-    ) {
+    private static void addEntry(Path worldRoot, Path path, ZipOutputStream zip, long[] counters) {
         var relative = worldRoot.relativize(path).normalize();
         if (relative.isAbsolute() || relative.startsWith("..")) {
             throw new BackupFailure(new IOException("Unsafe backup entry: " + path));

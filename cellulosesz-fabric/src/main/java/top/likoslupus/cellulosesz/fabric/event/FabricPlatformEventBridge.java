@@ -17,17 +17,17 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
-import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.GameModeKind;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.common.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchRequest;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
 
 import java.util.*;
 import java.util.function.BooleanSupplier;
@@ -273,12 +273,15 @@ public final class FabricPlatformEventBridge {
                 return true;
             }
 
+            var attacker = source.getEntity() instanceof Entity attackerEntity
+                    ? attackerEntity.getUUID()
+                    : null;
             return wrap(nativePlayer)
                     .map(player ->
                             events.fireCancellable(new PlayerDamageEvent(
                                     player,
                                     source.toString(),
-                                    Optional.ofNullable(source.getEntity()).map(Entity::getUUID),
+                                    attacker,
                                     amount
                             ))
                     )
@@ -353,8 +356,8 @@ public final class FabricPlatformEventBridge {
             return wrap(serverPlayer)
                     .map(player -> {
                         var targetPlayer = target instanceof ServerPlayer
-                                ? Optional.of(target.getUUID())
-                                : Optional.<UUID>empty();
+                                ? target.getUUID()
+                                : null;
                         var type = BuiltInRegistries.ENTITY_TYPE
                                 .getKey(target.getType())
                                 .toString();

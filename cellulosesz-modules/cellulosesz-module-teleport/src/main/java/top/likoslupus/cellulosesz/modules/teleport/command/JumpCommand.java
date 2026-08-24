@@ -9,7 +9,7 @@ import top.likoslupus.cellulosesz.modules.teleport.application.TeleportCommandSe
 
 import java.util.List;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 

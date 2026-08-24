@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 
 import java.util.List;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 public final class PingCommand implements CommandContributor {
 

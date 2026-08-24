@@ -6,7 +6,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
@@ -14,6 +13,7 @@ import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.common.command.argument.ToggleModes;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationService;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -105,9 +105,9 @@ public final class ClearInventoryConfirmToggleCommand implements CommandContribu
                     }
 
                     var currentPlayer = player.orElseThrow();
-                    var current = users.cached(currentPlayer.uuid())
-                            .map(user -> user.preferences().confirmInventoryClears())
-                            .orElse(true);
+                    var currentUser = users.cached(currentPlayer.uuid());
+                    var current = currentUser == null
+                            || currentUser.preferences().confirmInventoryClears();
                     var enabled = requested == null
                             ? !current
                             : requested;

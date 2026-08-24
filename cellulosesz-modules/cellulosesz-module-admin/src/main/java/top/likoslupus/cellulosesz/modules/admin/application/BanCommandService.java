@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
 
 import java.net.InetAddress;
 import java.time.Duration;

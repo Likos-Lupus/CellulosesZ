@@ -2,8 +2,8 @@ package top.likoslupus.cellulosesz.common.text;
 
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import static java.util.Objects.requireNonNull;
 

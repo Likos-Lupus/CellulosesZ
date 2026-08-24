@@ -22,7 +22,10 @@ public abstract class ServerGamePacketListenerEventMixin {
             at = @At("HEAD"),
             cancellable = true
     )
-    private void cellulosesz$commandPreprocess(ServerboundChatCommandPacket packet, CallbackInfo callback) {
+    private void cellulosesz$commandPreprocess(
+            ServerboundChatCommandPacket packet,
+            CallbackInfo callback
+    ) {
         if (!FabricPlatformEventBridge.allowCommand(player, packet.command())) {
             callback.cancel();
         }

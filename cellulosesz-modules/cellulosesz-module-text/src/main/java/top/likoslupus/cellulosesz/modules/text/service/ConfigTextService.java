@@ -5,6 +5,8 @@ import top.likoslupus.cellulosesz.modules.text.config.TextConfig;
 
 import java.util.*;
 
+import static java.util.Objects.requireNonNull;
+
 public final class ConfigTextService implements TextService {
 
     private volatile Snapshot snapshot;
@@ -18,9 +20,9 @@ public final class ConfigTextService implements TextService {
     }
 
     private static List<String> validateLines(List<String> lines, String name) {
-        Objects.requireNonNull(lines, name);
+        requireNonNull(lines, name);
         return List.copyOf(lines.stream()
-                .map(line -> Objects.requireNonNull(line, name + " line"))
+                .map(line -> requireNonNull(line, name + " line"))
                 .toList());
     }
 
@@ -55,7 +57,7 @@ public final class ConfigTextService implements TextService {
     }
 
     private static String normalize(String value) {
-        return Objects.requireNonNull(value, "name").trim().toLowerCase(Locale.ROOT);
+        return requireNonNull(value, "name").trim().toLowerCase(Locale.ROOT);
     }
 
     private record Snapshot(
@@ -74,18 +76,20 @@ public final class ConfigTextService implements TextService {
         }
 
         private static Snapshot from(TextConfig source) {
-            Objects.requireNonNull(source, "config");
+            requireNonNull(source, "config");
             if (source.pageSize < 1 || source.pageSize > 100) {
                 throw new IllegalArgumentException("text.pageSize must be between 1 and 100");
             }
             var info = validateLines(source.info, "info");
             var motd = validateLines(source.motd, "motd");
             var rules = validateLines(source.rules, "rules");
-            Objects.requireNonNull(source.custom, "custom");
+            requireNonNull(source.custom, "custom");
             Map<String, List<String>> normalized = new TreeMap<>();
             source.custom.forEach((name, lines) -> {
                 var key = normalize(name);
-                if (key.isBlank()) throw new IllegalArgumentException("custom text name must not be blank");
+                if (key.isBlank()) {
+                    throw new IllegalArgumentException("custom text name must not be blank");
+                }
                 if (normalized.put(key, validateLines(lines, "custom." + key)) != null) {
                     throw new IllegalArgumentException("duplicate custom text name: " + key);
                 }

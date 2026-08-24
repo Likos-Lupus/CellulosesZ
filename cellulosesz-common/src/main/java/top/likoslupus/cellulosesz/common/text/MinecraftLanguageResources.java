@@ -10,8 +10,8 @@ import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.json.JsonMapper;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.core.i18n.DefaultMessageService;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
-
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;

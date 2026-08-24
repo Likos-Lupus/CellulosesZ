@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.scheduler.Scheduler;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;

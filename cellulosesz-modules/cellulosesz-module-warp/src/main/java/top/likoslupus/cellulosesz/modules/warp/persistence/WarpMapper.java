@@ -5,7 +5,6 @@ import top.likoslupus.cellulosesz.api.warp.Warp;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 import static java.util.Objects.requireNonNull;
@@ -33,7 +32,9 @@ public final class WarpMapper {
                             location.yaw,
                             location.pitch
                     ),
-                    Optional.ofNullable(document.createdBy).map(UUID::fromString),
+                    document.createdBy != null
+                            ? UUID.fromString(document.createdBy)
+                            : null,
                     Instant.ofEpochMilli(document.createdAt)
             );
         } catch (RuntimeException failure) {
@@ -58,7 +59,9 @@ public final class WarpMapper {
         location.yaw = warp.location().yaw();
         location.pitch = warp.location().pitch();
         document.location = location;
-        document.createdBy = warp.createdBy().map(UUID::toString).orElse(null);
+        document.createdBy = warp.createdBy() != null
+                ? warp.createdBy().toString()
+                : null;
         document.createdAt = warp.createdAt().toEpochMilli();
         return document;
     }

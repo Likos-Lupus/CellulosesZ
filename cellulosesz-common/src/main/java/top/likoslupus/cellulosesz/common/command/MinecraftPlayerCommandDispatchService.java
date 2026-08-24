@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.common.command;
 
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import top.likoslupus.cellulosesz.api.command.service.*;
+import top.likoslupus.cellulosesz.common.command.service.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 

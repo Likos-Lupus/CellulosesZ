@@ -1,13 +1,12 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
-import top.likoslupus.cellulosesz.api.teleport.BackLocationService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.teleport.persistence.BackLocationDocument;
 import top.likoslupus.cellulosesz.modules.teleport.persistence.LocationMapper;
 

@@ -1,11 +1,9 @@
 package top.likoslupus.cellulosesz.modules.home.service;
 
-import top.likoslupus.cellulosesz.api.home.HomeRenameStatus;
-import top.likoslupus.cellulosesz.api.home.HomeService;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.home.persistence.HomeDocument;
 import top.likoslupus.cellulosesz.modules.home.persistence.HomeMapper;
 

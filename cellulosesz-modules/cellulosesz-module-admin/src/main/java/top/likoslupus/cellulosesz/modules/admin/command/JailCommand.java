@@ -4,7 +4,6 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import top.likoslupus.cellulosesz.api.admin.Jail;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -13,6 +12,7 @@ import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.AdminDurations;
+import top.likoslupus.cellulosesz.modules.admin.domain.Jail;
 
 import java.time.Duration;
 import java.util.List;

@@ -6,7 +6,6 @@ import top.likoslupus.cellulosesz.api.player.*;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import org.jspecify.annotations.Nullable;
@@ -42,8 +41,8 @@ public final class DefaultPlayerResolver implements PlayerResolver {
         }
 
         var online = players.onlinePlayer(input);
-        if (online.isPresent()) {
-            return visible(wrapOnline(online.get()), viewer);
+        if (online != null) {
+            return visible(wrapOnline(online), viewer);
         }
 
         var displayMatches = players.onlinePlayers().stream()
@@ -62,8 +61,8 @@ public final class DefaultPlayerResolver implements PlayerResolver {
             return resolveKnown(UUID.fromString(input), viewer);
         } catch (IllegalArgumentException _) {
             var uuid = names.findUuid(input);
-            if (uuid.isPresent()) {
-                return resolveKnown(uuid.get(), viewer);
+            if (uuid != null) {
+                return resolveKnown(uuid, viewer);
             }
 
             var cachedMatches = users.cachedUsers().stream()
@@ -91,26 +90,25 @@ public final class DefaultPlayerResolver implements PlayerResolver {
         }
 
         var cached = users.cached(uuid);
-        var name = names.findName(uuid)
-                .or(() ->
-                        cached
-                                .flatMap(user -> Optional.ofNullable(user.lastKnownName()))
-                                .filter(value -> !value.isBlank())
-                );
+        var name = names.findName(uuid);
+        if (name == null && cached != null) {
+            var lastKnown = cached.lastKnownName();
+            if (lastKnown != null && !lastKnown.isBlank()) {
+                name = lastKnown;
+            }
+        }
 
-        if (name.isEmpty()) {
+        if (name == null) {
             return unknown(uuid.toString());
         }
 
-        var vanished = cached
-                .map(user -> user.state().vanished())
-                .orElse(false);
+        var vanished = cached != null && cached.state().vanished();
 
         return visible(
                 new ResolvedPlayer(
                         ResolvedPlayerState.OFFLINE,
                         uuid,
-                        name.get(),
+                        name,
                         null,
                         vanished
                 ),
@@ -144,9 +142,8 @@ public final class DefaultPlayerResolver implements PlayerResolver {
     }
 
     private ResolvedPlayer wrapOnline(CellPlayer player) {
-        var vanished = users.cached(player.uuid())
-                .map(user -> user.state().vanished())
-                .orElse(false);
+        var cachedUser = users.cached(player.uuid());
+        var vanished = cachedUser != null && cachedUser.state().vanished();
         return new ResolvedPlayer(
                 ResolvedPlayerState.ONLINE,
                 player.uuid(),

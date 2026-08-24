@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.fabric;
 
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.common.text.MinecraftTextAdapter;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 
@@ -78,7 +79,7 @@ public final class FabricDisplayNameOperations implements DisplayNamePlatformSer
         }
     }
 
-    private PlatformResult<Void> refresh(net.minecraft.server.level.ServerPlayer player) {
+    private PlatformResult<Void> refresh(ServerPlayer player) {
         var packet = ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(player));
         server.requireRunning().getPlayerList().getPlayers().stream()
                 .filter(viewer -> !FabricVanishBridge.hiddenFrom(viewer, player))

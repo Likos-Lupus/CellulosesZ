@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.modules.teleport.command.argument;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestSelector;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestSelector;
 
 import java.util.UUID;
 

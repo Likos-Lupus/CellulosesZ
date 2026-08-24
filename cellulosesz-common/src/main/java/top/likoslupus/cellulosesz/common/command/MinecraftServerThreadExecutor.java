@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.common.command;
 
 import net.minecraft.util.thread.BlockableEventLoop;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;

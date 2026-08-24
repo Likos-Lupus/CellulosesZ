@@ -1,24 +1,24 @@
 package top.likoslupus.cellulosesz.api.module
 
-import top.likoslupus.cellulosesz.api.validation.TextChecks
+import top.likoslupus.cellulosesz.api.validation.requireNonBlank
 
 @JvmInline
-value class ModuleKey(
-    val value: String
+public value class ModuleKey(
+    public val value: String
 ) : Comparable<ModuleKey> {
 
     init {
-        TextChecks.requireNonBlank(value, "value")
+        value.requireNonBlank { "value" }
     }
 
     override fun toString(): String = value
 
     override fun compareTo(other: ModuleKey): Int = value.compareTo(other.value)
 
-    companion object {
+    public companion object {
 
         @JvmStatic
-        fun of(value: String): ModuleKey = ModuleKey(value)
+        public fun of(value: String): ModuleKey = ModuleKey(value)
 
     }
 

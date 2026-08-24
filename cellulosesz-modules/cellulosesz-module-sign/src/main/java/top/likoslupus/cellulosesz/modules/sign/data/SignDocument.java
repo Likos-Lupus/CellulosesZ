@@ -10,7 +10,9 @@ public final class SignDocument {
     public void validate() {
         var validated = new LinkedHashMap<String, StoredSign>();
         signs.forEach((key, value) -> {
-            if (key.isBlank()) throw new IllegalArgumentException("Sign key must not be blank");
+            if (key.isBlank()) {
+                throw new IllegalArgumentException("Sign key must not be blank");
+            }
             value.validate();
             validated.put(key, value);
         });

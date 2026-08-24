@@ -60,13 +60,8 @@ class OperationGateTest {
         operationStarted.await()
         assertEquals(1, gate.activeCount)
 
-        // Begin drain in background
-        val drainCompleted = AtomicBoolean(false)
-        val drainJob = async(Dispatchers.Default) {
-            gate.stopAccepting()
-            gate.drain()
-            drainCompleted.set(true)
-        }
+        gate.stopAccepting()
+        assertFalse(gate.accepting)
 
         // Ensure post-stop operations are rejected
         try {
@@ -74,6 +69,13 @@ class OperationGateTest {
             fail("Expected LifecycleClosedException")
         } catch (_: LifecycleClosedException) {
             // expected
+        }
+
+        // Begin drain in background
+        val drainCompleted = AtomicBoolean(false)
+        val drainJob = async(Dispatchers.Default) {
+            gate.drain()
+            drainCompleted.set(true)
         }
 
         // Drain should not be complete yet because op is still in flight

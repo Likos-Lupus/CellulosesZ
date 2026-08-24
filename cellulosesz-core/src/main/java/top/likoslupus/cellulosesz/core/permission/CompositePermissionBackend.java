@@ -4,7 +4,7 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.Objects;
 
 public final class CompositePermissionBackend implements PermissionBackend {
 
@@ -24,7 +24,8 @@ public final class CompositePermissionBackend implements PermissionBackend {
     @Override
     public int intOption(CellPlayer player, String key, int fallback) {
         return backends.stream()
-                .flatMap(backend -> backend.stringOption(player, key).stream())
+                .map(backend -> backend.stringOption(player, key))
+                .filter(Objects::nonNull)
                 .mapToInt(value -> parseInteger(key, value))
                 .findFirst()
                 .orElse(fallback);
@@ -44,7 +45,8 @@ public final class CompositePermissionBackend implements PermissionBackend {
     @Override
     public boolean boolOption(CellPlayer player, String key, boolean fallback) {
         return backends.stream()
-                .flatMap(backend -> backend.stringOption(player, key).stream())
+                .map(backend -> backend.stringOption(player, key))
+                .filter(Objects::nonNull)
                 .map(value -> parseBoolean(key, value))
                 .findFirst()
                 .orElse(fallback);
@@ -61,10 +63,12 @@ public final class CompositePermissionBackend implements PermissionBackend {
     }
 
     @Override
-    public Optional<String> stringOption(CellPlayer player, String key) {
+    public String stringOption(CellPlayer player, String key) {
         return backends.stream()
-                .flatMap(backend -> backend.stringOption(player, key).stream())
-                .findFirst();
+                .map(backend -> backend.stringOption(player, key))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse(null);
     }
 
 }

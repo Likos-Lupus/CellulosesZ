@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.service.Registration;
+import top.likoslupus.cellulosesz.core.config.ConfigRegistry;
 
 import java.util.Optional;
 import java.util.function.Supplier;

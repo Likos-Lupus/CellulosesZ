@@ -131,7 +131,9 @@ public final class EcoCommand implements CommandContributor {
                         mutation,
                         StringArgumentType.getString(command, "player"),
                         amount,
-                        policy.playerName().orElse("console")
+                        policy.playerName() == null
+                                ? "console"
+                                : policy.playerName()
                 )
         );
     }

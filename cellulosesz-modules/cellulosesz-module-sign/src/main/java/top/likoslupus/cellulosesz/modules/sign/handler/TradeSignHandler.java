@@ -1,14 +1,13 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.item.InventoryItemRequest;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.List;
 
@@ -66,33 +65,33 @@ public final class TradeSignHandler implements SynchronousSignHandler {
         var costResult = cost(context);
         var rewardResult = reward(context);
 
-        if (!costResult.successful() || costResult.value().isEmpty()) {
+        if (!costResult.successful() || costResult.value() == null) {
             return SignHandlerSupport.itemFailure(
                     costResult.status(),
                     "service.sign.trade-format"
             );
         }
 
-        if (!rewardResult.successful() || rewardResult.value().isEmpty()) {
+        if (!rewardResult.successful() || rewardResult.value() == null) {
             return SignHandlerSupport.itemFailure(
                     rewardResult.status(),
                     "service.sign.trade-format"
             );
         }
 
-        var cost = costResult.value().orElseThrow();
-        var reward = rewardResult.value().orElseThrow();
+        var cost = costResult.value();
+        var reward = rewardResult.value();
         var prepared = inventory.prepareExchange(
                 context.player(),
                 List.of(request(cost)),
                 List.of(request(reward))
         );
 
-        if (!prepared.successful() || prepared.value().isEmpty()) {
+        if (!prepared.successful() || prepared.value() == null) {
             return SignUseResult.failure("service.sign.trade-inventory-full");
         }
 
-        var committed = prepared.value().orElseThrow().commit();
+        var committed = prepared.value().commit();
         if (!committed.successful()) {
             return SignUseResult.failure("service.sign.trade-inventory-changed");
         }

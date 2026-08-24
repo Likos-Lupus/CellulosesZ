@@ -11,13 +11,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.execution.CommandExecutionPipeline;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.command.service.CommandAliasRegistry;
-import top.likoslupus.cellulosesz.api.command.service.CommandAvailabilityService;
-import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -25,6 +20,11 @@ import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
+import top.likoslupus.cellulosesz.core.command.catalog.CommandCatalogEntry;
+import top.likoslupus.cellulosesz.core.command.execution.CommandExecutionPipeline;
+import top.likoslupus.cellulosesz.core.command.service.CommandAliasRegistry;
+import top.likoslupus.cellulosesz.core.command.service.CommandAvailabilityService;
+import top.likoslupus.cellulosesz.core.command.service.PermissionCatalog;
 
 import java.util.*;
 import java.util.concurrent.CompletionStage;
@@ -114,7 +114,7 @@ public final class DefaultCommandRegistrationContext implements CommandRegistrat
         ) {
             return Optional.empty();
         }
-        return players.onlinePlayer(player.getUUID());
+        return Optional.ofNullable(players.onlinePlayer(player.getUUID()));
     }
 
     @Override

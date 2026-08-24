@@ -1,46 +1,45 @@
 package top.likoslupus.cellulosesz.core.bootstrap;
 
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
-import top.likoslupus.cellulosesz.api.command.execution.CommandExecutionPipeline;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.*;
-import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.api.event.EventRegistry;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.module.LoadedModuleInfo;
-import top.likoslupus.cellulosesz.api.module.ModuleCatalog;
-import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.runtime.RuntimeService;
-import top.likoslupus.cellulosesz.api.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
-import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewareRegistry;
+import top.likoslupus.cellulosesz.core.command.catalog.CommandCatalog;
 import top.likoslupus.cellulosesz.core.command.catalog.DefaultCommandCatalog;
+import top.likoslupus.cellulosesz.core.command.execution.CommandExecutionPipeline;
 import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecutionPipeline;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.core.command.service.*;
+import top.likoslupus.cellulosesz.core.config.ConfigRegistry;
 import top.likoslupus.cellulosesz.core.config.CoreConfig;
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry;
 import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry;
 import top.likoslupus.cellulosesz.core.i18n.DefaultLocaleResolver;
 import top.likoslupus.cellulosesz.core.i18n.DefaultMessageService;
 import top.likoslupus.cellulosesz.core.legacy.LegacyFutureLifecycleAdapter;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.core.module.DefaultModuleManager;
+import top.likoslupus.cellulosesz.core.module.ModuleCatalog;
+import top.likoslupus.cellulosesz.core.module.PreparedModuleReload;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime;
 import top.likoslupus.cellulosesz.core.runtime.DefaultRuntimeService;
 import top.likoslupus.cellulosesz.core.runtime.RuntimeDispatchers;
+import top.likoslupus.cellulosesz.core.runtime.RuntimeService;
 import top.likoslupus.cellulosesz.core.scheduler.DefaultScheduler;
+import top.likoslupus.cellulosesz.core.scheduler.Scheduler;
 import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
 import top.likoslupus.cellulosesz.core.storage.JacksonStorageService;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
+import top.likoslupus.cellulosesz.core.text.ClientLocaleService;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -487,8 +486,10 @@ public final class CellulosesZBootstrap {
             @Nullable String successMessage
     ) {
         return serverThread.submit(() -> {
-            services.optional(CommandTreeService.class)
-                    .ifPresent(CommandTreeService::refresh);
+            var commandTree = services.find(CommandTreeService.class);
+            if (commandTree != null) {
+                commandTree.refresh();
+            }
             if (successMessage != null) {
                 logger.info(successMessage);
             }

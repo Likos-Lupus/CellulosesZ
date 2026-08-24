@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
-import top.likoslupus.cellulosesz.api.economy.WorthService;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.data.WorthDocument;
 
 import java.math.BigDecimal;

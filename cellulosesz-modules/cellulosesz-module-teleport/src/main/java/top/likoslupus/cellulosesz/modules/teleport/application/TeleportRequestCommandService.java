@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.modules.teleport.application;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestSelector;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestSelector;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestType;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;

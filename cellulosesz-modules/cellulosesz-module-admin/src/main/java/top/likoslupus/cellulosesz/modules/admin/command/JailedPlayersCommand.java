@@ -4,13 +4,13 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.admin.application.JailCommandService;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;

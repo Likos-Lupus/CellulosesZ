@@ -1,15 +1,15 @@
 package top.likoslupus.cellulosesz.modules.kit.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 import top.likoslupus.cellulosesz.modules.kit.persistence.KitDocument;
 import top.likoslupus.cellulosesz.modules.kit.persistence.KitMapper;
@@ -47,12 +47,12 @@ final class DefaultKitServiceTest {
         var definition = kit("daily", "Daily");
 
         var save = service.save(definition);
-        assertTrue(service.kit("daily").isEmpty(), "unpersisted kit must not be visible");
+        assertNull(service.kit("daily"), "unpersisted kit must not be visible");
 
         storage.completeSave();
         save.join();
 
-        var published = service.kit("daily").orElseThrow();
+        var published = service.kit("daily");
         assertSame(definition, published);
         assertEquals("Daily", published.displayName());
         assertThrows(
@@ -107,7 +107,7 @@ final class DefaultKitServiceTest {
         return new KitDefinition(
                 id,
                 displayName,
-                Optional.of("cellulosesz.kit." + id),
+                "cellulosesz.kit." + id,
                 Duration.ZERO,
                 BigDecimal.ZERO,
                 List.of(new KitItem(0, "{id:\"minecraft:stone\",count:1}"))
@@ -133,7 +133,7 @@ final class DefaultKitServiceTest {
         storage.failSave();
 
         assertThrows(Exception.class, save::join);
-        assertTrue(service.kit("daily").isEmpty());
+        assertNull(service.kit("daily"));
     }
 
     @Test
@@ -187,8 +187,8 @@ final class DefaultKitServiceTest {
         service.save(kit("live", "Live")).join();
 
         assertThrows(Exception.class, () -> prepared.commit().toCompletableFuture().join());
-        assertTrue(service.kit("live").isPresent());
-        assertTrue(service.kit("next").isEmpty());
+        assertNotNull(service.kit("live"));
+        assertNull(service.kit("next"));
     }
 
     @Test
@@ -336,8 +336,8 @@ final class DefaultKitServiceTest {
         }
 
         @Override
-        public Optional<CellUser> cached(UUID uuid) {
-            return Optional.empty();
+        public CellUser cached(UUID uuid) {
+            return null;
         }
 
         @Override
@@ -346,8 +346,8 @@ final class DefaultKitServiceTest {
         }
 
         @Override
-        public Optional<UUID> findUuidByName(String name) {
-            return Optional.empty();
+        public UUID findUuidByName(String name) {
+            return null;
         }
 
         @Override

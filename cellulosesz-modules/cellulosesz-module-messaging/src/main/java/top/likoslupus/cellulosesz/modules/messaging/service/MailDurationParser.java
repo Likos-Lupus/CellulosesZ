@@ -10,7 +10,9 @@ public final class MailDurationParser {
     }
 
     public static OptionalLong parseMillis(String input) {
-        if (input.isBlank()) return OptionalLong.empty();
+        if (input.isBlank()) {
+            return OptionalLong.empty();
+        }
 
         var value = input.trim().toLowerCase(Locale.ROOT);
 

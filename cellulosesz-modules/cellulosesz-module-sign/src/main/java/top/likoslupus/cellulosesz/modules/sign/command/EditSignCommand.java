@@ -6,19 +6,22 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.*;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.common.sign.SignPlatformService;
+import top.likoslupus.cellulosesz.common.sign.SignSnapshot;
+import top.likoslupus.cellulosesz.common.sign.SignWriteRequest;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.sign.SignRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
+import top.likoslupus.cellulosesz.modules.sign.service.SignService;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -175,7 +178,7 @@ public final class EditSignCommand implements CommandContributor {
                 operation,
                 (policy, result) -> {
                     SignCommandSupport.respond(policy, result);
-                    return CommandOutcome.fromPlatformStatus(result.status());
+                    return result.status().toCommandOutcome();
                 }
         );
     }
@@ -193,12 +196,12 @@ public final class EditSignCommand implements CommandContributor {
             MinecraftCommandPolicyContext policy,
             PlatformResult<SignSnapshot> targetResult
     ) {
-        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+        if (!targetResult.successful() || targetResult.value() == null) {
             return targetResult;
         }
 
         var player = policy.currentPlayer().orElseThrow();
-        var target = targetResult.value().orElseThrow();
+        var target = targetResult.value();
 
         clipboards.put(player.uuid(), new Clipboard(target.lines()));
         policy.reply(LocalizedMessage.of(
@@ -213,7 +216,7 @@ public final class EditSignCommand implements CommandContributor {
             MinecraftCommandPolicyContext policy,
             PlatformResult<SignSnapshot> targetResult
     ) {
-        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+        if (!targetResult.successful() || targetResult.value() == null) {
             return CompletableFuture.completedFuture(targetResult);
         }
 
@@ -227,7 +230,7 @@ public final class EditSignCommand implements CommandContributor {
             ));
         }
 
-        return mutate(policy, targetResult.value().orElseThrow(), clipboard.lines());
+        return mutate(policy, targetResult.value(), clipboard.lines());
     }
 
     private CompletableFuture<PlatformResult<?>> clear(
@@ -235,11 +238,11 @@ public final class EditSignCommand implements CommandContributor {
             PlatformResult<SignSnapshot> targetResult,
             int line
     ) {
-        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+        if (!targetResult.successful() || targetResult.value() == null) {
             return CompletableFuture.completedFuture(targetResult);
         }
 
-        var target = targetResult.value().orElseThrow();
+        var target = targetResult.value();
         var replacement = new ArrayList<>(target.lines());
 
         replacement.set(line, "");
@@ -252,7 +255,7 @@ public final class EditSignCommand implements CommandContributor {
             int line,
             String text
     ) {
-        if (!targetResult.successful() || targetResult.value().isEmpty()) {
+        if (!targetResult.successful() || targetResult.value() == null) {
             return CompletableFuture.completedFuture(targetResult);
         }
 
@@ -261,7 +264,7 @@ public final class EditSignCommand implements CommandContributor {
             return CompletableFuture.completedFuture(textFailure.orElseThrow());
         }
 
-        var target = targetResult.value().orElseThrow();
+        var target = targetResult.value();
         var replacement = new ArrayList<>(target.lines());
 
         replacement.set(line, text);

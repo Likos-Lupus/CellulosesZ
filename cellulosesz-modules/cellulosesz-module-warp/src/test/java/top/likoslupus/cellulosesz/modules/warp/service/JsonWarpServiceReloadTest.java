@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.modules.warp.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.warp.Warp;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 import top.likoslupus.cellulosesz.modules.warp.persistence.WarpDocument;
 import top.likoslupus.cellulosesz.modules.warp.persistence.WarpMapper;
@@ -33,15 +33,11 @@ final class JsonWarpServiceReloadTest {
         assertEquals(List.of("old"), names(service));
         prepared.commit().toCompletableFuture().join();
         assertEquals(List.of("next"), names(service));
-        assertTrue(
-                service
-                        .requiredPermission(service.cachedWarp("next").orElseThrow())
-                        .isPresent()
-        );
+        assertNotNull(service.requiredPermission(service.cachedWarp("next")));
 
         prepared.rollback().toCompletableFuture().join();
         assertEquals(List.of("old"), names(service));
-        assertTrue(service.requiredPermission(service.cachedWarp("old").orElseThrow()).isEmpty());
+        assertNull(service.requiredPermission(service.cachedWarp("old")));
     }
 
     private static Warp warp(String name, double x) {
@@ -79,8 +75,8 @@ final class JsonWarpServiceReloadTest {
         ).join();
 
         assertThrows(Exception.class, () -> prepared.commit().toCompletableFuture().join());
-        assertTrue(service.cachedWarp("live").isPresent());
-        assertTrue(service.cachedWarp("next").isEmpty());
+        assertNotNull(service.cachedWarp("live"));
+        assertNull(service.cachedWarp("next"));
     }
 
     @Test

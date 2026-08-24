@@ -1,21 +1,20 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReservation;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostReserveResult;
-import top.likoslupus.cellulosesz.api.command.service.CommandCostService;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecutionPipeline;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostReservation;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostReserveResult;
+import top.likoslupus.cellulosesz.core.command.service.CommandCostService;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry;
 
 import java.math.BigDecimal;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -218,13 +217,13 @@ final class CommandCostTransactionTest {
         }
 
         @Override
-        public Optional<UUID> playerUuid() {
-            return Optional.of(PLAYER);
+        public UUID playerUuid() {
+            return PLAYER;
         }
 
         @Override
-        public Optional<String> playerName() {
-            return Optional.of("Player");
+        public String playerName() {
+            return "Player";
         }
 
         @Override

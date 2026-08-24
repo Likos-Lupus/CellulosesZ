@@ -2,16 +2,15 @@ package top.likoslupus.cellulosesz.modules.world.command;
 
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldResult;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
@@ -78,7 +77,7 @@ final class WorldCommandSupport {
                 policy -> {
                     var result = operation.apply(policy);
                     respond(policy, descriptor.canonicalName(), result);
-                    return CommandOutcome.fromPlatformStatus(result.status());
+                    return result.status().toCommandOutcome();
                 }
         );
     }
@@ -115,7 +114,7 @@ final class WorldCommandSupport {
             CommandContext<CommandSourceStack> command,
             CommandDescriptor descriptor,
             String audit,
-            Function<MinecraftCommandPolicyContext, AdminResult> operation
+            Function<MinecraftCommandPolicyContext, WorldResult> operation
     ) {
         return CommandExecutions.sync(
                 registration,
@@ -150,7 +149,7 @@ final class WorldCommandSupport {
                 operation,
                 (policy, result) -> {
                     respond(policy, descriptor.canonicalName(), result);
-                    return CommandOutcome.fromPlatformStatus(result.status());
+                    return result.status().toCommandOutcome();
                 }
         );
     }

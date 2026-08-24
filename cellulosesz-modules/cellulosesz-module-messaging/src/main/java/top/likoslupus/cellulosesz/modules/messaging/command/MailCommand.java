@@ -144,17 +144,17 @@ public final class MailCommand implements CommandContributor {
                 command,
                 descriptor,
                 audit,
-                policy -> policy.playerUuid()
-                        .map(operation)
-                        .orElseGet(() ->
-                                CompletableFuture.completedFuture(
-                                        MailCommandService.Result.failure(
-                                                LocalizedMessage.of(
-                                                        "common.player-only"
-                                                )
-                                        )
-                                )
-                        ),
+                policy -> {
+                    var senderUuid = policy.playerUuid();
+                    return senderUuid == null
+                            ? CompletableFuture.completedFuture(
+                            MailCommandService.Result.failure(
+                                    LocalizedMessage.of(
+                                            "common.player-only"
+                                    )
+                            ))
+                            : operation.apply(senderUuid);
+                },
                 (policy, result) -> {
                     respond(policy, result);
                     return CommandOutcome.fromSuccess(result.success());

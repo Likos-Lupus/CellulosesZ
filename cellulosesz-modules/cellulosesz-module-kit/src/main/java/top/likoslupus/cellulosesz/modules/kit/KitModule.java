@@ -1,22 +1,22 @@
 package top.likoslupus.cellulosesz.modules.kit;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitService;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.kit.application.DefaultKitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.application.KitCommandService;
 import top.likoslupus.cellulosesz.modules.kit.command.KitCommand;
 import top.likoslupus.cellulosesz.modules.kit.service.DefaultKitService;
 
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -43,7 +43,7 @@ public final class KitModule implements CellulosesZModule {
         var users = context.services().require(UserService.class);
         var inventory = context.services().require(InventoryPlatformService.class);
         var serverThread = context.services().require(ServerThreadExecutor.class);
-        var economy = context.services().optional(EconomyService.class);
+        var economy = Optional.ofNullable(context.services().find(EconomyService.class));
         var root = context.dataDirectory().getParent().resolve("kits");
 
         requireNonNull(config, "KitConfig has not been initialized");

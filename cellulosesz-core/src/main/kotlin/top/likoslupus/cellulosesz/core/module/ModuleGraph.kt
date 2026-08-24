@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.core.module
 
-import top.likoslupus.cellulosesz.api.module.ModuleCatalog
 import top.likoslupus.cellulosesz.api.module.ModuleDescriptor
 import top.likoslupus.cellulosesz.api.module.ModuleKey
-import top.likoslupus.cellulosesz.api.module.ModuleLoadException
 
 data class ResolvedModuleGraph(
     val activeKeys: Set<ModuleKey>,

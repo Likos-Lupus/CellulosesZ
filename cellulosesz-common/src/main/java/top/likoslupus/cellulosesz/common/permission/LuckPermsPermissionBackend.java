@@ -6,7 +6,6 @@ import net.luckperms.api.model.user.User;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 
-import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
@@ -25,10 +24,7 @@ public final class LuckPermsPermissionBackend implements PermissionBackend {
 
     @Override
     public boolean has(CellPlayer player, String permission) {
-        if (permission.isBlank()) {
-            return true;
-        }
-        return user(player)
+        return permission.isBlank() || user(player)
                 .getCachedData()
                 .getPermissionData()
                 .checkPermission(permission)
@@ -36,10 +32,8 @@ public final class LuckPermsPermissionBackend implements PermissionBackend {
     }
 
     @Override
-    public Optional<String> stringOption(CellPlayer player, String key) {
-        return Optional.ofNullable(
-                user(player).getCachedData().getMetaData().getMetaValue(key)
-        );
+    public String stringOption(CellPlayer player, String key) {
+        return user(player).getCachedData().getMetaData().getMetaValue(key);
     }
 
     private User user(CellPlayer player) {

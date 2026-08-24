@@ -12,10 +12,9 @@ import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationToken;
-import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.item.InventoryMutation;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
+import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
@@ -25,6 +24,10 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.item.*;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationKey;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationToken;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
@@ -33,9 +36,7 @@ import java.time.Duration;
 import java.util.*;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 import static java.util.Objects.requireNonNull;
 
@@ -362,12 +363,12 @@ public final class ClearInventoryCommand implements CommandContributor {
                     }
 
                     var value = payload.payload().orElseThrow();
-                    var resolved = value.targets()
+                    var targets = value.targets()
                             .stream()
                             .map(players::onlinePlayer)
                             .toList();
 
-                    if (resolved.stream().anyMatch(Optional::isEmpty)) {
+                    if (targets.stream().anyMatch(java.util.Objects::isNull)) {
                         return PlatformResult.failure(
                                 PlatformOperationStatus.NOT_FOUND,
                                 "target-offline"
@@ -376,9 +377,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
                     return executePrepared(
                             currentActor,
-                            resolved.stream()
-                                    .map(Optional::orElseThrow)
-                                    .toList(),
+                            List.copyOf(targets),
                             value.filter(),
                             value.amount()
                     );
@@ -444,13 +443,15 @@ public final class ClearInventoryCommand implements CommandContributor {
                     }
 
                     var total = estimate(filtered, filter, amount);
+                    var actorCached = actor.isEmpty()
+                            ? null
+                            : users.cached(actor.orElseThrow().uuid());
                     var needsConfirmation = actor.isPresent()
                             &&
-                            users.cached(actor.orElseThrow().uuid())
-                                    .map(user ->
-                                            user.preferences().confirmInventoryClears()
-                                    )
-                                    .orElse(true)
+                            (
+                                    actorCached == null
+                                            || actorCached.preferences().confirmInventoryClears()
+                            )
                             &&
                             (
                                     target.kind() == TargetKind.ALL
@@ -506,9 +507,12 @@ public final class ClearInventoryCommand implements CommandContributor {
         return switch (target.kind()) {
             case SELF -> actor.map(List::of)
                     .orElseGet(List::of);
-            case PLAYER -> players.onlinePlayer(target.name())
-                    .map(List::of)
-                    .orElseGet(List::of);
+            case PLAYER -> {
+                var online = players.onlinePlayer(target.name());
+                yield online == null
+                        ? List.of()
+                        : List.of(online);
+            }
             case ALL -> players.onlinePlayers();
         };
     }
@@ -523,12 +527,12 @@ public final class ClearInventoryCommand implements CommandContributor {
         for (var target : targets) {
             var slots = inventory.inventorySlots(target);
 
-            if (!slots.successful() || slots.value().isEmpty()) {
+            if (!slots.successful() || slots.value() == null) {
                 continue;
             }
 
             var selected = select(
-                    slots.value().orElseThrow(),
+                    slots.value(),
                     filter,
                     amount
             );
@@ -556,7 +560,7 @@ public final class ClearInventoryCommand implements CommandContributor {
         for (var target : targets) {
             var slots = inventory.inventorySlots(target);
 
-            if (!slots.successful() || slots.value().isEmpty()) {
+            if (!slots.successful() || slots.value() == null) {
                 return PlatformResult.failure(
                         slots.status(),
                         "inventory-snapshot-failed"
@@ -564,7 +568,7 @@ public final class ClearInventoryCommand implements CommandContributor {
             }
 
             var selections = select(
-                    slots.value().orElseThrow(),
+                    slots.value(),
                     filter,
                     amount
             );
@@ -579,7 +583,7 @@ public final class ClearInventoryCommand implements CommandContributor {
                     selections
             );
 
-            if (!prepared.successful() || prepared.value().isEmpty()) {
+            if (!prepared.successful() || prepared.value() == null) {
                 return PlatformResult.failure(
                         prepared.status(),
                         "inventory-prepare-failed"
@@ -588,7 +592,7 @@ public final class ClearInventoryCommand implements CommandContributor {
 
             plans.add(new Plan(
                     target,
-                    prepared.value().orElseThrow(),
+                    prepared.value(),
                     selections.stream()
                             .mapToInt(InventoryStackSelection::count)
                             .sum()

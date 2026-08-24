@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.modules.world.service;
 
-import top.likoslupus.cellulosesz.api.world.BackupPlatformService;
+import top.likoslupus.cellulosesz.common.world.BackupPlatformService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldConfig;
 
 import java.io.IOException;
@@ -10,8 +10,8 @@ import java.util.Comparator;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

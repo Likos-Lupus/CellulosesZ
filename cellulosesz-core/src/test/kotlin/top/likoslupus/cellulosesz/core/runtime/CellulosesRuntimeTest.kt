@@ -4,9 +4,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.lifecycle.LifecycleClosedException
 import top.likoslupus.cellulosesz.core.lifecycle.SuspendCloseable
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration.Companion.milliseconds

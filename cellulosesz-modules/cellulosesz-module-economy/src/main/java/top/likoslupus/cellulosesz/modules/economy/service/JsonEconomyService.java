@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.modules.economy.service;
 
 import top.likoslupus.cellulosesz.api.economy.*;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
-import top.likoslupus.cellulosesz.api.module.PreparedReloads;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.module.PreparedModuleReload;
+import top.likoslupus.cellulosesz.core.module.PreparedReloads;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 import top.likoslupus.cellulosesz.modules.economy.data.EconomyDocument;
 import top.likoslupus.cellulosesz.modules.economy.data.TransactionLogEntry;
@@ -23,8 +23,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireInRange;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public final class JsonEconomyService
         implements EconomyService, AsyncInitializable, AsyncCloseable {
@@ -420,11 +420,11 @@ public final class JsonEconomyService
         }
 
         return cachedTop.stream()
-                .filter(entry -> minimum.isEmpty()
-                        || entry.balance().compareTo(minimum.orElseThrow()) >= 0
+                .filter(entry -> minimum == null
+                        || entry.balance().compareTo(minimum) >= 0
                 )
-                .filter(entry -> maximum.isEmpty()
-                        || entry.balance().compareTo(maximum.orElseThrow()) <= 0
+                .filter(entry -> maximum == null
+                        || entry.balance().compareTo(maximum) <= 0
                 )
                 .limit(limit)
                 .toList();

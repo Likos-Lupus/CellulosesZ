@@ -1,17 +1,17 @@
 package top.likoslupus.cellulosesz.modules.playerstate.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.text.Normalizer;
 import java.time.Instant;
@@ -101,14 +101,15 @@ public final class PlayerInformationCommandService {
         return serverThread
                 .submit(() -> {
                     var sea = statePlatform.seaLevel(player);
-                    if (!sea.successful() || sea.value().isEmpty()) {
+                    if (!sea.successful() || sea.value() == null) {
                         return PlayerStateCommandResult.failure(
                                 "commands.playerstate.depth.platform-failed"
                         );
                     }
 
+                    var seaLevel = sea.value();
                     var y = (int) Math.floor(locations.currentLocation(player).y());
-                    var difference = y - sea.value().orElseThrow();
+                    var difference = y - seaLevel;
                     var key = difference > 0
                             ? "commands.playerstate.depth.above"
                             : difference < 0
@@ -119,12 +120,12 @@ public final class PlayerInformationCommandService {
                             ?
                             MessageArguments.builder()
                                     .add(y)
-                                    .add(sea.value().orElseThrow())
+                                    .add(seaLevel)
                                     .build()
                             : MessageArguments.builder()
                                     .add(Math.abs(difference))
                                     .add(y)
-                                    .add(sea.value().orElseThrow())
+                                    .add(seaLevel)
                                     .build();
                     return PlayerStateCommandResult.success(key, arguments);
                 });
@@ -317,13 +318,13 @@ public final class PlayerInformationCommandService {
         return resolver
                 .resolve(input, viewer.orElse(null))
                 .thenCompose(resolved -> {
-                    if (resolved.optionalUuid().isEmpty()
+                    if (resolved.uuid() == null
                             || resolved.vanished()
                             && viewer.isPresent()
                             &&
                             !vanish.canSee(
                                     viewer.orElseThrow(),
-                                    resolved.optionalUuid().orElseThrow()
+                                    resolved.uuid()
                             )
                     ) {
                         return finish(PlayerStateCommandResult.failure(
@@ -333,7 +334,7 @@ public final class PlayerInformationCommandService {
                     }
 
                     return users
-                            .load(resolved.optionalUuid().orElseThrow())
+                            .load(resolved.uuid())
                             .thenCompose(user -> finish(playtimeResult(
                                     resolved.name(),
                                     user.timestamps().playTimeMillis(),
@@ -401,15 +402,15 @@ public final class PlayerInformationCommandService {
         return resolver
                 .resolve(input, viewer.orElse(null))
                 .thenCompose(resolved -> {
-                    if (resolved.optionalUuid().isEmpty()) {
+                    if (resolved.uuid() == null) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
                                 MessageArguments.builder().add(input).build()
                         ));
                     }
 
-                    var uuid = resolved.optionalUuid().orElseThrow();
-                    var visibleOnline = resolved.online().isPresent()
+                    var uuid = resolved.uuid();
+                    var visibleOnline = resolved.onlinePlayer() != null
                             && (viewer.isEmpty() || vanish.canSee(viewer.orElseThrow(), uuid));
                     if (visibleOnline) {
                         return finish(PlayerStateCommandResult.success(
@@ -445,14 +446,14 @@ public final class PlayerInformationCommandService {
         return resolver
                 .resolve(input, viewer.orElse(null))
                 .thenCompose(resolved -> {
-                    if (resolved.optionalUuid().isEmpty()) {
+                    if (resolved.uuid() == null) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.common.unknown-player",
                                 MessageArguments.builder().add(input).build()
                         ));
                     }
 
-                    var uuid = resolved.optionalUuid().orElseThrow();
+                    var uuid = resolved.uuid();
                     if (resolved.vanished()
                             && viewer.isPresent()
                             && !vanish.canSee(viewer.orElseThrow(), uuid)
@@ -479,7 +480,7 @@ public final class PlayerInformationCommandService {
                                                                 ? uuid.toString()
                                                                 : "-"
                                                 )
-                                                .add(resolved.online().isPresent())
+                                                .add(resolved.onlinePlayer() != null)
                                                 .add(user.state().afk())
                                                 .add(
                                                         instantOrUnknown(user.timestamps().firstJoin())

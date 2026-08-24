@@ -6,7 +6,7 @@ import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
 
 import java.math.BigDecimal;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 import static java.util.Objects.requireNonNull;
 

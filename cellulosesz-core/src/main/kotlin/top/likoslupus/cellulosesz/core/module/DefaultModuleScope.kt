@@ -2,13 +2,12 @@ package top.likoslupus.cellulosesz.core.module
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.future.await
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable
-import top.likoslupus.cellulosesz.api.module.ModuleScope
 import top.likoslupus.cellulosesz.api.service.Registration
 import top.likoslupus.cellulosesz.core.legacy.LegacyFutureLifecycleAdapter
 import top.likoslupus.cellulosesz.core.lifecycle.DrainableResource
 import top.likoslupus.cellulosesz.core.lifecycle.LifecycleClosedException
 import top.likoslupus.cellulosesz.core.lifecycle.SuspendCloseable
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable
 import java.util.*
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean

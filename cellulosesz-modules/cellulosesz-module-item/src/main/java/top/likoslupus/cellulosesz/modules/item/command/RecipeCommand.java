@@ -14,10 +14,10 @@ import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
@@ -133,7 +133,7 @@ public final class RecipeCommand implements CommandContributor {
                         return result;
                     }
 
-                    var values = result.value().orElseThrow();
+                    var values = result.value();
 
                     if (number > values.size()) {
                         return PlatformResult.failure(

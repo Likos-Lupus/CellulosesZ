@@ -1,24 +1,24 @@
 package top.likoslupus.cellulosesz.api.module
 
-object ModuleKeys {
+public object ModuleKeys {
 
-    val COMMAND: ModuleKey = ModuleKey("command")
-    val PERMISSION: ModuleKey = ModuleKey("permission")
-    val USER: ModuleKey = ModuleKey("user")
-    val TEXT: ModuleKey = ModuleKey("text")
-    val ITEM: ModuleKey = ModuleKey("item")
-    val TELEPORT: ModuleKey = ModuleKey("teleport")
-    val PLAYERSTATE: ModuleKey = ModuleKey("playerstate")
-    val WORLD: ModuleKey = ModuleKey("world")
-    val ECONOMY: ModuleKey = ModuleKey("economy")
-    val HOME: ModuleKey = ModuleKey("home")
-    val KIT: ModuleKey = ModuleKey("kit")
-    val MESSAGING: ModuleKey = ModuleKey("messaging")
-    val WARP: ModuleKey = ModuleKey("warp")
-    val ADMIN: ModuleKey = ModuleKey("admin")
-    val SIGN: ModuleKey = ModuleKey("sign")
+    public val COMMAND: ModuleKey = ModuleKey("command")
+    public val PERMISSION: ModuleKey = ModuleKey("permission")
+    public val USER: ModuleKey = ModuleKey("user")
+    public val TEXT: ModuleKey = ModuleKey("text")
+    public val ITEM: ModuleKey = ModuleKey("item")
+    public val TELEPORT: ModuleKey = ModuleKey("teleport")
+    public val PLAYERSTATE: ModuleKey = ModuleKey("playerstate")
+    public val WORLD: ModuleKey = ModuleKey("world")
+    public val ECONOMY: ModuleKey = ModuleKey("economy")
+    public val HOME: ModuleKey = ModuleKey("home")
+    public val KIT: ModuleKey = ModuleKey("kit")
+    public val MESSAGING: ModuleKey = ModuleKey("messaging")
+    public val WARP: ModuleKey = ModuleKey("warp")
+    public val ADMIN: ModuleKey = ModuleKey("admin")
+    public val SIGN: ModuleKey = ModuleKey("sign")
 
-    val ALL: Set<ModuleKey> = setOf(
+    public val ALL: Set<ModuleKey> = setOf(
         COMMAND,
         PERMISSION,
         USER,

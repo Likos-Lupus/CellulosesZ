@@ -4,7 +4,7 @@ import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
 
 import java.math.BigDecimal;
 import java.util.Optional;

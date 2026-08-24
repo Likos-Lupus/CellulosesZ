@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
 import top.likoslupus.cellulosesz.api.service.Registration;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewareRegistry;
 
 import java.util.List;
 

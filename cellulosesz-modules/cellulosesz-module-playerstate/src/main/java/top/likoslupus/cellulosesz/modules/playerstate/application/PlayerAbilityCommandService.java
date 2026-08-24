@@ -1,10 +1,13 @@
 package top.likoslupus.cellulosesz.modules.playerstate.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.platform.MovementSpeedType;
 import top.likoslupus.cellulosesz.api.playerstate.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.platform.MovementSpeedType;
+import top.likoslupus.cellulosesz.common.playerstate.ExperienceRequest;
+import top.likoslupus.cellulosesz.common.playerstate.ExperienceSnapshot;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -63,13 +66,14 @@ public final class PlayerAbilityCommandService {
     ) {
         return onServer(() -> platform.flying(player))
                 .thenCompose(current -> {
-                    if (!current.successful() || current.value().isEmpty()) {
+                    var currentValue = current.value();
+                    if (!current.successful() || currentValue == null) {
                         return finish(PlayerStateCommandResult.failure(
                                 "service.playerstate.fly-failed"
                         ));
                     }
 
-                    var enabled = requested.orElse(!current.value().orElseThrow());
+                    var enabled = requested.orElse(!currentValue);
                     return states
                             .setFlying(player, enabled)
                             .thenCompose(result ->
@@ -87,14 +91,15 @@ public final class PlayerAbilityCommandService {
     ) {
         return onServer(() -> platform.invulnerable(player))
                 .thenCompose(current -> {
-                    if (!current.successful() || current.value().isEmpty()) {
+                    var currentValue = current.value();
+                    if (!current.successful() || currentValue == null) {
                         return finish(PlayerStateCommandResult.failure(
                                 "service.playerstate.god-failed"
                         ));
                     }
 
                     var enabled = requested
-                            .orElse(!current.value().orElseThrow());
+                            .orElse(!currentValue);
                     return states
                             .setGod(player, enabled)
                             .thenCompose(result -> finish(PlayerStateCommandResult.from(result)));
@@ -127,13 +132,13 @@ public final class PlayerAbilityCommandService {
     public CompletableFuture<PlayerStateCommandResult> experience(CellPlayer player) {
         return onServer(() -> {
             var result = platform.experience(player);
-            if (!result.successful() || result.value().isEmpty()) {
+            if (!result.successful() || result.value() == null) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.exp.platform-failed"
                 );
             }
 
-            return experienceResult(player, result.value().orElseThrow());
+            return experienceResult(player, result.value());
         });
     }
 
@@ -159,13 +164,13 @@ public final class PlayerAbilityCommandService {
     ) {
         return onServer(() -> {
             var result = platform.mutateExperience(player, request);
-            if (!result.successful() || result.value().isEmpty()) {
+            if (!result.successful() || result.value() == null) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.exp.platform-failed"
                 );
             }
 
-            return experienceResult(player, result.value().orElseThrow());
+            return experienceResult(player, result.value());
         });
     }
 
@@ -175,14 +180,14 @@ public final class PlayerAbilityCommandService {
     ) {
         return onServer(() -> {
             var result = platform.setGameMode(player, mode);
-            if (!result.successful() || result.value().isEmpty()) {
+            if (!result.successful() || result.value() == null) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.gamemode-invalid",
                         MessageArguments.empty()
                 );
             }
 
-            var change = result.value().orElseThrow();
+            var change = result.value();
             return PlayerStateCommandResult.success(
                     "commands.playerstate.gamemode-set",
                     MessageArguments.empty()
@@ -196,7 +201,8 @@ public final class PlayerAbilityCommandService {
     ) {
         return onServer(() -> platform.flying(player))
                 .thenCompose(flying -> {
-                    if (!flying.successful() || flying.value().isEmpty()) {
+                    var flyingValue = flying.value();
+                    if (!flying.successful() || flyingValue == null) {
                         return finish(PlayerStateCommandResult.failure(
                                 "commands.playerstate.speed-failed"
                         ));
@@ -204,7 +210,7 @@ public final class PlayerAbilityCommandService {
 
                     return speed(
                             player,
-                            flying.value().orElseThrow()
+                            flyingValue
                                     ? MovementSpeedType.FLY
                                     : MovementSpeedType.WALK,
                             speed
@@ -225,7 +231,7 @@ public final class PlayerAbilityCommandService {
 
         return onServer(() -> {
             var result = platform.setMovementSpeed(player, type, speed);
-            if (!result.successful() || result.value().isEmpty()) {
+            if (!result.successful() || result.value() == null) {
                 return PlayerStateCommandResult.failure(
                         "commands.playerstate.speed-failed"
                 );
@@ -261,7 +267,7 @@ public final class PlayerAbilityCommandService {
                 .setNick(
                         player.uuid(),
                         player.name(),
-                        nickname
+                        nickname.orElse(null)
                 )
                 .thenCompose(result ->
                         finish(PlayerStateCommandResult.from(result))
