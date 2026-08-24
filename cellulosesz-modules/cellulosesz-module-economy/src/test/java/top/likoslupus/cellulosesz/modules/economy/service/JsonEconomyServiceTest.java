@@ -2,8 +2,8 @@ package top.likoslupus.cellulosesz.modules.economy.service;
 
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.economy.EconomyConfig;
 
 import java.math.BigDecimal;

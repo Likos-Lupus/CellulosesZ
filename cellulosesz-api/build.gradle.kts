@@ -1,2 +1,6 @@
+kotlin {
+    explicitApi()
+}
+
 dependencies {
 }

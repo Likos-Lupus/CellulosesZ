@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.modules.user.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.user.*;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.user.persistence.UserDocument;
 import top.likoslupus.cellulosesz.modules.user.persistence.UserMapper;
 
@@ -19,7 +19,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.function.Supplier;
-
 import org.jspecify.annotations.Nullable;
 
 import static java.util.Objects.requireNonNull;
@@ -169,8 +168,8 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     }
 
     @Override
-    public Optional<CellUser> cached(UUID uuid) {
-        return Optional.ofNullable(users.get(requireNonNull(uuid, "uuid")));
+    public CellUser cached(UUID uuid) {
+        return users.get(requireNonNull(uuid, "uuid"));
     }
 
     @Override
@@ -179,7 +178,7 @@ public final class JsonUserService implements UserService, AsyncInitializable, A
     }
 
     @Override
-    public Optional<UUID> findUuidByName(String name) {
+    public UUID findUuidByName(String name) {
         return nameCache.findUuid(name);
     }
 

@@ -12,7 +12,8 @@ public final class IpAddresses {
     }
 
     /**
-     * Parses numeric literals only. Host names and IPv6 zone identifiers are rejected before JDK parsing.
+     * Parses numeric literals only. Host names and IPv6 zone identifiers are rejected before JDK
+     * parsing.
      */
     public static Optional<InetAddress> parseLiteral(String input) {
         var value = input.trim();
@@ -89,8 +90,10 @@ public final class IpAddresses {
         }
 
         return IntStream.range(0, 10).noneMatch(index -> bytes[index] != 0)
-                && ((bytes[10] & 255) == 255
-                && (bytes[11] & 255) == 255);
+                && (
+                (bytes[10] & 255) == 255
+                        && (bytes[11] & 255) == 255
+        );
     }
 
     public static String canonical(InetAddress address) {

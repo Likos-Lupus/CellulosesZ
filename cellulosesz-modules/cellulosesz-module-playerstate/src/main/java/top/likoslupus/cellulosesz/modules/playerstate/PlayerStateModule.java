@@ -1,20 +1,22 @@
 package top.likoslupus.cellulosesz.modules.playerstate;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
 import top.likoslupus.cellulosesz.api.event.*;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.*;
 import top.likoslupus.cellulosesz.api.playerstate.*;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.common.playerstate.VanishPlatformService;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.command.service.PermissionCatalog;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerAbilityCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerInformationCommandService;
 import top.likoslupus.cellulosesz.modules.playerstate.application.PlayerStateCommandSettings;
@@ -406,9 +408,6 @@ public final class PlayerStateModule implements CellulosesZModule {
                         )
                         .whenComplete((result, failure) ->
                                 serverThread.execute(() -> {
-                                    var online = context.services()
-                                            .require(PlayerDirectory.class)
-                                            .onlinePlayer(player.uuid());
                                     if (failure != null) {
                                         context.logger().error(
                                                 "Failed to persist automatic AFK state for "
@@ -416,13 +415,18 @@ public final class PlayerStateModule implements CellulosesZModule {
                                                 failure
                                         );
                                     } else {
-                                        online.ifPresent(target -> audience.send(
-                                                target,
-                                                renderer.render(
-                                                        audience.locale(target),
-                                                        result.message()
-                                                )
-                                        ));
+                                        var online = context.services()
+                                                .require(PlayerDirectory.class)
+                                                .onlinePlayer(player.uuid());
+                                        if (online != null) {
+                                            audience.send(
+                                                    online,
+                                                    renderer.render(
+                                                            audience.locale(online),
+                                                            result.message()
+                                                    )
+                                            );
+                                        }
                                     }
                                 })
                         );
@@ -451,12 +455,12 @@ public final class PlayerStateModule implements CellulosesZModule {
     private void maintainPersonalWorldState(ModuleContext context) {
         var stateService = requireNonNull(states, "states");
         context.services().require(PlayerDirectory.class).onlinePlayers()
-                .forEach(player -> stateService
-                        .cachedPersonalWorldState(player.uuid())
-                        .ifPresent(state ->
-                                applyPersonalWorldState(context, player, state)
-                        )
-                );
+                .forEach(player -> {
+                    var state = stateService.cachedPersonalWorldState(player.uuid());
+                    if (state != null) {
+                        applyPersonalWorldState(context, player, state);
+                    }
+                });
     }
 
     private static long saturatedAdd(long first, long second) {
@@ -486,11 +490,11 @@ public final class PlayerStateModule implements CellulosesZModule {
                                         return;
                                     }
 
-                                    if (online.isEmpty()) {
+                                    if (online == null) {
                                         return;
                                     }
 
-                                    var player = online.orElseThrow();
+                                    var player = online;
                                     var statePlatform = context.services()
                                             .require(PlayerStatePlatformService.class);
 
@@ -506,11 +510,16 @@ public final class PlayerStateModule implements CellulosesZModule {
                                                 .setVanished(player, true);
                                     }
 
-                                    requireNonNull(states, "states")
-                                            .cachedPersonalWorldState(player.uuid())
-                                            .ifPresent(state ->
-                                                    applyPersonalWorldState(context, player, state)
-                                            );
+                                    var personalWorldState =
+                                            requireNonNull(states, "states")
+                                                    .cachedPersonalWorldState(player.uuid());
+                                    if (personalWorldState != null) {
+                                        applyPersonalWorldState(
+                                                context,
+                                                player,
+                                                personalWorldState
+                                        );
+                                    }
                                     requireNonNull(vanish, "vanish")
                                             .synchronizeViewer(player);
                                     requireNonNull(states, "states").activity(
@@ -551,9 +560,11 @@ public final class PlayerStateModule implements CellulosesZModule {
         lastTime.remove(player.uuid());
         lastWeather.remove(player.uuid());
 
-        requireNonNull(states, "states")
-                .cachedPersonalWorldState(player.uuid())
-                .ifPresent(state -> applyPersonalWorldState(context, player, state));
+        var cachedState = requireNonNull(states, "states")
+                .cachedPersonalWorldState(player.uuid());
+        if (cachedState != null) {
+            applyPersonalWorldState(context, player, cachedState);
+        }
     }
 
     private void applyPersonalWorldState(

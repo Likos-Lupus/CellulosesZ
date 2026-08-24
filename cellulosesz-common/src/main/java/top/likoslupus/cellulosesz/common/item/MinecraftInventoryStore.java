@@ -1,5 +1,7 @@
 package top.likoslupus.cellulosesz.common.item;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.mojang.brigadier.StringReader;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -7,7 +9,8 @@ import com.mojang.serialization.JsonOps;
 import net.minecraft.commands.arguments.item.ItemParser;
 import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
-import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.item.InventoryMutation;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -46,7 +49,7 @@ final class MinecraftInventoryStore {
                 return PlatformResult.failure(encoded.status(), encoded.detail());
             }
 
-            snapshots.add(new InventoryItemSnapshot(slot, encoded.value().orElseThrow()));
+            snapshots.add(new InventoryItemSnapshot(slot, encoded.value()));
         }
 
         return PlatformResult.success(List.copyOf(snapshots));
@@ -95,7 +98,7 @@ final class MinecraftInventoryStore {
 
         return PlatformResult.success(new InventoryItemSnapshot(
                 slot,
-                encoded.value().orElseThrow()
+                encoded.value()
         ));
     }
 
@@ -106,7 +109,7 @@ final class MinecraftInventoryStore {
             return PlatformResult.failure(decoded.status(), decoded.detail());
         }
 
-        var stack = decoded.value().orElseThrow();
+        var stack = decoded.value();
         if (stack.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
@@ -129,10 +132,10 @@ final class MinecraftInventoryStore {
             );
         }
 
-        final com.google.gson.JsonElement json;
+        final JsonElement json;
         try {
             json = JsonParser.parseString(encoded);
-        } catch (com.google.gson.JsonParseException exception) {
+        } catch (JsonParseException exception) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
                     "Serialized item stack is not valid JSON: " + exception.getMessage()
@@ -160,7 +163,7 @@ final class MinecraftInventoryStore {
             return PlatformResult.failure(decoded.status(), decoded.detail());
         }
 
-        var stack = decoded.value().orElseThrow();
+        var stack = decoded.value();
         if (stack.isEmpty()) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_ARGUMENT,
@@ -212,7 +215,7 @@ final class MinecraftInventoryStore {
                 return PlatformResult.failure(decoded.status(), decoded.detail());
             }
 
-            var stack = decoded.value().orElseThrow();
+            var stack = decoded.value();
 
             if (stack.isEmpty()) {
                 return PlatformResult.failure(
@@ -338,7 +341,7 @@ final class MinecraftInventoryStore {
                 return PlatformResult.failure(expected.status(), expected.detail());
             }
 
-            if (!same(before.get(slot), expected.value().orElseThrow())) {
+            if (!same(before.get(slot), expected.value())) {
                 return PlatformResult.failure(
                         PlatformOperationStatus.CONFLICT,
                         "Inventory changed before removal could be prepared"

@@ -1,14 +1,19 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.admin.command.argument.NetworkTargetInput;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
+import top.likoslupus.cellulosesz.modules.admin.service.AddressBookService;
+import top.likoslupus.cellulosesz.modules.admin.service.BanService;
 import top.likoslupus.cellulosesz.modules.admin.service.IpAddresses;
+import top.likoslupus.cellulosesz.modules.admin.service.TempBanService;
 
 import java.net.InetAddress;
 import java.time.Duration;
@@ -192,17 +197,19 @@ public final class DefaultBanCommandService implements BanCommandService {
                 .resolve(
                         name,
                         actor.uuid()
-                                .flatMap(players::onlinePlayer)
+                                .map(players::onlinePlayer)
                                 .orElse(null)
                 ).thenApply(resolved -> {
-                    if (resolved.optionalUuid().isEmpty()) {
-                        return Optional.empty();
+                    if (resolved.uuid() == null) {
+                        return Optional.<InetAddress>empty();
                     }
 
-                    var online = resolved.online()
-                            .flatMap(networks::address);
+                    var onlinePlayer = resolved.onlinePlayer();
+                    var online = onlinePlayer == null
+                            ? Optional.<InetAddress>empty()
+                            : Optional.ofNullable(networks.address(onlinePlayer));
                     return online
-                            .or(() -> addresses.address(resolved.optionalUuid().orElseThrow()))
+                            .or(() -> addresses.address(resolved.uuid()))
                             .or(() -> addresses.address(resolved.name()));
                 });
     }
@@ -304,12 +311,12 @@ public final class DefaultBanCommandService implements BanCommandService {
                 .resolve(
                         input,
                         actor.uuid()
-                                .flatMap(players::onlinePlayer)
+                                .map(players::onlinePlayer)
                                 .orElse(null)
                 )
-                .thenApply(value -> value.optionalUuid().map(
-                        uuid -> new Target(uuid, value.name())
-                ));
+                .thenApply(value -> value.uuid() == null
+                        ? Optional.<Target>empty()
+                        : Optional.of(new Target(value.uuid(), value.name())));
     }
 
     private static CompletableFuture<AdminResult> notFound(String player) {

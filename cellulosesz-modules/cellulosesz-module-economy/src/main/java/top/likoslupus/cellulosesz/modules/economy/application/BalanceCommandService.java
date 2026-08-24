@@ -53,7 +53,7 @@ public final class BalanceCommandService {
             @Nullable CellPlayer viewer
     ) {
         return players.resolve(input, viewer).thenApply(target ->
-                target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()
+                target.state() == ResolvedPlayerState.UNKNOWN || target.uuid() == null
                         ?
                         EconomyCommandResult.failure(
                                 "commands.economy.abstract-economy-command.error.player-not-found",
@@ -64,7 +64,7 @@ public final class BalanceCommandService {
                                 MessageArguments.builder()
                                         .add(target.name())
                                         .add(economy.format(economy.balance(
-                                                target.optionalUuid().orElseThrow()
+                                                target.uuid()
                                         )))
                                         .build()
                         )
@@ -99,7 +99,7 @@ public final class BalanceCommandService {
 
         var entries = economy.topBalances(
                 limit,
-                new BalanceFilter(minimum, maximum)
+                new BalanceFilter(minimum.orElse(null), maximum.orElse(null))
         );
         if (entries.isEmpty() && page == 1) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
@@ -150,7 +150,7 @@ public final class BalanceCommandService {
             String actor
     ) {
         return players.resolve(input, null).thenCompose(target -> {
-            if (target.state() == ResolvedPlayerState.UNKNOWN || target.optionalUuid().isEmpty()) {
+            if (target.state() == ResolvedPlayerState.UNKNOWN || target.uuid() == null) {
                 return CompletableFuture.completedFuture(EconomyCommandResult.failure(
                         "commands.economy.abstract-economy-command.error.player-not-found",
                         MessageArguments.builder().add(input).build()
@@ -162,9 +162,9 @@ public final class BalanceCommandService {
                     "eco " + mutation.name().toLowerCase()
             );
             var future = switch (mutation) {
-                case GIVE -> economy.deposit(target.optionalUuid().orElseThrow(), amount, cause);
-                case TAKE -> economy.withdraw(target.optionalUuid().orElseThrow(), amount, cause);
-                case SET -> economy.setBalance(target.optionalUuid().orElseThrow(), amount, cause);
+                case GIVE -> economy.deposit(target.uuid(), amount, cause);
+                case TAKE -> economy.withdraw(target.uuid(), amount, cause);
+                case SET -> economy.setBalance(target.uuid(), amount, cause);
             };
 
             return future.thenApply(transaction ->

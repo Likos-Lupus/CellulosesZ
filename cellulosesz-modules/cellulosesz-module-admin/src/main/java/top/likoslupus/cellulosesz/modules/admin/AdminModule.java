@@ -1,27 +1,27 @@
 package top.likoslupus.cellulosesz.modules.admin;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.event.*;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.admin.BanPlatformService;
 import top.likoslupus.cellulosesz.api.player.*;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.admin.BanPlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.command.service.PermissionCatalog;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.application.*;
 import top.likoslupus.cellulosesz.modules.admin.command.*;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.JailState;
 import top.likoslupus.cellulosesz.modules.admin.service.*;
 
 import java.time.Clock;
@@ -205,24 +205,26 @@ public final class AdminModule implements CellulosesZModule {
                     var player = event.player();
                     var address = networks.address(player);
 
-                    address.ifPresent(value -> addressBook.remember(
-                                            player.uuid(),
-                                            player.name(),
-                                            value
-                                    )
-                                    .whenComplete((_, failure) -> {
-                                        if (failure != null) {
-                                            context.logger().error(
-                                                    "Failed to persist a player login address",
-                                                    failure
-                                            );
-                                        }
-                                    })
-                    );
+                    if (address != null) {
+                        addressBook.remember(
+                                        player.uuid(),
+                                        player.name(),
+                                        address
+                                )
+                                .whenComplete((_, failure) -> {
+                                    if (failure != null) {
+                                        context.logger().error(
+                                                "Failed to persist a player login address",
+                                                failure
+                                        );
+                                    }
+                                });
+                    }
 
-                    var active = temporary
-                            .active(player.uuid(), player.name())
-                            .or(() -> address.flatMap(temporary::activeIp));
+                    var active = temporary.active(player.uuid(), player.name());
+                    if (active.isEmpty() && address != null) {
+                        active = temporary.activeIp(address);
+                    }
 
                     if (active.isPresent()) {
                         connections.disconnect(

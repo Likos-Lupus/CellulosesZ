@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.common.world;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
-import top.likoslupus.cellulosesz.api.world.WorldStatePlatformService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import static java.util.Objects.requireNonNull;

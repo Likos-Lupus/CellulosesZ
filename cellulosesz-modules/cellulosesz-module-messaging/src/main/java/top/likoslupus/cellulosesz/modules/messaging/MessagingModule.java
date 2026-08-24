@@ -1,29 +1,29 @@
 package top.likoslupus.cellulosesz.modules.messaging;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.messaging.application.ChatCommandService;
 import top.likoslupus.cellulosesz.modules.messaging.application.MailCommandService;
 import top.likoslupus.cellulosesz.modules.messaging.application.PrivateMessageCommandService;
 import top.likoslupus.cellulosesz.modules.messaging.command.*;
 import top.likoslupus.cellulosesz.modules.messaging.service.DefaultPrivateMessageService;
 import top.likoslupus.cellulosesz.modules.messaging.service.JsonMailService;
+import top.likoslupus.cellulosesz.modules.messaging.service.PrivateMessageService;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;

@@ -1,11 +1,10 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.world.WeatherType;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.Locale;
 import java.util.Optional;
@@ -74,12 +73,12 @@ public final class WeatherSignHandler implements SynchronousSignHandler {
                 : context.line(3);
         var world = worldDirectory.resolveLoadedWorld(requestedWorld);
 
-        if (world.isEmpty()) {
+        if (world == null) {
             return SignUseResult.failure("service.sign.weather-world");
         }
 
-        return SignHandlerSupport.admin(worlds.setWeather(
-                world.orElseThrow(),
+        return SignHandlerSupport.outcome(worlds.setWeather(
+                world,
                 type.orElseThrow(),
                 seconds
         ));

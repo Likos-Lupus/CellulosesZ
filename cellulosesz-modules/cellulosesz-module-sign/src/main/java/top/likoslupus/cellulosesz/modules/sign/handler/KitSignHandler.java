@@ -2,10 +2,9 @@ package top.likoslupus.cellulosesz.modules.sign.handler;
 
 import top.likoslupus.cellulosesz.api.kit.KitService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
@@ -38,7 +37,7 @@ public final class KitSignHandler implements CellSignHandler {
             return SignUseResult.failure("service.sign.kit-name-required");
         }
 
-        return kits.kit(id).isPresent()
+        return kits.kit(id) != null
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure(
                         "service.sign.kit-not-found",
@@ -57,16 +56,16 @@ public final class KitSignHandler implements CellSignHandler {
 
         var kit = kits.kit(id);
 
-        if (kit.isEmpty()) {
+        if (kit == null) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.kit-not-found",
                     MessageArguments.builder().add(id).build()
             ));
         }
 
-        var permission = kit.orElseThrow().permission();
-        if (permission.isPresent()
-                && !permissions.has(context.player(), permission.orElseThrow())
+        var permission = kit.permission();
+        if (permission != null
+                && !permissions.has(context.player(), permission)
         ) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.kit-no-permission"
@@ -74,7 +73,7 @@ public final class KitSignHandler implements CellSignHandler {
         }
 
         return kits
-                .claim(context.player(), kit.orElseThrow())
+                .claim(context.player(), kit)
                 .thenApply(result -> result.success()
                         ? SignUseResult.success(result.message())
                         : SignUseResult.failure(result.message()));

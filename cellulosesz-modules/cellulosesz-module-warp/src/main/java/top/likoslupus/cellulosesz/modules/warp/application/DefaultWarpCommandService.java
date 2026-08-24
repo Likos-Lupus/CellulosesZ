@@ -1,8 +1,6 @@
 package top.likoslupus.cellulosesz.modules.warp.application;
 
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
@@ -11,6 +9,8 @@ import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.command.service.CooldownService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 
 import java.time.Duration;
@@ -22,8 +22,8 @@ import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -142,7 +142,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
             }
         }
 
-        final CompletableFuture<java.util.Optional<Warp>> loaded;
+        final CompletableFuture<Warp> loaded;
         try {
             loaded = warps.warp(name);
         } catch (IllegalArgumentException _) {
@@ -157,11 +157,11 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                         ));
                     }
 
-                    if (found.isEmpty()) {
+                    if (found == null) {
                         return CompletableFuture.completedFuture(missing(name));
                     }
 
-                    var warp = found.orElseThrow();
+                    var warp = found;
                     if (!allowed(warp, hasPermission)) {
                         return CompletableFuture.completedFuture(failure(
                                 "commands.warp.warp-command.error.do-not-permission-use-warp"
@@ -190,7 +190,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
         return warps
                 .warp(key)
                 .thenCompose(existing -> {
-                    if (existing.isPresent()
+                    if (existing != null
                             && !hasPermission.test("cellulosesz.warp.overwrite")
                             && !hasPermission.test("cellulosesz.warp.overwrite." + key)
                     ) {
@@ -204,9 +204,9 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             .submit(() -> players.resolveKnown(
                                     request.playerUuid(),
                                     null
-                            ).online())
+                            ).onlinePlayer())
                             .thenCompose(online -> {
-                                if (online.isEmpty()) {
+                                if (online == null) {
                                     return CompletableFuture.completedFuture(failure(
                                             LocalizedMessage.of(
                                                     "commands.common.player-offline",
@@ -219,7 +219,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
                                 return serverThread
                                         .submit(() ->
-                                                locations.currentLocation(online.orElseThrow())
+                                                locations.currentLocation(online)
                                         )
                                         .thenCompose(location ->
                                                 warps.setWarp(key, location, request.playerUuid())
@@ -284,14 +284,14 @@ public final class DefaultWarpCommandService implements WarpCommandService {
                             return failed("service.warp.persistence-failed");
                         }
 
-                        if (warp.isEmpty()) {
+                        if (warp == null) {
                             return failure(LocalizedMessage.of(
                                     "commands.warp.warp-info-command.error.warp-does-not-exist",
                                     MessageArguments.builder().add(name).build()
                             ));
                         }
 
-                        var value = warp.orElseThrow();
+                        var value = warp;
                         return success(LocalizedMessage.of(
                                 "commands.warp.warp-info-command.reply.warp-at",
                                 MessageArguments.builder()
@@ -371,9 +371,9 @@ public final class DefaultWarpCommandService implements WarpCommandService {
             Snapshot current
     ) {
         return serverThread
-                .submit(() -> players.resolveKnown(request.playerUuid(), null).online())
+                .submit(() -> players.resolveKnown(request.playerUuid(), null).onlinePlayer())
                 .thenCompose(online -> {
-                    if (online.isEmpty()) {
+                    if (online == null) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                                 "commands.common.player-offline",
                                 MessageArguments.builder()
@@ -392,7 +392,7 @@ public final class DefaultWarpCommandService implements WarpCommandService {
 
                     return serverThread
                             .submit(() -> teleports.teleport(
-                                    online.orElseThrow(),
+                                    online,
                                     warp.location(),
                                     options
                             ))
@@ -426,9 +426,8 @@ public final class DefaultWarpCommandService implements WarpCommandService {
     }
 
     private boolean allowed(Warp warp, Predicate<String> hasPermission) {
-        return warps.requiredPermission(warp)
-                .map(hasPermission::test)
-                .orElse(true);
+        var permission = warps.requiredPermission(warp);
+        return permission == null || hasPermission.test(permission);
     }
 
     private Result success(String key) {

@@ -8,14 +8,14 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.item.SkullRequest;
-import top.likoslupus.cellulosesz.api.item.SkullResult;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.common.item.SkullRequest;
+import top.likoslupus.cellulosesz.common.item.SkullResult;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
@@ -151,7 +151,7 @@ public final class SkullCommand implements CommandContributor {
                     var player = self.orElseThrow();
                     var held = inventory.heldSlot(player);
 
-                    if (!held.successful() || held.value().isEmpty()) {
+                    if (!held.successful() || held.value() == null) {
                         return null;
                     }
 
@@ -161,7 +161,6 @@ public final class SkullCommand implements CommandContributor {
                             false,
                             Optional.of(
                                     held.value()
-                                            .orElseThrow()
                                             .snapshot()
                             )
                     );

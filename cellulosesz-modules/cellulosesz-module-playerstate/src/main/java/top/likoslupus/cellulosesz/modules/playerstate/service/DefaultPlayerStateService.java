@@ -1,16 +1,16 @@
 package top.likoslupus.cellulosesz.modules.playerstate.service;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
+
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.playerstate.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -43,27 +43,27 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     @Override
-    public CompletableFuture<AdminResult> setFlying(CellPlayer player, boolean enabled) {
+    public CompletableFuture<PlayerStateResult> setFlying(CellPlayer player, boolean enabled) {
         return changePersistentBoolean(player, enabled, true);
     }
 
     @Override
-    public CompletableFuture<AdminResult> setGod(CellPlayer player, boolean enabled) {
+    public CompletableFuture<PlayerStateResult> setGod(CellPlayer player, boolean enabled) {
         return changePersistentBoolean(player, enabled, false);
     }
 
     @Override
-    public AdminResult heal(CellPlayer player) {
+    public PlayerStateResult heal(CellPlayer player) {
         var result = platform.heal(player);
         return result.successful()
                 ?
-                AdminResult.success(
+                PlayerStateResult.success(
                         "service.playerstate.heal-success",
                         MessageArguments.builder()
                                 .add(displayNames.plainDisplayName(player))
                                 .build()
                 )
-                : AdminResult.failure(
+                : PlayerStateResult.failure(
                         "service.playerstate.heal-failed",
                         MessageArguments.builder()
                                 .add(displayNames.plainDisplayName(player))
@@ -72,17 +72,17 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     @Override
-    public AdminResult feed(CellPlayer player) {
+    public PlayerStateResult feed(CellPlayer player) {
         var result = platform.feed(player);
         return result.successful()
                 ?
-                AdminResult.success(
+                PlayerStateResult.success(
                         "service.playerstate.feed-success",
                         MessageArguments.builder()
                                 .add(displayNames.plainDisplayName(player))
                                 .build()
                 )
-                : AdminResult.failure(
+                : PlayerStateResult.failure(
                         "service.playerstate.feed-failed",
                         MessageArguments.builder()
                                 .add(displayNames.plainDisplayName(player))
@@ -91,7 +91,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     @Override
-    public CompletableFuture<AdminResult> setAfk(
+    public CompletableFuture<PlayerStateResult> setAfk(
             UUID uuid,
             String name,
             boolean afk
@@ -106,22 +106,20 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 )
                 .thenApply(_ -> {
                     activity(uuid, now);
-                    return AdminResult.success(
+                    return PlayerStateResult.success(
                             afk
                                     ? "service.playerstate.afk-enabled"
                                     : "service.playerstate.afk-disabled",
                             MessageArguments.builder().add(name).build()
                     );
                 })
-                .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
+                .exceptionally(_ -> PlayerStateResult.failure("service.user.persistence-failed"));
     }
 
     @Override
     public boolean afk(UUID uuid) {
-        return users
-                .cached(uuid)
-                .map(user -> user.state().afk())
-                .orElse(false);
+        var user = users.cached(uuid);
+        return user != null && user.state().afk();
     }
 
     @Override
@@ -132,11 +130,13 @@ public final class DefaultPlayerStateService implements PlayerStateService {
 
     @Override
     public long lastActivity(UUID uuid) {
+        var cachedUser = users.cached(uuid);
         return lastActivityMillis
                 .getOrDefault(
-                        uuid, users.cached(uuid)
-                                .map(user -> user.timestamps().lastActivityAt())
-                                .orElse(0L)
+                        uuid,
+                        cachedUser == null
+                                ? 0L
+                                : cachedUser.timestamps().lastActivityAt()
                 );
     }
 
@@ -159,17 +159,18 @@ public final class DefaultPlayerStateService implements PlayerStateService {
     }
 
     @Override
-    public Optional<PersonalWorldState> cachedPersonalWorldState(UUID uuid) {
-        return users
-                .cached(uuid)
-                .map(user -> personalWorldState(
+    public PersonalWorldState cachedPersonalWorldState(UUID uuid) {
+        var user = users.cached(uuid);
+        return user == null
+                ? null
+                : personalWorldState(
                         user.state().personalTime(),
                         user.state().personalWeather()
-                ));
+                );
     }
 
     @Override
-    public CompletableFuture<AdminResult> setPersonalTime(
+    public CompletableFuture<PlayerStateResult> setPersonalTime(
             CellPlayer player,
             PersonalTimeSetting setting
     ) {
@@ -180,7 +181,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                         .submit(() -> platform.setPersonalTime(player, setting))
                         .thenCompose(applied -> {
                             if (!applied.successful()) {
-                                return CompletableFuture.completedFuture(AdminResult.failure(
+                                return CompletableFuture.completedFuture(PlayerStateResult.failure(
                                         "commands.playerstate.ptime-failed"
                                 ));
                             }
@@ -202,21 +203,21 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                             .thenApply(rollback ->
                                                     rollback.successful()
                                                             ?
-                                                            AdminResult.failure(
+                                                            PlayerStateResult.failure(
                                                                     "service.user.persistence-failed"
                                                             )
-                                                            : AdminResult.failure(
+                                                            : PlayerStateResult.failure(
                                                                     "commands.playerstate.ptime-rollback-failed"
                                                             )
                                             )
                                     );
                         })
                 )
-                .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
+                .exceptionally(_ -> PlayerStateResult.failure("service.user.persistence-failed"));
     }
 
     @Override
-    public CompletableFuture<AdminResult> setPersonalWeather(
+    public CompletableFuture<PlayerStateResult> setPersonalWeather(
             CellPlayer player,
             PersonalWeatherSetting setting
     ) {
@@ -227,7 +228,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                         .submit(() -> platform.setPersonalWeather(player, setting))
                         .thenCompose(applied -> {
                             if (!applied.successful()) {
-                                return CompletableFuture.completedFuture(AdminResult.failure(
+                                return CompletableFuture.completedFuture(PlayerStateResult.failure(
                                         "commands.playerstate.pweather-failed"
                                 ));
                             }
@@ -251,17 +252,17 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                             .thenApply(rollback ->
                                                     rollback.successful()
                                                             ?
-                                                            AdminResult.failure(
+                                                            PlayerStateResult.failure(
                                                                     "service.user.persistence-failed"
                                                             )
-                                                            : AdminResult.failure(
+                                                            : PlayerStateResult.failure(
                                                                     "commands.playerstate.pweather-rollback-failed"
                                                             )
                                             )
                                     );
                         })
                 )
-                .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
+                .exceptionally(_ -> PlayerStateResult.failure("service.user.persistence-failed"));
     }
 
     private static @Nullable String persistedWeather(PersonalWeatherSetting setting) {
@@ -270,67 +271,70 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                 : setting.name().toLowerCase(Locale.ROOT);
     }
 
-    private static AdminResult weatherSuccess(
+    private static PlayerStateResult weatherSuccess(
             PersonalWeatherSetting setting
     ) {
         return setting == PersonalWeatherSetting.RESET
                 ?
-                AdminResult.success(
+                PlayerStateResult.success(
                         "commands.playerstate.pweather-reset",
                         MessageArguments.empty()
                 )
-                : AdminResult.success(
+                : PlayerStateResult.success(
                         "commands.playerstate.pweather-set",
                         MessageArguments.empty()
                 );
     }
 
     @Override
-    public CompletableFuture<AdminResult> setNick(
+    public CompletableFuture<PlayerStateResult> setNick(
             UUID uuid,
             String name,
-            Optional<String> nickname
+            @Nullable String nickname
     ) {
         var online = players.onlinePlayer(uuid);
-        var normalized = nickname.filter(value -> !value.isBlank());
+        var normalized = nickname == null || nickname.isBlank()
+                ? null
+                : nickname;
 
-        if (online.isPresent() && normalized.isPresent()) {
-            var sanitized = displayNames.sanitizeNickname(
-                    online.orElseThrow(),
-                    normalized.orElseThrow()
-            );
-            if (!displayNames.validNickname(online.orElseThrow(), sanitized)) {
-                return CompletableFuture.completedFuture(AdminResult.failure("player.nick-invalid"));
+        if (online != null && normalized != null) {
+            var sanitized = displayNames.sanitizeNickname(online, normalized);
+            if (!displayNames.validNickname(online, sanitized)) {
+                return CompletableFuture.completedFuture(PlayerStateResult.failure(
+                        "player.nick-invalid"));
             }
 
-            normalized = Optional.of(sanitized);
+            normalized = sanitized;
         }
 
-        var stored = normalized;
+        final String stored = normalized;
         return users
                 .updateVoid(
                         uuid,
-                        user -> user.withState(user.state().withNickname(stored.orElse(null)))
+                        user -> user.withState(user.state().withNickname(stored))
                 )
                 .thenCompose(_ -> serverThread
                         .submit(() -> {
-                            online.ifPresent(displayNames::refresh);
-                            return stored
-                                    .map(value -> AdminResult.success(
+                            if (online != null) {
+                                displayNames.refresh(online);
+                            }
+                            return stored == null
+                                    ? PlayerStateResult.success("player.nick-cleared")
+                                    : PlayerStateResult.success(
                                             "player.nick-set",
-                                            MessageArguments.builder().add(value).build()
-                                    ))
-                                    .orElseGet(() -> AdminResult.success("player.nick-cleared"));
+                                            MessageArguments.builder().add(stored).build()
+                                    );
                         })
                 )
-                .exceptionally(_ -> AdminResult.failure("service.user.persistence-failed"));
+                .exceptionally(_ -> PlayerStateResult.failure("service.user.persistence-failed"));
     }
 
     @Override
-    public Optional<String> nick(UUID uuid) {
-        return users
-                .cached(uuid)
-                .flatMap(user -> Optional.ofNullable(user.state().nickname()));
+    public String nick(UUID uuid) {
+        var user = users.cached(uuid);
+        return user == null
+                ? null
+                : user.state().nickname();
     }
 
     private static @Nullable Long persistedTime(PersonalTimeSetting setting) {
@@ -341,15 +345,15 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         };
     }
 
-    private static AdminResult timeSuccess(PersonalTimeSetting setting) {
+    private static PlayerStateResult timeSuccess(PersonalTimeSetting setting) {
         if (setting instanceof PersonalTimeSetting.Reset) {
-            return AdminResult.success(
+            return PlayerStateResult.success(
                     "commands.playerstate.ptime-reset",
                     MessageArguments.empty()
             );
         }
 
-        return AdminResult.success(
+        return PlayerStateResult.success(
                 "commands.playerstate.ptime-set",
                 MessageArguments.empty()
         );
@@ -377,7 +381,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
         }
     }
 
-    private CompletableFuture<AdminResult> changePersistentBoolean(
+    private CompletableFuture<PlayerStateResult> changePersistentBoolean(
             CellPlayer player,
             boolean enabled,
             boolean flying
@@ -389,17 +393,18 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                 : platform.invulnerable(player)
                 )
                 .thenCompose(current -> {
+                    var currentValue = current.value();
                     if (!current.successful()
-                            || current.value().isEmpty()
+                            || currentValue == null
                     ) {
-                        return CompletableFuture.completedFuture(AdminResult.failure(
+                        return CompletableFuture.completedFuture(PlayerStateResult.failure(
                                 flying
                                         ? "service.playerstate.fly-failed"
                                         : "service.playerstate.god-failed"
                         ));
                     }
 
-                    var previous = (boolean) current.value().orElseThrow();
+                    var previous = (boolean) currentValue;
                     return serverThread
                             .submit(() ->
                                     flying
@@ -408,7 +413,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                             )
                             .thenCompose(applied -> {
                                 if (!applied.successful()) {
-                                    return CompletableFuture.completedFuture(AdminResult.failure(
+                                    return CompletableFuture.completedFuture(PlayerStateResult.failure(
                                             flying
                                                     ? "service.playerstate.fly-failed"
                                                     : "service.playerstate.god-failed"
@@ -423,7 +428,7 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                                                 ? user.state().withFlying(enabled)
                                                                 : user.state().withGod(enabled)
                                                 )
-                                        ).thenApply(_ -> AdminResult.success(
+                                        ).thenApply(_ -> PlayerStateResult.success(
                                                 flying
                                                         ?
                                                         enabled
@@ -455,10 +460,10 @@ public final class DefaultPlayerStateService implements PlayerStateService {
                                                 .thenApply(rollback ->
                                                         rollback.successful()
                                                                 ?
-                                                                AdminResult.failure(
+                                                                PlayerStateResult.failure(
                                                                         "service.user.persistence-failed"
                                                                 )
-                                                                : AdminResult.failure(
+                                                                : PlayerStateResult.failure(
                                                                         "service.user.rollback-failed"
                                                                 )
                                                 )

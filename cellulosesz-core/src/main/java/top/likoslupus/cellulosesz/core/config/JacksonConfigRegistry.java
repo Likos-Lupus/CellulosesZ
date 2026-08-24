@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.core.config;
 
-import top.likoslupus.cellulosesz.api.config.ConfigRegistry;
-import top.likoslupus.cellulosesz.api.config.ConfigSnapshot;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
 import top.likoslupus.cellulosesz.api.service.Registration;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -15,7 +13,7 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 

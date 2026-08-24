@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.fabric;
 
 import org.slf4j.Logger;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 public final class Slf4jCellulosesZLogger implements CellulosesZLogger {
 

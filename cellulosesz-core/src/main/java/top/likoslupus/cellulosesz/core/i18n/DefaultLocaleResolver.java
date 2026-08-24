@@ -1,9 +1,9 @@
 package top.likoslupus.cellulosesz.core.i18n;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
-import top.likoslupus.cellulosesz.api.validation.TextChecks;
+import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.core.text.ClientLocaleService;
 
 import java.util.Locale;
 
@@ -28,7 +28,7 @@ public final class DefaultLocaleResolver implements LocaleResolver {
     }
 
     private String normalize(String locale) {
-        var normalized = TextChecks.requireNonBlank(locale, "locale")
+        var normalized = Checks.requireNonBlank(locale, "locale")
                 .toLowerCase(Locale.ROOT)
                 .replace('-', '_');
         return normalized.isBlank()

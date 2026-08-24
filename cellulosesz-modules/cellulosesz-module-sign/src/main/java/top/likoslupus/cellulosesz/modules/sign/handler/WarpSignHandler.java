@@ -1,13 +1,12 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -42,7 +41,7 @@ public final class WarpSignHandler implements CellSignHandler {
             return SignUseResult.failure("service.sign.warp-name-required");
         }
 
-        return warps.cachedWarp(name).isPresent()
+        return warps.cachedWarp(name) != null
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure(
                         "service.sign.warp-not-found",
@@ -61,18 +60,18 @@ public final class WarpSignHandler implements CellSignHandler {
         }
 
         return warps.warp(name).thenCompose(warp -> {
-            if (warp.isEmpty()) {
+            if (warp == null) {
                 return CompletableFuture.completedFuture(SignUseResult.failure(
                         "service.sign.warp-not-found",
                         MessageArguments.builder().add(name).build()
                 ));
             }
 
-            var value = warp.orElseThrow();
+            var value = warp;
 
             var requiredPermission = warps.requiredPermission(value);
-            if (requiredPermission.isPresent()
-                    && !permissions.has(context.player(), requiredPermission.orElseThrow())
+            if (requiredPermission != null
+                    && !permissions.has(context.player(), requiredPermission)
             ) {
                 return CompletableFuture.completedFuture(SignUseResult.failure(
                         "service.sign.warp-no-permission"

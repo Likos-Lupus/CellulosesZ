@@ -13,9 +13,9 @@ import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.command.argument.WarpSelectors;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
 import top.likoslupus.cellulosesz.modules.warp.application.WarpCommandService;
-import top.likoslupus.cellulosesz.modules.warp.command.argument.WarpSelectors;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -289,7 +289,7 @@ public final class WarpCommand implements CommandContributor {
                 policy -> {
                     if (descriptor.requiredSourceKind()
                             == CommandSourceKind.PLAYER_ONLY
-                            && policy.playerUuid().isEmpty()
+                            && policy.playerUuid() == null
                     ) {
                         policy.error(
                                 LocalizedMessage.of("common.player-only")
@@ -314,8 +314,8 @@ public final class WarpCommand implements CommandContributor {
             MinecraftCommandPolicyContext context
     ) {
         return new WarpCommandService.Request(
-                context.playerUuid().orElseThrow(),
-                context.playerName().orElse(""),
+                context.playerUuid(),
+                context.playerName(),
                 context.hasPermission(
                         "cellulosesz.warp.bypass-cooldown"
                 ),

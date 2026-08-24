@@ -72,7 +72,7 @@ public final class DefaultTeleportPreferenceCommandService
 
         return resolver
                 .resolve(target.orElseThrow(), actor)
-                .thenCompose(resolved -> resolved.optionalUuid().isEmpty()
+                .thenCompose(resolved -> resolved.uuid() == null
                         ?
                         CompletableFuture.completedFuture(TeleportCommandResult.failure(
                                 NOT_FOUND,
@@ -82,7 +82,7 @@ public final class DefaultTeleportPreferenceCommandService
                                         .build()
                         ))
                         : update(
-                                resolved.optionalUuid().orElseThrow(),
+                                resolved.uuid(),
                                 resolved.name(),
                                 requested
                         )

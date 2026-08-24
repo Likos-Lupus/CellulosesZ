@@ -102,8 +102,10 @@ final class TeleportCommandResults {
             MinecraftCommandPolicyContext policy,
             PlayerDirectory players
     ) {
-        return policy.playerUuid()
-                .flatMap(players::onlinePlayer);
+        var uuid = policy.playerUuid();
+        return uuid == null
+                ? Optional.empty()
+                : Optional.ofNullable(players.onlinePlayer(uuid));
     }
 
 }

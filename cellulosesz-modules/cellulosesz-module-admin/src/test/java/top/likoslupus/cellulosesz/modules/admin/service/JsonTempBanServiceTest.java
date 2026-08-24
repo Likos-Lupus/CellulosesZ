@@ -1,17 +1,17 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminStatus;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;

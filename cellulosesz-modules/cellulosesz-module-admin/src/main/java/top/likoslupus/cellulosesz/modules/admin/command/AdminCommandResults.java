@@ -2,8 +2,6 @@ package top.likoslupus.cellulosesz.modules.admin.command;
 
 import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
@@ -12,6 +10,8 @@ import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandExecutions;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.source.MinecraftCommandPolicyContext;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -68,8 +68,10 @@ final class AdminCommandResults {
         return current(policy, players)
                 .map(AdminActor::player)
                 .orElseGet(() -> new AdminActor(
-                        policy.playerUuid(),
-                        policy.playerName().orElse("console")
+                        Optional.ofNullable(policy.playerUuid()),
+                        policy.playerName() == null
+                                ? "console"
+                                : policy.playerName()
                 ));
     }
 
@@ -77,7 +79,10 @@ final class AdminCommandResults {
             MinecraftCommandPolicyContext policy,
             PlayerDirectory players
     ) {
-        return policy.playerUuid().flatMap(players::onlinePlayer);
+        var uuid = policy.playerUuid();
+        return uuid == null
+                ? Optional.empty()
+                : Optional.ofNullable(players.onlinePlayer(uuid));
     }
 
 }

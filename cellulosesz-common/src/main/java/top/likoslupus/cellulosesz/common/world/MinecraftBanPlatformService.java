@@ -5,9 +5,9 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.players.IpBanListEntry;
 import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.UserBanListEntry;
-import top.likoslupus.cellulosesz.api.platform.admin.*;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.admin.*;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 
 import java.io.IOException;

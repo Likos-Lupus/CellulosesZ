@@ -13,17 +13,17 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.phys.BlockHitResult;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
-import top.likoslupus.cellulosesz.api.sign.SignService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.modules.item.service.ItemAutomationService;
+import top.likoslupus.cellulosesz.modules.sign.service.SignService;
 
 import java.util.*;
 import java.util.concurrent.CompletionException;
@@ -132,20 +132,20 @@ public final class FabricGameplayHooks {
             ServerPlayer player,
             String clickedPlayerName
     ) {
-        var automation = services.optional(ItemAutomationService.class);
-        if (automation.isEmpty()) {
+        var automation = services.find(ItemAutomationService.class);
+        if (automation == null) {
             return InteractionResult.PASS;
         }
 
         var wrapped = MinecraftPlayers.wrap(player);
-        return automation.get().executePowerTool(wrapped, clickedPlayerName)
+        return automation.executePowerTool(wrapped, clickedPlayerName)
                 ? InteractionResult.SUCCESS
                 : InteractionResult.PASS;
     }
 
     private void queueUnlimited(ServerPlayer nativePlayer) {
-        var automation = services.optional(ItemAutomationService.class);
-        if (automation.isEmpty()) {
+        var automation = services.find(ItemAutomationService.class);
+        if (automation == null) {
             return;
         }
 
@@ -156,15 +156,15 @@ public final class FabricGameplayHooks {
             return;
         }
 
-        heldItem.value()
-                .filter(itemId -> automation.get().unlimited(wrapped.uuid(), itemId))
-                .ifPresent(itemId -> pendingUnlimited
-                        .computeIfAbsent(
-                                wrapped.uuid(),
-                                _ -> ConcurrentHashMap.newKeySet()
-                        )
-                        .add(itemId)
-                );
+        var itemId = heldItem.value();
+        if (itemId != null && automation.unlimited(wrapped.uuid(), itemId)) {
+            pendingUnlimited
+                    .computeIfAbsent(
+                            wrapped.uuid(),
+                            _ -> ConcurrentHashMap.newKeySet()
+                    )
+                    .add(itemId);
+        }
     }
 
     private InteractionResult useSign(
@@ -172,8 +172,8 @@ public final class FabricGameplayHooks {
             Level level,
             BlockHitResult hit
     ) {
-        var signs = services.optional(SignService.class);
-        if (signs.isEmpty()) {
+        var signs = services.find(SignService.class);
+        if (signs == null) {
             return InteractionResult.PASS;
         }
 
@@ -199,7 +199,7 @@ public final class FabricGameplayHooks {
                                 : sign.getBackText()
                 ).getMessages(false)
         );
-        var execution = signs.get().use(
+        var execution = signs.use(
                 wrapped,
                 location,
                 front,
@@ -271,20 +271,20 @@ public final class FabricGameplayHooks {
 
         var pending = new LinkedHashMap<>(pendingUnlimited);
         pendingUnlimited.clear();
-        services.optional(ItemAutomationService.class)
-                .ifPresent(automation -> pending
-                        .forEach((uuid, itemIds) -> {
-                            var nativePlayer = server.getPlayerList().getPlayer(uuid);
-                            if (nativePlayer == null) {
-                                return;
-                            }
+        var automation = services.find(ItemAutomationService.class);
+        if (automation != null) {
+            pending.forEach((uuid, itemIds) -> {
+                var nativePlayer = server.getPlayerList().getPlayer(uuid);
+                if (nativePlayer == null) {
+                    return;
+                }
 
-                            var player = MinecraftPlayers.wrap(nativePlayer);
-                            itemIds.forEach(itemId ->
-                                    automation.maintainUnlimited(player, itemId)
-                            );
-                        })
+                var player = MinecraftPlayers.wrap(nativePlayer);
+                itemIds.forEach(itemId ->
+                        automation.maintainUnlimited(player, itemId)
                 );
+            });
+        }
     }
 
 }

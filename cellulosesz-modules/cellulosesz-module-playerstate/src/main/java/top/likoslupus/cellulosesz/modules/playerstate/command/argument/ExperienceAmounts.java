@@ -3,9 +3,9 @@ package top.likoslupus.cellulosesz.modules.playerstate.command.argument;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.DynamicCommandExceptionType;
-import top.likoslupus.cellulosesz.api.playerstate.ExperienceUnit;
+import top.likoslupus.cellulosesz.common.playerstate.ExperienceUnit;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonNegative;
 
 public final class ExperienceAmounts {
 

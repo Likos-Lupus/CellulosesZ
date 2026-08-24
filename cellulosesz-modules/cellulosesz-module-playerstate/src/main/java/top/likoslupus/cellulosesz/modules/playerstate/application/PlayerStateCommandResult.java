@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.modules.playerstate.application;
 
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
+import top.likoslupus.cellulosesz.api.playerstate.PlayerStateResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 
 import java.util.List;
 
-import static top.likoslupus.cellulosesz.api.validation.CollectionChecks.requireNonEmpty;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonEmpty;
 
 import static java.util.Objects.requireNonNull;
 
@@ -68,17 +68,10 @@ public record PlayerStateCommandResult(
         );
     }
 
-    public static PlayerStateCommandResult from(AdminResult result) {
-        var status = switch (result.status()) {
-            case SUCCESS -> CommandOutcome.Status.SUCCESS;
-            case PARTIAL_SUCCESS -> CommandOutcome.Status.PARTIAL;
-            case PERSISTENCE_FAILURE,
-                 NATIVE_COMMAND_FAILURE,
-                 PLATFORM_FAILURE,
-                 ROLLBACK_FAILURE,
-                 FAILURE -> CommandOutcome.Status.FAILED;
-            default -> CommandOutcome.Status.REJECTED;
-        };
+    public static PlayerStateCommandResult from(PlayerStateResult result) {
+        var status = result.success()
+                ? CommandOutcome.Status.SUCCESS
+                : CommandOutcome.Status.FAILED;
         return new PlayerStateCommandResult(status, List.of(result.message()));
     }
 

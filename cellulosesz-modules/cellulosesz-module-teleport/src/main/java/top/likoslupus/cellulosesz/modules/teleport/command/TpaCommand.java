@@ -4,10 +4,10 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestType;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportRequestCommandService;
+import top.likoslupus.cellulosesz.modules.teleport.domain.TeleportRequestType;
 
 import java.util.List;
 

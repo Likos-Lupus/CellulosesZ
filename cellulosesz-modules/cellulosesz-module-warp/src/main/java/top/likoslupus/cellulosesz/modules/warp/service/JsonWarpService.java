@@ -1,15 +1,15 @@
 package top.likoslupus.cellulosesz.modules.warp.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
-import top.likoslupus.cellulosesz.api.module.PreparedReloads;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.warp.Warp;
 import top.likoslupus.cellulosesz.api.warp.WarpService;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.module.PreparedModuleReload;
+import top.likoslupus.cellulosesz.core.module.PreparedReloads;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.warp.WarpConfig;
 import top.likoslupus.cellulosesz.modules.warp.persistence.WarpDocument;
 import top.likoslupus.cellulosesz.modules.warp.persistence.WarpMapper;
@@ -63,13 +63,13 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
     }
 
     @Override
-    public CompletableFuture<Optional<Warp>> warp(String name) {
+    public CompletableFuture<Warp> warp(String name) {
         return CompletableFuture.completedFuture(cachedWarp(name));
     }
 
     @Override
-    public synchronized Optional<Warp> cachedWarp(String name) {
-        return Optional.ofNullable(state.warps().get(normalize(name)));
+    public synchronized Warp cachedWarp(String name) {
+        return state.warps().get(normalize(name));
     }
 
     @Override
@@ -80,7 +80,7 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
                 key,
                 BigDecimal.ZERO,
                 requireNonNull(location, "location"),
-                Optional.of(requireNonNull(creator, "creator")),
+                requireNonNull(creator, "creator"),
                 Instant.now()
         ));
 
@@ -131,12 +131,12 @@ public final class JsonWarpService implements WarpService, AsyncInitializable, A
     }
 
     @Override
-    public synchronized Optional<String> requiredPermission(Warp warp) {
+    public synchronized String requiredPermission(Warp warp) {
         if (!state.perWarpPermission()) {
-            return Optional.empty();
+            return null;
         }
 
-        return Optional.of("cellulosesz.warp." + normalize(warp.name()));
+        return "cellulosesz.warp." + normalize(warp.name());
     }
 
     private Warp validated(Warp warp) {

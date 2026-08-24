@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import static java.util.Objects.requireNonNull;
 

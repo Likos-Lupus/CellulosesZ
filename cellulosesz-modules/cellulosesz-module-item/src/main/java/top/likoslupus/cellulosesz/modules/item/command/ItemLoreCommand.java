@@ -9,7 +9,7 @@ import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.RichText;
-import top.likoslupus.cellulosesz.api.validation.TextChecks;
+import top.likoslupus.cellulosesz.api.validation.Checks;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
@@ -79,13 +79,13 @@ public final class ItemLoreCommand implements CommandContributor {
     }
 
     private List<RichText> parse(String text) {
-        text = TextChecks.requireMaxLength(
+        text = Checks.requireMaxLength(
                 text,
                 MAXIMUM_TOTAL_LENGTH,
                 "lore"
         );
 
-        TextChecks.requireNoControlCharacters(
+        Checks.requireNoControlCharacters(
                 text.replace("\\n", ""),
                 "lore"
         );
@@ -102,7 +102,7 @@ public final class ItemLoreCommand implements CommandContributor {
 
         return lines.stream()
                 .map(line -> RichText.plain(
-                        TextChecks.requireMaxLength(
+                        Checks.requireMaxLength(
                                 line,
                                 MAXIMUM_LINE_LENGTH,
                                 "lore line"

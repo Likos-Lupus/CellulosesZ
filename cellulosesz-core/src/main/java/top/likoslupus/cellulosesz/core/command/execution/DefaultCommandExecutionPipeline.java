@@ -1,25 +1,23 @@
 package top.likoslupus.cellulosesz.core.command.execution;
 
-import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry;
-import top.likoslupus.cellulosesz.api.command.execution.*;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
+import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
+import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.command.CommandContinuation;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewareRegistry;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -95,13 +93,11 @@ public final class DefaultCommandExecutionPipeline
                 0
         );
         return stage.handle((outcome, failure) -> {
-            if (failure == null && outcome != null) {
+            if (failure == null) {
                 return outcome;
             }
 
-            var cause = failure == null
-                    ? new IllegalStateException("Command terminal completed without an outcome")
-                    : unwrap(failure);
+            var cause = unwrap(failure);
             reportInternalFailure(descriptor, context, cause);
 
             return CommandOutcome.failed();
@@ -146,9 +142,7 @@ public final class DefaultCommandExecutionPipeline
         var task = (Runnable) () -> context.error(LocalizedMessage.of(
                 "commands.common.platform.internal-error"
         ));
-        var serverThread = services
-                .optional(ServerThreadExecutor.class)
-                .orElse(null);
+        var serverThread = services.find(ServerThreadExecutor.class);
 
         if (serverThread == null || serverThread.isServerThread()) {
             runSafely(task, descriptor);

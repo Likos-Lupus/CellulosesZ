@@ -1,13 +1,12 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -40,7 +39,7 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
     @Override
     public SignUseResult validate(SignUseContext context) {
         return context.line(1).isBlank()
-                || worlds.resolveLoadedWorld(context.line(1)).isPresent()
+                || worlds.resolveLoadedWorld(context.line(1)) != null
                 ? SignUseResult.success("service.sign.valid")
                 : SignUseResult.failure("service.sign.random-teleport-world");
     }
@@ -52,18 +51,18 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
                 : context.line(1);
         var world = worlds.resolveLoadedWorld(requestedWorld);
 
-        if (world.isEmpty()) {
+        if (world == null) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.random-teleport-world"
             ));
         }
 
         var destination = randomTeleports.randomLocation(
-                world.orElseThrow(),
-                settings.settings(world.orElseThrow())
+                world,
+                settings.settings(world)
         );
 
-        if (!destination.success() || destination.location().isEmpty()) {
+        if (!destination.success() || destination.location() == null) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.random-teleport-failed"
             ));
@@ -72,7 +71,7 @@ public final class RandomTeleportSignHandler implements CellSignHandler {
         return teleports
                 .teleport(
                         context.player(),
-                        destination.location().orElseThrow(),
+                        destination.location(),
                         TeleportOptions.defaults().withSafe(true).withWarmup(0)
                 )
                 .thenApply(result -> result.success()

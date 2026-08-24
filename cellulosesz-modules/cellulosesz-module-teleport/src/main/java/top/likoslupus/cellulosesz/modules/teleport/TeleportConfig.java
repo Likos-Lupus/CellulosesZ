@@ -1,9 +1,6 @@
 package top.likoslupus.cellulosesz.modules.teleport;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requireNonNegative;
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
-import static top.likoslupus.cellulosesz.api.validation.RangeChecks.requireGreaterThan;
-
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 public final class TeleportConfig {
 

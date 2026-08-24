@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.core.storage;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.config.JacksonCodecs;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.io.IOException;
 import java.nio.file.Files;

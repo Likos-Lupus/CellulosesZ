@@ -1,8 +1,5 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.Jail;
-import top.likoslupus.cellulosesz.api.admin.JailService;
-import top.likoslupus.cellulosesz.api.admin.JailState;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
@@ -10,6 +7,8 @@ import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportResult;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.Jail;
+import top.likoslupus.cellulosesz.modules.admin.domain.JailState;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;

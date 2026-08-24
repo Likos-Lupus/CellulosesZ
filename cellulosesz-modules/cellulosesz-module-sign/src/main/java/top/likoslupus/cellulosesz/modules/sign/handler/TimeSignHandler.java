@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import static java.util.Objects.requireNonNull;
 
@@ -55,12 +54,12 @@ public final class TimeSignHandler implements SynchronousSignHandler {
                 : context.line(2);
         var world = worldDirectory.resolveLoadedWorld(requestedWorld);
 
-        if (world.isEmpty()) {
+        if (world == null) {
             return SignUseResult.failure("service.sign.time-world");
         }
 
-        return SignHandlerSupport.admin(worlds.setTime(
-                world.orElseThrow(),
+        return SignHandlerSupport.outcome(worlds.setTime(
+                world,
                 time.orElseThrow()
         ));
     }

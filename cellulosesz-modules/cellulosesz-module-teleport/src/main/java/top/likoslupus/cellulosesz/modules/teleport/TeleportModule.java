@@ -1,25 +1,26 @@
 package top.likoslupus.cellulosesz.modules.teleport;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.event.PlayerDamageEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerDeathEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerDisconnectEvent;
 import top.likoslupus.cellulosesz.api.event.PlayerMoveEvent;
-import top.likoslupus.cellulosesz.api.module.*;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
-import top.likoslupus.cellulosesz.api.scheduler.TaskHandle;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.core.module.*;
+import top.likoslupus.cellulosesz.core.scheduler.TaskHandle;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.teleport.application.*;
 import top.likoslupus.cellulosesz.modules.teleport.command.*;
 import top.likoslupus.cellulosesz.modules.teleport.service.*;
@@ -134,7 +135,7 @@ public final class TeleportModule implements CellulosesZModule {
                 audience,
                 renderer,
                 serverThread,
-                context.services().optional(VanishService.class),
+                context.services().find(VanishService.class),
                 settings
         );
         var preferenceCommands = new DefaultTeleportPreferenceCommandService(users, resolver);

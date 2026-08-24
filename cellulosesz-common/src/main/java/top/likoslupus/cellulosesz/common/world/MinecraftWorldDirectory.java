@@ -21,11 +21,12 @@ public final class MinecraftWorldDirectory implements WorldDirectory {
     @Override
     public List<String> loadedWorldIds() {
         var current = server.current();
-        if (current.isEmpty()) return List.of();
-        return StreamSupport.stream(current.orElseThrow().getAllLevels().spliterator(), false)
-                .map(level -> level.dimension().identifier().toString())
-                .sorted()
-                .toList();
+        return current.isEmpty()
+                ? List.of()
+                : StreamSupport.stream(current.orElseThrow().getAllLevels().spliterator(), false)
+                        .map(level -> level.dimension().identifier().toString())
+                        .sorted()
+                        .toList();
     }
 
     @Override

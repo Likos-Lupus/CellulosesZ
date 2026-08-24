@@ -12,10 +12,10 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.world.EntityRemovalRequest;
-import top.likoslupus.cellulosesz.api.world.EntityRemoveSelector;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.world.EntityRemovalRequest;
+import top.likoslupus.cellulosesz.common.world.EntityRemoveSelector;
 import top.likoslupus.cellulosesz.common.world.MinecraftEntityRemovalOperations;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 

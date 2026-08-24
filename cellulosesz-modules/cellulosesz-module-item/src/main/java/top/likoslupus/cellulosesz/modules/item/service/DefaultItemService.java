@@ -1,18 +1,18 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
+import top.likoslupus.cellulosesz.api.item.ItemGrantResult;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
-
 import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -90,14 +90,15 @@ public final class DefaultItemService implements ItemService {
 
             if (platform.registryStatus().successful()) {
                 var parsed = platform.parse(descriptor.normalizedArgument());
-                if (!parsed.successful() || parsed.value().isEmpty()) {
+                var parsedValue = parsed.value();
+                if (!parsed.successful() || parsedValue == null) {
                     throw new IllegalArgumentException("Invalid custom item: " + name);
                 }
 
                 descriptor = new ItemDescriptor(
-                        parsed.value().orElseThrow().normalizedItem(),
+                        parsedValue.normalizedItem(),
                         descriptor.count(),
-                        parsed.value().orElseThrow().normalizedArgument()
+                        parsedValue.normalizedArgument()
                 );
             }
 
@@ -232,12 +233,12 @@ public final class DefaultItemService implements ItemService {
         }
 
         var parsed = platform.parse(item.normalizedArgument());
-        if (!parsed.successful() || parsed.value().isEmpty()) {
+        if (!parsed.successful() || parsed.value() == null) {
             return PlatformResult.failure(parsed.status(), parsed.detail());
         }
 
         return PlatformResult.success(
-                parsed.value().orElseThrow().normalizedItem().equals(item.normalizedItem())
+                parsed.value().normalizedItem().equals(item.normalizedItem())
         );
     }
 
@@ -257,7 +258,7 @@ public final class DefaultItemService implements ItemService {
     }
 
     @Override
-    public PlatformResult<top.likoslupus.cellulosesz.api.item.ItemGrantResult> give(
+    public PlatformResult<ItemGrantResult> give(
             CellPlayer player,
             ItemDescriptor item
     ) {

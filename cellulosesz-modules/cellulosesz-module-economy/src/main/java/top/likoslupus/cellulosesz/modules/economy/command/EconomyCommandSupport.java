@@ -95,10 +95,12 @@ final class EconomyCommandSupport {
     }
 
     static Optional<CellPlayer> currentPlayer(
-            Optional<UUID> uuid,
+            UUID uuid,
             PlayerDirectory players
     ) {
-        return uuid.flatMap(players::onlinePlayer);
+        return uuid == null
+                ? Optional.empty()
+                : Optional.ofNullable(players.onlinePlayer(uuid));
     }
 
 }

@@ -1,23 +1,28 @@
 package top.likoslupus.cellulosesz.modules.item;
 
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationService;
-import top.likoslupus.cellulosesz.api.command.service.PermissionCatalog;
-import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
-import top.likoslupus.cellulosesz.api.item.*;
-import top.likoslupus.cellulosesz.api.module.*;
+import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.item.WorkstationKind;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.command.service.PlayerChatDispatchService;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
+import top.likoslupus.cellulosesz.common.item.WorkstationPlatformService;
+import top.likoslupus.cellulosesz.common.recipe.RecipePlatformService;
+import top.likoslupus.cellulosesz.core.command.service.ConfirmationService;
+import top.likoslupus.cellulosesz.core.command.service.PermissionCatalog;
+import top.likoslupus.cellulosesz.core.module.*;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 import top.likoslupus.cellulosesz.modules.item.application.ItemCommandService;
 import top.likoslupus.cellulosesz.modules.item.application.WorkstationCommandService;
 import top.likoslupus.cellulosesz.modules.item.command.*;
 import top.likoslupus.cellulosesz.modules.item.service.DefaultItemAutomationService;
 import top.likoslupus.cellulosesz.modules.item.service.DefaultItemService;
+import top.likoslupus.cellulosesz.modules.item.service.ItemAutomationService;
 
 import java.time.Clock;
 import java.util.List;

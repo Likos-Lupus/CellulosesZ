@@ -1,12 +1,17 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.admin.Expiration;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
+import top.likoslupus.cellulosesz.modules.admin.service.BanService;
+import top.likoslupus.cellulosesz.modules.admin.service.MuteService;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -53,14 +58,16 @@ public final class DefaultModerationCommandService implements ModerationCommandS
             String reason
     ) {
         return serverThread
-                .submit(() -> players.onlinePlayer(player)
-                        .map(value -> bans.kick(value, reason(reason)))
-                        .orElseGet(() -> AdminResult.failure(
-                                AdminStatus.NOT_FOUND,
-                                "service.admin.kick-failed",
-                                MessageArguments.builder().add(player).build()
-                        ))
-                );
+                .submit(() -> {
+                    var target = players.onlinePlayer(player);
+                    return target == null
+                            ? AdminResult.failure(
+                            AdminStatus.NOT_FOUND,
+                            "service.admin.kick-failed",
+                            MessageArguments.builder().add(player).build()
+                    )
+                            : bans.kick(target, reason(reason));
+                });
     }
 
     @Override
@@ -120,10 +127,10 @@ public final class DefaultModerationCommandService implements ModerationCommandS
         return resolver.resolve(
                 player,
                 actor.uuid()
-                        .flatMap(players::onlinePlayer)
+                        .map(players::onlinePlayer)
                         .orElse(null)
         ).thenCompose(value -> {
-            if (value.optionalUuid().isEmpty()) {
+            if (value.uuid() == null) {
                 return completed(AdminResult.failure(
                         AdminStatus.NOT_FOUND,
                         "commands.common.player-not-found",
@@ -147,7 +154,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
             }
 
             return mutes.mute(
-                    value.optionalUuid().orElseThrow(),
+                    value.uuid(),
                     value.name(),
                     actor,
                     expiration,
@@ -160,9 +167,9 @@ public final class DefaultModerationCommandService implements ModerationCommandS
     public CompletableFuture<AdminResult> unmute(String player, AdminActor actor) {
         return resolver.resolve(
                         player,
-                        actor.uuid().flatMap(players::onlinePlayer).orElse(null)
+                        actor.uuid().map(players::onlinePlayer).orElse(null)
                 )
-                .thenCompose(value -> value.optionalUuid().isEmpty()
+                .thenCompose(value -> value.uuid() == null
                         ?
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
@@ -170,7 +177,7 @@ public final class DefaultModerationCommandService implements ModerationCommandS
                                 MessageArguments.builder().add(player).build()
                         ))
                         : mutes.unmute(
-                                value.optionalUuid().orElseThrow(),
+                                value.uuid(),
                                 value.name(),
                                 actor
                         )

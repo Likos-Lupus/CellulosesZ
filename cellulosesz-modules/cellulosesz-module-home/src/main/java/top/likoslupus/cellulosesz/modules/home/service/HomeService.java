@@ -1,0 +1,47 @@
+package top.likoslupus.cellulosesz.modules.home.service;
+
+import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
+public interface HomeService {
+
+    CompletableFuture<Map<String, CellLocation>> homes(UUID uuid);
+
+    Map<String, CellLocation> cachedHomes(UUID uuid);
+
+    CompletableFuture<Optional<CellLocation>> home(
+            UUID uuid,
+            String name
+    );
+
+    CompletableFuture<Boolean> setHome(
+            UUID uuid,
+            String name,
+            CellLocation location
+    );
+
+    CompletableFuture<Boolean> deleteHome(
+            UUID uuid,
+            String name
+    );
+
+    default CompletableFuture<Boolean> renameHome(
+            UUID uuid,
+            String oldName,
+            String newName
+    ) {
+        return renameHomeDetailed(uuid, oldName, newName)
+                .thenApply(status -> status == HomeRenameStatus.RENAMED);
+    }
+
+    CompletableFuture<HomeRenameStatus> renameHomeDetailed(
+            UUID uuid,
+            String oldName,
+            String newName
+    );
+
+}

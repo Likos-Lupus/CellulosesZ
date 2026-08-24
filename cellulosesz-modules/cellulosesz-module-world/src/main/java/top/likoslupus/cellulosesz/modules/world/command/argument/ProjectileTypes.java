@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.modules.world.command.argument;
 import com.mojang.brigadier.LiteralMessage;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
-import top.likoslupus.cellulosesz.api.entity.ProjectileType;
+import top.likoslupus.cellulosesz.common.entity.ProjectileType;
 
 import java.util.List;
 import java.util.Locale;

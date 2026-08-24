@@ -1,9 +1,6 @@
 package top.likoslupus.cellulosesz.modules.kit.application;
 
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
@@ -11,6 +8,9 @@ import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.item.InventoryItemSnapshot;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -47,8 +47,8 @@ public final class DefaultKitCommandService implements KitCommandService {
     @Override
     public Result list(Predicate<String> hasPermission) {
         var names = kits.kits().stream()
-                .filter(kit -> kit.permission().isEmpty()
-                        || hasPermission.test(kit.permission().orElseThrow())
+                .filter(kit -> kit.permission() == null
+                        || hasPermission.test(kit.permission())
                 )
                 .map(KitDefinition::id)
                 .sorted()
@@ -71,16 +71,14 @@ public final class DefaultKitCommandService implements KitCommandService {
             Predicate<String> hasPermission
     ) {
         var name = normalize(rawName);
-        var kit = kits.kit(name);
+        var definition = kits.kit(name);
 
-        if (kit.isEmpty()) {
+        if (definition == null) {
             return CompletableFuture.completedFuture(missing(name));
         }
 
-        var definition = kit.orElseThrow();
-
-        if (definition.permission().isPresent()
-                && !hasPermission.test(definition.permission().orElseThrow())
+        if (definition.permission() != null
+                && !hasPermission.test(definition.permission())
         ) {
             return CompletableFuture.completedFuture(failure(
                     "commands.kit.kit-command.error.do-not-permission-claim-kit"
@@ -99,12 +97,12 @@ public final class DefaultKitCommandService implements KitCommandService {
         var name = normalize(rawName);
         var kit = kits.kit(name);
 
-        if (kit.isEmpty()) {
+        if (kit == null) {
             return missing(name);
         }
 
         var entries = new StringBuilder();
-        var sorted = kit.orElseThrow().items().stream()
+        var sorted = kit.items().stream()
                 .sorted(Comparator.comparingInt(KitItem::slot))
                 .limit(MAX_DESCRIBED_ITEMS)
                 .toList();
@@ -114,11 +112,11 @@ public final class DefaultKitCommandService implements KitCommandService {
                     new InventoryItemSnapshot(item.slot(), item.stack())
             );
 
-            if (!described.successful() || described.value().isEmpty()) {
+            var descriptor = described.value();
+            if (!described.successful() || descriptor == null) {
                 return failure("commands.kit.show-kit-command.error.invalid-item");
             }
 
-            var descriptor = described.value().orElseThrow();
             var id = truncate(descriptor.normalizedItem(), MAX_DESCRIPTION_LENGTH);
             entries.append("\n- [")
                     .append(item.slot())
@@ -131,7 +129,7 @@ public final class DefaultKitCommandService implements KitCommandService {
         return success(LocalizedMessage.of(
                 "commands.kit.details",
                 MessageArguments.builder()
-                        .add(kit.orElseThrow().displayName())
+                        .add(kit.displayName())
                         .add(entries.toString())
                         .build()
         ));
@@ -152,13 +150,13 @@ public final class DefaultKitCommandService implements KitCommandService {
         return serverThread
                 .submit(() -> inventory.inventorySlots(player))
                 .thenCompose(snapshot -> {
-                    if (!snapshot.successful() || snapshot.value().isEmpty()) {
+                    if (!snapshot.successful() || snapshot.value() == null) {
                         return CompletableFuture.completedFuture(failure(
                                 "commands.kit.create-kit-command.error.snapshot"
                         ));
                     }
 
-                    var slots = snapshot.value().orElseThrow();
+                    var slots = snapshot.value();
                     if (slots.isEmpty()) {
                         return CompletableFuture.completedFuture(failure(
                                 "commands.kit.create-kit-command.error.empty"
@@ -168,7 +166,7 @@ public final class DefaultKitCommandService implements KitCommandService {
                     var definition = new KitDefinition(
                             id,
                             rawName,
-                            java.util.Optional.of("cellulosesz.kit." + id),
+                            "cellulosesz.kit." + id,
                             Duration.ofSeconds(cooldownSeconds),
                             BigDecimal.ZERO,
                             slots.stream()
@@ -212,7 +210,7 @@ public final class DefaultKitCommandService implements KitCommandService {
         var kitName = normalize(request.kit());
         var kit = kits.kit(kitName);
 
-        if (kit.isEmpty()) {
+        if (kit == null) {
             return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                     "commands.kit.kit-reset-command.error.kit",
                     MessageArguments.builder().add(kitName).build()
@@ -249,15 +247,15 @@ public final class DefaultKitCommandService implements KitCommandService {
         return players
                 .resolve(target, viewer)
                 .thenCompose(resolved -> {
-                    var uuid = resolved.optionalUuid();
-                    if (uuid.isEmpty()) {
+                    var uuid = resolved.uuid();
+                    if (uuid == null) {
                         return CompletableFuture.completedFuture(failure(LocalizedMessage.of(
                                 "commands.kit.kit-reset-command.error.player-not-found",
                                 MessageArguments.builder().add(target).build()
                         )));
                     }
 
-                    return kits.resetCooldown(uuid.orElseThrow(), kitName)
+                    return kits.resetCooldown(uuid, kitName)
                             .thenApply(_ -> success(LocalizedMessage.of(
                                     "commands.kit.kit-reset-command.reply.kit-cooldown-reset",
                                     MessageArguments.empty()
@@ -278,8 +276,8 @@ public final class DefaultKitCommandService implements KitCommandService {
     public List<String> claimableNames(Predicate<String> hasPermission) {
         requireNonNull(hasPermission, "hasPermission");
         return kits.kits().stream()
-                .filter(kit -> kit.permission().isEmpty()
-                        || hasPermission.test(kit.permission().orElseThrow())
+                .filter(kit -> kit.permission() == null
+                        || hasPermission.test(kit.permission())
                 )
                 .map(KitDefinition::id)
                 .sorted()

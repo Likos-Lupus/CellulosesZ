@@ -1,9 +1,13 @@
 package top.likoslupus.cellulosesz.modules.text;
 
 import top.likoslupus.cellulosesz.api.event.PlayerJoinEvent;
-import top.likoslupus.cellulosesz.api.module.*;
-import top.likoslupus.cellulosesz.api.text.*;
+import top.likoslupus.cellulosesz.api.text.LocaleResolver;
+import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.api.text.MessageRenderer;
+import top.likoslupus.cellulosesz.api.text.TextService;
 import top.likoslupus.cellulosesz.common.command.CommandRegistry;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.module.*;
 import top.likoslupus.cellulosesz.modules.text.application.DefaultTextCommandService;
 import top.likoslupus.cellulosesz.modules.text.application.TextCommandService;
 import top.likoslupus.cellulosesz.modules.text.command.TextCommand;

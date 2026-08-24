@@ -1,21 +1,22 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.teleport.TeleportOptions;
 import top.likoslupus.cellulosesz.api.teleport.TeleportService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.admin.Expiration;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.*;
 import top.likoslupus.cellulosesz.modules.admin.persistence.JailDocument;
 import top.likoslupus.cellulosesz.modules.admin.persistence.JailMapper;
 
@@ -583,7 +584,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
 
                     var online = players.onlinePlayer(uuid);
 
-                    if (online.isEmpty()) {
+                    if (online == null) {
                         return completed(
                                 AdminResult.success(
                                         "service.admin.unjail-pending",
@@ -593,7 +594,7 @@ public final class JsonJailService implements JailService, AsyncInitializable, A
                     }
 
                     return finishReleaseAccepted(
-                            online.orElseThrow(),
+                            online,
                             pending
                     );
                 });

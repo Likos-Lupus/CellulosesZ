@@ -1,19 +1,19 @@
 package top.likoslupus.cellulosesz.api.module
 
-data class LoadedModuleInfo(
-    val key: ModuleKey,
-    val name: String,
-    val description: String,
-    val phase: ModulePhase,
-    val enabled: Boolean,
-    val state: String = if (enabled) "ACTIVE" else "STOPPED",
+public data class LoadedModuleInfo(
+    public val key: ModuleKey,
+    public val name: String,
+    public val description: String,
+    public val phase: ModulePhase,
+    public val enabled: Boolean,
+    public val state: String = if (enabled) "ACTIVE" else "STOPPED",
 ) {
 
-    fun id(): String = key.value
-    fun name(): String = name
-    fun description(): String = description
-    fun phase(): ModulePhase = phase
-    fun enabled(): Boolean = enabled
-    fun state(): String = state
+    public fun id(): String = key.value
+    public fun name(): String = name
+    public fun description(): String = description
+    public fun phase(): ModulePhase = phase
+    public fun enabled(): Boolean = enabled
+    public fun state(): String = state
 
 }

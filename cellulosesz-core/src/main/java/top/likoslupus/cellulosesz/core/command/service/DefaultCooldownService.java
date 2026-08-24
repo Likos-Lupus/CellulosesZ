@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
-import top.likoslupus.cellulosesz.api.command.service.CooldownService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.user.UserService;
 
@@ -50,49 +49,47 @@ public final class DefaultCooldownService implements CooldownService {
     ) {
         var expiresAt = System.currentTimeMillis() + Math.max(0L, duration.toMillis());
         transientCooldowns.put(new Key(uuid, key), expiresAt);
-        services.optional(UserService.class)
-                .ifPresent(users ->
-                        users.cached(uuid).ifPresent(_ ->
-                                users.updateVoid(
-                                        uuid,
-                                        user -> {
-                                            var cooldowns = new LinkedHashMap<>(user.cooldowns());
-                                            cooldowns.put(key, expiresAt);
-                                            return user.withCooldowns(cooldowns);
-                                        }
-                                )
-                        )
-                );
+        var users = services.find(UserService.class);
+        if (users != null && users.cached(uuid) != null) {
+            users.updateVoid(
+                    uuid,
+                    user -> {
+                        var cooldowns = new LinkedHashMap<>(user.cooldowns());
+                        cooldowns.put(key, expiresAt);
+                        return user.withCooldowns(cooldowns);
+                    }
+            );
+        }
     }
 
     @Override
     public void clear(UUID uuid, String key) {
         transientCooldowns.remove(new Key(uuid, key));
-        services.optional(UserService.class)
-                .ifPresent(users ->
-                        users.cached(uuid).ifPresent(user -> {
-                            if (!user.cooldowns().containsKey(key)) {
-                                return;
-                            }
-
-                            users.updateVoid(
-                                    uuid,
-                                    current -> {
-                                        var cooldowns = new LinkedHashMap<>(current.cooldowns());
-                                        cooldowns.remove(key);
-                                        return current.withCooldowns(cooldowns);
-                                    }
-                            );
-                        })
+        var users = services.find(UserService.class);
+        if (users != null) {
+            var user = users.cached(uuid);
+            if (user != null && user.cooldowns().containsKey(key)) {
+                users.updateVoid(
+                        uuid,
+                        current -> {
+                            var cooldowns = new LinkedHashMap<>(current.cooldowns());
+                            cooldowns.remove(key);
+                            return current.withCooldowns(cooldowns);
+                        }
                 );
+            }
+        }
     }
 
     private long stored(UUID uuid, String key) {
         var transientValue = transientCooldowns.getOrDefault(new Key(uuid, key), 0L);
-        var persisted = services.optional(UserService.class)
-                .flatMap(users -> users.cached(uuid))
-                .map(user -> user.cooldowns().getOrDefault(key, 0L))
-                .orElse(0L);
+        var users = services.find(UserService.class);
+        var user = users != null
+                ? users.cached(uuid)
+                : null;
+        var persisted = user != null
+                ? user.cooldowns().getOrDefault(key, 0L)
+                : 0L;
         return Math.max(transientValue, persisted);
     }
 

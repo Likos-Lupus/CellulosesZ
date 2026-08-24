@@ -1,18 +1,19 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.player.PlayerNetworkService;
-import top.likoslupus.cellulosesz.api.player.PlayerResolver;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayer;
-import top.likoslupus.cellulosesz.api.player.ResolvedPlayerState;
+import top.likoslupus.cellulosesz.api.player.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
+import top.likoslupus.cellulosesz.modules.admin.domain.BanRecord;
+import top.likoslupus.cellulosesz.modules.admin.service.AddressBookService;
+import top.likoslupus.cellulosesz.modules.admin.service.BanService;
+import top.likoslupus.cellulosesz.modules.admin.service.TempBanService;
 
 import java.net.InetAddress;
 import java.time.Duration;
@@ -21,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
+import org.jspecify.annotations.Nullable;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -54,6 +56,22 @@ final class DefaultBanCommandServiceTest {
         assertEquals(2, result.components().size());
         assertEquals(AdminStatus.SUCCESS, result.components().get(0).status());
         assertEquals(AdminStatus.PERSISTENCE_FAILURE, result.components().get(1).status());
+    }
+
+    private static DefaultBanCommandService createService(
+            StubBanService bans,
+            StubTempBanService tempBans
+    ) {
+        return new DefaultBanCommandService(
+                bans,
+                tempBans,
+                new StubPlayerResolver(),
+                new StubPlayerDirectory(),
+                new StubPlayerNetworkService(),
+                new StubAddressBookService(),
+                new DirectServerThreadExecutor(),
+                new AdminRuntimeSettings(new AdminConfig())
+        );
     }
 
     @Test
@@ -211,19 +229,6 @@ final class DefaultBanCommandServiceTest {
         assertEquals(2, result.components().size());
     }
 
-    private static DefaultBanCommandService createService(StubBanService bans, StubTempBanService tempBans) {
-        return new DefaultBanCommandService(
-                bans,
-                tempBans,
-                new StubPlayerResolver(),
-                new StubPlayerDirectory(),
-                new StubPlayerNetworkService(),
-                new StubAddressBookService(),
-                new DirectServerThreadExecutor(),
-                new AdminRuntimeSettings(new AdminConfig())
-        );
-    }
-
     private static final class DirectServerThreadExecutor implements ServerThreadExecutor {
 
         @Override
@@ -272,7 +277,10 @@ final class DefaultBanCommandServiceTest {
         }
 
         @Override
-        public CompletableFuture<ResolvedPlayer> resolve(String input, @Nullable CellPlayer viewer) {
+        public CompletableFuture<ResolvedPlayer> resolve(
+                String input,
+                @Nullable CellPlayer viewer
+        ) {
             return CompletableFuture.completedFuture(resolveKnown(input, viewer));
         }
 
@@ -281,18 +289,18 @@ final class DefaultBanCommandServiceTest {
     private static final class StubPlayerDirectory implements PlayerDirectory {
 
         @Override
-        public Optional<CellPlayer> onlinePlayer(UUID uuid) {
-            return Optional.empty();
-        }
-
-        @Override
-        public Optional<CellPlayer> onlinePlayer(String name) {
-            return Optional.empty();
-        }
-
-        @Override
         public List<CellPlayer> onlinePlayers() {
             return List.of();
+        }
+
+        @Override
+        public CellPlayer onlinePlayer(UUID uuid) {
+            return null;
+        }
+
+        @Override
+        public CellPlayer onlinePlayer(String name) {
+            return null;
         }
 
         @Override
@@ -305,8 +313,8 @@ final class DefaultBanCommandServiceTest {
     private static final class StubPlayerNetworkService implements PlayerNetworkService {
 
         @Override
-        public Optional<InetAddress> address(CellPlayer player) {
-            return Optional.empty();
+        public InetAddress address(CellPlayer player) {
+            return null;
         }
 
     }
@@ -341,13 +349,13 @@ final class DefaultBanCommandServiceTest {
         }
 
         @Override
-        public AdminResult banIp(InetAddress target, AdminActor actor, String reason) {
-            return AdminResult.success("ok");
+        public AdminResult unban(UUID target, String targetName, AdminActor actor) {
+            return unbanResult;
         }
 
         @Override
-        public AdminResult unban(UUID target, String targetName, AdminActor actor) {
-            return unbanResult;
+        public AdminResult banIp(InetAddress target, AdminActor actor, String reason) {
+            return AdminResult.success("ok");
         }
 
         @Override
@@ -364,21 +372,38 @@ final class DefaultBanCommandServiceTest {
 
     private static final class StubTempBanService implements TempBanService {
 
-        CompletableFuture<AdminResult> unbanResult = CompletableFuture.completedFuture(AdminResult.success("ok"));
-        CompletableFuture<AdminResult> unbanIpResult = CompletableFuture.completedFuture(AdminResult.success("ok"));
+        CompletableFuture<AdminResult> unbanResult = CompletableFuture.completedFuture(AdminResult.success(
+                "ok"));
+        CompletableFuture<AdminResult> unbanIpResult = CompletableFuture.completedFuture(AdminResult.success(
+                "ok"));
 
         @Override
-        public CompletableFuture<AdminResult> tempBan(UUID target, String targetName, AdminActor actor, Duration duration, String reason) {
+        public CompletableFuture<AdminResult> tempBan(
+                UUID target,
+                String targetName,
+                AdminActor actor,
+                Duration duration,
+                String reason
+        ) {
             return CompletableFuture.completedFuture(AdminResult.success("ok"));
         }
 
         @Override
-        public CompletableFuture<AdminResult> tempBanIp(InetAddress target, AdminActor actor, Duration duration, String reason) {
+        public CompletableFuture<AdminResult> tempBanIp(
+                InetAddress target,
+                AdminActor actor,
+                Duration duration,
+                String reason
+        ) {
             return CompletableFuture.completedFuture(AdminResult.success("ok"));
         }
 
         @Override
-        public CompletableFuture<AdminResult> unban(UUID target, String targetName, AdminActor actor) {
+        public CompletableFuture<AdminResult> unban(
+                UUID target,
+                String targetName,
+                AdminActor actor
+        ) {
             return unbanResult;
         }
 

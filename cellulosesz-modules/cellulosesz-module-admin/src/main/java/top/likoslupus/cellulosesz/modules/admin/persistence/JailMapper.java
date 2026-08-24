@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.modules.admin.persistence;
 
-import top.likoslupus.cellulosesz.api.admin.Expiration;
-import top.likoslupus.cellulosesz.api.admin.Jail;
-import top.likoslupus.cellulosesz.api.admin.JailState;
-import top.likoslupus.cellulosesz.api.admin.JailedPlayer;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
+import top.likoslupus.cellulosesz.common.admin.Expiration;
+import top.likoslupus.cellulosesz.modules.admin.domain.Jail;
+import top.likoslupus.cellulosesz.modules.admin.domain.JailState;
+import top.likoslupus.cellulosesz.modules.admin.domain.JailedPlayer;
 
 import java.time.Instant;
 import java.util.Optional;

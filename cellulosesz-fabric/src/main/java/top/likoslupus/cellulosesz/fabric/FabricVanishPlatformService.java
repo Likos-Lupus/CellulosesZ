@@ -7,9 +7,9 @@ import net.minecraft.server.level.ServerPlayer;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.playerstate.VanishPlatformService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.playerstate.VanishPlatformService;
 import top.likoslupus.cellulosesz.fabric.vanish.FabricVanishBridge;
 
 import java.util.List;

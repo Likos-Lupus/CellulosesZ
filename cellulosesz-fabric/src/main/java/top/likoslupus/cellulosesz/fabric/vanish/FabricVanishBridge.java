@@ -20,8 +20,11 @@ public final class FabricVanishBridge {
     }
 
     public static void vanished(UUID uuid, boolean vanished) {
-        if (vanished) VANISHED.add(uuid);
-        else VANISHED.remove(uuid);
+        if (vanished) {
+            VANISHED.add(uuid);
+        } else {
+            VANISHED.remove(uuid);
+        }
     }
 
     public static boolean vanished(UUID uuid) {

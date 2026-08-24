@@ -1,10 +1,15 @@
 package top.likoslupus.cellulosesz.modules.item.application;
 
-import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
+import top.likoslupus.cellulosesz.api.item.ItemService;
+import top.likoslupus.cellulosesz.api.item.RepairScope;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.RichText;
+import top.likoslupus.cellulosesz.common.item.FireworkItemRequest;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
+import top.likoslupus.cellulosesz.common.item.PotionItemRequest;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,7 +46,8 @@ public final class ItemCommandService {
             return PlatformResult.failure(valid.status(), valid.detail());
         }
 
-        if (valid.value().isEmpty() || !valid.value().orElseThrow()) {
+        var validValue = valid.value();
+        if (validValue == null || !validValue) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INVALID_INPUT,
                     "invalid-item"
@@ -60,14 +66,15 @@ public final class ItemCommandService {
             return PlatformResult.failure(maximum.status(), maximum.detail());
         }
 
-        if (maximum.value().isEmpty()) {
+        var maximumValue = maximum.value();
+        if (maximumValue == null) {
             return PlatformResult.failure(
                     PlatformOperationStatus.INTERNAL_ERROR,
                     "missing-max-stack-size"
             );
         }
 
-        if (descriptor.count() > maximum.value().orElseThrow() && !allowOversized) {
+        if (descriptor.count() > maximumValue && !allowOversized) {
             return PlatformResult.failure(
                     PlatformOperationStatus.PERMISSION_DENIED,
                     "oversized-stack"

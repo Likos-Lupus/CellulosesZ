@@ -1,10 +1,9 @@
 package top.likoslupus.cellulosesz.modules.messaging.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 import top.likoslupus.cellulosesz.modules.messaging.persistence.MailDocument;
 import top.likoslupus.cellulosesz.modules.messaging.persistence.MailMapper;

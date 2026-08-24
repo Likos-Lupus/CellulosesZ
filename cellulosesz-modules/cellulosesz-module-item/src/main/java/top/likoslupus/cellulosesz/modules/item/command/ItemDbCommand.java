@@ -7,7 +7,6 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
@@ -15,6 +14,7 @@ import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
 import java.util.List;
@@ -116,12 +116,13 @@ public final class ItemDbCommand implements CommandContributor {
                         return PlatformResult.failure(parsed.status(), parsed.detail());
                     }
 
-                    return parsed.value()
-                            .<PlatformResult<?>>map(PlatformResult::success)
-                            .orElseGet(() -> PlatformResult.failure(
+                    var resolved = parsed.value();
+                    return resolved != null
+                            ? PlatformResult.success(resolved)
+                            : PlatformResult.failure(
                                     PlatformOperationStatus.NOT_FOUND,
                                     "unknown-item"
-                            ));
+                            );
                 }
         );
     }

@@ -6,13 +6,13 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
-import top.likoslupus.cellulosesz.api.entity.TntBurstRequest;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.world.PlayerTargetingService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.entity.EntityPlatformService;
+import top.likoslupus.cellulosesz.common.entity.TntBurstRequest;
+import top.likoslupus.cellulosesz.common.world.PlayerTargetingService;
 import top.likoslupus.cellulosesz.modules.world.config.WorldRuntimeSettings;
 
 import java.util.List;
@@ -100,10 +100,10 @@ public final class AntiochCommand implements CommandContributor {
                             config.targetDistance()
                     );
 
-                    return target.successful() && target.value().isPresent()
+                    return target.successful() && target.value() != null
                             ?
                             entities.spawnTnt(new TntBurstRequest(
-                                    target.value().orElseThrow(),
+                                    target.value(),
                                     Math.min(1, config.antiochMaximumEntities()),
                                     config.antiochFuseTicks(),
                                     config.antiochExplosionPower(),

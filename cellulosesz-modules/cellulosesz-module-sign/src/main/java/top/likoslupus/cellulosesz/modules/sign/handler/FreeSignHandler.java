@@ -1,14 +1,13 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
+import top.likoslupus.cellulosesz.common.item.InventoryItemRequest;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.List;
 
@@ -45,17 +44,18 @@ public final class FreeSignHandler implements SynchronousSignHandler {
             return result;
         }
 
-        var descriptor = parsed.value().orElseThrow();
+        var descriptor = parsed.value();
         var maximum = items.maxStackSize(descriptor);
 
-        if (!maximum.successful() || maximum.value().isEmpty()) {
+        var maxStackSize = maximum.value();
+        if (!maximum.successful() || maxStackSize == null) {
             return SignHandlerSupport.itemFailure(
                     maximum.status(),
                     "service.sign.free-format"
             );
         }
 
-        if (descriptor.count() > maximum.value().orElseThrow()) {
+        if (descriptor.count() > maxStackSize) {
             return SignUseResult.failure("service.sign.free-stack-limit");
         }
 
@@ -83,14 +83,14 @@ public final class FreeSignHandler implements SynchronousSignHandler {
     public SignUseResult useSynchronously(SignUseContext context) {
         var parsed = item(context);
 
-        if (!parsed.successful() || parsed.value().isEmpty()) {
+        if (!parsed.successful() || parsed.value() == null) {
             return SignHandlerSupport.itemFailure(
                     parsed.status(),
                     "service.sign.free-format"
             );
         }
 
-        var descriptor = parsed.value().orElseThrow();
+        var descriptor = parsed.value();
         var prepared = inventory.prepareExchange(
                 context.player(),
                 List.of(),
@@ -100,11 +100,11 @@ public final class FreeSignHandler implements SynchronousSignHandler {
                 ))
         );
 
-        if (!prepared.successful() || prepared.value().isEmpty()) {
+        if (!prepared.successful() || prepared.value() == null) {
             return SignUseResult.failure("service.sign.free-inventory-full");
         }
 
-        var committed = prepared.value().orElseThrow().commit();
+        var committed = prepared.value().commit();
         if (!committed.successful()) {
             return SignUseResult.failure("service.sign.free-inventory-full");
         }

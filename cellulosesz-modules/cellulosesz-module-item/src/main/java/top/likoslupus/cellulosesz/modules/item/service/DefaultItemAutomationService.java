@@ -1,27 +1,24 @@
 package top.likoslupus.cellulosesz.modules.item.service;
 
-import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
-import top.likoslupus.cellulosesz.api.command.service.PlayerChatDispatchService;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
-import top.likoslupus.cellulosesz.api.item.ItemAutomationService;
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
-import top.likoslupus.cellulosesz.api.validation.TextChecks;
+import top.likoslupus.cellulosesz.api.validation.Checks;
+import top.likoslupus.cellulosesz.common.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.common.command.service.PlayerChatDispatchService;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchRequest;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemConfig;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNoControlCharacters;
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.*;
 
 import static java.util.Objects.requireNonNull;
 
@@ -60,19 +57,21 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     @Override
     public List<String> powerTool(UUID uuid, String itemId) {
-        return users.cached(uuid)
-                .map(user -> user.state().powerToolCommands().getOrDefault(
+        var user = users.cached(uuid);
+        return user == null
+                ? List.of()
+                : user.state().powerToolCommands().getOrDefault(
                         normalize(itemId),
                         List.of()
-                ))
-                .orElseGet(List::of);
+                );
     }
 
     @Override
     public Map<String, List<String>> powerTools(UUID uuid) {
-        return users.cached(uuid)
-                .map(user -> user.state().powerToolCommands())
-                .orElseGet(Map::of);
+        var user = users.cached(uuid);
+        return user == null
+                ? Map.of()
+                : user.state().powerToolCommands();
     }
 
     @Override
@@ -190,11 +189,11 @@ public final class DefaultItemAutomationService implements ItemAutomationService
         }
 
         var held = items.heldItemId(player);
-        if (!held.successful() || held.value().isEmpty()) {
+        if (!held.successful() || held.value() == null) {
             return false;
         }
 
-        var commands = powerTool(player.uuid(), held.value().orElseThrow());
+        var commands = powerTool(player.uuid(), held.value());
         if (commands.isEmpty()) {
             return false;
         }
@@ -231,9 +230,8 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     @Override
     public boolean powerToolsEnabled(UUID uuid) {
-        return users.cached(uuid)
-                .map(user -> user.preferences().powerToolsEnabled())
-                .orElse(true);
+        var user = users.cached(uuid);
+        return user == null || user.preferences().powerToolsEnabled();
     }
 
     @Override
@@ -257,16 +255,16 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     @Override
     public boolean unlimited(UUID uuid, String itemId) {
-        return users.cached(uuid)
-                .map(user -> user.state().unlimitedItems().contains(normalize(itemId)))
-                .orElse(false);
+        var user = users.cached(uuid);
+        return user != null && user.state().unlimitedItems().contains(normalize(itemId));
     }
 
     @Override
     public Set<String> unlimitedItems(UUID uuid) {
-        return users.cached(uuid)
-                .map(user -> user.state().unlimitedItems())
-                .orElseGet(Set::of);
+        var user = users.cached(uuid);
+        return user == null
+                ? Set.of()
+                : user.state().unlimitedItems();
     }
 
     @Override
@@ -332,7 +330,7 @@ public final class DefaultItemAutomationService implements ItemAutomationService
 
     private String normalizeCommand(String command) {
         var normalized = requireNonBlank(command, "command").trim();
-        normalized = TextChecks.requireMaxLength(normalized, 512, "command");
+        normalized = Checks.requireMaxLength(normalized, 512, "command");
         requireNoControlCharacters(normalized, "command");
 
         if (normalized.startsWith("c:")) {

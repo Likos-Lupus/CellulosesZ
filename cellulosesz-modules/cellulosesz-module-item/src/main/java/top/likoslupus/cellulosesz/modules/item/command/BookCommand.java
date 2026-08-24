@@ -6,14 +6,14 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.item.BookAction;
-import top.likoslupus.cellulosesz.api.item.BookRequest;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.validation.TextChecks;
+import top.likoslupus.cellulosesz.api.validation.Checks;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.item.BookAction;
+import top.likoslupus.cellulosesz.common.item.BookRequest;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
 import java.util.List;
@@ -60,8 +60,8 @@ public final class BookCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 BookAction.SET_TITLE,
-                                                TextChecks.requireMaxLength(
-                                                        TextChecks.requireNoControlCharacters(
+                                                Checks.requireMaxLength(
+                                                        Checks.requireNoControlCharacters(
                                                                 StringArgumentType.getString(
                                                                         command,
                                                                         "title"
@@ -88,8 +88,8 @@ public final class BookCommand implements CommandContributor {
                                                 command,
                                                 descriptor,
                                                 BookAction.SET_AUTHOR,
-                                                TextChecks.requireMaxLength(
-                                                        TextChecks.requireNoControlCharacters(
+                                                Checks.requireMaxLength(
+                                                        Checks.requireNoControlCharacters(
                                                                 StringArgumentType.getString(
                                                                         command,
                                                                         "author"
@@ -136,11 +136,11 @@ public final class BookCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var details = inventory.heldBook(currentPlayer);
 
-                    if (!details.successful() || details.value().isEmpty()) {
+                    if (!details.successful() || details.value() == null) {
                         return details;
                     }
 
-                    var book = details.value().orElseThrow();
+                    var book = details.value();
 
                     if (book.written()
                             && book.author().isPresent()

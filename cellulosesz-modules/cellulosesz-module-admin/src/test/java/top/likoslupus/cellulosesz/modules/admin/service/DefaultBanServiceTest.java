@@ -1,15 +1,14 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminStatus;
-import top.likoslupus.cellulosesz.api.admin.Expiration;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
-import top.likoslupus.cellulosesz.api.platform.admin.*;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.PlayerConnectionService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.common.admin.*;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
 
 import java.lang.reflect.Proxy;
 import java.net.InetAddress;

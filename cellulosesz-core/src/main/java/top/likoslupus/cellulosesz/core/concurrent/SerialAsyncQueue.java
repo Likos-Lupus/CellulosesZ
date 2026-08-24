@@ -3,7 +3,7 @@ package top.likoslupus.cellulosesz.core.concurrent;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
-import static top.likoslupus.cellulosesz.api.validation.NumericChecks.requirePositive;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requirePositive;
 
 import static java.util.Objects.requireNonNull;
 
@@ -29,8 +29,8 @@ public final class SerialAsyncQueue implements AutoCloseable {
     ) {
         requireNonNull(operation, "operation");
         final CompletableFuture<Void> predecessor;
-        final CompletableFuture<Void> start = new CompletableFuture<>();
-        final CompletableFuture<T> result = new CompletableFuture<>();
+        final var start = new CompletableFuture<Void>();
+        final var result = new CompletableFuture<T>();
 
         synchronized (lock) {
             if (!accepting) {

@@ -5,7 +5,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.tree.CommandNode;
 import net.minecraft.commands.CommandSourceStack;
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.ArrayList;
 import java.util.List;

@@ -6,14 +6,14 @@ import net.minecraft.util.context.ContextMap;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.*;
 import net.minecraft.world.item.crafting.display.SlotDisplayContext;
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.recipe.CompressionRule;
-import top.likoslupus.cellulosesz.api.recipe.RecipeDescription;
-import top.likoslupus.cellulosesz.api.recipe.RecipeIngredient;
-import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.common.recipe.CompressionRule;
+import top.likoslupus.cellulosesz.common.recipe.RecipeDescription;
+import top.likoslupus.cellulosesz.common.recipe.RecipeIngredient;
+import top.likoslupus.cellulosesz.common.recipe.RecipePlatformService;
 
 import java.util.*;
 
@@ -61,14 +61,14 @@ final class FabricRecipeOperations implements RecipePlatformService {
             return PlatformResult.failure(validity.status(), validity.detail());
         }
 
-        if (!validity.value().orElse(false)) {
+        if (!Boolean.TRUE.equals(validity.value())) {
             return PlatformResult.failure(PlatformOperationStatus.INVALID_ARGUMENT, "unknown item");
         }
 
         try {
             var descriptions = allDescriptions(ingredientCandidateLimit).stream()
                     .filter(description -> description.outputItem().equals(normalized))
-                    .sorted(java.util.Comparator.comparing(RecipeDescription::id))
+                    .sorted(Comparator.comparing(RecipeDescription::id))
                     .toList();
             return PlatformResult.success(descriptions);
         } catch (RuntimeException failure) {

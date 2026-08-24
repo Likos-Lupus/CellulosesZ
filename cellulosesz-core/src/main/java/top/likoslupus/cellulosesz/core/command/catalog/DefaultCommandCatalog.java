@@ -1,8 +1,5 @@
 package top.likoslupus.cellulosesz.core.command.catalog;
 
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalog;
-import top.likoslupus.cellulosesz.api.command.catalog.CommandCatalogEntry;
-
 import java.util.Collection;
 import java.util.List;
 

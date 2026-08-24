@@ -19,7 +19,9 @@ public abstract class ServerPlayerDisplayNameMixin {
     private void cellulosesz$tabDisplayName(CallbackInfoReturnable<Component> callback) {
         var self = (ServerPlayer) (Object) this;
         var displayName = FabricDisplayNameBridge.displayName(self.getUUID());
-        if (displayName != null) callback.setReturnValue(displayName);
+        if (displayName != null) {
+            callback.setReturnValue(displayName);
+        }
     }
 
 }

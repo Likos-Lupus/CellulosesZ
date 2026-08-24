@@ -4,11 +4,11 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware
 import top.likoslupus.cellulosesz.core.command.execution.DefaultCommandExecutionPipeline
 import top.likoslupus.cellulosesz.core.config.JacksonConfigRegistry
 import top.likoslupus.cellulosesz.core.event.SimpleEventRegistry
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.scheduler.DefaultScheduler
 import top.likoslupus.cellulosesz.core.service.DefaultServiceRegistry
 import java.nio.file.Path

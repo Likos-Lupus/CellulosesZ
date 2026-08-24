@@ -9,12 +9,12 @@ import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.teleport.TeleportRequestService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
 import top.likoslupus.cellulosesz.modules.teleport.application.TeleportRequestCommandService;
 import top.likoslupus.cellulosesz.modules.teleport.command.argument.TeleportRequestSelectors;
+import top.likoslupus.cellulosesz.modules.teleport.service.TeleportRequestService;
 
 import java.util.List;
 import java.util.Optional;
@@ -61,7 +61,9 @@ public final class TpaCancelCommand implements CommandContributor {
                                         .map(player -> requests.outgoingFor(player.uuid()).stream()
                                                 .flatMap(request -> Stream.of(
                                                         request.id().toString(),
-                                                        players.onlinePlayer(request.target())
+                                                        Optional.ofNullable(
+                                                                        players.onlinePlayer(request.target())
+                                                                )
                                                                 .map(CellPlayer::name)
                                                                 .orElse("")
                                                 ))

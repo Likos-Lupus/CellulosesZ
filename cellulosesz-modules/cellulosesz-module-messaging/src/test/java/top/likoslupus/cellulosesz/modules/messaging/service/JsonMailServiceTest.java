@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.modules.messaging.service;
 
 import org.junit.jupiter.api.Test;
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
 
 import java.nio.file.Path;

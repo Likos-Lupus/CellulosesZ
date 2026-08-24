@@ -18,7 +18,8 @@ import net.minecraft.world.item.component.ResolvableProfile;
 import net.minecraft.world.item.component.WritableBookContent;
 import net.minecraft.world.item.component.WrittenBookContent;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
-import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.item.InventoryMutation;
+import top.likoslupus.cellulosesz.api.item.ItemDescriptor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
@@ -125,7 +126,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
             }
 
             var views = new ArrayList<InventorySlotView>();
-            for (var snapshot : snapshots.value().orElseThrow()) {
+            for (var snapshot : snapshots.value()) {
                 var descriptor = store.describe(snapshot);
                 if (!descriptor.successful()) {
                     return PlatformResult.failure(descriptor.status(), descriptor.detail());
@@ -138,9 +139,9 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
                 views.add(new InventorySlotView(
                         snapshot,
-                        descriptor.value().orElseThrow(),
+                        descriptor.value(),
                         slotKind(snapshot.slot()),
-                        plain.value().orElseThrow()
+                        plain.value()
                 ));
             }
 
@@ -156,7 +157,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
                 return PlatformResult.failure(snapshot.status(), snapshot.detail());
             }
 
-            var value = snapshot.value().orElseThrow();
+            var value = snapshot.value();
             var descriptor = store.describe(value);
             if (!descriptor.successful()) {
                 return PlatformResult.failure(descriptor.status(), descriptor.detail());
@@ -169,9 +170,9 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
             return PlatformResult.success(new InventorySlotView(
                     value,
-                    descriptor.value().orElseThrow(),
+                    descriptor.value(),
                     InventorySlotKind.MAIN,
-                    plain.value().orElseThrow()
+                    plain.value()
             ));
         });
     }
@@ -392,7 +393,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
             nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, replacement.orElseThrow());
             var after = details(replacement.orElseThrow());
-            if (!after.successful() || after.value().isEmpty()) {
+            if (!after.successful() || after.value() == null) {
                 nativePlayer.setItemInHand(InteractionHand.MAIN_HAND, original);
                 return PlatformResult.failure(
                         PlatformOperationStatus.ROLLBACK_FAILED,
@@ -402,7 +403,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
 
             return PlatformResult.success(new BookMutationResult(
                     request.action(),
-                    after.value().orElseThrow()
+                    after.value()
             ));
         });
     }
@@ -485,7 +486,7 @@ public final class MinecraftInventoryOperations implements InventoryPlatformServ
             return PlatformResult.failure(currentSnapshot.status(), currentSnapshot.detail());
         }
 
-        var currentSnapshotValue = currentSnapshot.value().orElseThrow();
+        var currentSnapshotValue = currentSnapshot.value();
         if (currentSnapshotValue.slot() != expected.slot()
                 || !currentSnapshotValue.stack().equals(expected.stack())
         ) {

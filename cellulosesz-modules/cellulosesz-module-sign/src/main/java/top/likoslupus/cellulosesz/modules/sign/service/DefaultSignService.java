@@ -1,17 +1,18 @@
 package top.likoslupus.cellulosesz.modules.sign.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.sign.*;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.CellLocation;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.sign.SignConfig;
 import top.likoslupus.cellulosesz.modules.sign.data.SignDocument;
 import top.likoslupus.cellulosesz.modules.sign.data.StoredSign;
+import top.likoslupus.cellulosesz.modules.sign.domain.*;
+import top.likoslupus.cellulosesz.modules.sign.handler.CellSignHandler;
 
 import java.nio.file.Path;
 import java.text.Normalizer;

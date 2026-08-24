@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.core.config;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.math.BigDecimal;
 import java.nio.file.Path;

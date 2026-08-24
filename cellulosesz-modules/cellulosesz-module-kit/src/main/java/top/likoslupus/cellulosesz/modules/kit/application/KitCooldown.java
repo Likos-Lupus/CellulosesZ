@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.kit.application;
 
-import top.likoslupus.cellulosesz.api.validation.NumericChecks;
-
+import top.likoslupus.cellulosesz.api.validation.Checks;
 
 public sealed interface KitCooldown permits KitCooldown.Once, KitCooldown.Seconds {
 
@@ -12,7 +11,7 @@ public sealed interface KitCooldown permits KitCooldown.Once, KitCooldown.Second
     record Seconds(long value) implements KitCooldown {
 
         public Seconds {
-            NumericChecks.requireNonNegative(value, "value");
+            Checks.requireNonNegative(value, "value");
         }
 
     }

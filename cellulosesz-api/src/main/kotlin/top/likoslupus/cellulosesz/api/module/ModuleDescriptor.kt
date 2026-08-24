@@ -1,20 +1,20 @@
 package top.likoslupus.cellulosesz.api.module
 
-import top.likoslupus.cellulosesz.api.validation.TextChecks
+import top.likoslupus.cellulosesz.api.validation.requireNonBlank
 
-data class ModuleDescriptor(
-    val key: ModuleKey,
-    val name: String,
-    val description: String,
-    val phase: ModulePhase = ModulePhase.FEATURE,
-    val priority: Int = 0,
-    val requires: Set<ModuleKey> = emptySet(),
-    val optional: Set<ModuleKey> = emptySet(),
-    val enabledByDefault: Boolean = true,
+public data class ModuleDescriptor(
+    public val key: ModuleKey,
+    public val name: String,
+    public val description: String,
+    public val phase: ModulePhase = ModulePhase.FEATURE,
+    public val priority: Int = 0,
+    public val requires: Set<ModuleKey> = emptySet(),
+    public val optional: Set<ModuleKey> = emptySet(),
+    public val enabledByDefault: Boolean = true,
 ) {
 
     init {
-        TextChecks.requireNonBlank(name, "name")
+        name.requireNonBlank { "name" }
         require(key !in requires) {
             "Module '$key' cannot require itself"
         }
@@ -27,6 +27,6 @@ data class ModuleDescriptor(
         }
     }
 
-    fun id(): String = key.value
+    public fun id(): String = key.value
 
 }

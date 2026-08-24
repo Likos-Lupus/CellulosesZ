@@ -1,15 +1,14 @@
 package top.likoslupus.cellulosesz.core.module
 
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewareRegistry
-import top.likoslupus.cellulosesz.api.config.ConfigRegistry
 import top.likoslupus.cellulosesz.api.event.EventRegistry
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger
-import top.likoslupus.cellulosesz.api.module.ModuleContext
 import top.likoslupus.cellulosesz.api.module.ModuleKey
-import top.likoslupus.cellulosesz.api.scheduler.Scheduler
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewareRegistry
+import top.likoslupus.cellulosesz.core.config.ConfigRegistry
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime
+import top.likoslupus.cellulosesz.core.scheduler.Scheduler
 import java.nio.file.Path
 
 class DefaultModuleContext(

@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.fabric.module
 
-import top.likoslupus.cellulosesz.api.module.ModuleCatalog
 import top.likoslupus.cellulosesz.api.module.ModuleKeys
-import top.likoslupus.cellulosesz.api.module.moduleCatalog
+import top.likoslupus.cellulosesz.core.module.ModuleCatalog
+import top.likoslupus.cellulosesz.core.module.moduleCatalog
 import top.likoslupus.cellulosesz.modules.admin.AdminModule
 import top.likoslupus.cellulosesz.modules.command.CommandModule
 import top.likoslupus.cellulosesz.modules.economy.EconomyModule

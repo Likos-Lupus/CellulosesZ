@@ -1,12 +1,10 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.entity.EntityPlatformService;
-import top.likoslupus.cellulosesz.api.entity.SpawnMobRequest;
-import top.likoslupus.cellulosesz.api.entity.SpawnMobResult;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
-import top.likoslupus.cellulosesz.api.sign.SynchronousSignHandler;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.entity.EntityPlatformService;
+import top.likoslupus.cellulosesz.common.entity.SpawnMobRequest;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import static java.util.Objects.requireNonNull;
 
@@ -50,11 +48,12 @@ public final class SpawnMobSignHandler implements SynchronousSignHandler {
                 count,
                 context.player()
         ));
-        var spawned = result.value()
-                .map(SpawnMobResult::spawned)
-                .orElse(0);
+        var spawnValue = result.value();
+        var spawned = spawnValue == null
+                ? 0
+                : spawnValue.spawned();
 
-        return result.successful() && spawned.equals(count)
+        return result.successful() && spawned == count
                 ?
                 SignUseResult.success(
                         "service.sign.spawnmob-success",

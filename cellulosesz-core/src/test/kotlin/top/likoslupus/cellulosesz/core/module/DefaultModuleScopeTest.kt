@@ -4,12 +4,12 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.api.service.Registration
 import top.likoslupus.cellulosesz.core.lifecycle.DrainableResource
 import top.likoslupus.cellulosesz.core.lifecycle.LifecycleClosedException
 import top.likoslupus.cellulosesz.core.lifecycle.SuspendCloseable
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.runtime.CellulosesRuntime
 import java.util.*
 import java.util.concurrent.CompletableFuture

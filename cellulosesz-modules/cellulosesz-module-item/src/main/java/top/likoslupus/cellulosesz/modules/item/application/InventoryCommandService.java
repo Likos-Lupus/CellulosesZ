@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.modules.item.application;
 
-import top.likoslupus.cellulosesz.api.item.BookRequest;
-import top.likoslupus.cellulosesz.api.item.HatAction;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.item.SkullRequest;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
+import top.likoslupus.cellulosesz.common.item.BookRequest;
+import top.likoslupus.cellulosesz.common.item.HatAction;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.common.item.SkullRequest;
 
 import java.util.concurrent.CompletableFuture;
 

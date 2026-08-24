@@ -12,10 +12,10 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.modules.user.UserConfig;
 
 import java.util.Locale;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
 
@@ -84,7 +84,7 @@ public final class DefaultDisplayNameService implements DisplayNameService {
                             .trim()
                             .toLowerCase(Locale.ROOT))
                     .filter(value -> !value.isEmpty())
-                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+                    .collect(Collectors.toUnmodifiableSet());
 
             return new Settings(
                     requireNonNull(display.nicknamePrefix, "displayName.nicknamePrefix"),
@@ -109,9 +109,9 @@ public final class DefaultDisplayNameService implements DisplayNameService {
     @Override
     public RichText displayName(UUID uuid, String fallbackName) {
         var online = players.onlinePlayer(uuid);
-        return online
-                .map(player -> displayName(uuid, fallbackName, player))
-                .orElseGet(() -> displayName(uuid, fallbackName, null));
+        return online != null
+                ? displayName(uuid, fallbackName, online)
+                : displayName(uuid, fallbackName, null);
     }
 
     @Override
@@ -157,15 +157,16 @@ public final class DefaultDisplayNameService implements DisplayNameService {
             String fallbackName,
             @Nullable CellPlayer online
     ) {
-        var nickname = users.cached(uuid)
-                .flatMap(user -> Optional.ofNullable(user.state().nickname()))
-                .filter(value -> !value.isBlank());
-        if (nickname.isEmpty()) {
+        var user = users.cached(uuid);
+        var nickname = user == null
+                ? null
+                : user.state().nickname();
+        if (nickname == null || nickname.isBlank()) {
             return RichText.plain(fallbackName);
         }
 
         var current = settings;
-        var value = nickname.orElseThrow();
+        var value = nickname;
         var safe = online == null
                 ? value
                 : sanitizeNickname(online, value);

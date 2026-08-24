@@ -6,11 +6,11 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.application.InventoryCommandService;
 
@@ -99,11 +99,11 @@ public final class MoreCommand implements CommandContributor {
                     var currentPlayer = player.orElseThrow();
                     var held = inventory.heldItemDetails(currentPlayer);
 
-                    if (!held.successful() || held.value().isEmpty()) {
+                    if (!held.successful() || held.value() == null) {
                         return held;
                     }
 
-                    var details = held.value().orElseThrow();
+                    var details = held.value();
 
                     return service.more(
                             currentPlayer,

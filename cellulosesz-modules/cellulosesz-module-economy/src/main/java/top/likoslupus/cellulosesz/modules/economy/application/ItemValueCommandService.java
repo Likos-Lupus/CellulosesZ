@@ -1,15 +1,19 @@
 package top.likoslupus.cellulosesz.modules.economy.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
-import top.likoslupus.cellulosesz.api.economy.WorthService;
-import top.likoslupus.cellulosesz.api.item.*;
+import top.likoslupus.cellulosesz.api.item.InventoryMutation;
+import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.common.item.InventorySlotView;
+import top.likoslupus.cellulosesz.common.item.InventoryStackSelection;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.modules.economy.service.WorthService;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -54,14 +58,16 @@ public final class ItemValueCommandService {
         return serverThread.submit(() -> switch (selector) {
             case HAND -> {
                 var held = inventories.heldSlot(player);
-                yield held.successful()
-                        ? buildWorth(List.of(held.value().orElseThrow()))
+                var heldValue = held.value();
+                yield held.successful() && heldValue != null
+                        ? buildWorth(List.of(heldValue))
                         : EconomyCommandResult.failure("commands.economy.sell.empty-hand");
             }
             case INVENTORY -> {
                 var snapshot = inventories.inventorySlots(player);
-                yield snapshot.successful()
-                        ? buildWorth(snapshot.value().orElseThrow())
+                var snapshotValue = snapshot.value();
+                yield snapshot.successful() && snapshotValue != null
+                        ? buildWorth(snapshotValue)
                         : EconomyCommandResult.failure("commands.economy.sell.inventory-changed");
             }
         });
@@ -150,7 +156,7 @@ public final class ItemValueCommandService {
             return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
-        var canonical = parsed.value().orElseThrow().normalizedItem();
+        var canonical = parsed.value().normalizedItem();
         var unit = worths.worth(canonical);
         if (unit.isEmpty()) {
             return CompletableFuture.completedFuture(EconomyCommandResult.failure(
@@ -265,7 +271,7 @@ public final class ItemValueCommandService {
             ));
         }
 
-        var all = snapshot.value().orElseThrow();
+        var all = snapshot.value();
         final List<InventorySlotView> candidates;
 
         switch (selector) {
@@ -277,7 +283,7 @@ public final class ItemValueCommandService {
                     ));
                 }
 
-                candidates = List.of(held.value().orElseThrow());
+                candidates = List.of(held.value());
             }
             case ITEM -> {
                 var input = itemInput.orElseThrow();
@@ -286,7 +292,7 @@ public final class ItemValueCommandService {
                     return SalePreparation.failure(itemParseFailure(parsed));
                 }
 
-                var canonical = parsed.value().orElseThrow().normalizedItem();
+                var canonical = parsed.value().normalizedItem();
 
                 candidates = all.stream()
                         .filter(view ->
@@ -363,13 +369,13 @@ public final class ItemValueCommandService {
         }
 
         var prepared = inventories.prepareRemoval(player, selections);
-        if (!prepared.successful() || prepared.value().isEmpty()) {
+        if (!prepared.successful() || prepared.value() == null) {
             return SalePreparation.failure(EconomyCommandResult.failure(
                     "commands.economy.sell.inventory-changed"
             ));
         }
 
-        var mutation = prepared.value().orElseThrow();
+        var mutation = prepared.value();
         var committed = mutation.commit();
         if (!committed.successful()) {
             return SalePreparation.failure(EconomyCommandResult.failed(
@@ -387,7 +393,7 @@ public final class ItemValueCommandService {
             return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
-        var canonical = parsed.value().orElseThrow().normalizedItem();
+        var canonical = parsed.value().normalizedItem();
         return worths
                 .setWorth(canonical, amount)
                 .thenApply(_ -> EconomyCommandResult.success(
@@ -405,7 +411,7 @@ public final class ItemValueCommandService {
             return CompletableFuture.completedFuture(itemParseFailure(parsed));
         }
 
-        var canonical = parsed.value().orElseThrow().normalizedItem();
+        var canonical = parsed.value().normalizedItem();
         return worths
                 .removeWorth(canonical)
                 .thenApply(removed ->

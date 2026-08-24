@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.modules.teleport.service;
 
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldResolution;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
 import java.util.random.RandomGenerator;
@@ -35,11 +37,11 @@ public final class DefaultRandomTeleportService implements RandomTeleportService
         requireNonNull(settings, "settings");
 
         var resolution = worlds.resolve(world);
-        if (resolution.worldId().isEmpty()) {
+        if (!(resolution instanceof WorldResolution.Resolved resolved)) {
             return RandomTeleportResult.failure(RandomTeleportStatus.WORLD_NOT_FOUND);
         }
 
-        var worldId = resolution.worldId().orElseThrow();
+        var worldId = resolved.worldId();
         var minSquared = (double) settings.minRadius() * settings.minRadius();
         var maxSquared = (double) settings.maxRadius() * settings.maxRadius();
 
@@ -55,9 +57,10 @@ public final class DefaultRandomTeleportService implements RandomTeleportService
                     0.0F
             );
             var found = operations.highestSafeLocation(requested);
+            var safe = found.value();
 
-            if (found.successful() && found.value().isPresent()) {
-                return RandomTeleportResult.success(found.value().orElseThrow());
+            if (found.successful() && safe != null) {
+                return RandomTeleportResult.success(safe);
             }
         }
 

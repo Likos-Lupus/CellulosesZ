@@ -1,28 +1,28 @@
 package top.likoslupus.cellulosesz.modules.kit.service;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
 import top.likoslupus.cellulosesz.api.economy.TransactionResult;
-import top.likoslupus.cellulosesz.api.item.InventoryItemSnapshot;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.kit.KitClaimResult;
 import top.likoslupus.cellulosesz.api.kit.KitDefinition;
 import top.likoslupus.cellulosesz.api.kit.KitItem;
 import top.likoslupus.cellulosesz.api.kit.KitService;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.module.PreparedModuleReload;
-import top.likoslupus.cellulosesz.api.module.PreparedReloads;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.CellUser;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.common.item.InventoryItemSnapshot;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.core.concurrent.KeyedSerialAsyncQueue;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.module.PreparedModuleReload;
+import top.likoslupus.cellulosesz.core.module.PreparedReloads;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.kit.KitConfig;
 import top.likoslupus.cellulosesz.modules.kit.persistence.KitDocument;
 import top.likoslupus.cellulosesz.modules.kit.persistence.KitMapper;
@@ -160,13 +160,13 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
             throw new IllegalArgumentException("Invalid or non-normalized kit id: " + kit.id());
         }
 
-        kit.permission().ifPresent(permission -> {
-            if (!permission.startsWith("cellulosesz.")) {
+        if (kit.permission() != null) {
+            if (!kit.permission().startsWith("cellulosesz.")) {
                 throw new IllegalArgumentException(
                         "Kit permission must use the cellulosesz.* namespace"
                 );
             }
-        });
+        }
 
         var cooldownSeconds = kit.cooldown().getSeconds();
         if (cooldownSeconds > Long.MAX_VALUE / 1000L) {
@@ -191,7 +191,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
         return new KitDefinition(
                 "starter",
                 "Starter",
-                Optional.of("cellulosesz.kit.starter"),
+                "cellulosesz.kit.starter",
                 Duration.ofSeconds(86_400L),
                 BigDecimal.ZERO,
                 List.of(
@@ -215,8 +215,8 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
     }
 
     @Override
-    public synchronized Optional<KitDefinition> kit(String id) {
-        return Optional.ofNullable(state.kits().get(key(id)));
+    public synchronized KitDefinition kit(String id) {
+        return state.kits().get(key(id));
     }
 
     @Override
@@ -371,7 +371,7 @@ public final class DefaultKitService implements KitService, AsyncInitializable, 
                                                 prepared.detail()
                                         );
                                     }
-                                    return prepared.value().orElseThrow().commit();
+                                    return prepared.value().commit();
                                 })
                                 .thenCompose(grantResult -> {
                                     if (grantResult.successful()) {

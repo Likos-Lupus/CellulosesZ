@@ -1,15 +1,14 @@
 package top.likoslupus.cellulosesz.modules.sign.handler;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.economy.EconomyService;
 import top.likoslupus.cellulosesz.api.economy.TransactionCause;
-import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
 import top.likoslupus.cellulosesz.api.item.ItemService;
-import top.likoslupus.cellulosesz.api.sign.CellSignHandler;
-import top.likoslupus.cellulosesz.api.sign.SignUseContext;
-import top.likoslupus.cellulosesz.api.sign.SignUseResult;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.item.InventoryItemRequest;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseContext;
+import top.likoslupus.cellulosesz.modules.sign.domain.SignUseResult;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -60,7 +59,7 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
         var descriptorResult = item(context);
         var price = price(context);
         if (!descriptorResult.successful()
-                || descriptorResult.value().isEmpty()
+                || descriptorResult.value() == null
                 || price.isEmpty()
         ) {
             return CompletableFuture.completedFuture(
@@ -70,7 +69,7 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
                     )
             );
         }
-        var descriptor = descriptorResult.value().orElseThrow();
+        var descriptor = descriptorResult.value();
         var prepared = inventory.prepareExchange(
                 context.player(),
                 List.of(),
@@ -79,12 +78,12 @@ public final class BuySignHandler extends AbstractTradeSignHandler implements Ce
                         descriptor.count()
                 ))
         );
-        if (!prepared.successful() || prepared.value().isEmpty()) {
+        if (!prepared.successful() || prepared.value() == null) {
             return CompletableFuture.completedFuture(SignUseResult.failure(
                     "service.sign.buy-inventory-full"));
         }
 
-        var mutation = prepared.value().orElseThrow();
+        var mutation = prepared.value();
         var cause = TransactionCause.command(
                 context.player().name(),
                 "buy sign " + descriptor.normalizedItem()

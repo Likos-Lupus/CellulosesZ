@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.modules.messaging.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.messaging.MailMessage;
 import top.likoslupus.cellulosesz.api.messaging.MailService;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
@@ -11,9 +9,11 @@ import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.user.UserService;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.modules.messaging.service.PrivateMessageService;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -185,7 +185,7 @@ public final class MailCommandService {
 
         return resolver.resolve(targetToken, sender.orElse(null))
                 .thenCompose(target -> {
-                    if (target.optionalUuid().isEmpty()) {
+                    if (target.uuid() == null) {
                         return CompletableFuture.completedFuture(Result.failure(LocalizedMessage.of(
                                 "commands.common.player-not-found",
                                 MessageArguments.builder().add(targetToken).build()
@@ -218,7 +218,7 @@ public final class MailCommandService {
                     var senderName = sender
                             .map(displayNames::plainDisplayName)
                             .orElse("console");
-                    var recipient = target.optionalUuid().orElseThrow();
+                    var recipient = target.uuid();
                     var message = new MailMessage(
                             UUID.randomUUID(),
                             sender.map(CellPlayer::uuid).orElse(null),
@@ -271,14 +271,16 @@ public final class MailCommandService {
     private CompletableFuture<Void> notifyOnline(UUID recipient) {
         return serverThread
                 .submit(() -> {
-                    players.onlinePlayer(recipient)
-                            .ifPresent(player -> audiences.send(
-                                    player,
-                                    renderer.render(
-                                            audiences.locale(player),
-                                            "messaging.mail-received"
-                                    )
-                            ));
+                    var player = players.onlinePlayer(recipient);
+                    if (player != null) {
+                        audiences.send(
+                                player,
+                                renderer.render(
+                                        audiences.locale(player),
+                                        "messaging.mail-received"
+                                )
+                        );
+                    }
                     return Boolean.TRUE;
                 })
                 .thenAccept(_ -> {

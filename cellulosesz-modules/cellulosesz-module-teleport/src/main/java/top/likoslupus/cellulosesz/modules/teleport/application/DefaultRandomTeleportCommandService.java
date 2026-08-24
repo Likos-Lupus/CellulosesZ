@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.modules.teleport.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.teleport.*;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
 
 import java.util.Optional;
@@ -49,7 +49,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
             Optional<Coordinates> coordinates
     ) {
         var resolved = worlds.resolveLoadedWorld(world);
-        if (resolved.isEmpty()) {
+        if (resolved == null) {
             return completed(TeleportCommandResult.failure(
                     NOT_FOUND,
                     "commands.teleport.world-not-found"
@@ -57,7 +57,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
         }
 
         if (coordinates.isPresent()) {
-            return saveCenter(resolved.orElseThrow(), coordinates.orElseThrow());
+            return saveCenter(resolved, coordinates.orElseThrow());
         }
 
         if (actor.isEmpty()) {
@@ -70,7 +70,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
         return serverThread
                 .submit(() -> locations.currentLocation(actor.orElseThrow()))
                 .thenCompose(location -> saveCenter(
-                        resolved.orElseThrow(),
+                        resolved,
                         new Coordinates(location.x(), location.z())
                 ));
     }
@@ -105,7 +105,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                     );
                 })
                 .thenCompose(value -> {
-                    if (!value.result().success() || value.result().location().isEmpty()) {
+                    if (!value.result().success() || value.result().location() == null) {
                         return completed(TeleportCommandResult.failure(
                                 PLATFORM_FAILURE,
                                 value.result().status() == RandomTeleportStatus.WORLD_NOT_FOUND
@@ -117,7 +117,7 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
                     return teleports
                             .teleport(
                                     player,
-                                    value.result().location().orElseThrow(),
+                                    value.result().location(),
                                     TeleportOptions
                                             .defaults()
                                             .withWarmup(runtimeSettings.warmupSeconds())
@@ -163,21 +163,21 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
             boolean minimum
     ) {
         var resolved = worlds.resolveLoadedWorld(world);
-        if (resolved.isEmpty()) {
+        if (resolved == null) {
             return completed(TeleportCommandResult.failure(
                     NOT_FOUND,
                     "commands.teleport.world-not-found"
             ));
         }
 
-        var current = settings.settings(resolved.orElseThrow());
+        var current = settings.settings(resolved);
         if (radius.isEmpty()) {
             return completed(TeleportCommandResult.success(
                     minimum
                             ? "commands.teleport.set-tpr-command.reply.minrange"
                             : "commands.teleport.set-tpr-command.reply.maxrange",
                     MessageArguments.builder()
-                            .add(resolved.orElseThrow())
+                            .add(resolved)
                             .add(
                                     minimum
                                             ? current.minRadius()
@@ -198,15 +198,15 @@ public final class DefaultRandomTeleportCommandService implements RandomTeleport
         }
 
         var mutation = minimum
-                ? settings.setMinimumRadius(resolved.orElseThrow(), value)
-                : settings.setMaximumRadius(resolved.orElseThrow(), value);
+                ? settings.setMinimumRadius(resolved, value)
+                : settings.setMaximumRadius(resolved, value);
         return mutation
                 .thenApply(_ -> TeleportCommandResult.success(
                         minimum
                                 ? "commands.teleport.set-tpr-command.reply.minrange"
                                 : "commands.teleport.set-tpr-command.reply.maxrange",
                         MessageArguments.builder()
-                                .add(resolved.orElseThrow())
+                                .add(resolved)
                                 .add(value)
                                 .build()
                 ))

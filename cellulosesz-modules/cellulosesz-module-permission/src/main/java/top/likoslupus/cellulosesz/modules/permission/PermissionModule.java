@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.modules.permission;
 
-import top.likoslupus.cellulosesz.api.module.*;
+import top.likoslupus.cellulosesz.core.module.*;
 import top.likoslupus.cellulosesz.core.permission.DefaultPermissionService;
 import top.likoslupus.cellulosesz.modules.permission.config.PermissionConfig;
 

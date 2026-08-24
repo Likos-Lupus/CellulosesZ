@@ -1,13 +1,15 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.*;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.admin.Expiration;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.*;
+import top.likoslupus.cellulosesz.modules.admin.service.JailService;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -79,7 +81,7 @@ public final class DefaultJailCommandService implements JailCommandService {
             Optional<Duration> duration,
             String reason
     ) {
-        var target = players.onlinePlayer(player);
+        var target = Optional.ofNullable(players.onlinePlayer(player));
         if (target.isEmpty()) {
             return completed(AdminResult.failure(
                     AdminStatus.NOT_FOUND,
@@ -117,10 +119,10 @@ public final class DefaultJailCommandService implements JailCommandService {
         return resolver.resolve(
                         player,
                         actor.uuid()
-                                .flatMap(players::onlinePlayer)
+                                .map(players::onlinePlayer)
                                 .orElse(null)
                 )
-                .thenCompose(value -> value.optionalUuid().isEmpty()
+                .thenCompose(value -> value.uuid() == null
                         ?
                         completed(AdminResult.failure(
                                 AdminStatus.NOT_FOUND,
@@ -128,7 +130,7 @@ public final class DefaultJailCommandService implements JailCommandService {
                                 MessageArguments.builder().add(player).build()
                         ))
                         : jails.unjail(
-                                value.optionalUuid().orElseThrow(),
+                                value.uuid(),
                                 value.name(),
                                 actor
                         ));

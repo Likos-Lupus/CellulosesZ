@@ -1,8 +1,6 @@
 package top.likoslupus.cellulosesz.core.module;
 
-import top.likoslupus.cellulosesz.api.config.ConfigSnapshot;
-import top.likoslupus.cellulosesz.api.module.ModuleContext;
-import top.likoslupus.cellulosesz.api.module.ModuleReloadContext;
+import top.likoslupus.cellulosesz.core.config.ConfigSnapshot;
 
 import java.util.function.Predicate;
 

@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.common.player;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
-import top.likoslupus.cellulosesz.api.text.ClientLocaleService;
 import top.likoslupus.cellulosesz.common.lifecycle.MinecraftServerHandle;
+import top.likoslupus.cellulosesz.core.text.ClientLocaleService;
 
 import static java.util.Objects.requireNonNull;
 

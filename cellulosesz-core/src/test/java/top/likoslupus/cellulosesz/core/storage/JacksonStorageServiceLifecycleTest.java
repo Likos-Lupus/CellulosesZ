@@ -2,13 +2,12 @@ package top.likoslupus.cellulosesz.core.storage;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.Queue;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.*;

@@ -2,21 +2,21 @@ package top.likoslupus.cellulosesz.fabric.lifecycle;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.playerstate.VanishService;
-import top.likoslupus.cellulosesz.api.teleport.TeleportOperations;
 import top.likoslupus.cellulosesz.api.text.LocaleResolver;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.common.command.MinecraftPlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.common.entity.MinecraftEntityOperations;
+import top.likoslupus.cellulosesz.common.item.ItemPlatformService;
 import top.likoslupus.cellulosesz.common.lifecycle.CommonRuntimeHooks;
 import top.likoslupus.cellulosesz.common.player.MinecraftPlayers;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.common.world.MinecraftBackupOperations;
 import top.likoslupus.cellulosesz.core.bootstrap.CellulosesZBootstrap;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.core.permission.PermissionBackend;
 import top.likoslupus.cellulosesz.fabric.display.FabricDisplayNameBridge;
 import top.likoslupus.cellulosesz.fabric.event.FabricPlatformEventBridge;
@@ -77,13 +77,13 @@ public final class FabricCommonRuntimeHooks implements CommonRuntimeHooks {
         );
         events.register();
 
-        FabricVanishBridge.visibility((viewer, target) -> services
-                .optional(VanishService.class)
-                .map(service -> service.canSee(
-                        MinecraftPlayers.wrap(viewer),
-                        target.getUUID()
-                ))
-                .orElse(true));
+        FabricVanishBridge.visibility((viewer, target) -> {
+            var service = services.find(VanishService.class);
+            return service == null || service.canSee(
+                    MinecraftPlayers.wrap(viewer),
+                    target.getUUID()
+            );
+        });
     }
 
     @Override

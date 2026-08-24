@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.modules.teleport.application;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.player.*;
@@ -11,8 +10,11 @@ import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
+import top.likoslupus.cellulosesz.common.teleport.TeleportOperations;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportConfig;
 import top.likoslupus.cellulosesz.modules.teleport.TeleportRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.teleport.service.OfflineLocationService;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -163,8 +165,8 @@ final class DefaultTeleportCommandServiceDispatchTest {
         }
 
         @Override
-        public Optional<CellLocation> backLocation(UUID uuid) {
-            return Optional.empty();
+        public CellLocation backLocation(UUID uuid) {
+            return null;
         }
 
         @Override
@@ -195,17 +197,17 @@ final class DefaultTeleportCommandServiceDispatchTest {
         }
 
         @Override
-        public Optional<CellPlayer> onlinePlayer(UUID uuid) {
+        public CellPlayer onlinePlayer(UUID uuid) {
             return uuid.equals(PLAYER_ID)
-                    ? Optional.of(PLAYER)
-                    : Optional.empty();
+                    ? PLAYER
+                    : null;
         }
 
         @Override
-        public Optional<CellPlayer> onlinePlayer(String name) {
+        public CellPlayer onlinePlayer(String name) {
             return name.equalsIgnoreCase("Alice")
-                    ? Optional.of(PLAYER)
-                    : Optional.empty();
+                    ? PLAYER
+                    : null;
         }
 
         @Override
@@ -305,8 +307,8 @@ final class DefaultTeleportCommandServiceDispatchTest {
         }
 
         @Override
-        public Optional<CellUser> cached(UUID uuid) {
-            return Optional.of(CellUser.create(uuid));
+        public CellUser cached(UUID uuid) {
+            return CellUser.create(uuid);
         }
 
         @Override
@@ -315,8 +317,8 @@ final class DefaultTeleportCommandServiceDispatchTest {
         }
 
         @Override
-        public Optional<UUID> findUuidByName(String name) {
-            return Optional.of(PLAYER_ID);
+        public UUID findUuidByName(String name) {
+            return PLAYER_ID;
         }
 
         @Override

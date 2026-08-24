@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.core.legacy
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.future.future
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable
 import java.util.concurrent.CompletableFuture
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext

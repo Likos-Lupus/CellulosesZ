@@ -7,16 +7,16 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.item.ItemArgument;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.item.InventoryItemRequest;
-import top.likoslupus.cellulosesz.api.item.InventoryPlatformService;
-import top.likoslupus.cellulosesz.api.item.InventorySlotView;
 import top.likoslupus.cellulosesz.api.item.ItemService;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformOperationStatus;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
-import top.likoslupus.cellulosesz.api.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
 import top.likoslupus.cellulosesz.common.command.CommandSuggestionSupport;
+import top.likoslupus.cellulosesz.common.item.InventoryItemRequest;
+import top.likoslupus.cellulosesz.common.item.InventoryPlatformService;
+import top.likoslupus.cellulosesz.common.item.InventorySlotView;
+import top.likoslupus.cellulosesz.common.recipe.RecipePlatformService;
 import top.likoslupus.cellulosesz.modules.item.ItemRuntimeSettings;
 import top.likoslupus.cellulosesz.modules.item.command.argument.ItemDescriptors;
 
@@ -134,11 +134,11 @@ public final class CondenseCommand implements CommandContributor {
                         return rules;
                     }
 
-                    if (!slots.successful() || slots.value().isEmpty()) {
+                    if (!slots.successful() || slots.value() == null) {
                         return slots;
                     }
 
-                    var counts = slots.value().orElseThrow().stream()
+                    var counts = slots.value().stream()
                             .filter(InventorySlotView::plain)
                             .collect(Collectors.toMap(
                                     slot -> slot.descriptor().normalizedItem(),
@@ -150,7 +150,7 @@ public final class CondenseCommand implements CommandContributor {
                     var additions = new ArrayList<InventoryItemRequest>();
                     var conversions = 0;
 
-                    for (var rule : rules.value().orElseThrow()) {
+                    for (var rule : rules.value()) {
                         var batches = Math.min(
                                 config.maximumCondenseBatches(),
                                 counts.getOrDefault(
@@ -194,7 +194,7 @@ public final class CondenseCommand implements CommandContributor {
                     );
 
                     if (!mutation.successful()
-                            || mutation.value().isEmpty()
+                            || mutation.value() == null
                     ) {
                         return PlatformResult.failure(
                                 mutation.status(),
@@ -202,7 +202,7 @@ public final class CondenseCommand implements CommandContributor {
                         );
                     }
 
-                    var committed = mutation.value().orElseThrow().commit();
+                    var committed = mutation.value().commit();
                     return committed.successful()
                             ? PlatformResult.success(conversions)
                             : PlatformResult.failure(

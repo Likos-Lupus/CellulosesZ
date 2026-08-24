@@ -61,14 +61,17 @@ public final class ItemDescriptors {
             ItemService items
     ) throws CommandSyntaxException {
         var parsed = items.parse(rawArgument(context, name));
-        if (!parsed.successful() || parsed.value().isEmpty()) {
+        var descriptor = parsed.value();
+        if (descriptor == null) {
             throw INVALID.create();
         }
 
-        var descriptor = parsed.value().orElseThrow();
-
         var valid = items.valid(descriptor);
-        if (!valid.successful() || valid.value().isEmpty() || !valid.value().orElseThrow()) {
+        if (!valid.successful()) {
+            throw INVALID.create();
+        }
+        var validValue = valid.value();
+        if (validValue == null || !validValue) {
             throw INVALID.create();
         }
 

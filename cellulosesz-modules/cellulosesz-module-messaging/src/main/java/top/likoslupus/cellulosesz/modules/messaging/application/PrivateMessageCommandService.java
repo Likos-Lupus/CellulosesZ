@@ -1,8 +1,5 @@
 package top.likoslupus.cellulosesz.modules.messaging.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.messaging.MessageResult;
-import top.likoslupus.cellulosesz.api.messaging.PrivateMessageService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
 import top.likoslupus.cellulosesz.api.player.PlayerResolver;
@@ -11,7 +8,10 @@ import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.user.NameCacheService;
 import top.likoslupus.cellulosesz.api.user.UserService;
 import top.likoslupus.cellulosesz.api.user.UserUpdate;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.modules.messaging.domain.MessageResult;
+import top.likoslupus.cellulosesz.modules.messaging.service.PrivateMessageService;
 
 import java.util.Comparator;
 import java.util.List;
@@ -67,21 +67,21 @@ public final class PrivateMessageCommandService {
                 .resolve(targetToken, sender)
                 .thenCompose(target -> {
                     if (target.state() != ResolvedPlayerState.ONLINE
-                            || target.online().isEmpty()
+                            || target.onlinePlayer() == null
                     ) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "service.messaging.player-offline",
                                 MessageArguments.builder().add(targetToken).build()
                         ));
                     }
-                    if (target.optionalUuid().orElseThrow().equals(sender.uuid())) {
+                    if (target.uuid().equals(sender.uuid())) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "commands.messaging.cannot-message-self"
                         ));
                     }
                     return privateMessages.send(
                             sender,
-                            target.online().orElseThrow(),
+                            target.onlinePlayer(),
                             message
                     );
                 });
@@ -117,14 +117,14 @@ public final class PrivateMessageCommandService {
                     return serverThread
                             .submit(() -> players.onlinePlayer(target.orElseThrow()))
                             .thenCompose(online ->
-                                    online.isEmpty()
+                                    online == null
                                             ?
                                             CompletableFuture.completedFuture(MessageResult.failure(
                                                     "commands.messaging.reply-command.error.player-can-reply-no-longer-online"
                                             ))
                                             : privateMessages.send(
                                                     sender,
-                                                    online.orElseThrow(),
+                                                    online,
                                                     message
                                             ));
                 });
@@ -155,14 +155,14 @@ public final class PrivateMessageCommandService {
         return resolver
                 .resolve(targetToken, actor)
                 .thenCompose(target -> {
-                    if (target.optionalUuid().isEmpty()) {
+                    if (target.uuid() == null) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "commands.common.player-not-found",
                                 MessageArguments.builder().add(targetToken).build()
                         ));
                     }
 
-                    var targetUuid = target.optionalUuid().orElseThrow();
+                    var targetUuid = target.uuid();
                     if (targetUuid.equals(actor.uuid())) {
                         return CompletableFuture.completedFuture(MessageResult.failure(
                                 "commands.messaging.ignore-self"
@@ -245,10 +245,13 @@ public final class PrivateMessageCommandService {
     public CompletableFuture<ResolvedTarget> knownTarget(String token, CellPlayer viewer) {
         return resolver
                 .resolve(token, viewer)
-                .thenApply(result -> result.optionalUuid()
-                        .map(uuid -> new ResolvedTarget(uuid, result.name()))
-                        .orElseThrow(() -> new IllegalArgumentException("Unknown player: " + token))
-                );
+                .thenApply(result -> {
+                    if (result.uuid() == null) {
+                        throw new IllegalArgumentException("Unknown player: " + token);
+                    }
+
+                    return new ResolvedTarget(result.uuid(), result.name());
+                });
     }
 
     public List<String> knownNames() {

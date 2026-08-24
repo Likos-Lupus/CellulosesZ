@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.modules.command.middleware;
 
-import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
-import top.likoslupus.cellulosesz.api.command.CommandMiddlewarePhase;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger;
+import top.likoslupus.cellulosesz.core.command.CommandContinuation;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
+import top.likoslupus.cellulosesz.core.command.CommandMiddlewarePhase;
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger;
 
 import java.util.concurrent.CompletionStage;
 

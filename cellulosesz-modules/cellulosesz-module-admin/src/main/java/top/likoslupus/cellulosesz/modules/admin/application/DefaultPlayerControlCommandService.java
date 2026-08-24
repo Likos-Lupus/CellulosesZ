@@ -1,18 +1,18 @@
 package top.likoslupus.cellulosesz.modules.admin.application;
 
-import top.likoslupus.cellulosesz.api.admin.AdminActor;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
-import top.likoslupus.cellulosesz.api.admin.AdminStatus;
-import top.likoslupus.cellulosesz.api.command.service.CommandDispatchOrigin;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchRequest;
-import top.likoslupus.cellulosesz.api.command.service.PlayerCommandDispatchService;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.PlayerDirectory;
-import top.likoslupus.cellulosesz.api.playerstate.KillKind;
-import top.likoslupus.cellulosesz.api.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
+import top.likoslupus.cellulosesz.common.command.service.CommandDispatchOrigin;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchRequest;
+import top.likoslupus.cellulosesz.common.command.service.PlayerCommandDispatchService;
+import top.likoslupus.cellulosesz.common.playerstate.KillKind;
+import top.likoslupus.cellulosesz.common.playerstate.PlayerStatePlatformService;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminRuntimeSettings;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminActor;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminResult;
+import top.likoslupus.cellulosesz.modules.admin.domain.AdminStatus;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -43,7 +43,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
 
     @Override
     public CompletableFuture<AdminResult> burn(String player, int seconds) {
-        var target = players.onlinePlayer(player);
+        var target = Optional.ofNullable(players.onlinePlayer(player));
         if (target.isEmpty()) {
             return completed(notFound(player));
         }
@@ -86,7 +86,9 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             Optional<CellPlayer> actor,
             Optional<String> target
     ) {
-        var value = target.flatMap(players::onlinePlayer).or(() -> actor);
+        var value = target
+                .flatMap(name -> Optional.ofNullable(players.onlinePlayer(name)))
+                .or(() -> actor);
         if (value.isEmpty()) {
             return completed(AdminResult.failure(
                     AdminStatus.INVALID_INPUT,
@@ -113,7 +115,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
     @Override
     public CompletableFuture<AdminResult> ice(Optional<CellPlayer> actor, Optional<String> target) {
         var value = target
-                .flatMap(players::onlinePlayer)
+                .flatMap(name -> Optional.ofNullable(players.onlinePlayer(name)))
                 .or(() -> actor);
 
         if (value.isEmpty()) {
@@ -124,13 +126,14 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
         }
 
         var result = states.freeze(value.orElseThrow());
+        var frozenTicks = result.value();
         return completed(result.successful()
                 ?
                 AdminResult.success(
                         "commands.admin.ice.success",
                         MessageArguments.builder()
                                 .add(value.orElseThrow().name())
-                                .add(result.value().orElseThrow())
+                                .add(requireNonNull(frozenTicks))
                                 .build()
                 )
                 : AdminResult.failure(
@@ -141,7 +144,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
 
     @Override
     public CompletableFuture<AdminResult> kill(String player, boolean force) {
-        var target = players.onlinePlayer(player);
+        var target = Optional.ofNullable(players.onlinePlayer(player));
         if (target.isEmpty()) {
             return completed(notFound(player));
         }
@@ -212,7 +215,7 @@ public final class DefaultPlayerControlCommandService implements PlayerControlCo
             String player,
             String command
     ) {
-        var target = players.onlinePlayer(player);
+        var target = Optional.ofNullable(players.onlinePlayer(player));
         if (target.isEmpty()) {
             return completed(notFound(player));
         }

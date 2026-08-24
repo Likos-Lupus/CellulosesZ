@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.core.runtime
 
 import kotlinx.coroutines.*
-import top.likoslupus.cellulosesz.api.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.lifecycle.LifecycleClosedException
+import top.likoslupus.cellulosesz.core.logging.CellulosesZLogger
 import top.likoslupus.cellulosesz.core.module.DefaultModuleScope
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference

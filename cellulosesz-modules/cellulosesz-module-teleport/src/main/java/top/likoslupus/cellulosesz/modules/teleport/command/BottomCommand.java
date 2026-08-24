@@ -33,15 +33,15 @@ public final class BottomCommand implements CommandContributor {
         );
         var root = Commands.literal("bottom")
                 .executes(command ->
-                TeleportCommandResults.player(
-                        context,
-                        command,
-                        descriptor,
-                        "bottom",
-                        players,
-                        service::bottom
-                )
-        );
+                        TeleportCommandResults.player(
+                                context,
+                                command,
+                                descriptor,
+                                "bottom",
+                                players,
+                                service::bottom
+                        )
+                );
 
         context.registerDirect(
                 moduleId(),

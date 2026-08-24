@@ -1,11 +1,11 @@
 package top.likoslupus.cellulosesz.modules.teleport.service;
 
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncCloseable;
-import top.likoslupus.cellulosesz.api.lifecycle.AsyncInitializable;
-import top.likoslupus.cellulosesz.api.storage.StorageService;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettings;
 import top.likoslupus.cellulosesz.api.teleport.RandomTeleportSettingsService;
 import top.likoslupus.cellulosesz.core.concurrent.SerialAsyncQueue;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncCloseable;
+import top.likoslupus.cellulosesz.core.lifecycle.legacy.AsyncInitializable;
+import top.likoslupus.cellulosesz.core.storage.StorageService;
 import top.likoslupus.cellulosesz.modules.teleport.persistence.RandomTeleportSettingsDocument;
 import top.likoslupus.cellulosesz.modules.teleport.persistence.RandomTeleportSettingsMapper;
 

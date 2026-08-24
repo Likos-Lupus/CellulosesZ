@@ -4,7 +4,6 @@ import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.commands.CommandSourceStack;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
-import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.platform.operation.PlatformResult;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
@@ -52,7 +51,7 @@ final class ItemCommandSupport {
                 policy -> {
                     var result = operation.apply(policy);
                     respond(policy, descriptor.canonicalName(), result);
-                    return CommandOutcome.fromPlatformStatus(result.status());
+                    return result.status().toCommandOutcome();
                 }
         );
     }
@@ -107,7 +106,7 @@ final class ItemCommandSupport {
                 operation,
                 (policy, result) -> {
                     respond(policy, descriptor.canonicalName(), result);
-                    return CommandOutcome.fromPlatformStatus(result.status());
+                    return result.status().toCommandOutcome();
                 }
         );
     }

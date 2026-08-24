@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.modules.messaging.application;
 
-import top.likoslupus.cellulosesz.api.command.execution.ServerThreadExecutor;
-import top.likoslupus.cellulosesz.api.messaging.MessageResult;
 import top.likoslupus.cellulosesz.api.permission.PermissionService;
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 import top.likoslupus.cellulosesz.api.player.DisplayNameService;
@@ -11,11 +9,13 @@ import top.likoslupus.cellulosesz.api.playerstate.VanishService;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 import top.likoslupus.cellulosesz.api.text.MessageArguments;
 import top.likoslupus.cellulosesz.api.text.MessageRenderer;
-import top.likoslupus.cellulosesz.api.text.PlayerAudienceService;
 import top.likoslupus.cellulosesz.api.text.RichText;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
 import top.likoslupus.cellulosesz.api.world.WorldResolution;
+import top.likoslupus.cellulosesz.common.text.PlayerAudienceService;
+import top.likoslupus.cellulosesz.core.command.execution.ServerThreadExecutor;
 import top.likoslupus.cellulosesz.modules.messaging.MessagingConfig;
+import top.likoslupus.cellulosesz.modules.messaging.domain.MessageResult;
 
 import java.util.List;
 import java.util.Optional;
@@ -146,11 +146,11 @@ public final class ChatCommandService {
         return serverThread
                 .submit(() -> {
                     var resolution = worlds.resolve(input);
-                    if (resolution.status() != WorldResolution.Status.RESOLVED) {
+                    if (!(resolution instanceof WorldResolution.Resolved resolved)) {
                         return new WorldDelivery(resolution, new Counts(0, 0));
                     }
 
-                    var world = resolution.worldId().orElseThrow();
+                    var world = resolved.worldId();
                     var recipients = players.onlinePlayers().stream()
                             .filter(player -> locations.currentLocation(player)
                                     .world()
@@ -166,26 +166,31 @@ public final class ChatCommandService {
                             )
                     );
                 })
-                .thenApply(result -> switch (result.resolution().status()) {
-                    case NOT_FOUND -> MessageResult.failure(
+                .thenApply(result -> {
+                    var resolution = result.resolution();
+                    if (resolution instanceof WorldResolution.Resolved resolved) {
+                        return deliveryResult(
+                                "commands.messaging.broadcast-world-result",
+                                result.counts(),
+                                MessageArguments.builder()
+                                        .add(resolved.worldId())
+                                        .build()
+                        );
+                    }
+
+                    if (resolution instanceof WorldResolution.Ambiguous ambiguous) {
+                        return MessageResult.failure(
+                                "commands.messaging.broadcast-world-command.ambiguous",
+                                MessageArguments.builder()
+                                        .add(input)
+                                        .add(String.join(", ", ambiguous.candidates()))
+                                        .build()
+                        );
+                    }
+
+                    return MessageResult.failure(
                             "commands.messaging.broadcast-world-command.world",
                             MessageArguments.builder().add(input).build()
-                    );
-                    case AMBIGUOUS -> MessageResult.failure(
-                            "commands.messaging.broadcast-world-command.ambiguous",
-                            MessageArguments.builder()
-                                    .add(input)
-                                    .add(
-                                            String.join(", ", result.resolution().candidates())
-                                    )
-                                    .build()
-                    );
-                    case RESOLVED -> deliveryResult(
-                            "commands.messaging.broadcast-world-result",
-                            result.counts(),
-                            MessageArguments.builder()
-                                    .add(result.resolution().worldId().orElseThrow())
-                                    .build()
                     );
                 });
     }
@@ -253,9 +258,8 @@ public final class ChatCommandService {
     }
 
     private boolean canSee(CellPlayer viewer, CellPlayer target) {
-        return services.optional(VanishService.class)
-                .map(service -> service.canSee(viewer, target.uuid()))
-                .orElse(true);
+        var vanish = services.find(VanishService.class);
+        return vanish == null || vanish.canSee(viewer, target.uuid());
     }
 
     public CompletableFuture<MessageResult> list(Optional<CellPlayer> viewer) {

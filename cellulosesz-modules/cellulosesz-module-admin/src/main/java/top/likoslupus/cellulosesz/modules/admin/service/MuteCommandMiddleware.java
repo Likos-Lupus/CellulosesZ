@@ -1,12 +1,11 @@
 package top.likoslupus.cellulosesz.modules.admin.service;
 
-import top.likoslupus.cellulosesz.api.admin.MuteService;
-import top.likoslupus.cellulosesz.api.command.CommandContinuation;
-import top.likoslupus.cellulosesz.api.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.command.execution.CommandOutcome;
 import top.likoslupus.cellulosesz.api.command.execution.CommandPolicyContext;
 import top.likoslupus.cellulosesz.api.text.LocalizedMessage;
+import top.likoslupus.cellulosesz.core.command.CommandContinuation;
+import top.likoslupus.cellulosesz.core.command.CommandMiddleware;
 import top.likoslupus.cellulosesz.modules.admin.config.AdminConfig;
 
 import java.util.Locale;
@@ -40,9 +39,11 @@ public final class MuteCommandMiddleware implements CommandMiddleware {
             CommandPolicyContext context,
             CommandContinuation next
     ) {
+        var senderUuid = context.playerUuid();
         if (blocked(descriptor.canonicalName())
                 && !context.hasPermission("cellulosesz.admin.mute.bypass")
-                && context.playerUuid().filter(mutes::muted).isPresent()
+                && senderUuid != null
+                && mutes.muted(senderUuid)
         ) {
             context.error(LocalizedMessage.of(
                     "commands.admin.mute-command-middleware.error.muted-cannot-use-command"

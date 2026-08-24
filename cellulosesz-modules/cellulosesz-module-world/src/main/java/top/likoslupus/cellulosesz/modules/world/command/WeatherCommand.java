@@ -7,11 +7,11 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.DimensionArgument;
-import top.likoslupus.cellulosesz.api.admin.AdminResult;
 import top.likoslupus.cellulosesz.api.command.CommandSourceKind;
 import top.likoslupus.cellulosesz.api.command.execution.CommandDescriptor;
 import top.likoslupus.cellulosesz.api.player.PlayerLocationPlatformService;
 import top.likoslupus.cellulosesz.api.world.WorldDirectory;
+import top.likoslupus.cellulosesz.api.world.WorldResult;
 import top.likoslupus.cellulosesz.api.world.WorldService;
 import top.likoslupus.cellulosesz.common.command.CommandContributor;
 import top.likoslupus.cellulosesz.common.command.CommandRegistrationContext;
@@ -115,7 +115,7 @@ public final class WeatherCommand implements CommandContributor {
                         .map(world ->
                                 service.setWeather(world, type, seconds)
                         )
-                        .orElseGet(() -> AdminResult.failure("service.world.world-required"))
+                        .orElseGet(() -> WorldResult.failure("service.world.world-required"))
         );
     }
 

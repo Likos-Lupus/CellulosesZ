@@ -16,7 +16,8 @@ public final class CommandTreeRefreshService {
         server.current()
                 .ifPresent(current -> {
                     if (!current.isSameThread()) {
-                        throw new IllegalStateException("Command tree refresh must run on the server thread");
+                        throw new IllegalStateException(
+                                "Command tree refresh must run on the server thread");
                     }
                     current.getPlayerList().getPlayers()
                             .forEach(player -> current.getCommands().sendCommands(player));

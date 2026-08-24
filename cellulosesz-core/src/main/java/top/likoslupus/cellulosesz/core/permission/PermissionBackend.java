@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.core.permission;
 
 import top.likoslupus.cellulosesz.api.platform.CellPlayer;
 
-import java.util.Optional;
+import org.jspecify.annotations.Nullable;
 
 public interface PermissionBackend {
 
@@ -27,11 +27,11 @@ public interface PermissionBackend {
         return fallback;
     }
 
-    default Optional<String> stringOption(
+    default @Nullable String stringOption(
             CellPlayer player,
             String key
     ) {
-        return Optional.empty();
+        return null;
     }
 
 }

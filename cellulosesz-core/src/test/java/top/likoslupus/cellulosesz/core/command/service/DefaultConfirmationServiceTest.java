@@ -1,9 +1,6 @@
 package top.likoslupus.cellulosesz.core.command.service;
 
 import org.junit.jupiter.api.Test;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationConsumeStatus;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationKey;
-import top.likoslupus.cellulosesz.api.command.service.ConfirmationToken;
 
 import java.time.Duration;
 import java.util.UUID;

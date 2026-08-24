@@ -4,11 +4,11 @@ import top.likoslupus.cellulosesz.api.service.Registration;
 import top.likoslupus.cellulosesz.api.service.ServiceRegistry;
 
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.jspecify.annotations.Nullable;
 
-import static top.likoslupus.cellulosesz.api.validation.TextChecks.requireNonBlank;
+import static top.likoslupus.cellulosesz.api.validation.Checks.requireNonBlank;
 
 import static java.util.Objects.requireNonNull;
 
@@ -34,18 +34,22 @@ public final class DefaultServiceRegistry implements ServiceRegistry {
 
     @Override
     public <T> T require(Class<T> type) {
-        return optional(type).orElseThrow(() ->
-                new IllegalStateException("Required service is not registered: " + type.getName())
-        );
+        var service = find(type);
+        if (service == null) {
+            throw new IllegalStateException(
+                    "Required service is not registered: " + type.getName());
+        }
+        return service;
     }
 
     @Override
-    public <T> Optional<T> optional(Class<T> type) {
+    public <T> @Nullable T find(Class<T> type) {
+        requireNonNull(type, "type");
         var entry = services.get(type);
         if (entry == null) {
-            return Optional.empty();
+            return null;
         }
-        return Optional.of(type.cast(entry.instance()));
+        return type.cast(entry.instance());
     }
 
     @Override

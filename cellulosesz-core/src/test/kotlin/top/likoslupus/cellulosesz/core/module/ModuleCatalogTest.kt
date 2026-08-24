@@ -3,7 +3,9 @@ package top.likoslupus.cellulosesz.core.module
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import top.likoslupus.cellulosesz.api.module.*
+import top.likoslupus.cellulosesz.api.module.ModuleDescriptor
+import top.likoslupus.cellulosesz.api.module.ModuleKey
+import top.likoslupus.cellulosesz.api.module.ModulePhase
 
 class ModuleCatalogTest {
 
