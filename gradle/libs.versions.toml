@@ -10,7 +10,7 @@ architectury-api = "20.0.12"
 architectury-plugin = "3.5.169"
 shadow = "9.6.1"
 
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 coroutines = "1.11.0"
 jackson = "3.2.2"
 jspecify = "1.0.1"
