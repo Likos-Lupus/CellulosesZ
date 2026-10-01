@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  build-test:
-    name: Build & Test (JDK ${{ matrix.java }})
+  verify:
+    name: Verify (JDK ${{ matrix.java }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -40,8 +40,27 @@ jobs:
           java -version
           ./gradlew --version
 
-      - name: Build (includes tests & checks)
-        run: ./gradlew --no-daemon build --stacktrace
+      - name: Architecture checks, build and tests (both loader cells)
+        run: ./gradlew --no-daemon verifyArchitecture chiseledBuild --stacktrace
+
+      - name: Inspect Fabric artifact metadata
+        run: |
+          set -euo pipefail
+          FABRIC_JAR=$(ls versions/26.1.2-fabric/build/libs/*-fabric.jar)
+          echo "Inspecting $FABRIC_JAR"
+          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "fabric-language-kotlin"
+          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
+
+      - name: Inspect NeoForge artifact Kotlin runtime (Jar-in-Jar)
+        run: |
+          set -euo pipefail
+          NEOFORGE_JAR=$(ls versions/26.1.2-neoforge/build/libs/*-neoforge.jar)
+          echo "Inspecting $NEOFORGE_JAR"
+          unzip -p "$NEOFORGE_JAR" META-INF/neoforge.mods.toml | grep -q 'modLoader = "javafml"'
+          for module in kotlin-stdlib kotlinx-coroutines-core-jvm kotlinx-serialization-core-jvm kotlinx-serialization-json-jvm; do
+            unzip -l "$NEOFORGE_JAR" | grep -q "META-INF/jars/$module" \
+              || { echo "missing Jar-in-Jar: $module"; exit 1; }
+          done
 
       - name: Upload test reports (always)
         if: always()
