@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "cellulosesz",
+  "version": "${version}",
+  "name": "CellulosesZ",
+  "description": "Server utility mod for Minecraft 26.1.2.",
+  "authors": [
+    "Likos-Lupus",
+    "Chiloven945"
+  ],
+  "license": "GPL-3.0",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "minecraft": "~${minecraft_version}",
+    "java": ">=25",
+    "fabric-api": ">=${fabric_version}",
+    "fabric-language-kotlin": ">=${fabric_language_kotlin_version}",
+    "architectury": ">=${architectury_version}"
+  }
+}

@@ -8,8 +8,6 @@ kotlin = "2.4.20"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 
-architectury-loom = "1.17.491"
-architectury-plugin = "3.5.170"
 architectury-api = "20.1.16"
 
 fabric-loader = "0.19.5"
@@ -26,6 +24,7 @@ fabric-loader = { module = "net.fabricmc:fabric-loader", version.ref = "fabric-l
 fabric-api = { module = "net.fabricmc.fabric-api:fabric-api", version.ref = "fabric-api" }
 fabric-language-kotlin = { module = "net.fabricmc:fabric-language-kotlin", version.ref = "fabric-language-kotlin" }
 
+architectury-common = { module = "dev.architectury:architectury", version.ref = "architectury-api" }
 architectury-fabric = { module = "dev.architectury:architectury-fabric", version.ref = "architectury-api" }
 architectury-neoforge = { module = "dev.architectury:architectury-neoforge", version.ref = "architectury-api" }
 
@@ -40,8 +39,6 @@ jspecify = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
 
-[plugins]
-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
-kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
-architectury-plugin = { id = "architectury-plugin", version.ref = "architectury-plugin" }
-architectury-loom-no-remap = { id = "dev.architectury.loom-no-remap", version.ref = "architectury-loom" }
+# Build-tool plugin versions are intentionally NOT here: Gradle's settings `plugins {}` block cannot
+# read the version catalog, so stonecutter/kotlin/architectury plugin versions live in
+# gradle.properties. See the comment there.

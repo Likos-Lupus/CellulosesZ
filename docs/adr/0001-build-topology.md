@@ -1,5 +1,9 @@
 # ADR 0001 — Single source tree with two Stonecutter loader cells
 
+> **Status: Superseded by [ADR 0002](0002-modular-monolith.md).**
+> The single-`src/common` compilation unit was replaced by a coarse-grained modular monolith; the
+> two Stonecutter loader cells remain as the distribution axis.
+
 ## Context
 
 CellulosesZ targets both Fabric and NeoForge for Minecraft 26.1.2 from one codebase. It is written

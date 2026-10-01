@@ -1,10 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.architectury.loom.no.remap)
-    alias(libs.plugins.architectury.plugin)
+    id("org.jetbrains.kotlin.jvm")
+    id("dev.architectury.loom-no-remap")
+    id("architectury-plugin")
 }
 
 val modId = providers.gradleProperty("mod_id").get()
@@ -15,6 +14,18 @@ val javaVersion = libs.versions.java.get().toInt()
 group = modGroup
 version = "${libs.versions.mod.get()}+$minecraftVersion"
 base.archivesName.set(modId)
+
+// Fixed compile-time architecture modules that are flattened into the distribution jar. These are
+// NOT loader cells and NOT separately shipped artifacts.
+val internalModules = listOf(
+    ":modules:foundation",
+    ":modules:minecraft-core",
+    ":modules:movement",
+    ":modules:communication",
+    ":modules:administration",
+    ":modules:utility",
+    ":modules:application",
+)
 
 architectury {
     platformSetupLoomIde()
@@ -32,22 +43,12 @@ loom {
 
 sourceSets["main"].apply {
     java.setSrcDirs(emptyList<String>())
-    kotlin.setSrcDirs(
-        listOf(
-            rootProject.file("src/common/kotlin"),
-            rootProject.file("src/fabric/kotlin")
-        )
-    )
-    resources.setSrcDirs(
-        listOf(
-            rootProject.file("src/common/resources"),
-            rootProject.file("src/fabric/resources")
-        )
-    )
+    kotlin.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/kotlin")))
+    resources.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/resources")))
 }
 
 sourceSets["test"].apply {
-    kotlin.setSrcDirs(listOf(rootProject.file("src/common/test/kotlin")))
+    kotlin.setSrcDirs(emptyList<String>())
     resources.setSrcDirs(emptyList<String>())
 }
 
@@ -69,17 +70,16 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 
-    compileOnly(libs.jspecify)
-    testCompileOnly(libs.jspecify)
-    testImplementation(libs.junit.jupiter)
-    testRuntimeOnly(libs.junit.platform.launcher)
+    internalModules.forEach { path ->
+        val dependency = add("implementation", project(path))
+        (dependency as ModuleDependency).isTransitive = false
+    }
 }
 
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(javaVersion))
     }
-    withSourcesJar()
 }
 
 kotlin {
@@ -92,10 +92,6 @@ kotlin {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(javaVersion)
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
 }
 
 tasks.named<ProcessResources>("processResources") {
@@ -118,4 +114,10 @@ tasks.named<Jar>("jar") {
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_$modId" }
     }
+    // Flatten internal module outputs into the distribution jar. External mods (Fabric API,
+    // Architectury, FLK) are NOT included.
+    internalModules.forEach { path ->
+        from(project(path).the<SourceSetContainer>()["main"].output)
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }

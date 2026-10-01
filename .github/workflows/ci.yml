@@ -40,8 +40,8 @@ jobs:
           java -version
           ./gradlew --version
 
-      - name: Architecture checks, build and tests (both loader cells)
-        run: ./gradlew --no-daemon verifyArchitecture chiseledBuild --stacktrace
+      - name: Architecture, module checks, build, artifact inspection
+        run: ./gradlew --no-daemon verifyArchitecture checkModuleDependencies checkModules chiseledBuild inspectArtifacts --stacktrace
 
       - name: Inspect Fabric artifact metadata
         run: |
@@ -50,6 +50,7 @@ jobs:
           echo "Inspecting $FABRIC_JAR"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "fabric-language-kotlin"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
+          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"environment": "*"'
 
       - name: Inspect NeoForge artifact Kotlin runtime (Jar-in-Jar)
         run: |

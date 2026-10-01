@@ -1,10 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.architectury.loom.no.remap)
-    alias(libs.plugins.architectury.plugin)
+    id("org.jetbrains.kotlin.jvm")
+    id("dev.architectury.loom-no-remap")
+    id("architectury-plugin")
 }
 
 val modId = providers.gradleProperty("mod_id").get()
@@ -15,6 +14,16 @@ val javaVersion = libs.versions.java.get().toInt()
 group = modGroup
 version = "${libs.versions.mod.get()}+$minecraftVersion"
 base.archivesName.set(modId)
+
+val internalModules = listOf(
+    ":modules:foundation",
+    ":modules:minecraft-core",
+    ":modules:movement",
+    ":modules:communication",
+    ":modules:administration",
+    ":modules:utility",
+    ":modules:application",
+)
 
 architectury {
     platformSetupLoomIde()
@@ -31,23 +40,14 @@ loom {
 }
 
 sourceSets["main"].apply {
-    java.setSrcDirs(listOf(rootProject.file("src/neoforge/java")))
-    kotlin.setSrcDirs(
-        listOf(
-            rootProject.file("src/common/kotlin"),
-            rootProject.file("src/neoforge/kotlin"),
-        )
-    )
-    resources.setSrcDirs(
-        listOf(
-            rootProject.file("src/common/resources"),
-            rootProject.file("src/neoforge/resources")
-        )
-    )
+    java.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/java")))
+    kotlin.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/kotlin")))
+    resources.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/resources")))
 }
 
 sourceSets["test"].apply {
-    kotlin.setSrcDirs(listOf(rootProject.file("src/common/test/kotlin")))
+    java.setSrcDirs(emptyList<String>())
+    kotlin.setSrcDirs(emptyList<String>())
     resources.setSrcDirs(emptyList<String>())
 }
 
@@ -61,7 +61,10 @@ repositories {
 // dependency is attached as soon as the configuration appears.
 val dependencyHandler = dependencies
 configurations.matching { it.name == "neoForge" }.configureEach {
-    dependencyHandler.add(name, "net.neoforged:neoforge:${libs.versions.neoforge.get()}")
+    dependencyHandler.add(
+        name,
+        "net.neoforged:neoforge:${libs.versions.neoforge.get()}"
+    )
 }
 
 dependencies {
@@ -73,23 +76,22 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
 
+    internalModules.forEach { path ->
+        val dependency = add("implementation", project(path))
+        (dependency as ModuleDependency).isTransitive = false
+    }
+
     // Kotlin runtime is shipped Jar-in-Jar because NeoForge users must not need KotlinForForge.
     include(libs.kotlin.stdlib) { isTransitive = false }
     include(libs.kotlinx.coroutines.core.jvm) { isTransitive = false }
     include(libs.kotlinx.serialization.core.jvm) { isTransitive = false }
     include(libs.kotlinx.serialization.json.jvm) { isTransitive = false }
-
-    compileOnly(libs.jspecify)
-    testCompileOnly(libs.jspecify)
-    testImplementation(libs.junit.jupiter)
-    testRuntimeOnly(libs.junit.platform.launcher)
 }
 
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(javaVersion))
     }
-    withSourcesJar()
 }
 
 kotlin {
@@ -102,10 +104,6 @@ kotlin {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(javaVersion)
-}
-
-tasks.withType<Test>().configureEach {
-    useJUnitPlatform()
 }
 
 tasks.named<ProcessResources>("processResources") {
@@ -125,4 +123,8 @@ tasks.named<Jar>("jar") {
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_$modId" }
     }
+    internalModules.forEach { path ->
+        from(project(path).the<SourceSetContainer>()["main"].output)
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
