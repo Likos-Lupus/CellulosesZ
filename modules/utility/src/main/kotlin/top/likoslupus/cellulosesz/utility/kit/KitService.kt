@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.utility.kit
 
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import java.util.*
+import java.util.UUID
 
 internal sealed interface GiveKitResult {
 

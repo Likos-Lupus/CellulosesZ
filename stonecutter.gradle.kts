@@ -118,8 +118,28 @@ tasks.register("verifyArchitecture") {
                     }
         }
 
-        // Java is exception-only: the NeoForge @Mod shim is the sole allowed Java source.
+        // Single commit path: Minecraft teleport calls are allowed only in the teleport backend.
+        val teleportBackendFile =
+            "modules/movement/src/main/kotlin/top/likoslupus/cellulosesz/movement/teleport/MinecraftTeleportBackend.kt"
+        val directTeleportMarkers = listOf(".teleport(", ".teleportTo(", "TeleportTransition(")
+        modulesDir.listFiles().orEmpty().filter { it.isDirectory }.forEach { module ->
+            kotlinFiles(module.resolve("src/main/kotlin")).forEach { file ->
+                val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                if (relative != teleportBackendFile) {
+                    val text = file.readText()
+                    directTeleportMarkers.forEach { marker ->
+                        if (text.contains(marker)) {
+                            violations +=
+                                "$relative: forbidden direct teleport call '$marker' (route through TeleportCoordinator)"
+                        }
+                    }
+                }
+            }
+        }
+
+        // Java is exception-only: the loader entrypoint shims are the sole allowed Java sources.
         val javaAllowlist = setOf(
+            "platform/fabric/src/main/java/top/likoslupus/cellulosesz/fabric/CellulosesZFabric.java",
             "platform/neoforge/src/main/java/top/likoslupus/cellulosesz/neoforge/CellulosesZNeoForge.java"
         )
         platformDir.walkTopDown()

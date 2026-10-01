@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.application.bootstrap
 
-import dev.architectury.event.events.common.CommandRegistrationEvent
-import dev.architectury.event.events.common.LifecycleEvent
-import dev.architectury.event.events.common.PlayerEvent
+import dev.architectury.event.EventResult
+import dev.architectury.event.events.common.*
 import dev.architectury.platform.Platform
 import kotlinx.coroutines.Dispatchers
+import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.storage.LevelResource
 import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.application.command.RootCommand
@@ -45,9 +45,8 @@ public object CellulosesZ {
 
         val movement = createMovementFeature(
             kernel = kernel,
-            dataRoot = { dataRoot(kernel) },
-            homeSettings = { config.current.homes },
-            requestSettings = { config.current.teleportRequests },
+            dataRoot = { dataRoot(kernel).resolve("movement") },
+            settings = { config.current.movement },
         )
         val communication = createCommunicationFeature()
         val administration = createAdministrationFeature()
@@ -66,13 +65,26 @@ public object CellulosesZ {
         }
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
-            kernel.launchIo { config.loadOrCreate() }
+            kernel.launch { config.loadOrCreate() }
         }
         LifecycleEvent.SERVER_STOPPING.register {
+            movement.onServerStopping()
             kernel.onServerStopping()
         }
         LifecycleEvent.SERVER_STOPPED.register {
             kernel.onServerStopped()
+        }
+
+        TickEvent.PLAYER_POST.register { player ->
+            if (player is ServerPlayer) {
+                movement.onPlayerTick(player)
+            }
+        }
+        EntityEvent.LIVING_HURT.register { entity, _, _ ->
+            if (entity is ServerPlayer) {
+                movement.onPlayerHurt(entity.uuid)
+            }
+            EventResult.pass()
         }
 
         PlayerEvent.PLAYER_QUIT.register {

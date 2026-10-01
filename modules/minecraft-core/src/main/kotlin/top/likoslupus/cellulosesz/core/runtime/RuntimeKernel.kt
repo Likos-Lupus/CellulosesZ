@@ -54,6 +54,22 @@ public class RuntimeKernel {
         serverRef.set(null)
     }
 
+    /**
+     * Launches an orchestration task on the runtime's default dispatcher, or returns null when the
+     * runtime is shutting down. File access must switch to [Dispatchers.IO] inside the repository;
+     * use [launchIo] only for tasks that are themselves IO-bound start to finish.
+     */
+    public fun launch(block: suspend CoroutineScope.() -> Unit): Job? {
+        val current = stateRef.get()
+        return if (current == KernelState.STOPPING
+            || current == KernelState.STOPPED
+        ) {
+            null
+        } else {
+            scope.launch(block = block)
+        }
+    }
+
     /** Launches an IO-owned task, or returns null when the runtime is shutting down. */
     public fun launchIo(block: suspend CoroutineScope.() -> Unit): Job? {
         val current = stateRef.get()

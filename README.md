@@ -18,8 +18,13 @@ with the legacy CellulosesZ or with EssentialsX.
 ## Features
 
 - **Homes** — `/sethome`, `/home`, `/delhome`, `/homes` with per-player, per-UUID JSON storage.
-- **Teleport requests** — `/tpa`, `/tpaccept`, `/tpdeny`, `/tpcancel` with lazy expiry, ambiguity
-  handling and automatic cleanup when a player disconnects.
+- **Teleport requests** — `/tpa`, `/tpahere`, `/tpaccept`, `/tpdeny`, `/tpcancel` with
+  direction-aware requests, a per-target queue limit, lazy expiry, and cleanup when a player
+  disconnects.
+- **Direct teleports** — `/back`, `/tp`, `/tphere`, `/tppos`, all routed through the same teleport
+  pipeline as homes, warps, spawn and requests.
+- **Safe teleports** — destinations are validated against collisions, fluids, build height and the
+  world border, with an optional delay that cancels on movement or damage.
 - **Private messaging** — `/msg` and `/reply` with in-memory last-conversation state.
 - **Warps** — `/warp`, `/warps`, `/setwarp`, `/delwarp` as server-global named positions.
 - **Spawn** — `/spawn`, `/setspawn`, `/delspawn` with a configurable spawn and vanilla fallback.
@@ -35,6 +40,8 @@ with the legacy CellulosesZ or with EssentialsX.
 - **Dual-loader, first-class** — one codebase, two Stonecutter distribution cells.
 - **Server-thread safe** — Minecraft state is only mutated on the server thread; no `ServerPlayer`
   is ever held across a suspension.
+- **One teleport path** — every player move goes through a single `TeleportCoordinator`; only the
+  teleport backend may call the Minecraft teleport API, enforced by `verifyArchitecture`.
 - **Crash-safe persistence** — every durable write goes through a temp file, `fsync` and an atomic
   move; corrupt machine data is never silently overwritten.
 - **Strict, typed config** — JSONC with comments and trailing commas, unknown keys rejected, and a
@@ -81,37 +88,43 @@ needed there. This mod adds **no client UI**.
 
 ## Commands
 
-| Command                   | Permission | Description                               |
-|:--------------------------|:-----------|:------------------------------------------|
-| `/sethome [name]`         | Player     | Save the current position as a home.      |
-| `/home [name]`            | Player     | Teleport to a saved home.                 |
-| `/delhome <name>`         | Player     | Delete a saved home.                      |
-| `/homes`                  | Player     | List your homes.                          |
-| `/tpa <player>`           | Player     | Request to teleport to another player.    |
-| `/tpaccept [player]`      | Player     | Accept a pending teleport request.        |
-| `/tpdeny [player]`        | Player     | Deny a pending teleport request.          |
-| `/tpcancel`               | Player     | Cancel your outgoing teleport request.    |
-| `/msg <player> <message>` | Player     | Send a private message.                   |
-| `/reply <message>`        | Player     | Reply to the last private message.        |
-| `/warp <name>`            | Player     | Teleport to a warp.                       |
-| `/warps`                  | Player     | List warps.                               |
-| `/setwarp <name>`         | Moderator  | Create or update a warp.                  |
-| `/delwarp <name>`         | Moderator  | Delete a warp.                            |
-| `/spawn`                  | Player     | Teleport to the configured spawn.         |
-| `/setspawn`               | Moderator  | Set the spawn to your current position.   |
-| `/delspawn`               | Moderator  | Reset the spawn to vanilla.               |
-| `/kit <name>`             | Player     | Receive a kit.                            |
-| `/kits`                   | Player     | List kits.                                |
-| `/createkit <name>`       | Moderator  | Create a kit from your inventory.         |
-| `/delkit <name>`          | Moderator  | Delete a kit.                             |
-| `/heal [player]`          | Moderator  | Restore health.                           |
-| `/feed [player]`          | Moderator  | Restore hunger.                           |
-| `/kick <player> [reason]` | Moderator  | Disconnect a player.                      |
-| `/fly [player]`           | Moderator  | Toggle flight.                            |
-| `/god [player]`           | Moderator  | Toggle invulnerability.                   |
-| `/repair [player]`        | Moderator  | Repair the held item.                     |
-| `/cellulosesz status`     | Moderator  | Show runtime state and config generation. |
-| `/cellulosesz reload`     | Moderator  | Reload the configuration transactionally. |
+| Command                    | Permission | Description                               |
+|:---------------------------|:-----------|:------------------------------------------|
+| `/sethome [name]`          | Player     | Save the current position as a home.      |
+| `/home [name]`             | Player     | Teleport to a saved home.                 |
+| `/delhome <name>`          | Player     | Delete a saved home.                      |
+| `/homes`                   | Player     | List your homes.                          |
+| `/tpa <player>`            | Player     | Request to teleport to another player.    |
+| `/tpahere <player>`        | Player     | Request a player to teleport to you.      |
+| `/tpaccept [player]`       | Player     | Accept a pending teleport request.        |
+| `/tpdeny [player]`         | Player     | Deny a pending teleport request.          |
+| `/tpcancel`                | Player     | Cancel your outgoing teleport request.    |
+| `/back`                    | Player     | Return to your previous location.         |
+| `/tp <player>`             | Player     | Teleport to another player.               |
+| `/tp <player> <target>`    | Moderator  | Teleport a player to another player.      |
+| `/tphere <target>`         | Moderator  | Teleport a player to you.                 |
+| `/tppos <x> <y> <z> [dim]` | Moderator  | Teleport to coordinates.                  |
+| `/msg <player> <message>`  | Player     | Send a private message.                   |
+| `/reply <message>`         | Player     | Reply to the last private message.        |
+| `/warp <name>`             | Player     | Teleport to a warp.                       |
+| `/warps`                   | Player     | List warps.                               |
+| `/setwarp <name>`          | Moderator  | Create or update a warp.                  |
+| `/delwarp <name>`          | Moderator  | Delete a warp.                            |
+| `/spawn`                   | Player     | Teleport to the configured spawn.         |
+| `/setspawn`                | Moderator  | Set the spawn to your current position.   |
+| `/delspawn`                | Moderator  | Reset the spawn to vanilla.               |
+| `/kit <name>`              | Player     | Receive a kit.                            |
+| `/kits`                    | Player     | List kits.                                |
+| `/createkit <name>`        | Moderator  | Create a kit from your inventory.         |
+| `/delkit <name>`           | Moderator  | Delete a kit.                             |
+| `/heal [player]`           | Moderator  | Restore health.                           |
+| `/feed [player]`           | Moderator  | Restore hunger.                           |
+| `/kick <player> [reason]`  | Moderator  | Disconnect a player.                      |
+| `/fly [player]`            | Moderator  | Toggle flight.                            |
+| `/god [player]`            | Moderator  | Toggle invulnerability.                   |
+| `/repair [player]`         | Moderator  | Repair the held item.                     |
+| `/cellulosesz status`      | Moderator  | Show runtime state and config generation. |
+| `/cellulosesz reload`      | Moderator  | Reload the configuration transactionally. |
 
 Moderator commands use the vanilla Minecraft 26.1.2 permission `COMMANDS_MODERATOR`.
 
@@ -128,9 +141,11 @@ Per-world data is stored under:
 
 ```text
 <world>/cellulosesz/
-├─ homes/<uuid>.json
-├─ warps.json
-├─ spawn.json
+├─ movement/
+│  ├─ homes/<uuid>.json
+│  ├─ warps.json
+│  ├─ spawn.json
+│  └─ teleport-history/<uuid>.json
 └─ kits.json
 ```
 

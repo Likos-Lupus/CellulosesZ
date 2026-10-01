@@ -1,8 +1,7 @@
 package top.likoslupus.cellulosesz.movement.home
 
 import top.likoslupus.cellulosesz.movement.config.HomeSettings
-import top.likoslupus.cellulosesz.movement.teleport.TeleportResult
-import top.likoslupus.cellulosesz.movement.teleport.TeleportService
+import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
 import java.util.*
 
 internal sealed interface SetHomeResult {
@@ -12,8 +11,6 @@ internal sealed interface SetHomeResult {
     data object InvalidName : SetHomeResult
 
     data object LimitReached : SetHomeResult
-
-    data object PlayerOffline : SetHomeResult
 
 }
 
@@ -37,13 +34,17 @@ internal sealed interface DeleteHomeResult {
 
 }
 
+/** Owns home storage and naming policy only; it never moves a player. */
 internal class HomeService(
     private val repository: HomeRepository,
-    private val teleport: TeleportService,
     private val policy: () -> HomeSettings,
 ) {
 
-    suspend fun set(playerId: UUID, rawName: String?): SetHomeResult {
+    suspend fun set(
+        playerId: UUID,
+        rawName: String?,
+        position: StoredPosition
+    ): SetHomeResult {
         val config = policy()
         val name = HomeName.parse(rawName ?: config.defaultName)
             ?: return SetHomeResult.InvalidName
@@ -54,9 +55,6 @@ internal class HomeService(
         ) {
             return SetHomeResult.LimitReached
         }
-
-        val position = teleport.capturePosition(playerId)
-            ?: return SetHomeResult.PlayerOffline
 
         repository.put(playerId, Home(name, position))
         return SetHomeResult.Success
@@ -72,16 +70,11 @@ internal class HomeService(
         return HomeLookupResult.Found(home)
     }
 
-    suspend fun teleportTo(playerId: UUID, home: Home): TeleportResult =
-        teleport.teleport(playerId, home.position)
-
     suspend fun delete(playerId: UUID, rawName: String): DeleteHomeResult {
         val name = HomeName.parse(rawName)
             ?: return DeleteHomeResult.InvalidName
 
-        return if (
-            repository.remove(playerId, name)
-        ) {
+        return if (repository.remove(playerId, name)) {
             DeleteHomeResult.Deleted
         } else {
             DeleteHomeResult.NotFound

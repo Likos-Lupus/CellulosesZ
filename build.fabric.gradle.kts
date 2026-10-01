@@ -42,7 +42,7 @@ loom {
 }
 
 sourceSets["main"].apply {
-    java.setSrcDirs(emptyList<String>())
+    java.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/java")))
     kotlin.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/kotlin")))
     resources.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/resources")))
 }

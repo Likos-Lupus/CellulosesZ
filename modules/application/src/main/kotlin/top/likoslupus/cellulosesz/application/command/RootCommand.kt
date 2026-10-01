@@ -3,8 +3,8 @@ package top.likoslupus.cellulosesz.application.command
 import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
-import net.minecraft.server.permissions.Permissions
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
+import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
@@ -21,9 +21,7 @@ internal object RootCommand {
     ) {
         dispatcher.register(
             Commands.literal(ROOT_LITERAL)
-                    .requires { source ->
-                        source.permissions().hasPermission(Permissions.COMMANDS_MODERATOR)
-                    }
+                    .requires { source -> source.canUseModeratorCommands() }
                     .then(
                         Commands.literal("status")
                                 .executes { context ->
@@ -43,7 +41,7 @@ internal object RootCommand {
                         Commands.literal("reload")
                                 .executes { context ->
                                     val source = context.source
-                                    val job = kernel.launchIo {
+                                    val job = kernel.launch {
                                         when (val result = config.reload()) {
                                             is ConfigReloadResult.Success -> kernel.onServerThread {
                                                 source.sendSuccess(

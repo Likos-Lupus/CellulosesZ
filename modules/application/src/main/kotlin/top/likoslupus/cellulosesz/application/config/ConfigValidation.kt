@@ -1,7 +1,9 @@
 package top.likoslupus.cellulosesz.application.config
 
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
+import top.likoslupus.cellulosesz.movement.config.MovementSettingsValidation
 
+/** Aggregates root-schema rules and each feature owner's own validation. */
 internal object ConfigValidation {
 
     fun validate(config: CellulosesConfig): List<ValidationError> = buildList {
@@ -13,15 +15,7 @@ internal object ConfigValidation {
                 )
             )
         }
-        if (config.homes.maxPerPlayer < 0) {
-            add(ValidationError("homes.maxPerPlayer", "must be >= 0"))
-        }
-        if (config.homes.defaultName.isBlank()) {
-            add(ValidationError("homes.defaultName", "must not be blank"))
-        }
-        if (config.teleportRequests.timeoutSeconds <= 0) {
-            add(ValidationError("teleportRequests.timeoutSeconds", "must be > 0"))
-        }
+        addAll(MovementSettingsValidation.validate(config.movement))
     }
 
 }

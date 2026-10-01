@@ -7,7 +7,7 @@ import org.junit.jupiter.api.io.TempDir
 import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.*
+import java.util.UUID
 
 class FileHomeRepositoryTest {
 

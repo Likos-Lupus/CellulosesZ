@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.movement.home
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import top.likoslupus.cellulosesz.foundation.persistence.AtomicFile
 import top.likoslupus.cellulosesz.foundation.persistence.KeyedMutex
 import top.likoslupus.cellulosesz.foundation.persistence.StorageJson
@@ -65,7 +64,7 @@ internal class FileHomeRepository(private val root: () -> Path) : HomeRepository
 
         val decoded = try {
             StorageJson.format.decodeFromString(HomeFile.serializer(), text)
-        } catch (exception: SerializationException) {
+        } catch (exception: IllegalArgumentException) {
             throw HomeDataException("corrupt homes data for $owner", exception)
         }
 

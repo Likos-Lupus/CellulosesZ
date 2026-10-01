@@ -7,7 +7,7 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
-import net.minecraft.server.permissions.Permissions
+import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
@@ -18,7 +18,7 @@ internal object ModerationCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("heal")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .executes { context -> heal(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -32,7 +32,7 @@ internal object ModerationCommands {
         )
         dispatcher.register(
             Commands.literal("feed")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .executes { context -> feed(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -46,7 +46,7 @@ internal object ModerationCommands {
         )
         dispatcher.register(
             Commands.literal("kick")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->

@@ -4,7 +4,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import top.likoslupus.cellulosesz.foundation.persistence.AtomicFile
 import top.likoslupus.cellulosesz.foundation.persistence.StorageJson
 import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
@@ -47,7 +46,7 @@ internal class FileSpawnRepository(private val root: () -> Path) : SpawnReposito
                 SpawnFile.serializer(),
                 text
             )
-        } catch (exception: SerializationException) {
+        } catch (exception: IllegalArgumentException) {
             throw SpawnDataException("corrupt spawn data", exception)
         }
 

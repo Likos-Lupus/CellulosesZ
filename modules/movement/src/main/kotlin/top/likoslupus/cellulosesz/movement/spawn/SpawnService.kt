@@ -1,16 +1,6 @@
 package top.likoslupus.cellulosesz.movement.spawn
 
-import top.likoslupus.cellulosesz.movement.teleport.TeleportResult
-import top.likoslupus.cellulosesz.movement.teleport.TeleportService
-import java.util.*
-
-internal sealed interface SetSpawnResult {
-
-    data object Success : SetSpawnResult
-
-    data object PlayerOffline : SetSpawnResult
-
-}
+import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
 
 internal sealed interface ClearSpawnResult {
 
@@ -20,17 +10,11 @@ internal sealed interface ClearSpawnResult {
 
 }
 
-internal class SpawnService(
-    private val repository: SpawnRepository,
-    private val teleport: TeleportService,
-) {
+/** Owns the configured spawn; resolving vanilla spawn and moving players happen above it. */
+internal class SpawnService(private val repository: SpawnRepository) {
 
-    suspend fun set(playerId: UUID): SetSpawnResult {
-        val position = teleport.capturePosition(playerId)
-            ?: return SetSpawnResult.PlayerOffline
+    suspend fun set(position: StoredPosition) =
         repository.write(position)
-        return SetSpawnResult.Success
-    }
 
     suspend fun clear(): ClearSpawnResult =
         if (repository.read() == null) {
@@ -40,12 +24,7 @@ internal class SpawnService(
             ClearSpawnResult.Cleared
         }
 
-    suspend fun teleportToSpawn(playerId: UUID): TeleportResult {
-        val configured = repository.read()
-        return teleport.teleport(
-            playerId,
-            configured ?: teleport.vanillaSpawnPosition()
-        )
-    }
+    suspend fun configured(): StoredPosition? =
+        repository.read()
 
 }

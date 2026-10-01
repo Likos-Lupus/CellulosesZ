@@ -4,6 +4,7 @@ import kotlinx.serialization.SerializationException
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.movement.config.HomeSettings
+import top.likoslupus.cellulosesz.movement.config.MovementSettings
 
 class ConfigCodecTest {
 
@@ -12,6 +13,7 @@ class ConfigCodecTest {
         val encoded = ConfigCodec.encode(CellulosesConfig())
 
         assertTrue(encoded.contains("\"schemaVersion\""))
+        assertTrue(encoded.contains("\"movement\""))
         assertTrue(encoded.contains("\"homes\""))
         assertTrue(encoded.contains("\"maxPerPlayer\""))
     }
@@ -20,9 +22,11 @@ class ConfigCodecTest {
     fun `round trips a config`() {
         val original = CellulosesConfig(
             diagnostics = DiagnosticsConfig(verboseLogging = true),
-            homes = HomeSettings(
-                maxPerPlayer = 3,
-                defaultName = "base"
+            movement = MovementSettings(
+                homes = HomeSettings(
+                    maxPerPlayer = 3,
+                    defaultName = "base"
+                )
             ),
         )
 
@@ -38,15 +42,17 @@ class ConfigCodecTest {
             {
                 // schema is mandatory
                 "schemaVersion": 1,
-                "homes": {
-                    "maxPerPlayer": 2,
+                "movement": {
+                    "homes": {
+                        "maxPerPlayer": 2,
+                    },
                 },
             }
         """.trimIndent()
 
         assertEquals(
             2,
-            ConfigCodec.decode(text).homes.maxPerPlayer
+            ConfigCodec.decode(text).movement.homes.maxPerPlayer
         )
     }
 

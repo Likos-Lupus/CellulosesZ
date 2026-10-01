@@ -6,8 +6,8 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.server.level.ServerPlayer
-import net.minecraft.server.permissions.Permissions
 import net.minecraft.world.entity.player.Abilities
+import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
@@ -18,7 +18,7 @@ internal object PlayerStateCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("fly")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .executes { context -> fly(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -32,7 +32,7 @@ internal object PlayerStateCommands {
         )
         dispatcher.register(
             Commands.literal("god")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .executes { context -> god(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())

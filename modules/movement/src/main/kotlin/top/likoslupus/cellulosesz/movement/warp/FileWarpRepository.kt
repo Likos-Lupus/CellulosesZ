@@ -4,7 +4,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import top.likoslupus.cellulosesz.foundation.persistence.AtomicFile
 import top.likoslupus.cellulosesz.foundation.persistence.StorageJson
 import java.io.IOException
@@ -19,7 +18,9 @@ internal class FileWarpRepository(private val root: () -> Path) : WarpRepository
         mutex.withLock {
             withContext(Dispatchers.IO) {
                 readFile().warps.mapNotNull { (rawName, position) ->
-                    WarpName.parse(rawName)?.let { Warp(it, position) }
+                    WarpName.parse(rawName)?.let {
+                        Warp(it, position)
+                    }
                 }.sortedBy { it.name.value }
             }
         }
@@ -27,7 +28,9 @@ internal class FileWarpRepository(private val root: () -> Path) : WarpRepository
     override suspend fun get(name: WarpName): Warp? =
         mutex.withLock {
             withContext(Dispatchers.IO) {
-                readFile().warps[name.value]?.let { Warp(name, it) }
+                readFile().warps[name.value]?.let {
+                    Warp(name, it)
+                }
             }
         }
 
@@ -72,8 +75,11 @@ internal class FileWarpRepository(private val root: () -> Path) : WarpRepository
         }
 
         val decoded = try {
-            StorageJson.format.decodeFromString(WarpFile.serializer(), text)
-        } catch (exception: SerializationException) {
+            StorageJson.format.decodeFromString(
+                WarpFile.serializer(),
+                text
+            )
+        } catch (exception: IllegalArgumentException) {
             throw WarpDataException("corrupt warps data", exception)
         }
 

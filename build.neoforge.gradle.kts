@@ -30,6 +30,19 @@ architectury {
     neoForge()
 }
 
+// Internal modules are Architectury common projects. They must be routed through a dedicated
+// configuration that feeds the compile/runtime classpath and, crucially, the NeoForge development
+// classpath. The Architectury transformer turns the `developmentNeoForge` output into the mod's
+// runtime classes; without it NeoForge loads the module classes (and a second copy of
+// dev.architectury.*) from the parent classloader, so Architectury event callbacks registered by
+// the composition root never fire in dev runs (no config generation, no commands).
+val internalCommon = configurations.maybeCreate("common")
+configurations {
+    compileClasspath.get().extendsFrom(internalCommon)
+    runtimeClasspath.get().extendsFrom(internalCommon)
+    getByName("developmentNeoForge").extendsFrom(internalCommon)
+}
+
 loom {
     silentMojangMappingsLicense()
     mods {
@@ -77,7 +90,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     internalModules.forEach { path ->
-        val dependency = add("implementation", project(path))
+        val dependency = add("common", project(path))
         (dependency as ModuleDependency).isTransitive = false
     }
 

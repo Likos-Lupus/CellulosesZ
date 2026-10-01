@@ -1,16 +1,12 @@
 package top.likoslupus.cellulosesz.movement.warp
 
-import top.likoslupus.cellulosesz.movement.teleport.TeleportResult
-import top.likoslupus.cellulosesz.movement.teleport.TeleportService
-import java.util.*
+import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
 
 internal sealed interface SetWarpResult {
 
     data object Success : SetWarpResult
 
     data object InvalidName : SetWarpResult
-
-    data object PlayerOffline : SetWarpResult
 
 }
 
@@ -34,16 +30,12 @@ internal sealed interface DeleteWarpResult {
 
 }
 
-internal class WarpService(
-    private val repository: WarpRepository,
-    private val teleport: TeleportService,
-) {
+/** Owns global warp storage and naming policy only; it never moves a player. */
+internal class WarpService(private val repository: WarpRepository) {
 
-    suspend fun set(playerId: UUID, rawName: String): SetWarpResult {
+    suspend fun set(rawName: String, position: StoredPosition): SetWarpResult {
         val name = WarpName.parse(rawName)
             ?: return SetWarpResult.InvalidName
-        val position = teleport.capturePosition(playerId)
-            ?: return SetWarpResult.PlayerOffline
         repository.put(Warp(name, position))
         return SetWarpResult.Success
     }
@@ -67,8 +59,5 @@ internal class WarpService(
     }
 
     suspend fun list(): List<Warp> = repository.list()
-
-    suspend fun teleportTo(playerId: UUID, warp: Warp): TeleportResult =
-        teleport.teleport(playerId, warp.position)
 
 }

@@ -1,16 +1,18 @@
 package top.likoslupus.cellulosesz.movement.request
 
-import java.time.Instant
 import java.util.*
+import kotlin.time.Duration
+import kotlin.time.TimeMark
 
+/** Transient teleport request. Time is a [TimeMark] so expiry is elapsed duration, not a calendar. */
 internal data class TeleportRequest(
     val senderId: UUID,
     val targetId: UUID,
-    val createdAt: Instant,
-    val expiresAt: Instant,
+    val type: TeleportRequestType,
+    val createdAt: TimeMark,
 ) {
 
-    fun isExpired(now: Instant): Boolean =
-        !now.isBefore(expiresAt)
+    fun isExpired(timeout: Duration): Boolean =
+        createdAt.elapsedNow() >= timeout
 
 }

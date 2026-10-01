@@ -6,22 +6,27 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.teleport.TeleportResult
+import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.teleport.*
+import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object HomeCommands {
 
     fun register(
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: HomeService,
+        backend: TeleportBackend,
+        teleports: TeleportCoordinator,
+        teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
     ) {
         dispatcher.register(
             Commands.literal("sethome")
-                    .executes { context -> setHome(context, null, service, kernel) }
+                    .executes { context -> setHome(context, null, service, backend, kernel) }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->
@@ -29,14 +34,24 @@ internal object HomeCommands {
                                         context,
                                         StringArgumentType.getString(context, "name"),
                                         service,
-                                        kernel
+                                        backend,
+                                        kernel,
                                     )
                                 }
                     )
         )
         dispatcher.register(
             Commands.literal("home")
-                    .executes { context -> goHome(context, null, service, kernel) }
+                    .executes { context ->
+                        goHome(
+                            context,
+                            null,
+                            service,
+                            teleports,
+                            teleportSettings,
+                            kernel
+                        )
+                    }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->
@@ -44,7 +59,9 @@ internal object HomeCommands {
                                         context,
                                         StringArgumentType.getString(context, "name"),
                                         service,
-                                        kernel
+                                        teleports,
+                                        teleportSettings,
+                                        kernel,
                                     )
                                 }
                     )
@@ -58,7 +75,7 @@ internal object HomeCommands {
                                         context,
                                         StringArgumentType.getString(context, "name"),
                                         service,
-                                        kernel
+                                        kernel,
                                     )
                                 }
                     )
@@ -73,61 +90,59 @@ internal object HomeCommands {
         context: CommandContext<CommandSourceStack>,
         rawName: String?,
         service: HomeService,
+        backend: TeleportBackend,
         kernel: RuntimeKernel,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
-        val job = kernel.launchIo {
-            val message = when (service.set(playerId, rawName)) {
-                SetHomeResult.Success ->
-                    Messages.prefixed("home saved")
-
-                SetHomeResult.InvalidName ->
-                    Messages.prefixed("invalid home name; use a-z, 0-9, '_' or '-', up to 32 characters")
-
-                SetHomeResult.LimitReached ->
-                    Messages.prefixed("home limit reached")
-
-                SetHomeResult.PlayerOffline ->
-                    Messages.prefixed("you are no longer online")
-            }
+        val job = kernel.launch {
+            val position = backend.position(playerId)
+            val message = Messages.prefixed(
+                when (position) {
+                    null -> "you are no longer online"
+                    else -> when (service.set(playerId, rawName, position)) {
+                        SetHomeResult.Success -> "home saved"
+                        SetHomeResult.InvalidName -> "invalid home name; use a-z, 0-9, '_' or '-', up to 32 characters"
+                        SetHomeResult.LimitReached -> "home limit reached"
+                    }
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("saving home..."))
-        }
+        return launchResult(source, job, "saving home...")
     }
 
     private fun goHome(
         context: CommandContext<CommandSourceStack>,
         rawName: String?,
         service: HomeService,
+        teleports: TeleportCoordinator,
+        teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
-        val job = kernel.launchIo {
+        val job = kernel.launch {
             val message = when (val result = service.get(playerId, rawName)) {
-                is HomeLookupResult.Found ->
-                    when (
-                        val teleport = service.teleportTo(playerId, result.home)
-                    ) {
-                        TeleportResult.Success ->
+                is HomeLookupResult.Found -> {
+                    val intent = TeleportIntent(
+                        subjectId = playerId,
+                        destination = TeleportDestination.Fixed(result.home.position),
+                        cause = TeleportCause.HOME,
+                        policy = teleportPolicyFor(TeleportCause.HOME, teleportSettings()),
+                    )
+                    when (val outcome = teleports.execute(intent)) {
+                        is TeleportOutcome.Success ->
                             Messages.prefixed("teleported to home '${result.home.name.value}'")
 
-                        TeleportResult.PlayerOffline ->
-                            Messages.prefixed("you are no longer online")
-
-                        is TeleportResult.UnknownDimension ->
-                            Messages.prefixed("home dimension '${teleport.dimension}' is unavailable")
+                        else -> TeleportFeedback.failure(outcome) ?: return@launch
                     }
+                }
 
                 HomeLookupResult.InvalidName ->
                     Messages.prefixed("invalid home name")
@@ -138,11 +153,7 @@ internal object HomeCommands {
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("teleporting..."))
-        }
+        return launchResult(source, job, "teleporting...")
     }
 
     private fun deleteHome(
@@ -155,25 +166,18 @@ internal object HomeCommands {
         val playerId = source.player?.uuid
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
-        val job = kernel.launchIo {
-            val message = when (service.delete(playerId, rawName)) {
-                DeleteHomeResult.Deleted ->
-                    Messages.prefixed("home '$rawName' deleted")
-
-                DeleteHomeResult.InvalidName ->
-                    Messages.prefixed("invalid home name")
-
-                DeleteHomeResult.NotFound ->
-                    Messages.prefixed("home '$rawName' not found")
-            }
+        val job = kernel.launch {
+            val message = Messages.prefixed(
+                when (service.delete(playerId, rawName)) {
+                    DeleteHomeResult.Deleted -> "home '$rawName' deleted"
+                    DeleteHomeResult.InvalidName -> "invalid home name"
+                    DeleteHomeResult.NotFound -> "home '$rawName' not found"
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("deleting home..."))
-        }
+        return launchResult(source, job, "deleting home...")
     }
 
     private fun listHomes(
@@ -185,23 +189,18 @@ internal object HomeCommands {
         val playerId = source.player?.uuid
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
-        val job = kernel.launchIo {
+        val job = kernel.launch {
             val homes = service.list(playerId).map { it.name.value }
             val message = Messages.prefixed(
-                if (homes.isEmpty()) {
-                    "you have no homes"
-                } else {
-                    "homes: ${homes.joinToString(", ")}"
+                when {
+                    homes.isEmpty() -> "you have no homes"
+                    else -> "homes: ${homes.joinToString(", ")}"
                 }
             )
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("loading homes..."))
-        }
+        return launchResult(source, job, "loading homes...")
     }
 
 }

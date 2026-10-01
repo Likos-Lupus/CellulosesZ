@@ -1,6 +1,8 @@
 modLoader = "javafml"
 loaderVersion = "[1,)"
 license = "GPL-3.0"
+authors = "Likos-Lupus, Chiloven945"
+displayURL = "https://github.com/Likos-Lupus/CellulosesZ"
 
 [[mods]]
 modId = "cellulosesz"

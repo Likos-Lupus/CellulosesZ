@@ -1,14 +1,21 @@
 package top.likoslupus.cellulosesz.movement.request
 
-import java.time.Instant
+import top.likoslupus.cellulosesz.movement.config.TeleportRequestSettings
 import java.util.*
-import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 internal sealed interface TpaSendResult {
 
-    data object Sent : TpaSendResult
+    data class Sent(val targetId: UUID) : TpaSendResult
+
+    data class Refreshed(val targetId: UUID) : TpaSendResult
 
     data object Self : TpaSendResult
+
+    data object SenderAlreadyHasRequest : TpaSendResult
+
+    data object TargetQueueFull : TpaSendResult
 
 }
 
@@ -33,37 +40,55 @@ internal sealed interface TpaDenyResult {
 }
 
 /**
- * In-memory teleport request state. Confined to the server thread: all command handlers and
- * disconnect events run there, so no additional locking is required.
+ * In-memory teleport-request state. Confined to the server thread: sending, accepting, denying, and
+ * disconnect events all run there, so plain maps are used with no locking. Expiry is lazy.
  *
- * Policy: a sender has at most one outstanding outbound request; a new [send] replaces it.
- * Expiry is lazy, evaluated whenever the state is read.
+ * Policy: a sender has at most one outbound request (a same-target, same-type send refreshes it);
+ * a target accepts at most [TeleportRequestSettings.maxIncomingPerPlayer] concurrent requests.
  */
 internal class TeleportRequestService(
-    private val timeout: () -> Duration,
-    private val clock: () -> Instant = Instant::now,
+    private val settings: () -> TeleportRequestSettings,
+    private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
 
     private val outbound = HashMap<UUID, TeleportRequest>()
 
-    fun send(senderId: UUID, targetId: UUID): TpaSendResult {
+    fun send(
+        senderId: UUID,
+        targetId: UUID,
+        type: TeleportRequestType
+    ): TpaSendResult {
         if (senderId == targetId) {
             return TpaSendResult.Self
         }
 
-        val now = clock()
-        purgeExpired(now)
+        purgeExpired()
+
+        val existing = outbound[senderId]
+        if (existing != null) {
+            if (existing.targetId != targetId || existing.type != type) {
+                return TpaSendResult.SenderAlreadyHasRequest
+            }
+
+            outbound[senderId] = existing.copy(createdAt = timeSource.markNow())
+            return TpaSendResult.Refreshed(targetId)
+        }
+
+        if (incomingCount(targetId) >= settings().maxIncomingPerPlayer) {
+            return TpaSendResult.TargetQueueFull
+        }
+
         outbound[senderId] = TeleportRequest(
-            senderId = senderId,
-            targetId = targetId,
-            createdAt = now,
-            expiresAt = now.plusNanos(timeout().inWholeNanoseconds),
+            senderId,
+            targetId,
+            type,
+            timeSource.markNow()
         )
-        return TpaSendResult.Sent
+        return TpaSendResult.Sent(targetId)
     }
 
     fun accept(targetId: UUID, senderId: UUID?): TpaAcceptResult {
-        purgeExpired(clock())
+        purgeExpired()
         val candidates = outbound.values.filter { it.targetId == targetId }
         val request = when {
             senderId != null ->
@@ -83,7 +108,7 @@ internal class TeleportRequestService(
     }
 
     fun deny(targetId: UUID, senderId: UUID?): TpaDenyResult {
-        purgeExpired(clock())
+        purgeExpired()
         val candidates = outbound.values.filter { it.targetId == targetId }
         val request = when {
             senderId != null ->
@@ -103,7 +128,7 @@ internal class TeleportRequestService(
     }
 
     fun cancel(senderId: UUID): TeleportRequest? {
-        purgeExpired(clock())
+        purgeExpired()
         return outbound.remove(senderId)
     }
 
@@ -112,7 +137,7 @@ internal class TeleportRequestService(
      * Returns the senders whose outbound request was dropped because the target left.
      */
     fun clearPlayer(playerId: UUID): List<UUID> {
-        purgeExpired(clock())
+        purgeExpired()
         val affectedSenders = mutableListOf<UUID>()
         outbound.remove(playerId)
         val iterator = outbound.entries.iterator()
@@ -126,8 +151,12 @@ internal class TeleportRequestService(
         return affectedSenders
     }
 
-    private fun purgeExpired(now: Instant) {
-        outbound.entries.removeIf { it.value.isExpired(now) }
+    private fun incomingCount(targetId: UUID): Int =
+        outbound.values.count { it.targetId == targetId }
+
+    private fun purgeExpired() {
+        val timeout = settings().timeoutSeconds.seconds
+        outbound.values.removeIf { it.isExpired(timeout) }
     }
 
 }

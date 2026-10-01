@@ -6,7 +6,7 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.server.level.ServerPlayer
-import net.minecraft.server.permissions.Permissions
+import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
@@ -17,7 +17,7 @@ internal object ItemCommands {
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
         dispatcher.register(
             Commands.literal("repair")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .executes { context -> repair(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())

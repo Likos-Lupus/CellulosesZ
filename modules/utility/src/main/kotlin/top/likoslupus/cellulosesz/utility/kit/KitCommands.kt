@@ -5,7 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
-import net.minecraft.server.permissions.Permissions
+import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
@@ -39,7 +39,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             Commands.literal("createkit")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->
@@ -54,7 +54,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             Commands.literal("delkit")
-                    .requires { it.permissions().hasPermission(Permissions.COMMANDS_MODERATOR) }
+                    .requires { it.canUseModeratorCommands() }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->
@@ -80,16 +80,13 @@ internal object KitCommands {
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
         val job = kernel.launchIo {
-            val message = when (service.give(playerId, name)) {
-                GiveKitResult.Success ->
-                    Messages.prefixed("received kit '$name'")
-
-                GiveKitResult.NotFound ->
-                    Messages.prefixed("kit '$name' not found")
-
-                GiveKitResult.PlayerOffline ->
-                    Messages.prefixed("you are no longer online")
-            }
+            val message = Messages.prefixed(
+                when (service.give(playerId, name)) {
+                    GiveKitResult.Success -> "received kit '$name'"
+                    GiveKitResult.NotFound -> "kit '$name' not found"
+                    GiveKitResult.PlayerOffline -> "you are no longer online"
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
@@ -111,12 +108,12 @@ internal object KitCommands {
 
         val job = kernel.launchIo {
             val kits = service.list().map { it.value }
-            val message = if (kits.isEmpty()) {
-                Messages.prefixed("no kits defined")
-            } else {
-                Messages.prefixed("kits: ${kits.joinToString(", ")}")
-            }
-
+            val message = Messages.prefixed(
+                when {
+                    kits.isEmpty() -> "no kits defined"
+                    else -> "kits: ${kits.joinToString(", ")}"
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
@@ -138,19 +135,14 @@ internal object KitCommands {
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
 
         val job = kernel.launchIo {
-            val message = when (service.create(playerId, name)) {
-                CreateKitResult.Success ->
-                    Messages.prefixed("kit '$name' created from your inventory")
-
-                CreateKitResult.InvalidName ->
-                    Messages.prefixed("invalid kit name")
-
-                CreateKitResult.Empty ->
-                    Messages.prefixed("your inventory is empty")
-
-                CreateKitResult.PlayerOffline ->
-                    Messages.prefixed("you are no longer online")
-            }
+            val message = Messages.prefixed(
+                when (service.create(playerId, name)) {
+                    CreateKitResult.Success -> "kit '$name' created from your inventory"
+                    CreateKitResult.InvalidName -> "invalid kit name"
+                    CreateKitResult.Empty -> "your inventory is empty"
+                    CreateKitResult.PlayerOffline -> "you are no longer online"
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
@@ -171,16 +163,13 @@ internal object KitCommands {
         val playerId = source.player?.uuid
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
         val job = kernel.launchIo {
-            val message = when (service.delete(name)) {
-                DeleteKitResult.Deleted ->
-                    Messages.prefixed("kit '$name' deleted")
-
-                DeleteKitResult.InvalidName ->
-                    Messages.prefixed("invalid kit name")
-
-                DeleteKitResult.NotFound ->
-                    Messages.prefixed("kit '$name' not found")
-            }
+            val message = Messages.prefixed(
+                when (service.delete(name)) {
+                    DeleteKitResult.Deleted -> "kit '$name' deleted"
+                    DeleteKitResult.InvalidName -> "invalid kit name"
+                    DeleteKitResult.NotFound -> "kit '$name' not found"
+                }
+            )
             kernel.messagePlayer(playerId, message)
         }
 
