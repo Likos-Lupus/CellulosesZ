@@ -10,6 +10,9 @@ version = "${version}"
 displayName = "CellulosesZ"
 description = "Server utility mod for Minecraft 26.1.2."
 
+[[mixins]]
+config = "cellulosesz.mixins.json"
+
 [[dependencies.cellulosesz]]
 modId = "neoforge"
 type = "required"

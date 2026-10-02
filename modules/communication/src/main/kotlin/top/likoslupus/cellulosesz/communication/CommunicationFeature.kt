@@ -16,8 +16,16 @@ public class CommunicationFeature internal constructor(
     public fun registerCommands(
         dispatcher: CommandDispatcher<CommandSourceStack>,
         enabled: () -> Boolean,
+        canSend: (UUID) -> Boolean = { true },
+        observe: (PrivateMessageObservation) -> Unit = {},
     ) {
-        MessagingCommands.register(dispatcher, conversation, enabled)
+        MessagingCommands.register(
+            dispatcher,
+            conversation,
+            enabled,
+            canSend,
+            observe
+        )
     }
 
     public fun onPlayerQuit(playerId: UUID) {

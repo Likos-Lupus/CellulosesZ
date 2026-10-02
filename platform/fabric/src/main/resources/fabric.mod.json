@@ -10,6 +10,9 @@
   ],
   "license": "GPL-3.0",
   "environment": "*",
+  "mixins": [
+    "cellulosesz.mixins.json"
+  ],
   "entrypoints": {
     "main": [
       "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"

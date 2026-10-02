@@ -5,10 +5,12 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import top.likoslupus.cellulosesz.communication.PrivateMessageObservation
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.text.Messages
+import java.util.*
 
 internal object MessagingCommands {
 
@@ -16,6 +18,8 @@ internal object MessagingCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         conversation: ConversationState,
         enabled: () -> Boolean,
+        canSend: (UUID) -> Boolean,
+        observe: (PrivateMessageObservation) -> Unit,
     ) {
         dispatcher.register(
             Commands.literal("msg")
@@ -33,6 +37,8 @@ internal object MessagingCommands {
                                                     ),
                                                     conversation,
                                                     enabled,
+                                                    canSend,
+                                                    observe,
                                                 )
                                             }
                                 )
@@ -48,6 +54,8 @@ internal object MessagingCommands {
                                         StringArgumentType.getString(context, "message"),
                                         conversation,
                                         enabled,
+                                        canSend,
+                                        observe,
                                     )
                                 }
                     )
@@ -60,6 +68,8 @@ internal object MessagingCommands {
         text: String,
         conversation: ConversationState,
         enabled: () -> Boolean,
+        canSend: (UUID) -> Boolean,
+        observe: (PrivateMessageObservation) -> Unit,
     ): Int {
         val source = context.source
         if (!enabled()) {
@@ -68,6 +78,10 @@ internal object MessagingCommands {
 
         val sender = source.player
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
+        if (!canSend(sender.uuid)) {
+            return source.replyError(Messages.prefixed("you are muted"))
+        }
+
         val target = PlayerResolver.onlineByName(source.server, targetName)
             ?: return source.replyError(Messages.prefixed("player '$targetName' is not online"))
         if (target.uuid == sender.uuid) {
@@ -79,6 +93,15 @@ internal object MessagingCommands {
             Messages.privateMessage(
                 sender.name.string,
                 text
+            )
+        )
+        observe(
+            PrivateMessageObservation(
+                senderId = sender.uuid,
+                senderName = sender.name.string,
+                targetId = target.uuid,
+                targetName = target.name.string,
+                text = text,
             )
         )
         return source.reply(
@@ -94,6 +117,8 @@ internal object MessagingCommands {
         text: String,
         conversation: ConversationState,
         enabled: () -> Boolean,
+        canSend: (UUID) -> Boolean,
+        observe: (PrivateMessageObservation) -> Unit,
     ): Int {
         val source = context.source
         if (!enabled()) {
@@ -102,6 +127,10 @@ internal object MessagingCommands {
 
         val sender = source.player
             ?: return source.replyError(Messages.prefixed("this command requires a player"))
+        if (!canSend(sender.uuid)) {
+            return source.replyError(Messages.prefixed("you are muted"))
+        }
+
         val partnerId = conversation.partnerOf(sender.uuid)
             ?: return source.replyError(Messages.prefixed("you have no one to reply to"))
         val target = PlayerResolver.onlineById(source.server, partnerId)
@@ -112,6 +141,15 @@ internal object MessagingCommands {
             Messages.privateMessage(
                 sender.name.string,
                 text
+            )
+        )
+        observe(
+            PrivateMessageObservation(
+                senderId = sender.uuid,
+                senderName = sender.name.string,
+                targetId = target.uuid,
+                targetName = target.name.string,
+                text = text,
             )
         )
 

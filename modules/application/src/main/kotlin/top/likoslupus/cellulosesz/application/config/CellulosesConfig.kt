@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.application.config
 
 import kotlinx.serialization.Serializable
+import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.communication.MessagingSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
 
@@ -16,6 +17,7 @@ public data class CellulosesConfig(
     public val diagnostics: DiagnosticsConfig = DiagnosticsConfig(),
     public val movement: MovementSettings = MovementSettings(),
     public val messaging: MessagingSettings = MessagingSettings(),
+    public val administration: AdministrationSettings = AdministrationSettings(),
 )
 
 @Serializable

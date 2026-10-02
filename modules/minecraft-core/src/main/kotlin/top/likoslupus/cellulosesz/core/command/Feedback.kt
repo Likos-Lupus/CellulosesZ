@@ -30,3 +30,19 @@ public suspend fun RuntimeKernel.messagePlayer(
         )?.sendSystemMessage(message)
     }
 }
+
+/** Delivers a component to the captured feedback destination on the server thread. */
+public suspend fun RuntimeKernel.message(
+    target: CommandFeedbackTarget,
+    message: Component
+) {
+    when (target) {
+        is CommandFeedbackTarget.Player ->
+            messagePlayer(target.id, message)
+
+        CommandFeedbackTarget.Server ->
+            onServerThread {
+                requireServer().sendSystemMessage(message)
+            }
+    }
+}

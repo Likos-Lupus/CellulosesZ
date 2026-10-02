@@ -13,9 +13,41 @@ import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.text.Messages
 
+/**
+ * Operator control over individual player state (health, food, flight, invulnerability). This is not
+ * moderation: nothing here is a sanction or is persisted.
+ */
 internal object PlayerStateCommands {
 
     fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+        dispatcher.register(
+            Commands.literal("heal")
+                    .requires { it.canUseModeratorCommands() }
+                    .executes { context -> heal(context, null) }
+                    .then(
+                        Commands.argument("player", StringArgumentType.word())
+                                .executes { context ->
+                                    heal(
+                                        context,
+                                        StringArgumentType.getString(context, "player")
+                                    )
+                                }
+                    )
+        )
+        dispatcher.register(
+            Commands.literal("feed")
+                    .requires { it.canUseModeratorCommands() }
+                    .executes { context -> feed(context, null) }
+                    .then(
+                        Commands.argument("player", StringArgumentType.word())
+                                .executes { context ->
+                                    feed(
+                                        context,
+                                        StringArgumentType.getString(context, "player")
+                                    )
+                                }
+                    )
+        )
         dispatcher.register(
             Commands.literal("fly")
                     .requires { it.canUseModeratorCommands() }
@@ -46,6 +78,31 @@ internal object PlayerStateCommands {
         )
     }
 
+    private fun heal(
+        context: CommandContext<CommandSourceStack>,
+        targetName: String?
+    ): Int {
+        val source = context.source
+        val target = resolveTarget(source, targetName)
+            ?: return source.replyError(Messages.prefixed("player not found"))
+
+        target.health = target.maxHealth
+        return source.reply(Messages.prefixed("healed ${target.name.string}"))
+    }
+
+    private fun feed(
+        context: CommandContext<CommandSourceStack>,
+        targetName: String?
+    ): Int {
+        val source = context.source
+        val target = resolveTarget(source, targetName)
+            ?: return source.replyError(Messages.prefixed("player not found"))
+
+        target.foodData.foodLevel = 20
+        target.foodData.setSaturation(20f)
+        return source.reply(Messages.prefixed("fed ${target.name.string}"))
+    }
+
     private fun fly(
         context: CommandContext<CommandSourceStack>,
         targetName: String?
@@ -72,7 +129,10 @@ internal object PlayerStateCommands {
         return source.reply(Messages.prefixed("flight $state for ${target.name.string}"))
     }
 
-    private fun god(context: CommandContext<CommandSourceStack>, targetName: String?): Int {
+    private fun god(
+        context: CommandContext<CommandSourceStack>,
+        targetName: String?
+    ): Int {
         val source = context.source
         val target = resolveTarget(source, targetName)
             ?: return source.replyError(Messages.prefixed("player not found"))

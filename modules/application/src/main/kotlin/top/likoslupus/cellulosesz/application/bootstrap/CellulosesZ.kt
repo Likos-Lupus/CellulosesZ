@@ -49,19 +49,37 @@ public object CellulosesZ {
             settings = { config.current.movement },
         )
         val communication = createCommunicationFeature()
-        val administration = createAdministrationFeature()
+        val administration = createAdministrationFeature(
+            kernel = kernel,
+            dataRoot = { dataRoot(kernel).resolve("administration") },
+            settings = { config.current.administration },
+        )
         val utility = createUtilityFeature(kernel) { dataRoot(kernel) }
 
         CommandRegistrationEvent.EVENT.register { dispatcher, _, _ ->
             RootCommand.register(dispatcher, config, kernel)
             movement.registerCommands(dispatcher)
-            communication.registerCommands(dispatcher) { config.current.messaging.enabled }
+            communication.registerCommands(
+                dispatcher = dispatcher,
+                enabled = { config.current.messaging.enabled },
+                canSend = { administration.isMuted(it) },
+                observe = {
+                    administration.observePrivateMessage(
+                        senderId = it.senderId,
+                        senderName = it.senderName,
+                        targetId = it.targetId,
+                        targetName = it.targetName,
+                        text = it.text,
+                    )
+                },
+            )
             administration.registerCommands(dispatcher)
             utility.registerCommands(dispatcher)
         }
 
         LifecycleEvent.SERVER_STARTING.register {
             kernel.onServerStarting(it)
+            administration.onServerStarting()
         }
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
@@ -69,6 +87,7 @@ public object CellulosesZ {
         }
         LifecycleEvent.SERVER_STOPPING.register {
             movement.onServerStopping()
+            administration.onServerStopping()
             kernel.onServerStopping()
         }
         LifecycleEvent.SERVER_STOPPED.register {
@@ -87,7 +106,23 @@ public object CellulosesZ {
             EventResult.pass()
         }
 
+        PlayerEvent.PLAYER_JOIN.register {
+            administration.onPlayerJoined(it)
+        }
+
+        ChatEvent.RECEIVED.register { player, _ ->
+            if (player != null
+                && administration.isMuted(player.uuid)
+            ) {
+                player.sendSystemMessage(Messages.prefixed("you are muted"))
+                EventResult.interruptFalse()
+            } else {
+                EventResult.pass()
+            }
+        }
+
         PlayerEvent.PLAYER_QUIT.register {
+            administration.onPlayerQuit(it.uuid)
             val affected = movement.onPlayerQuit(it.uuid)
             communication.onPlayerQuit(it.uuid)
             if (kernel.state == KernelState.RUNNING) {

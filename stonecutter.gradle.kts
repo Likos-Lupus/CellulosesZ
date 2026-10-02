@@ -76,6 +76,19 @@ tasks.register("verifyArchitecture") {
                         .toList()
             }
 
+        fun javaFiles(root: File): List<File> =
+            when {
+                !root.isDirectory -> emptyList()
+                else -> root.walkTopDown()
+                        .filter { it.isFile && it.extension == "java" }
+                        .toList()
+            }
+
+        // Java is allowed only in a `mixin` package (Mixin's Kotlin support is incomplete) and at
+        // the loader shim allowlist below.
+        fun isMixinPackage(relative: String): Boolean =
+            relative.split('/').contains("mixin")
+
         fun inspect(file: File, extraForbidden: List<String> = emptyList()) {
             val text = file.readText()
             val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
@@ -99,8 +112,13 @@ tasks.register("verifyArchitecture") {
         }
 
         modulesDir.listFiles().orEmpty().filter { it.isDirectory }.forEach { module ->
-            if (module.resolve("src/main/java").exists()) {
-                violations += "modules/${module.name}/src/main/java must not exist (Kotlin-only)"
+            javaFiles(module.resolve("src/main/java")).forEach { file ->
+                val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                if (!isMixinPackage(relative)) {
+                    violations += "$relative: Java is only allowed in a 'mixin' package"
+                } else {
+                    inspect(file, loaderForbidden)
+                }
             }
             kotlinFiles(module.resolve("src/main/kotlin"))
                     .forEach { file ->
@@ -137,7 +155,60 @@ tasks.register("verifyArchitecture") {
             }
         }
 
-        // Java is exception-only: the loader entrypoint shims are the sole allowed Java sources.
+        // Moderation: the native ban lists may only be touched by the ban backend, and operator
+        // execution/game mode/kill only by the control backend.
+        val banBackendFile =
+            "modules/administration/src/main/kotlin/top/likoslupus/cellulosesz/administration/moderation/ban/MinecraftBanBackend.kt"
+        val controlBackendFile =
+            "modules/administration/src/main/kotlin/top/likoslupus/cellulosesz/administration/operator/MinecraftPlayerControlBackend.kt"
+        val banMarkers = listOf(
+            "UserBanListEntry",
+            "IpBanListEntry",
+            "playerList.bans",
+            "playerList.ipBans"
+        )
+        val controlMarkers = listOf(
+            "player.setGameMode(",
+            "player.kill(",
+            "performPrefixedCommand"
+        )
+        val commandIoMarkers = listOf("java.nio.file.Files", "AtomicFile", "StorageJson")
+
+        modulesDir.listFiles().orEmpty().filter { it.isDirectory }.forEach { module ->
+            kotlinFiles(module.resolve("src/main/kotlin")).forEach { file ->
+                val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                val text = file.readText()
+
+                if (relative != banBackendFile) {
+                    banMarkers.forEach { marker ->
+                        if (text.contains(marker)) {
+                            violations +=
+                                "$relative: forbidden native ban API '$marker' (use BanBackend)"
+                        }
+                    }
+                }
+                if (relative != controlBackendFile) {
+                    controlMarkers.forEach { marker ->
+                        if (text.contains(marker)) {
+                            violations +=
+                                "$relative: forbidden operator control API '$marker' (use PlayerControlBackend)"
+                        }
+                    }
+                }
+
+                val isCommandFile =
+                    relative.contains("/command/") || file.name.endsWith("Commands.kt")
+                if (isCommandFile) {
+                    commandIoMarkers.forEach { marker ->
+                        if (text.contains(marker)) {
+                            violations += "$relative: command files must not perform file IO ('$marker')"
+                        }
+                    }
+                }
+            }
+        }
+
+        // Java is exception-only: classes in a `mixin` package plus the loader entrypoint shims.
         val javaAllowlist = setOf(
             "platform/fabric/src/main/java/top/likoslupus/cellulosesz/fabric/CellulosesZFabric.java",
             "platform/neoforge/src/main/java/top/likoslupus/cellulosesz/neoforge/CellulosesZNeoForge.java"
@@ -146,7 +217,7 @@ tasks.register("verifyArchitecture") {
                 .filter { it.isFile && it.extension == "java" }
                 .forEach { file ->
                     val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
-                    if (relative !in javaAllowlist) {
+                    if (relative !in javaAllowlist && !isMixinPackage(relative)) {
                         violations += "$relative: Java file is not on the allowlist"
                     }
                 }

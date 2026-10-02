@@ -31,15 +31,15 @@ movement   communication  administration  utility   (minecraft-core, foundation)
 
 ## Modules
 
-| Module           | Responsibility                                                                                                                                                          | May depend on              |
-|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
-| `foundation`     | Plain Kotlin/JVM: `AtomicFile`, `KeyedMutex`, `StorageJson`, generic `ConfigStore<T>`. Knows nothing about Minecraft.                                                   | –                          |
-| `minecraft-core` | `RuntimeKernel`, `MinecraftServerDispatcher`, `PlayerResolver`, `Messages`, command feedback helpers.                                                                   | foundation                 |
-| `movement`       | teleport/home/warp/spawn/request (`/tpa`, `/tpahere`). Owns the teleport pipeline: `TeleportCoordinator`, `MinecraftTeleportBackend`, safety, pending/cooldown/history. | foundation, minecraft-core |
-| `communication`  | messaging (`/msg`, `/reply`) and conversation state.                                                                                                                    | foundation, minecraft-core |
-| `administration` | moderation (`/heal`, `/feed`, `/kick`) and player state (`/fly`, `/god`).                                                                                               | foundation, minecraft-core |
-| `utility`        | kits and item utilities (`/repair`).                                                                                                                                    | foundation, minecraft-core |
-| `application`    | Composition root, root `CellulosesConfig`, `/cellulosesz status                                                                                                         | reload`.                   | foundation, minecraft-core, movement, communication, administration, utility |
+| Module           | Responsibility                                                                                                                                                                                                                                                                            | May depend on              |
+|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------|
+| `foundation`     | Plain Kotlin/JVM: `AtomicFile`, `KeyedMutex`, `StorageJson`, generic `ConfigStore<T>`. Knows nothing about Minecraft.                                                                                                                                                                     | –                          |
+| `minecraft-core` | `RuntimeKernel`, `MinecraftServerDispatcher`, `PlayerResolver`, `Messages`, command feedback helpers.                                                                                                                                                                                     | foundation                 |
+| `movement`       | teleport/home/warp/spawn/request (`/tpa`, `/tpahere`). Owns the teleport pipeline: `TeleportCoordinator`, `MinecraftTeleportBackend`, safety, pending/cooldown/history.                                                                                                                   | foundation, minecraft-core |
+| `communication`  | messaging (`/msg`, `/reply`) and conversation state.                                                                                                                                                                                                                                      | foundation, minecraft-core |
+| `administration` | moderation (`/kick`, `/kickall`, `/ban`, `/tempban`, `/unban`, `/banip`, `/tempbanip`, `/unbanip`, `/mute`, `/tempmute`, `/unmute`, `/muteinfo`), operator control (`/kill`, `/gamemode`, console-only `/sudo`), social spy, vanish, and player state (`/heal`, `/feed`, `/fly`, `/god`). | foundation, minecraft-core |
+| `utility`        | kits and item utilities (`/repair`).                                                                                                                                                                                                                                                      | foundation, minecraft-core |
+| `application`    | Composition root, root `CellulosesConfig`, `/cellulosesz status                                                                                                                                                                                                                           | reload`.                   | foundation, minecraft-core, movement, communication, administration, utility |
 
 No feature module may depend on another feature module. `minecraft-core` and `foundation` never
 depend on features. Loader APIs (`net.fabricmc.*`, `net.neoforged.*`, `net.minecraft.*` in
@@ -85,6 +85,26 @@ TeleportIntent → preflight → optional delay → late destination resolve
   exceptions; exceptions are reserved for storage/IO/invariant faults.
 - `TeleportDestination.Player` is resolved at commit time, never snapshotted at request time.
 
+## Administration and moderation
+
+- Minecraft's native account/IP ban lists are the single source of truth for bans; there is no
+  CellulosesZ ban database, so login enforcement and `/pardon` interoperability come from vanilla.
+- Mutes are persisted per player under
+  `<world>/cellulosesz/administration/moderation/mutes/<uuid>.json`. A mute is published to runtime
+  state only after its file is written; unmute deletes the file before unpublishing. Corrupt records
+  are isolated, never overwritten, and reported rather than treated as "not muted".
+- Punishment expiry uses wall-clock `Clock`/`Instant` (never monotonic gameplay time); expected
+  failures are sealed outcomes.
+- Cross-feature enforcement is composed in `application`: `communication` receives a `canSend`
+  capability and emits a `PrivateMessageObservation`, and the public-chat gate cancels muted chat.
+  `administration` never depends on `communication` or `movement`.
+- Vanish suppresses entity tracking via `ServerPlayerVisibilityMixin`, the only mixin (written in
+  Java because Mixin's Kotlin support is incomplete); it reads a small static vanish snapshot.
+  Command execution as another player (`/sudo`) is console-only and has a single dispatch path.
+- `verifyArchitecture` forbids native ban access outside `MinecraftBanBackend`,
+  kill/game-mode/command execution outside `MinecraftPlayerControlBackend`, and file IO in command
+  files.
+
 ## Config
 
 - `foundation.ConfigStore<T>` is generic: decode candidate, validate the whole candidate, then
@@ -98,7 +118,8 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 - Config: `<config-dir>/cellulosesz/cellulosesz.jsonc`.
 - Data: `<world>/cellulosesz/` — `movement/` (`homes/<uuid>.json`, `warps.json`, `spawn.json`,
-  `teleport-history/<uuid>.json`) and `kits.json`.
+  `teleport-history/<uuid>.json`), `administration/moderation/mutes/<uuid>.json`,
+  `administration/moderation/audit/<utc-day>/<millis>-<uuid>.json`, and `kits.json`.
 - Writes go through `AtomicFile` (temp file + fsync + atomic move); per-file serialization uses
   `KeyedMutex` or a repository `Mutex`.
 - Corrupt machine data raises a typed `*DataException` and is never silently overwritten.
@@ -128,10 +149,10 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Verification
 
-| Task                      | Purpose                                                                                       |
-|---------------------------|-----------------------------------------------------------------------------------------------|
-| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, Java allowlist, single teleport path. |
-| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                    |
-| `checkModules`            | Runs every module's `check` (including unit tests) once.                                      |
-| `chiseledBuild`           | Builds both loader distributions.                                                             |
-| `inspectArtifacts`        | Flattened classes present; externals absent; NeoForge Jar-in-Jar intact.                      |
+| Task                      | Purpose                                                                                                                                                               |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban. |
+| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                            |
+| `checkModules`            | Runs every module's `check` (including unit tests) once.                                                                                                              |
+| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                     |
+| `inspectArtifacts`        | Flattened classes present; externals absent; NeoForge Jar-in-Jar intact.                                                                                              |
