@@ -112,10 +112,7 @@ internal class MuteService(
         }
 
         val now = clock.instant()
-        val expired = result.records.filter {
-            it.expiresAt?.isBefore(now) == true
-        }
-        val alive = result.records.filterNot {
+        val (expired, alive) = result.records.partition {
             it.expiresAt?.isBefore(now) == true
         }
 

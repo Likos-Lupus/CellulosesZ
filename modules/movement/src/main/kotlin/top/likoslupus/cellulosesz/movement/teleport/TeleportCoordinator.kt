@@ -26,7 +26,7 @@ internal class TeleportCoordinator(
         val origin = backend.position(intent.subjectId)
             ?: return TeleportOutcome.PlayerOffline
 
-        if (pending.has(intent.subjectId)) {
+        if (intent.subjectId in pending) {
             return TeleportOutcome.AlreadyPending
         }
 

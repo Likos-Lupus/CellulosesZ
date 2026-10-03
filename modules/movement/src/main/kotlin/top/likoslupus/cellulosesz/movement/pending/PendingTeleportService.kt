@@ -13,7 +13,8 @@ internal class PendingTeleportService {
 
     private val entries = HashMap<UUID, PendingTeleport>()
 
-    fun has(playerId: UUID): Boolean = entries.containsKey(playerId)
+    operator fun contains(playerId: UUID): Boolean =
+        entries.containsKey(playerId)
 
     fun register(
         playerId: UUID,

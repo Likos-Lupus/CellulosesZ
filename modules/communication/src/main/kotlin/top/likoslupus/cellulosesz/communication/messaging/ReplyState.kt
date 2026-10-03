@@ -68,10 +68,8 @@ internal class ReplyState(
 
     fun clear(playerId: UUID) {
         entries.remove(playerId)
-        for (key in entries.keys.toList()) {
-            val entry = entries[key]
-                ?: continue
-            entries[key] = entry.copy(
+        entries.replaceAll { _, entry ->
+            entry.copy(
                 lastIncoming = entry.lastIncoming?.takeUnless { it.playerId == playerId },
                 lastOutgoing = entry.lastOutgoing?.takeUnless { it.playerId == playerId },
                 lastInteraction = entry.lastInteraction?.takeUnless { it.playerId == playerId },
@@ -80,8 +78,6 @@ internal class ReplyState(
     }
 
     private fun isExpired(target: ReplyTarget): Boolean =
-        timeout().let {
-            it != null && target.updatedAt.elapsedNow() > it
-        }
+        timeout()?.let { target.updatedAt.elapsedNow() > it } ?: false
 
 }

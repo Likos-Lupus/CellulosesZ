@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.communication
 
 import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.communication.messaging.OnlinePlayerIdentity
+import top.likoslupus.cellulosesz.communication.messaging.toOnlineIdentity
 import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import java.util.*
@@ -12,32 +13,18 @@ internal class MinecraftPlayerDirectory(
 ) : PlayerDirectory {
 
     override fun online(): List<OnlinePlayerIdentity> =
-        kernel.requireServer().playerList.players.map {
-            OnlinePlayerIdentity(
-                it.uuid,
-                it.gameProfile.name
-            )
-        }
+        kernel.requireServer().playerList.players
+                .map { it.toOnlineIdentity() }
 
     override fun moderators(): List<OnlinePlayerIdentity> =
         kernel.requireServer().playerList.players
                 .filter { it.createCommandSourceStack().canUseModeratorCommands() }
-                .map {
-                    OnlinePlayerIdentity(
-                        it.uuid,
-                        it.gameProfile.name
-                    )
-                }
+                .map { it.toOnlineIdentity() }
 
     override fun onlineIn(dimensionId: String): List<OnlinePlayerIdentity> =
         kernel.requireServer().playerList.players
                 .filter { it.level().dimension().identifier().toString() == dimensionId }
-                .map {
-                    OnlinePlayerIdentity(
-                        it.uuid,
-                        it.gameProfile.name
-                    )
-                }
+                .map { it.toOnlineIdentity() }
 
     override fun send(playerId: UUID, message: Component): Boolean {
         val player = kernel.requireServer().playerList.getPlayer(playerId)

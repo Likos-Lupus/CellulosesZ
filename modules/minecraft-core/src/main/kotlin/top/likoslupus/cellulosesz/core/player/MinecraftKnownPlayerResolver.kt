@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.core.player
 
+import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import java.util.*
 
@@ -27,27 +28,19 @@ public class MinecraftKnownPlayerResolver(
         byName.clear()
     }
 
-    override fun onlineByName(name: String): KnownPlayerIdentity? {
-        val player = kernel.requireServer().playerList.getPlayerByName(name)
-            ?: return null
-        val identity = KnownPlayerIdentity(
-            player.uuid,
-            player.gameProfile.name
-        )
-        record(identity)
-        return identity
-    }
+    override fun onlineByName(name: String): KnownPlayerIdentity? =
+        recordAndReturn(kernel.requireServer().playerList.getPlayerByName(name))
 
-    override fun onlineById(id: UUID): KnownPlayerIdentity? {
-        val player = kernel.requireServer().playerList.getPlayer(id)
-            ?: return null
-        val identity = KnownPlayerIdentity(
-            player.uuid,
-            player.gameProfile.name
-        )
-        record(identity)
-        return identity
-    }
+    override fun onlineById(id: UUID): KnownPlayerIdentity? =
+        recordAndReturn(kernel.requireServer().playerList.getPlayer(id))
+
+    private fun recordAndReturn(player: ServerPlayer?): KnownPlayerIdentity? =
+        player?.let {
+            KnownPlayerIdentity(
+                it.uuid,
+                it.gameProfile.name
+            ).also(::record)
+        }
 
     override fun knownByName(name: String): KnownPlayerIdentity? {
         val id = byName[name.lowercase()]

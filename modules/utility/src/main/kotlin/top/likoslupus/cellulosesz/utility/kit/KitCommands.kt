@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.utility.kit
 import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
+import kotlinx.coroutines.Job
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
@@ -90,11 +91,7 @@ internal object KitCommands {
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("giving kit..."))
-        }
+        return acknowledge(source, job, "giving kit...")
     }
 
     private fun list(
@@ -117,11 +114,7 @@ internal object KitCommands {
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("loading kits..."))
-        }
+        return acknowledge(source, job, "loading kits...")
     }
 
     private fun create(
@@ -146,11 +139,7 @@ internal object KitCommands {
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("creating kit..."))
-        }
+        return acknowledge(source, job, "creating kit...")
     }
 
     private fun delete(
@@ -173,11 +162,17 @@ internal object KitCommands {
             kernel.messagePlayer(playerId, message)
         }
 
-        return if (job == null) {
-            source.replyError(Messages.prefixed("runtime is shutting down"))
-        } else {
-            source.reply(Messages.prefixed("deleting kit..."))
-        }
+        return acknowledge(source, job, "deleting kit...")
     }
+
+    private fun acknowledge(
+        source: CommandSourceStack,
+        job: Job?,
+        pending: String,
+    ): Int =
+        when (job) {
+            null -> source.replyError(Messages.prefixed("runtime is shutting down"))
+            else -> source.reply(Messages.prefixed(pending))
+        }
 
 }

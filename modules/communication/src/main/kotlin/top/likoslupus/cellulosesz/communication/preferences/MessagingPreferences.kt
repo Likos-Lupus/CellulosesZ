@@ -11,4 +11,9 @@ internal data class MessagingPreferences(
     val receivePrivateMessages: Boolean = true,
     val ignoredPlayerIds: Set<UUID> = emptySet(),
     val replyMode: ReplyMode? = null,
-)
+) {
+
+    operator fun contains(playerId: UUID): Boolean =
+        playerId in ignoredPlayerIds
+
+}

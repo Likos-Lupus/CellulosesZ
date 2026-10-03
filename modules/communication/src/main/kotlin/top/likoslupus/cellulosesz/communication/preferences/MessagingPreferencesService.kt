@@ -80,7 +80,7 @@ internal class MessagingPreferencesService(
                 val value = state.value
                 when {
                     !value.receivePrivateMessages -> ReceiveDecision.DENIED
-                    senderId in value.ignoredPlayerIds -> ReceiveDecision.DENIED
+                    senderId in value -> ReceiveDecision.DENIED
                     else -> ReceiveDecision.ALLOWED
                 }
             }
@@ -134,7 +134,7 @@ internal class MessagingPreferencesService(
 
         val current = runner.run { current(playerId) }
             ?: return IgnoreUpdateResult.StorageUnavailable
-        if (targetId in current.ignoredPlayerIds) {
+        if (targetId in current) {
             return IgnoreUpdateResult.AlreadyIgnored
         }
         if (current.ignoredPlayerIds.size >= settings().maxIgnoredPlayers) {
@@ -161,7 +161,7 @@ internal class MessagingPreferencesService(
 
         val current = runner.run { current(playerId) }
             ?: return IgnoreUpdateResult.StorageUnavailable
-        if (targetId !in current.ignoredPlayerIds) {
+        if (targetId !in current) {
             return IgnoreUpdateResult.NotIgnored
         }
 

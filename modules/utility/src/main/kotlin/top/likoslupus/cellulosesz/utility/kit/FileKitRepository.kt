@@ -34,9 +34,12 @@ internal class FileKitRepository(private val root: () -> Path) : KitRepository {
         mutex.withLock {
             withContext(Dispatchers.IO) {
                 val current = readFile()
-                val updated = current.kits.toMutableMap()
-                updated[name.value] = items.map(KitItemCodec::encode)
-                writeFile(KitFile(current.schemaVersion, updated))
+                writeFile(
+                    KitFile(
+                        current.schemaVersion,
+                        current.kits + (name.value to items.map(KitItemCodec::encode))
+                    )
+                )
             }
         }
 
@@ -48,9 +51,12 @@ internal class FileKitRepository(private val root: () -> Path) : KitRepository {
                     return@withContext false
                 }
 
-                val updated = current.kits.toMutableMap()
-                updated.remove(name.value)
-                writeFile(KitFile(current.schemaVersion, updated))
+                writeFile(
+                    KitFile(
+                        current.schemaVersion,
+                        current.kits - name.value
+                    )
+                )
                 true
             }
         }
@@ -71,7 +77,10 @@ internal class FileKitRepository(private val root: () -> Path) : KitRepository {
         }
 
         val decoded = try {
-            StorageJson.format.decodeFromString(KitFile.serializer(), text)
+            StorageJson.format.decodeFromString(
+                KitFile.serializer(),
+                text
+            )
         } catch (exception: SerializationException) {
             throw KitDataException("corrupt kits data", exception)
         }

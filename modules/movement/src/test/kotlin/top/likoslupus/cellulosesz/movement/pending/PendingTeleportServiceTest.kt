@@ -50,10 +50,10 @@ class PendingTeleportServiceTest {
     @Test
     fun `register and clear track presence`() {
         service.register(player, position(), policy())
-        assertTrue(service.has(player))
+        assertTrue(player in service)
 
         service.clear(player)
-        assertFalse(service.has(player))
+        assertFalse(player in service)
     }
 
     @Test
@@ -82,7 +82,7 @@ class PendingTeleportServiceTest {
                 position(x = 0.2)
             )
         )
-        assertTrue(service.has(player))
+        assertTrue(player in service)
     }
 
     @Test
@@ -101,7 +101,7 @@ class PendingTeleportServiceTest {
             TeleportCancellation.MOVED,
             signal.await()
         )
-        assertFalse(service.has(player))
+        assertFalse(player in service)
     }
 
     @Test
@@ -157,7 +157,7 @@ class PendingTeleportServiceTest {
         )
 
         assertFalse(service.onDamage(player))
-        assertTrue(service.has(player))
+        assertTrue(player in service)
     }
 
     @Test
@@ -184,7 +184,7 @@ class PendingTeleportServiceTest {
             TeleportCancellation.SERVER_STOPPING,
             second.await()
         )
-        assertFalse(service.has(player))
+        assertFalse(player in service)
     }
 
 }

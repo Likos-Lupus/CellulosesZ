@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.communication.messaging
 
 import net.minecraft.network.chat.Component
+import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import java.util.*
 
@@ -17,10 +18,7 @@ internal class MinecraftMessagingBackend(
             val player = kernel.requireServer().playerList.getPlayerByName(name)
         ) {
             null -> null
-            else -> OnlinePlayerIdentity(
-                player.uuid,
-                player.gameProfile.name
-            )
+            else -> player.toOnlineIdentity()
         }
 
     override fun onlineIdentityById(id: UUID): OnlinePlayerIdentity? =
@@ -28,10 +26,7 @@ internal class MinecraftMessagingBackend(
             val player = kernel.requireServer().playerList.getPlayer(id)
         ) {
             null -> null
-            else -> OnlinePlayerIdentity(
-                player.uuid,
-                player.gameProfile.name
-            )
+            else -> player.toOnlineIdentity()
         }
 
     override fun deliverPrivateMessage(playerId: UUID, message: Component): Boolean =
@@ -46,3 +41,6 @@ internal class MinecraftMessagingBackend(
         }
 
 }
+
+internal fun ServerPlayer.toOnlineIdentity(): OnlinePlayerIdentity =
+    OnlinePlayerIdentity(uuid, gameProfile.name)

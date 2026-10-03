@@ -14,15 +14,9 @@ internal class MinecraftAccountResolver(
     private val known: KnownPlayerResolver,
 ) {
 
-    fun resolve(rawTarget: String): PlayerIdentity? {
-        known.onlineByName(rawTarget)?.let {
-            return PlayerIdentity(it.id, it.name)
-        }
-        known.knownByName(rawTarget)?.let {
-            return PlayerIdentity(it.id, it.name)
-        }
-        return null
-    }
+    fun resolve(rawTarget: String): PlayerIdentity? =
+        (known.onlineByName(rawTarget) ?: known.knownByName(rawTarget))
+            ?.let { PlayerIdentity(it.id, it.name) }
 
     fun resolveOnline(rawTarget: String): PlayerIdentity? =
         known.onlineByName(rawTarget)?.let {

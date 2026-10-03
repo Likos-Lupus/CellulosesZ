@@ -5,6 +5,7 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
+import top.likoslupus.cellulosesz.administration.moderation.command.ModerationFeedback
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
@@ -60,7 +61,7 @@ internal object SocialSpyCommands {
 
     private fun feedback(result: SocialSpyResult): Component {
         val state = if (result.enabled) "enabled" else "disabled"
-        val note = if (result.auditRecorded) "" else " (audit record could not be written)"
+        val note = ModerationFeedback.auditNote(result.auditRecorded)
         return Messages.prefixed("social spy $state$note")
     }
 

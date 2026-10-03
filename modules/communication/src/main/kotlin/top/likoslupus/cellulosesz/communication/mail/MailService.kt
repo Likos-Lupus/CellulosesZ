@@ -242,7 +242,6 @@ internal class MailService(
     ): Boolean =
         try {
             preferences.load(targetId)
-                    ?.ignoredPlayerIds
                     ?.contains(senderId) == true
         } catch (cancellation: CancellationException) {
             throw cancellation
