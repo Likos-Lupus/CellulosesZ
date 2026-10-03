@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.application.config
 
 import kotlinx.serialization.Serializable
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
-import top.likoslupus.cellulosesz.communication.MessagingSettings
+import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
 
 public const val CURRENT_SCHEMA_VERSION: Int = 1

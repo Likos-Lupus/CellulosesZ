@@ -13,10 +13,4 @@ public object Messages {
     public fun raw(message: String): Component =
         Component.literal(message)
 
-    public fun privateMessage(senderName: String, message: String): Component =
-        Component.literal("[$senderName -> you] $message")
-
-    public fun privateMessageSent(targetName: String, message: String): Component =
-        Component.literal("[you -> $targetName] $message")
-
 }

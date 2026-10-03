@@ -25,7 +25,12 @@ with the legacy CellulosesZ or with EssentialsX.
   pipeline as homes, warps, spawn and requests.
 - **Safe teleports** — destinations are validated against collisions, fluids, build height and the
   world border, with an optional delay that cancels on movement or damage.
-- **Private messaging** — `/msg` and `/reply` with in-memory last-conversation state.
+- **Private messaging** — `/msg`, `/reply` and `/r` with session reply state, plus per-player
+  preferences (`/ignore`, `/msgtoggle`) that persist across restarts.
+- **Mail** — `/mail`, `/mail read`, `/mail send`, `/mail sendtemp`, `/mail clear`: durable,
+  offline-capable messaging with bounded mailboxes, expiry and per-sender rate limiting.
+- **Staff communication** — `/helpop` for staff support, and moderator `/broadcast` /
+  `/broadcastworld`.
 - **Warps** — `/warp`, `/warps`, `/setwarp`, `/delwarp` as server-global named positions.
 - **Spawn** — `/spawn`, `/setspawn`, `/delspawn` with a configurable spawn and vanilla fallback.
 - **Kits** — `/kit`, `/kits`, `/createkit`, `/delkit`, stored through the vanilla `ItemStack`
@@ -88,43 +93,58 @@ needed there. This mod adds **no client UI**.
 
 ## Commands
 
-| Command                    | Permission | Description                               |
-|:---------------------------|:-----------|:------------------------------------------|
-| `/sethome [name]`          | Player     | Save the current position as a home.      |
-| `/home [name]`             | Player     | Teleport to a saved home.                 |
-| `/delhome <name>`          | Player     | Delete a saved home.                      |
-| `/homes`                   | Player     | List your homes.                          |
-| `/tpa <player>`            | Player     | Request to teleport to another player.    |
-| `/tpahere <player>`        | Player     | Request a player to teleport to you.      |
-| `/tpaccept [player]`       | Player     | Accept a pending teleport request.        |
-| `/tpdeny [player]`         | Player     | Deny a pending teleport request.          |
-| `/tpcancel`                | Player     | Cancel your outgoing teleport request.    |
-| `/back`                    | Player     | Return to your previous location.         |
-| `/tp <player>`             | Player     | Teleport to another player.               |
-| `/tp <player> <target>`    | Moderator  | Teleport a player to another player.      |
-| `/tphere <target>`         | Moderator  | Teleport a player to you.                 |
-| `/tppos <x> <y> <z> [dim]` | Moderator  | Teleport to coordinates.                  |
-| `/msg <player> <message>`  | Player     | Send a private message.                   |
-| `/reply <message>`         | Player     | Reply to the last private message.        |
-| `/warp <name>`             | Player     | Teleport to a warp.                       |
-| `/warps`                   | Player     | List warps.                               |
-| `/setwarp <name>`          | Moderator  | Create or update a warp.                  |
-| `/delwarp <name>`          | Moderator  | Delete a warp.                            |
-| `/spawn`                   | Player     | Teleport to the configured spawn.         |
-| `/setspawn`                | Moderator  | Set the spawn to your current position.   |
-| `/delspawn`                | Moderator  | Reset the spawn to vanilla.               |
-| `/kit <name>`              | Player     | Receive a kit.                            |
-| `/kits`                    | Player     | List kits.                                |
-| `/createkit <name>`        | Moderator  | Create a kit from your inventory.         |
-| `/delkit <name>`           | Moderator  | Delete a kit.                             |
-| `/heal [player]`           | Moderator  | Restore health.                           |
-| `/feed [player]`           | Moderator  | Restore hunger.                           |
-| `/kick <player> [reason]`  | Moderator  | Disconnect a player.                      |
-| `/fly [player]`            | Moderator  | Toggle flight.                            |
-| `/god [player]`            | Moderator  | Toggle invulnerability.                   |
-| `/repair [player]`         | Moderator  | Repair the held item.                     |
-| `/cellulosesz status`      | Moderator  | Show runtime state and config generation. |
-| `/cellulosesz reload`      | Moderator  | Reload the configuration transactionally. |
+| Command                                        | Permission     | Description                                    |
+|:-----------------------------------------------|:---------------|:-----------------------------------------------|
+| `/sethome [name]`                              | Player         | Save the current position as a home.           |
+| `/home [name]`                                 | Player         | Teleport to a saved home.                      |
+| `/delhome <name>`                              | Player         | Delete a saved home.                           |
+| `/homes`                                       | Player         | List your homes.                               |
+| `/tpa <player>`                                | Player         | Request to teleport to another player.         |
+| `/tpahere <player>`                            | Player         | Request a player to teleport to you.           |
+| `/tpaccept [player]`                           | Player         | Accept a pending teleport request.             |
+| `/tpdeny [player]`                             | Player         | Deny a pending teleport request.               |
+| `/tpcancel`                                    | Player         | Cancel your outgoing teleport request.         |
+| `/back`                                        | Player         | Return to your previous location.              |
+| `/tp <player>`                                 | Player         | Teleport to another player.                    |
+| `/tp <player> <target>`                        | Moderator      | Teleport a player to another player.           |
+| `/tphere <target>`                             | Moderator      | Teleport a player to you.                      |
+| `/tppos <x> <y> <z> [dim]`                     | Moderator      | Teleport to coordinates.                       |
+| `/msg <player> <message>`                      | Player         | Send a private message.                        |
+| `/reply <message>`                             | Player         | Reply to the last private message.             |
+| `/r <message>`                                 | Player         | Alias of `/reply`.                             |
+| `/ignore`                                      | Player         | List ignored players.                          |
+| `/ignore add <player>`                         | Player         | Stop receiving private messages from a player. |
+| `/ignore remove <player>`                      | Player         | Reverse `/ignore add`.                         |
+| `/msgtoggle`                                   | Player         | Show your private-message receive state.       |
+| `/msgtoggle on`                                | Player         | Enable receiving private messages.             |
+| `/msgtoggle off`                               | Player         | Disable receiving private messages.            |
+| `/mail`                                        | Player         | Show a mailbox summary.                        |
+| `/mail read [page]`                            | Player         | Read and mark mail as read.                    |
+| `/mail send <player> <message>`                | Player/Console | Send durable mail.                             |
+| `/mail sendtemp <player> <duration> <message>` | Player/Console | Send expiring mail.                            |
+| `/mail clear`                                  | Player         | Delete all your mail.                          |
+| `/helpop <message>`                            | Player/Console | Contact online moderators.                     |
+| `/broadcast <message>`                         | Moderator      | Announce to all players.                       |
+| `/broadcastworld <dimension> <message>`        | Moderator      | Announce to one dimension.                     |
+| `/warp <name>`                                 | Player         | Teleport to a warp.                            |
+| `/warps`                                       | Player         | List warps.                                    |
+| `/setwarp <name>`                              | Moderator      | Create or update a warp.                       |
+| `/delwarp <name>`                              | Moderator      | Delete a warp.                                 |
+| `/spawn`                                       | Player         | Teleport to the configured spawn.              |
+| `/setspawn`                                    | Moderator      | Set the spawn to your current position.        |
+| `/delspawn`                                    | Moderator      | Reset the spawn to vanilla.                    |
+| `/kit <name>`                                  | Player         | Receive a kit.                                 |
+| `/kits`                                        | Player         | List kits.                                     |
+| `/createkit <name>`                            | Moderator      | Create a kit from your inventory.              |
+| `/delkit <name>`                               | Moderator      | Delete a kit.                                  |
+| `/heal [player]`                               | Moderator      | Restore health.                                |
+| `/feed [player]`                               | Moderator      | Restore hunger.                                |
+| `/kick <player> [reason]`                      | Moderator      | Disconnect a player.                           |
+| `/fly [player]`                                | Moderator      | Toggle flight.                                 |
+| `/god [player]`                                | Moderator      | Toggle invulnerability.                        |
+| `/repair [player]`                             | Moderator      | Repair the held item.                          |
+| `/cellulosesz status`                          | Moderator      | Show runtime state and config generation.      |
+| `/cellulosesz reload`                          | Moderator      | Reload the configuration transactionally.      |
 
 Moderator commands use the vanilla Minecraft 26.1.2 permission `COMMANDS_MODERATOR`.
 
@@ -146,6 +166,9 @@ Per-world data is stored under:
 │  ├─ warps.json
 │  ├─ spawn.json
 │  └─ teleport-history/<uuid>.json
+├─ communication/
+│  ├─ preferences/<uuid>.json
+│  └─ mail/<uuid>.json
 └─ kits.json
 ```
 
@@ -172,13 +195,13 @@ versions/26.1.2-neoforge/build/libs/cellulosesz-<version>+26.1.2-neoforge.jar
 
 ### Verification tasks
 
-| Task                      | Purpose                                                                 |
-|:--------------------------|:------------------------------------------------------------------------|
-| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, Java allowlist. |
-| `checkModuleDependencies` | Compile-time module dependency allowlist.                               |
-| `checkModules`            | Unit tests of every architecture module, run once.                      |
-| `chiseledBuild`           | Builds both loader distributions.                                       |
-| `inspectArtifacts`        | Asserts flattened classes, no bundled externals, NeoForge Jar-in-Jar.   |
+| Task                      | Purpose                                                                                                        |
+|:--------------------------|:---------------------------------------------------------------------------------------------------------------|
+| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, Java allowlist, communication repository IO ownership. |
+| `checkModuleDependencies` | Compile-time module dependency allowlist.                                                                      |
+| `checkModules`            | Unit tests of every architecture module, run once.                                                             |
+| `chiseledBuild`           | Builds both loader distributions.                                                                              |
+| `inspectArtifacts`        | Asserts flattened classes, no bundled externals, NeoForge Jar-in-Jar.                                          |
 
 CI runs all of the above on JDK 25.
 

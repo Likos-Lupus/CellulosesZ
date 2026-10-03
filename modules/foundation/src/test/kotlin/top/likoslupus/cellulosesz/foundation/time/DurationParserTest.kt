@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.administration.moderation
+package top.likoslupus.cellulosesz.foundation.time
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull

@@ -208,6 +208,27 @@ tasks.register("verifyArchitecture") {
             }
         }
 
+        // Communication: JSON serialization and atomic writes are owned by repositories only.
+        val communicationIoAllowlist = setOf(
+            "modules/communication/src/main/kotlin/top/likoslupus/cellulosesz/communication/preferences/FileMessagingPreferencesRepository.kt",
+            "modules/communication/src/main/kotlin/top/likoslupus/cellulosesz/communication/mail/FileMailboxRepository.kt"
+        )
+        kotlinFiles(
+            modulesDir.resolve("communication")
+                    .resolve("src/main/kotlin")
+        ).forEach { file ->
+            val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+            if (relative !in communicationIoAllowlist) {
+                val text = file.readText()
+                listOf("StorageJson", "AtomicFile").forEach { marker ->
+                    if (text.contains(marker)) {
+                        violations +=
+                            "$relative: communication IO must live in a repository ('$marker')"
+                    }
+                }
+            }
+        }
+
         // Java is exception-only: classes in a `mixin` package plus the loader entrypoint shims.
         val javaAllowlist = setOf(
             "platform/fabric/src/main/java/top/likoslupus/cellulosesz/fabric/CellulosesZFabric.java",

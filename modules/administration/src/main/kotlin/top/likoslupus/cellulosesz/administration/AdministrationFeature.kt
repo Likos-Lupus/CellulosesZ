@@ -4,14 +4,12 @@ import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
-import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.audit.FileModerationAuditRepository
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditService
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanCommands
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanService
 import top.likoslupus.cellulosesz.administration.moderation.ban.IpBanCommands
 import top.likoslupus.cellulosesz.administration.moderation.ban.MinecraftBanBackend
-import top.likoslupus.cellulosesz.administration.moderation.identity.KnownPlayerIndex
 import top.likoslupus.cellulosesz.administration.moderation.identity.MinecraftAccountResolver
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickCommands
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickService
@@ -29,6 +27,8 @@ import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
 import top.likoslupus.cellulosesz.core.command.messagePlayer
+import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
+import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import java.nio.file.Path
@@ -45,7 +45,7 @@ public class AdministrationFeature internal constructor(
     private val control: PlayerControlService,
     private val spies: SocialSpyService,
     private val vanish: VanishService,
-    private val known: KnownPlayerIndex,
+    private val known: MinecraftKnownPlayerResolver,
     private val notifier: ModerationNotifier,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
@@ -71,13 +71,15 @@ public class AdministrationFeature internal constructor(
                 known.clear()
                 server.playerList.players.forEach { player ->
                     known.record(
-                        PlayerIdentity(
+                        KnownPlayerIdentity(
                             player.uuid,
                             player.gameProfile.name
                         )
                     )
                 }
-                bans.listedAccountIdentities().forEach { known.record(it) }
+                bans.listedAccountIdentities().forEach {
+                    known.record(KnownPlayerIdentity(it.id, it.name))
+                }
             }
 
             mutes.load()
@@ -85,7 +87,7 @@ public class AdministrationFeature internal constructor(
             kernel.onServerThread {
                 mutes.activeMutes().forEach { mute ->
                     known.record(
-                        PlayerIdentity(
+                        KnownPlayerIdentity(
                             mute.playerId,
                             mute.playerName
                         )
@@ -103,7 +105,7 @@ public class AdministrationFeature internal constructor(
     /** Records every joined player so offline moderation can resolve them later. */
     public fun onPlayerJoined(player: ServerPlayer) {
         known.record(
-            PlayerIdentity(
+            KnownPlayerIdentity(
                 player.uuid,
                 player.gameProfile.name
             )
@@ -118,6 +120,13 @@ public class AdministrationFeature internal constructor(
     /** Server-thread confined mute gate used by communication and the chat gate. */
     public fun isMuted(playerId: UUID): Boolean =
         mutes.isMuted(playerId)
+
+    /**
+     * Server-thread confined visibility check used by communication reachability. Vanished players
+     * stay visible to other vanished players.
+     */
+    public fun canBeSeenBy(viewerId: UUID, targetId: UUID): Boolean =
+        !vanish.isVanished(targetId) || vanish.isVanished(viewerId)
 
     /**
      * Called by the composition root after a private message is delivered. Given as primitives so
@@ -150,10 +159,10 @@ public fun createAdministrationFeature(
     kernel: RuntimeKernel,
     dataRoot: () -> Path,
     settings: () -> AdministrationSettings,
+    known: MinecraftKnownPlayerResolver,
 ): AdministrationFeature {
     val clock = Clock.systemUTC()
-    val known = KnownPlayerIndex()
-    val accountResolver = MinecraftAccountResolver(kernel, known)
+    val accountResolver = MinecraftAccountResolver(known)
     val protection = TargetProtectionPolicy(kernel) { settings().moderation }
     val audit = ModerationAuditService(
         repository = FileModerationAuditRepository(dataRoot),

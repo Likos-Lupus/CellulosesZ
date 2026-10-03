@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.application.config
 
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettingsValidation
+import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
 import top.likoslupus.cellulosesz.movement.config.MovementSettingsValidation
 
@@ -18,6 +19,7 @@ internal object ConfigValidation {
                 )
             }
             addAll(MovementSettingsValidation.validate(config.movement))
+            addAll(MessagingSettingsValidation.validate(config.messaging))
             addAll(AdministrationSettingsValidation.validate(config.administration))
         }
 

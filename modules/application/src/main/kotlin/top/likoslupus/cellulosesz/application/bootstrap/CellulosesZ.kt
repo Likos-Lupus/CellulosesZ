@@ -10,7 +10,10 @@ import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.application.command.RootCommand
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigValidation
+import top.likoslupus.cellulosesz.communication.CommunicationIntegration
+import top.likoslupus.cellulosesz.communication.SendGateResult
 import top.likoslupus.cellulosesz.communication.createCommunicationFeature
+import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
@@ -22,8 +25,8 @@ import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * The only composition root. It explicitly wires config, runtime, and the bounded-context facades;
- * it contains no domain logic.
+ * The only composition root. It explicitly wires config, runtime, shared identity lookup and the
+ * bounded-context facades; it contains no domain logic.
  */
 public object CellulosesZ {
 
@@ -43,16 +46,24 @@ public object CellulosesZ {
             ioDispatcher = Dispatchers.IO,
         )
 
+        val known = MinecraftKnownPlayerResolver(kernel)
+
         val movement = createMovementFeature(
             kernel = kernel,
             dataRoot = { dataRoot(kernel).resolve("movement") },
             settings = { config.current.movement },
         )
-        val communication = createCommunicationFeature()
         val administration = createAdministrationFeature(
             kernel = kernel,
             dataRoot = { dataRoot(kernel).resolve("administration") },
             settings = { config.current.administration },
+            known = known,
+        )
+        val communication = createCommunicationFeature(
+            kernel = kernel,
+            dataRoot = { dataRoot(kernel).resolve("communication") },
+            settings = { config.current.messaging },
+            known = known,
         )
         val utility = createUtilityFeature(kernel) { dataRoot(kernel) }
 
@@ -61,17 +72,29 @@ public object CellulosesZ {
             movement.registerCommands(dispatcher)
             communication.registerCommands(
                 dispatcher = dispatcher,
-                enabled = { config.current.messaging.enabled },
-                canSend = { administration.isMuted(it) },
-                observe = {
-                    administration.observePrivateMessage(
-                        senderId = it.senderId,
-                        senderName = it.senderName,
-                        targetId = it.targetId,
-                        targetName = it.targetName,
-                        text = it.text,
-                    )
-                },
+                integration = CommunicationIntegration(
+                    senderGate = {
+                        when {
+                            administration.isMuted(it) -> SendGateResult.Denied(
+                                Messages.prefixed("you are muted")
+                            )
+
+                            else -> SendGateResult.Allowed
+                        }
+                    },
+                    targetReachability = { senderId, targetId ->
+                        administration.canBeSeenBy(senderId, targetId)
+                    },
+                    observer = {
+                        administration.observePrivateMessage(
+                            senderId = it.senderId,
+                            senderName = it.senderName,
+                            targetId = it.targetId,
+                            targetName = it.targetName,
+                            text = it.text,
+                        )
+                    },
+                ),
             )
             administration.registerCommands(dispatcher)
             utility.registerCommands(dispatcher)
@@ -80,6 +103,7 @@ public object CellulosesZ {
         LifecycleEvent.SERVER_STARTING.register {
             kernel.onServerStarting(it)
             administration.onServerStarting()
+            communication.onServerStarting()
         }
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
@@ -87,6 +111,7 @@ public object CellulosesZ {
         }
         LifecycleEvent.SERVER_STOPPING.register {
             movement.onServerStopping()
+            communication.onServerStopping()
             administration.onServerStopping()
             kernel.onServerStopping()
         }
@@ -108,6 +133,7 @@ public object CellulosesZ {
 
         PlayerEvent.PLAYER_JOIN.register {
             administration.onPlayerJoined(it)
+            communication.onPlayerJoined(it.uuid)
         }
 
         ChatEvent.RECEIVED.register { player, _ ->
@@ -123,8 +149,8 @@ public object CellulosesZ {
 
         PlayerEvent.PLAYER_QUIT.register {
             administration.onPlayerQuit(it.uuid)
-            val affected = movement.onPlayerQuit(it.uuid)
             communication.onPlayerQuit(it.uuid)
+            val affected = movement.onPlayerQuit(it.uuid)
             if (kernel.state == KernelState.RUNNING) {
                 affected.forEach { senderId ->
                     PlayerResolver.onlineById(

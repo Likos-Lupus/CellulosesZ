@@ -3,6 +3,8 @@ package top.likoslupus.cellulosesz.application.config
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import top.likoslupus.cellulosesz.communication.config.MailSettings
+import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.movement.config.*
 
 class ConfigValidationTest {
@@ -69,6 +71,19 @@ class ConfigValidationTest {
         )
 
         assertTrue(errors.any { it.path == "movement.teleport.delaySeconds" })
+    }
+
+    @Test
+    fun `rejects non positive messaging mailbox limit`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(
+                messaging = MessagingSettings(
+                    mail = MailSettings(maxMessagesPerMailbox = 0)
+                )
+            )
+        )
+
+        assertTrue(errors.any { it.path == "messaging.mail.maxMessagesPerMailbox" })
     }
 
 }

@@ -4,10 +4,8 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.network.chat.Component
-import top.likoslupus.cellulosesz.administration.moderation.DurationParser
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
-import top.likoslupus.cellulosesz.administration.moderation.TemporaryDuration
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
 import top.likoslupus.cellulosesz.core.command.message
@@ -15,6 +13,8 @@ import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.foundation.time.DurationParser
+import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 
 internal val ModerationActor.displayName: String
     get() = when (this) {

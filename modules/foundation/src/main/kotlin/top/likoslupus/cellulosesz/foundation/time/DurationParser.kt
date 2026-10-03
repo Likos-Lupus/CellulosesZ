@@ -1,4 +1,4 @@
-package top.likoslupus.cellulosesz.administration.moderation
+package top.likoslupus.cellulosesz.foundation.time
 
 import java.time.Duration
 
@@ -10,7 +10,7 @@ import java.time.Duration
  * Pure Kotlin, no locale dependence, no Minecraft dependence. Returns `null` for empty, zero,
  * negative, malformed, or overflowing input.
  */
-internal object DurationParser {
+public object DurationParser {
 
     private val UNIT_SECONDS: Map<Char, Long> = mapOf(
         's' to 1L,
@@ -20,7 +20,7 @@ internal object DurationParser {
         'w' to 604_800L,
     )
 
-    fun parse(raw: String): TemporaryDuration? {
+    public fun parse(raw: String): TemporaryDuration? {
         val text = raw.trim().lowercase()
         if (text.isEmpty()) {
             return null
