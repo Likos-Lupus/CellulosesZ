@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
+import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 
 public const val CURRENT_SCHEMA_VERSION: Int = 1
 
@@ -18,6 +19,7 @@ public data class CellulosesConfig(
     public val movement: MovementSettings = MovementSettings(),
     public val messaging: MessagingSettings = MessagingSettings(),
     public val administration: AdministrationSettings = AdministrationSettings(),
+    public val utility: UtilitySettings = UtilitySettings(),
 )
 
 @Serializable

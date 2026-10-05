@@ -1,97 +1,204 @@
 package top.likoslupus.cellulosesz.utility.kit
 
 import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
+import com.mojang.brigadier.arguments.StringArgumentType.getString
+import com.mojang.brigadier.arguments.StringArgumentType.word
 import com.mojang.brigadier.context.CommandContext
-import kotlinx.coroutines.Job
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
+import net.minecraft.commands.Commands.argument
+import net.minecraft.commands.Commands.literal
 import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.reply
+import top.likoslupus.cellulosesz.core.command.message
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
+import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.foundation.time.DurationParser
+import top.likoslupus.cellulosesz.utility.command.utilityLaunch
+import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import java.time.Duration
 
 internal object KitCommands {
 
     fun register(
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: KitService,
+        known: KnownPlayerResolver,
         kernel: RuntimeKernel,
     ) {
         dispatcher.register(
-            Commands.literal("kit")
+            literal("kit")
                     .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    give(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        kernel
-                                    )
+                        argument("name", word())
+                                .suggests { _, builder ->
+                                    service.configuredNames().forEach(builder::suggest)
+                                    builder.buildFuture()
                                 }
+                                .executes { context -> claim(context, service, kernel) }
                     )
         )
         dispatcher.register(
-            Commands.literal("kits")
+            literal("kits")
                     .executes { context -> list(context, service, kernel) }
         )
         dispatcher.register(
-            Commands.literal("createkit")
-                    .requires { it.canUseModeratorCommands() }
+            literal("showkit")
                     .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    create(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        kernel
-                                    )
+                        argument("name", word())
+                                .suggests { _, builder ->
+                                    service.configuredNames().forEach(builder::suggest)
+                                    builder.buildFuture()
                                 }
+                                .executes { context -> show(context, service, kernel) }
                     )
         )
         dispatcher.register(
-            Commands.literal("delkit")
+            literal("createkit")
                     .requires { it.canUseModeratorCommands() }
                     .then(
-                        Commands.argument("name", StringArgumentType.word())
+                        argument("name", word())
                                 .executes { context ->
-                                    delete(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        kernel
-                                    )
+                                    create(context, KitReusePolicy.Always, service, kernel)
                                 }
+                                .then(
+                                    literal("once")
+                                            .executes { context ->
+                                                create(
+                                                    context,
+                                                    KitReusePolicy.Once,
+                                                    service,
+                                                    kernel
+                                                )
+                                            }
+                                )
+                                .then(
+                                    literal("cooldown")
+                                            .then(
+                                                argument("duration", word())
+                                                        .executes { context ->
+                                                            val duration = parseDuration(context)
+                                                                ?: return@executes context.source.replyError(
+                                                                    UtilityMessages.prefixed("invalid cooldown duration")
+                                                                )
+                                                            create(
+                                                                context,
+                                                                KitReusePolicy.Cooldown(duration),
+                                                                service,
+                                                                kernel,
+                                                            )
+                                                        }
+                                            )
+                                )
+                    )
+        )
+        dispatcher.register(
+            literal("updatekit")
+                    .requires { it.canUseModeratorCommands() }
+                    .then(
+                        argument("name", word())
+                                .suggests { _, builder ->
+                                    service.configuredNames().forEach(builder::suggest)
+                                    builder.buildFuture()
+                                }
+                                .executes { context ->
+                                    update(context, null, service, kernel)
+                                }
+                                .then(
+                                    literal("once")
+                                            .executes { context ->
+                                                update(
+                                                    context,
+                                                    KitReusePolicy.Once,
+                                                    service,
+                                                    kernel
+                                                )
+                                            }
+                                )
+                                .then(
+                                    literal("cooldown")
+                                            .then(
+                                                argument("duration", word())
+                                                        .executes { context ->
+                                                            val duration = parseDuration(context)
+                                                                ?: return@executes context.source.replyError(
+                                                                    UtilityMessages.prefixed("invalid cooldown duration")
+                                                                )
+                                                            update(
+                                                                context,
+                                                                KitReusePolicy.Cooldown(duration),
+                                                                service,
+                                                                kernel,
+                                                            )
+                                                        }
+                                            )
+                                )
+                    )
+        )
+        dispatcher.register(
+            literal("delkit")
+                    .requires { it.canUseModeratorCommands() }
+                    .then(
+                        argument("name", word())
+                                .suggests { _, builder ->
+                                    service.configuredNames().forEach(builder::suggest)
+                                    builder.buildFuture()
+                                }
+                                .executes { context -> delete(context, service, kernel) }
+                    )
+        )
+        dispatcher.register(
+            literal("kitreset")
+                    .requires { it.canUseModeratorCommands() }
+                    .then(
+                        argument("name", word())
+                                .suggests { _, builder ->
+                                    service.configuredNames().forEach(builder::suggest)
+                                    builder.buildFuture()
+                                }
+                                .executes { context -> resetSelf(context, service, kernel) }
+                                .then(
+                                    argument("player", word())
+                                            .suggests { context, builder ->
+                                                context.source.server.playerList.players
+                                                        .forEach { builder.suggest(it.gameProfile.name) }
+                                                builder.buildFuture()
+                                            }
+                                            .executes { context ->
+                                                resetOther(context, service, known, kernel)
+                                            }
+                                )
                     )
         )
     }
 
-    private fun give(
+    private fun parseDuration(context: CommandContext<CommandSourceStack>): Duration? =
+        DurationParser
+                .parse(getString(context, "duration"))
+                ?.duration
+
+    private fun claim(
         context: CommandContext<CommandSourceStack>,
-        name: String,
         service: KitService,
         kernel: RuntimeKernel,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(UtilityMessages.requiresPlayer())
+        val name = getString(context, "name")
 
-        val job = kernel.launchIo {
-            val message = Messages.prefixed(
-                when (service.give(playerId, name)) {
-                    GiveKitResult.Success -> "received kit '$name'"
-                    GiveKitResult.NotFound -> "kit '$name' not found"
-                    GiveKitResult.PlayerOffline -> "you are no longer online"
-                }
+        return utilityLaunch(
+            source,
+            kernel,
+            "claiming kit..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.claim(
+                    requestedName = name,
+                    result = service.claim(playerId, name)
+                )
             )
-            kernel.messagePlayer(playerId, message)
         }
-
-        return acknowledge(source, job, "giving kit...")
     }
 
     private fun list(
@@ -101,78 +208,181 @@ internal object KitCommands {
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launchIo {
-            val kits = service.list().map { it.value }
-            val message = Messages.prefixed(
-                when {
-                    kits.isEmpty() -> "no kits defined"
-                    else -> "kits: ${kits.joinToString(", ")}"
-                }
+        return utilityLaunch(
+            source,
+            kernel,
+            "loading kits..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.list(
+                    service.list(playerId)
+                )
             )
-            kernel.messagePlayer(playerId, message)
         }
+    }
 
-        return acknowledge(source, job, "loading kits...")
+    private fun show(
+        context: CommandContext<CommandSourceStack>,
+        service: KitService,
+        kernel: RuntimeKernel,
+    ): Int {
+        val source = context.source
+        val name = getString(context, "name")
+        return utilityLaunch(
+            source,
+            kernel,
+            "loading kit..."
+        ) {
+            kernel.message(
+                it,
+                UtilityMessages.show(
+                    service.show(
+                        name
+                    )
+                )
+            )
+        }
     }
 
     private fun create(
         context: CommandContext<CommandSourceStack>,
-        name: String,
+        reuse: KitReusePolicy,
         service: KitService,
         kernel: RuntimeKernel,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launchIo {
-            val message = Messages.prefixed(
-                when (service.create(playerId, name)) {
-                    CreateKitResult.Success -> "kit '$name' created from your inventory"
-                    CreateKitResult.InvalidName -> "invalid kit name"
-                    CreateKitResult.Empty -> "your inventory is empty"
-                    CreateKitResult.PlayerOffline -> "you are no longer online"
-                }
+            ?: return source.replyError(UtilityMessages.requiresPlayer())
+        val name = getString(context, "name")
+        return utilityLaunch(
+            source,
+            kernel,
+            "creating kit..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.create(
+                    service.create(
+                        playerId = playerId,
+                        rawName = name,
+                        reuse = reuse
+                    )
+                )
             )
-            kernel.messagePlayer(playerId, message)
         }
+    }
 
-        return acknowledge(source, job, "creating kit...")
+    private fun update(
+        context: CommandContext<CommandSourceStack>,
+        reuse: KitReusePolicy?,
+        service: KitService,
+        kernel: RuntimeKernel,
+    ): Int {
+        val source = context.source
+        val playerId = source.player?.uuid
+            ?: return source.replyError(UtilityMessages.requiresPlayer())
+        val name = getString(context, "name")
+        return utilityLaunch(
+            source,
+            kernel,
+            "updating kit..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.update(
+                    service.update(
+                        playerId = playerId,
+                        rawName = name,
+                        reuse = reuse
+                    )
+                )
+            )
+        }
     }
 
     private fun delete(
         context: CommandContext<CommandSourceStack>,
-        name: String,
         service: KitService,
         kernel: RuntimeKernel,
     ): Int {
         val source = context.source
-        val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-        val job = kernel.launchIo {
-            val message = Messages.prefixed(
-                when (service.delete(name)) {
-                    DeleteKitResult.Deleted -> "kit '$name' deleted"
-                    DeleteKitResult.InvalidName -> "invalid kit name"
-                    DeleteKitResult.NotFound -> "kit '$name' not found"
-                }
+        val name = getString(context, "name")
+        return utilityLaunch(
+            source,
+            kernel,
+            "deleting kit..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.delete(
+                    service.delete(
+                        name
+                    )
+                )
             )
-            kernel.messagePlayer(playerId, message)
         }
-
-        return acknowledge(source, job, "deleting kit...")
     }
 
-    private fun acknowledge(
+    private fun resetSelf(
+        context: CommandContext<CommandSourceStack>,
+        service: KitService,
+        kernel: RuntimeKernel,
+    ): Int {
+        val source = context.source
+        val player = source.player
+            ?: return source.replyError(UtilityMessages.requiresPlayer())
+        return reset(
+            source = source,
+            target = KnownPlayerIdentity(player.uuid, player.gameProfile.name),
+            name = getString(context, "name"),
+            service = service,
+            kernel = kernel,
+        )
+    }
+
+    private fun resetOther(
+        context: CommandContext<CommandSourceStack>,
+        service: KitService,
+        known: KnownPlayerResolver,
+        kernel: RuntimeKernel,
+    ): Int {
+        val source = context.source
+        val raw = getString(context, "player")
+        val target = known.onlineByName(raw) ?: known.knownByName(raw)
+        return when (target) {
+            null -> source.replyError(UtilityMessages.prefixed("player '$raw' is not known to this server"))
+            else -> reset(
+                source,
+                target = target,
+                name = getString(context, "name"),
+                service = service,
+                kernel = kernel,
+            )
+        }
+    }
+
+    private fun reset(
         source: CommandSourceStack,
-        job: Job?,
-        pending: String,
+        target: KnownPlayerIdentity,
+        name: String,
+        service: KitService,
+        kernel: RuntimeKernel,
     ): Int =
-        when (job) {
-            null -> source.replyError(Messages.prefixed("runtime is shutting down"))
-            else -> source.reply(Messages.prefixed(pending))
+        utilityLaunch(
+            source,
+            kernel,
+            "resetting kit..."
+        ) {
+            kernel.message(
+                target = it,
+                message = UtilityMessages.reset(
+                    service.reset(
+                        rawName = name,
+                        target = target
+                    )
+                )
+            )
         }
 
 }

@@ -33,11 +33,15 @@ with the legacy CellulosesZ or with EssentialsX.
   `/broadcastworld`.
 - **Warps** — `/warp`, `/warps`, `/setwarp`, `/delwarp` as server-global named positions.
 - **Spawn** — `/spawn`, `/setspawn`, `/delspawn` with a configurable spawn and vanilla fallback.
-- **Kits** — `/kit`, `/kits`, `/createkit`, `/delkit`, stored through the vanilla `ItemStack`
-  codec.
+- **Kits** — `/kit`, `/kits`, `/showkit`, `/createkit`, `/updatekit`, `/delkit`, `/kitreset`; a v2
+  catalog with a per-kit reuse policy (unlimited / one-time / cooldown), durable per-player claims,
+  and explicit all-or-nothing or drop-overflow delivery.
 - **Moderation** — `/heal`, `/feed`, `/kick`.
 - **Player state** — `/fly`, `/god`.
-- **Item utilities** — `/repair`.
+- **Item utilities** — `/repair [hand|all] [player]`, `/more [amount]`, `/condense`.
+- **Portable workstations** — `/workbench`, `/anvil`, `/grindstone`, `/stonecutter`, `/loom`,
+  `/cartographytable`, `/smithingtable` (disabled by default).
+- **Inventory inspection** — `/enderchest`, `/disposal`, and read-only `/invsee <player>`.
 - **Admin root** — `/cellulosesz status`, `/cellulosesz reload`.
 
 ## Design highlights
@@ -133,16 +137,25 @@ needed there. This mod adds **no client UI**.
 | `/spawn`                                       | Player         | Teleport to the configured spawn.              |
 | `/setspawn`                                    | Moderator      | Set the spawn to your current position.        |
 | `/delspawn`                                    | Moderator      | Reset the spawn to vanilla.                    |
-| `/kit <name>`                                  | Player         | Receive a kit.                                 |
-| `/kits`                                        | Player         | List kits.                                     |
-| `/createkit <name>`                            | Moderator      | Create a kit from your inventory.              |
+| `/kit <name>`                                  | Player         | Claim a kit.                                   |
+| `/kits`                                        | Player         | List kits with per-player availability.        |
+| `/showkit <name>`                              | Player         | Preview a kit's contents.                      |
+| `/createkit <name> [once\|cooldown <dur>]`     | Moderator      | Create a kit from your inventory.              |
+| `/updatekit <name> [once\|cooldown <dur>]`     | Moderator      | Update a kit, preserving its reuse history.    |
 | `/delkit <name>`                               | Moderator      | Delete a kit.                                  |
+| `/kitreset <name> [player]`                    | Moderator      | Reset a kit's cooldown / used state.           |
 | `/heal [player]`                               | Moderator      | Restore health.                                |
 | `/feed [player]`                               | Moderator      | Restore hunger.                                |
 | `/kick <player> [reason]`                      | Moderator      | Disconnect a player.                           |
 | `/fly [player]`                                | Moderator      | Toggle flight.                                 |
 | `/god [player]`                                | Moderator      | Toggle invulnerability.                        |
-| `/repair [player]`                             | Moderator      | Repair the held item.                          |
+| `/repair [hand\|all] [player]`                 | Moderator      | Repair the held or all items.                  |
+| `/more [amount]`                               | Moderator      | Fill the held stack (never oversized).         |
+| `/condense`                                    | Player         | Condense items into compact blocks.            |
+| `/enderchest`                                  | Player         | Open your ender chest.                         |
+| `/disposal`                                    | Player         | Open a temporary trash menu.                   |
+| `/workbench`, `/anvil`, …                      | Player         | Open a portable workstation (if enabled).      |
+| `/invsee <player>`                             | Moderator      | View a player's inventory (read-only).         |
 | `/cellulosesz status`                          | Moderator      | Show runtime state and config generation.      |
 | `/cellulosesz reload`                          | Moderator      | Reload the configuration transactionally.      |
 
@@ -169,8 +182,17 @@ Per-world data is stored under:
 ├─ communication/
 │  ├─ preferences/<uuid>.json
 │  └─ mail/<uuid>.json
-└─ kits.json
+├─ administration/
+│  └─ moderation/
+│     ├─ mutes/<uuid>.json
+│     └─ audit/<utc-day>/...
+└─ utility/
+   ├─ kits.json
+   └─ kit-claims/<uuid>.json
 ```
+
+A legacy `<world>/cellulosesz/kits.json` (schema v1) is migrated once into `utility/kits.json`
+(schema v2); the legacy file is renamed to `kits.json.v1.bak`.
 
 ## Building from Source
 

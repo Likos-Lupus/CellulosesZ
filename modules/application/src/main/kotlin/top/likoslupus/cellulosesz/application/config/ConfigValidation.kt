@@ -4,6 +4,7 @@ import top.likoslupus.cellulosesz.administration.config.AdministrationSettingsVa
 import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
 import top.likoslupus.cellulosesz.movement.config.MovementSettingsValidation
+import top.likoslupus.cellulosesz.utility.config.UtilitySettingsValidation
 
 /** Aggregates root-schema rules and each feature owner's own validation. */
 internal object ConfigValidation {
@@ -14,13 +15,15 @@ internal object ConfigValidation {
                 add(
                     ValidationError(
                         "schemaVersion",
-                        "unsupported schema version ${config.schemaVersion}, expected $CURRENT_SCHEMA_VERSION",
+                        "unsupported schema version ${config.schemaVersion}, " +
+                                "expected $CURRENT_SCHEMA_VERSION",
                     )
                 )
             }
             addAll(MovementSettingsValidation.validate(config.movement))
             addAll(MessagingSettingsValidation.validate(config.messaging))
             addAll(AdministrationSettingsValidation.validate(config.administration))
+            addAll(UtilitySettingsValidation.validate(config.utility))
         }
 
 }

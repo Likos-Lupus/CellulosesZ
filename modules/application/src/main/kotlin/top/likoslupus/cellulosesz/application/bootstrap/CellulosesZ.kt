@@ -65,7 +65,13 @@ public object CellulosesZ {
             settings = { config.current.messaging },
             known = known,
         )
-        val utility = createUtilityFeature(kernel) { dataRoot(kernel) }
+        val utility = createUtilityFeature(
+            kernel = kernel,
+            dataRoot = { dataRoot(kernel).resolve("utility") },
+            legacyDataRoot = { dataRoot(kernel) },
+            settings = { config.current.utility },
+            known = known,
+        )
 
         CommandRegistrationEvent.EVENT.register { dispatcher, _, _ ->
             RootCommand.register(dispatcher, config, kernel)
@@ -104,6 +110,7 @@ public object CellulosesZ {
             kernel.onServerStarting(it)
             administration.onServerStarting()
             communication.onServerStarting()
+            utility.onServerStarting()
         }
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
@@ -113,6 +120,7 @@ public object CellulosesZ {
             movement.onServerStopping()
             communication.onServerStopping()
             administration.onServerStopping()
+            utility.onServerStopping()
             kernel.onServerStopping()
         }
         LifecycleEvent.SERVER_STOPPED.register {

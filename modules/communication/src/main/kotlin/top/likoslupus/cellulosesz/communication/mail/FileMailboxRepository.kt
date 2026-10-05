@@ -133,7 +133,6 @@ internal class FileMailboxRepository(
 
     private fun directory(): Path =
         dataRoot()
-                .resolve("communication")
                 .resolve("mail")
 
     private fun path(ownerId: UUID): Path =

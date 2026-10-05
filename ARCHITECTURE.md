@@ -31,15 +31,15 @@ movement   communication  administration  utility   (minecraft-core, foundation)
 
 ## Modules
 
-| Module           | Responsibility                                                                                                                                                                                                                                                                            | May depend on                                                                |
-|------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|
-| `foundation`     | Plain Kotlin/JVM: `AtomicFile`, `KeyedMutex`, `StorageJson`, generic `ConfigStore<T>`. Knows nothing about Minecraft.                                                                                                                                                                     | –                                                                            |
-| `minecraft-core` | `RuntimeKernel`, `MinecraftServerDispatcher`, `PlayerResolver`, `Messages`, command feedback helpers.                                                                                                                                                                                     | foundation                                                                   |
-| `movement`       | teleport/home/warp/spawn/request (`/tpa`, `/tpahere`). Owns the teleport pipeline: `TeleportCoordinator`, `MinecraftTeleportBackend`, safety, pending/cooldown/history.                                                                                                                   | foundation, minecraft-core                                                   |
-| `communication`  | private messaging (`/msg`, `/reply`, `/r`) with reply state, per-player preferences (`/ignore`, `/msgtoggle`), durable mail (`/mail`), staff support (`/helpop`) and announcements (`/broadcast`, `/broadcastworld`).                                                                     | foundation, minecraft-core                                                   |
-| `administration` | moderation (`/kick`, `/kickall`, `/ban`, `/tempban`, `/unban`, `/banip`, `/tempbanip`, `/unbanip`, `/mute`, `/tempmute`, `/unmute`, `/muteinfo`), operator control (`/kill`, `/gamemode`, console-only `/sudo`), social spy, vanish, and player state (`/heal`, `/feed`, `/fly`, `/god`). | foundation, minecraft-core                                                   |
-| `utility`        | kits and item utilities (`/repair`).                                                                                                                                                                                                                                                      | foundation, minecraft-core                                                   |
-| `application`    | Composition root, root `CellulosesConfig`, `/cellulosesz status \| reload`.                                                                                                                                                                                                               | foundation, minecraft-core, movement, communication, administration, utility |
+| Module           | Responsibility                                                                                                                                                                                                                                                                               | May depend on                                                                |
+|------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| `foundation`     | Plain Kotlin/JVM: `AtomicFile`, `KeyedMutex`, `StorageJson`, generic `ConfigStore<T>`. Knows nothing about Minecraft.                                                                                                                                                                        | –                                                                            |
+| `minecraft-core` | `RuntimeKernel`, `MinecraftServerDispatcher`, `PlayerResolver`, `Messages`, command feedback helpers.                                                                                                                                                                                        | foundation                                                                   |
+| `movement`       | teleport/home/warp/spawn/request (`/tpa`, `/tpahere`). Owns the teleport pipeline: `TeleportCoordinator`, `MinecraftTeleportBackend`, safety, pending/cooldown/history.                                                                                                                      | foundation, minecraft-core                                                   |
+| `communication`  | private messaging (`/msg`, `/reply`, `/r`) with reply state, per-player preferences (`/ignore`, `/msgtoggle`), durable mail (`/mail`), staff support (`/helpop`) and announcements (`/broadcast`, `/broadcastworld`).                                                                        | foundation, minecraft-core                                                   |
+| `administration` | moderation (`/kick`, `/kickall`, `/ban`, `/tempban`, `/unban`, `/banip`, `/tempbanip`, `/unbanip`, `/mute`, `/tempmute`, `/unmute`, `/muteinfo`), operator control (`/kill`, `/gamemode`, console-only `/sudo`), social spy, vanish, and player state (`/heal`, `/feed`, `/fly`, `/god`).    | foundation, minecraft-core                                                   |
+| `utility`        | kits (`/kit`, `/kits`, `/showkit`, `/createkit`, `/updatekit`, `/delkit`, `/kitreset`) with a v2 catalog and durable per-player claims, item utilities (`/repair`, `/more`, `/condense`), portable workstations, and inventory inspection (`/enderchest`, view-only `/invsee`, `/disposal`). | foundation, minecraft-core                                                   |
+| `application`    | Composition root, root `CellulosesConfig`, `/cellulosesz status \| reload`.                                                                                                                                                                                                                  | foundation, minecraft-core, movement, communication, administration, utility |
 
 No feature module may depend on another feature module. `minecraft-core` and `foundation` never
 depend on features. Loader APIs (`net.fabricmc.*`, `net.neoforged.*`, `net.minecraft.*` in
@@ -107,6 +107,26 @@ TeleportIntent → preflight → optional delay → late destination resolve
   kill/game-mode/command execution outside `MinecraftPlayerControlBackend`, and file IO in command
   files.
 
+## Utility
+
+- Kit definitions are server-owned catalog state under `utility/kits.json` (schema v2); each kit has
+  a stable `KitId`, a `KitReusePolicy` (`Always`/`Once`/`Cooldown`) and an immutable list of
+  `ItemStack` snapshots. Delivery always copies those snapshots.
+- Player claim history is separate per-player state under `utility/kit-claims/<uuid>.json`. A
+  cooldown/one-time claim writes a `RESERVED` record before delivery and a `DELIVERED` record after;
+  a reservation is never rolled back, so a crash fails closed rather than duplicating items.
+- Overflow is explicit: `REJECT` is all-or-nothing, `DROP` drops the remainder. Silent partial
+  delivery is impossible.
+- `KitItemCodec` encodes/decodes `ItemStack.CODEC` through a registry-aware `RegistryOps`, so item
+  components (enchantments, custom data) round-trip.
+- Legacy `<world>/cellulosesz/kits.json` (v1) is migrated once into `utility/kits.json` (v2) with
+  the legacy file renamed to `kits.json.v1.bak`.
+- Item utilities, portable workstations and inventory inspection mutate Minecraft state only through
+  their backends. `/invsee` is strictly read-only. Only vanilla menu types are used, so no client
+  screen code is required.
+- `verifyArchitecture` confines `StorageJson`/`AtomicFile` in `utility` to the two kit repositories
+  and live kit inventory mutation to `MinecraftKitInventoryBackend`.
+
 ## Config
 
 - `foundation.ConfigStore<T>` is generic: decode candidate, validate the whole candidate, then
@@ -123,7 +143,8 @@ TeleportIntent → preflight → optional delay → late destination resolve
 - Data: `<world>/cellulosesz/` — `movement/` (`homes/<uuid>.json`, `warps.json`, `spawn.json`,
   `teleport-history/<uuid>.json`), `administration/moderation/mutes/<uuid>.json`,
   `administration/moderation/audit/<utc-day>/<millis>-<uuid>.json`,
-  `communication/preferences/<uuid>.json`, `communication/mail/<uuid>.json`, and `kits.json`.
+  `communication/preferences/<uuid>.json`, `communication/mail/<uuid>.json`,
+  `utility/kits.json`, and `utility/kit-claims/<uuid>.json`.
 - Writes go through `AtomicFile` (temp file + fsync + atomic move); per-file serialization uses
   `KeyedMutex` or a repository `Mutex`.
 - Corrupt machine data raises a typed `*DataException` and is never silently overwritten.
@@ -153,10 +174,10 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Verification
 
-| Task                      | Purpose                                                                                                                                                                                                      |
-|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, communication repository IO ownership. |
-| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                   |
-| `checkModules`            | Runs every module's `check` (including unit tests) once.                                                                                                                                                     |
-| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                            |
-| `inspectArtifacts`        | Flattened classes present; externals absent; NeoForge Jar-in-Jar intact.                                                                                                                                     |
+| Task                      | Purpose                                                                                                                                                                                                                                                                     |
+|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, communication repository IO ownership, utility repository IO ownership and kit inventory single path. |
+| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                  |
+| `checkModules`            | Runs every module's `check` (including unit tests) once.                                                                                                                                                                                                                    |
+| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                           |
+| `inspectArtifacts`        | Flattened classes present; externals absent; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                    |

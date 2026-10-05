@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.communication.config.MailSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.movement.config.*
+import top.likoslupus.cellulosesz.utility.config.KitSettings
+import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 
 class ConfigValidationTest {
 
@@ -84,6 +86,17 @@ class ConfigValidationTest {
         )
 
         assertTrue(errors.any { it.path == "messaging.mail.maxMessagesPerMailbox" })
+    }
+
+    @Test
+    fun `rejects non positive utility kit cap`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(
+                utility = UtilitySettings(kits = KitSettings(maxKits = 0))
+            )
+        )
+
+        assertTrue(errors.any { it.path == "utility.kits.maxKits" })
     }
 
 }

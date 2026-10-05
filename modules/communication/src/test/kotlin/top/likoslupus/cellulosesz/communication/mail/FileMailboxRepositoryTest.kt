@@ -47,7 +47,6 @@ class FileMailboxRepositoryTest {
     fun `corrupt file is not overwritten`() =
         runBlocking {
             val file = root
-                    .resolve("communication")
                     .resolve("mail")
                     .resolve("${owner.id}.json")
             Files.createDirectories(file.parent)
@@ -63,7 +62,6 @@ class FileMailboxRepositoryTest {
     fun `future schema is rejected`() =
         runBlocking {
             val file = root
-                    .resolve("communication")
                     .resolve("mail")
                     .resolve("${owner.id}.json")
             Files.createDirectories(file.parent)

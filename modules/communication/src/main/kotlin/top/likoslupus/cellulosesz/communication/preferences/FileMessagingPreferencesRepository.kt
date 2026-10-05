@@ -115,9 +115,11 @@ internal class FileMessagingPreferencesRepository(
     }
 
     private fun directory(): Path =
-        dataRoot().resolve("communication").resolve("preferences")
+        dataRoot()
+                .resolve("preferences")
 
     private fun path(playerId: UUID): Path =
-        directory().resolve("$playerId.json")
+        directory()
+                .resolve("$playerId.json")
 
 }

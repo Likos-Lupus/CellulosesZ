@@ -54,7 +54,6 @@ class FileMessagingPreferencesRepositoryTest {
     fun `corrupt file is not overwritten`() =
         runBlocking {
             val file = root
-                    .resolve("communication")
                     .resolve("preferences")
                     .resolve("$player.json")
             Files.createDirectories(file.parent)
@@ -76,11 +75,9 @@ class FileMessagingPreferencesRepositoryTest {
                 MessagingPreferences()
             )
             val source = root
-                    .resolve("communication")
                     .resolve("preferences")
                     .resolve("$other.json")
             val target = root
-                    .resolve("communication")
                     .resolve("preferences")
                     .resolve("$player.json")
             Files.copy(source, target)
