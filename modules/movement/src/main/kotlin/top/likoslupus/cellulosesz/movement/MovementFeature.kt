@@ -3,16 +3,18 @@ package top.likoslupus.cellulosesz.movement
 import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
-import top.likoslupus.cellulosesz.movement.home.FileHomeRepository
 import top.likoslupus.cellulosesz.movement.home.HomeCommands
 import top.likoslupus.cellulosesz.movement.home.HomeService
+import top.likoslupus.cellulosesz.movement.home.JdbcHomeRepository
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.pending.TeleportCancellation
 import top.likoslupus.cellulosesz.movement.request.TeleportRequestCommands
 import top.likoslupus.cellulosesz.movement.request.TeleportRequestService
-import top.likoslupus.cellulosesz.movement.spawn.FileSpawnRepository
+import top.likoslupus.cellulosesz.movement.spawn.JdbcSpawnRepository
 import top.likoslupus.cellulosesz.movement.spawn.SpawnCommands
 import top.likoslupus.cellulosesz.movement.spawn.SpawnService
 import top.likoslupus.cellulosesz.movement.teleport.MinecraftTeleportBackend
@@ -20,14 +22,13 @@ import top.likoslupus.cellulosesz.movement.teleport.TeleportBackend
 import top.likoslupus.cellulosesz.movement.teleport.TeleportCoordinator
 import top.likoslupus.cellulosesz.movement.teleport.command.TeleportCommands
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
-import top.likoslupus.cellulosesz.movement.teleport.history.FileTeleportHistoryRepository
+import top.likoslupus.cellulosesz.movement.teleport.history.JdbcTeleportHistoryRepository
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
 import top.likoslupus.cellulosesz.movement.teleport.safety.SafeDestinationResolver
 import top.likoslupus.cellulosesz.movement.teleport.toStoredPosition
-import top.likoslupus.cellulosesz.movement.warp.FileWarpRepository
+import top.likoslupus.cellulosesz.movement.warp.JdbcWarpRepository
 import top.likoslupus.cellulosesz.movement.warp.WarpCommands
 import top.likoslupus.cellulosesz.movement.warp.WarpService
-import java.nio.file.Path
 import java.util.*
 
 /**
@@ -45,6 +46,7 @@ public class MovementFeature internal constructor(
     private val history: TeleportHistoryService,
     private val settings: () -> MovementSettings,
     private val kernel: RuntimeKernel,
+    private val permissions: PermissionService,
 ) {
 
     public fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
@@ -63,7 +65,8 @@ public class MovementFeature internal constructor(
             backend,
             teleports,
             teleportSettings,
-            kernel
+            kernel,
+            permissions,
         )
         SpawnCommands.register(
             dispatcher,
@@ -71,7 +74,8 @@ public class MovementFeature internal constructor(
             backend,
             teleports,
             teleportSettings,
-            kernel
+            kernel,
+            permissions,
         )
         TeleportRequestCommands.register(
             dispatcher,
@@ -85,7 +89,8 @@ public class MovementFeature internal constructor(
             teleports,
             history,
             teleportSettings,
-            kernel
+            kernel,
+            permissions,
         )
     }
 
@@ -114,13 +119,15 @@ public class MovementFeature internal constructor(
 
 public fun createMovementFeature(
     kernel: RuntimeKernel,
-    dataRoot: () -> Path,
+    database: DatabaseRuntime,
+    namespace: String,
+    permissions: PermissionService,
     settings: () -> MovementSettings,
 ): MovementFeature {
     val backend = MinecraftTeleportBackend(kernel, SafeDestinationResolver())
     val pending = PendingTeleportService()
     val cooldowns = TeleportCooldowns()
-    val history = TeleportHistoryService(FileTeleportHistoryRepository(dataRoot))
+    val history = TeleportHistoryService(JdbcTeleportHistoryRepository(database, namespace))
     val teleports = TeleportCoordinator(
         backend = backend,
         pending = pending,
@@ -131,14 +138,15 @@ public fun createMovementFeature(
 
     return MovementFeature(
         teleports = teleports,
-        homes = HomeService(FileHomeRepository(dataRoot)) { settings().homes },
-        warps = WarpService(FileWarpRepository(dataRoot)),
-        spawn = SpawnService(FileSpawnRepository(dataRoot)),
+        homes = HomeService(JdbcHomeRepository(database, namespace)) { settings().homes },
+        warps = WarpService(JdbcWarpRepository(database, namespace)),
+        spawn = SpawnService(JdbcSpawnRepository(database, namespace)),
         requests = TeleportRequestService(settings = { settings().requests }),
         pending = pending,
         backend = backend,
         history = history,
         settings = settings,
         kernel = kernel,
+        permissions = permissions,
     )
 }

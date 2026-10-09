@@ -7,9 +7,11 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Abilities
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.text.Messages
 
@@ -19,10 +21,13 @@ import top.likoslupus.cellulosesz.core.text.Messages
  */
 internal object PlayerStateCommands {
 
-    fun register(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    fun register(
+        dispatcher: CommandDispatcher<CommandSourceStack>,
+        permissions: PermissionService,
+    ) {
         dispatcher.register(
             Commands.literal("heal")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.HEAL) }
                     .executes { context -> heal(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -36,7 +41,7 @@ internal object PlayerStateCommands {
         )
         dispatcher.register(
             Commands.literal("feed")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.FEED) }
                     .executes { context -> feed(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -50,7 +55,7 @@ internal object PlayerStateCommands {
         )
         dispatcher.register(
             Commands.literal("fly")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.FLY) }
                     .executes { context -> fly(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
@@ -64,7 +69,7 @@ internal object PlayerStateCommands {
         )
         dispatcher.register(
             Commands.literal("god")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.GOD) }
                     .executes { context -> god(context, null) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())

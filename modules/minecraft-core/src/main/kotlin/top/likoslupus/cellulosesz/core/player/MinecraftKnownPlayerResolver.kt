@@ -23,6 +23,11 @@ public class MinecraftKnownPlayerResolver(
         byName[identity.name.lowercase()] = identity.id
     }
 
+    /** Seeds the in-memory index from the durable Player Identity Index at startup. */
+    public fun hydrate(identities: Collection<KnownPlayerIdentity>) {
+        identities.forEach(::record)
+    }
+
     public fun clear() {
         byId.clear()
         byName.clear()

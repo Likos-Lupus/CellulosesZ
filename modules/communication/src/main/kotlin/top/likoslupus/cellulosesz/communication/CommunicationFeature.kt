@@ -6,7 +6,7 @@ import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommand
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
-import top.likoslupus.cellulosesz.communication.mail.FileMailboxRepository
+import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
 import top.likoslupus.cellulosesz.communication.mail.MailRateLimiter
 import top.likoslupus.cellulosesz.communication.mail.MailService
 import top.likoslupus.cellulosesz.communication.mail.MailSummaryResult
@@ -15,18 +15,19 @@ import top.likoslupus.cellulosesz.communication.messaging.MinecraftMessagingBack
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageService
 import top.likoslupus.cellulosesz.communication.messaging.ReplyState
 import top.likoslupus.cellulosesz.communication.messaging.command.PrivateMessageCommands
-import top.likoslupus.cellulosesz.communication.preferences.FileMessagingPreferencesRepository
+import top.likoslupus.cellulosesz.communication.preferences.JdbcMessagingPreferencesRepository
 import top.likoslupus.cellulosesz.communication.preferences.MessagingPreferencesService
 import top.likoslupus.cellulosesz.communication.preferences.command.MessagingPreferenceCommands
 import top.likoslupus.cellulosesz.communication.staff.HelpOpCommands
 import top.likoslupus.cellulosesz.communication.staff.HelpOpService
 import top.likoslupus.cellulosesz.core.command.messagePlayer
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
+import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.persistence.KeyedMutex
-import java.nio.file.Path
 import java.time.Clock
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
@@ -34,8 +35,7 @@ import kotlin.time.Duration.Companion.seconds
 /** Holds the composed integration, set at command-registration time. */
 internal class IntegrationHolder {
 
-    @Volatile
-    var value: CommunicationIntegration = CommunicationIntegration()
+    @Volatile var value: CommunicationIntegration = CommunicationIntegration()
 
 }
 
@@ -53,6 +53,7 @@ public class CommunicationFeature internal constructor(
     private val kernel: RuntimeKernel,
     private val known: MinecraftKnownPlayerResolver,
     private val settings: () -> MessagingSettings,
+    private val permissions: PermissionService,
 ) {
 
     public fun registerCommands(
@@ -64,7 +65,7 @@ public class CommunicationFeature internal constructor(
         MessagingPreferenceCommands.register(dispatcher, preferences, known, kernel)
         MailCommands.register(dispatcher, mail, kernel)
         HelpOpCommands.register(dispatcher, helpOp, kernel)
-        AnnouncementCommands.register(dispatcher, announcements, kernel)
+        AnnouncementCommands.register(dispatcher, announcements, kernel, permissions)
     }
 
     public fun onServerStarting() {
@@ -115,14 +116,16 @@ public class CommunicationFeature internal constructor(
 
 public fun createCommunicationFeature(
     kernel: RuntimeKernel,
-    dataRoot: () -> Path,
+    database: DatabaseRuntime,
+    namespace: String,
+    permissions: PermissionService,
     settings: () -> MessagingSettings,
     known: MinecraftKnownPlayerResolver,
 ): CommunicationFeature {
     val holder = IntegrationHolder()
     val runner = kernel.serverThreadRunner()
 
-    val preferencesRepository = FileMessagingPreferencesRepository(dataRoot)
+    val preferencesRepository = JdbcMessagingPreferencesRepository(database, namespace)
     val preferences = MessagingPreferencesService(
         runner = runner,
         repository = preferencesRepository,
@@ -141,7 +144,7 @@ public fun createCommunicationFeature(
 
     val mail = MailService(
         runner = runner,
-        mailboxes = FileMailboxRepository(dataRoot),
+        mailboxes = JdbcMailboxRepository(database, namespace),
         preferences = preferencesRepository,
         identities = known,
         senderGate = { holder.value.senderGate },
@@ -151,7 +154,7 @@ public fun createCommunicationFeature(
         locks = KeyedMutex(),
     )
 
-    val directory = MinecraftPlayerDirectory(kernel)
+    val directory = MinecraftPlayerDirectory(kernel, permissions)
     val helpOp = HelpOpService(
         runner = runner,
         directory = directory,
@@ -174,5 +177,6 @@ public fun createCommunicationFeature(
         kernel = kernel,
         known = known,
         settings = settings,
+        permissions = permissions,
     )
 }

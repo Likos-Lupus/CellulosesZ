@@ -1,0 +1,186 @@
+# CellulosesZ configuration (TOML).
+#
+# This file is a packaged template. It is written once, on first start, and is never
+# rewritten by the mod; edit it freely. Unknown keys are rejected, so a typo fails the load.
+
+[diagnostics]
+# When true, storage/permission/health diagnostics are logged more verbosely. Secrets are never logged.
+verboseLogging = false
+
+# ---------------------------------------------------------------------------
+# Storage. Only the backend named by `type` is initialized. Every backend has its
+# own section, so you can prepare an alternative backend and switch `type` later;
+# switching the active backend migrates data on the next cold start.
+# ---------------------------------------------------------------------------
+[database]
+# One of: sqlite, h2, mysql, mariadb, postgresql.
+type = "sqlite"
+# Logical namespace stored alongside all rows. Use distinct values to share one
+# database/schema between several servers. Must match [a-z0-9_]{1,32}.
+namespace = "default"
+
+# Shared pool timeouts; backend sections may override selected values.
+[database.pool]
+maximum-pool-size = 10
+connection-timeout-ms = 10000
+validation-timeout-ms = 5000
+idle-timeout-ms = 600000
+max-lifetime-ms = 1800000
+keepalive-time-ms = 0
+
+[database.sqlite]
+# Relative paths resolve under <world>/cellulosesz/.
+path = "cellulosesz.db"
+busy-timeout-ms = 5000
+journal-mode = "wal"
+synchronous = "normal"
+foreign-keys = true
+
+[database.sqlite.pool]
+# A single writer connection is the safe SQLite default.
+maximum-pool-size = 1
+
+[database.h2]
+path = "cellulosesz"
+username = "sa"
+# Set at most one of password / password-env.
+password = ""
+password-env = ""
+
+[database.h2.pool]
+maximum-pool-size = 2
+
+[database.mysql]
+host = "127.0.0.1"
+port = 3306
+database = "cellulosesz"
+username = "cellulosesz"
+# Set at most one of password / password-env. Prefer password-env so the secret is not on disk.
+password = ""
+password-env = ""
+ssl-mode = "preferred"
+
+[database.mysql.pool]
+maximum-pool-size = 10
+
+[database.mariadb]
+host = "127.0.0.1"
+port = 3306
+database = "cellulosesz"
+username = "cellulosesz"
+password = ""
+password-env = ""
+ssl-mode = "preferred"
+
+[database.mariadb.pool]
+maximum-pool-size = 10
+
+[database.postgresql]
+host = "127.0.0.1"
+port = 5432
+database = "cellulosesz"
+schema = "public"
+username = "cellulosesz"
+password = ""
+password-env = ""
+ssl-mode = "prefer"
+
+[database.postgresql.pool]
+maximum-pool-size = 10
+
+# ---------------------------------------------------------------------------
+# Movement
+# ---------------------------------------------------------------------------
+[movement.teleport]
+delaySeconds = 0
+cooldownSeconds = 0
+cancelOnMove = true
+cancelOnDamage = true
+movementTolerance = 0.15
+dismountPassengers = true
+
+[movement.teleport.safety]
+enabled = true
+searchHorizontalRadius = 3
+searchVerticalRadius = 8
+allowWater = false
+
+[movement.requests]
+timeoutSeconds = 60
+maxIncomingPerPlayer = 5
+
+[movement.homes]
+maxPerPlayer = 10
+defaultName = "home"
+
+[movement.history]
+enabled = true
+
+# ---------------------------------------------------------------------------
+# Communication
+# ---------------------------------------------------------------------------
+[messaging]
+enabled = true
+
+[messaging.privateMessages]
+enabled = true
+maxMessageLength = 512
+maxIgnoredPlayers = 128
+defaultReplyMode = "LAST_INTERACTION"
+
+[messaging.mail]
+enabled = true
+maxMessageLength = 1000
+maxMessagesPerMailbox = 100
+maxSendsPerMinute = 10
+notifyOnJoin = true
+
+[messaging.helpOp]
+enabled = true
+maxMessageLength = 512
+maxMessagesPerMinute = 6
+
+[messaging.announcements]
+enabled = true
+maxMessageLength = 1000
+
+# ---------------------------------------------------------------------------
+# Administration
+# ---------------------------------------------------------------------------
+[administration.moderation]
+enabled = true
+protectOperators = true
+defaultKickReason = "Kicked by an administrator"
+defaultBanReason = "Banned by an administrator"
+defaultMuteReason = "Muted by an administrator"
+maxReasonLength = 256
+notifyModerators = true
+auditEnabled = true
+
+# ---------------------------------------------------------------------------
+# Utility
+# ---------------------------------------------------------------------------
+[utility.kits]
+enabled = true
+maxKits = 128
+maxItemsPerKit = 64
+overflowPolicy = "REJECT"
+
+[utility.items]
+repairEnabled = true
+repairEnchanted = false
+repairAllIncludesArmor = true
+moreEnabled = false
+condenseEnabled = false
+
+[utility.workstations]
+enabled = false
+allowed = [
+    "CRAFTING",
+    "ANVIL",
+    "GRINDSTONE",
+    "STONECUTTER",
+    "LOOM",
+    "CARTOGRAPHY",
+    "SMITHING",
+]

@@ -1,11 +1,15 @@
 package top.likoslupus.cellulosesz.core.command
 
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.server.permissions.Permissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
+import top.likoslupus.cellulosesz.core.permission.hasPermission
 
 /**
- * Single mapping point for the vanilla moderator capability. Command files must not repeat the
- * permission constant directly, so a future permission port only has to replace this function.
+ * The single command-facing authorization entry point. Command files never reference a loader or
+ * third-party permission API directly; they ask the [PermissionService] for a [PermissionSpec].
  */
-public fun CommandSourceStack.canUseModeratorCommands(): Boolean =
-    permissions().hasPermission(Permissions.COMMANDS_MODERATOR)
+public fun CommandSourceStack.requiresPermission(
+    permissions: PermissionService,
+    spec: PermissionSpec,
+): Boolean = hasPermission(permissions, spec)

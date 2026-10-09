@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.fabric.api)
     implementation(libs.fabric.language.kotlin)
     implementation(libs.architectury.fabric)
+    implementation(libs.fabric.permissions.api)
 
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
@@ -74,6 +75,17 @@ dependencies {
         val dependency = add("implementation", project(path))
         (dependency as ModuleDependency).isTransitive = false
     }
+
+    // Storage/config/permission runtime is nested as Fabric jars (not flattened), so driver
+    // resource layout (SQLite natives, service files) and license metadata survive intact.
+    include(libs.hikari) { isTransitive = false }
+    include(libs.tomlkt) { isTransitive = false }
+    include(libs.sqlite.jdbc) { isTransitive = false }
+    include(libs.h2) { isTransitive = false }
+    include(libs.postgresql) { isTransitive = false }
+    include(libs.mariadb) { isTransitive = false }
+    include(libs.mysql) { isTransitive = false }
+    include(libs.fabric.permissions.api) { isTransitive = false }
 }
 
 java {

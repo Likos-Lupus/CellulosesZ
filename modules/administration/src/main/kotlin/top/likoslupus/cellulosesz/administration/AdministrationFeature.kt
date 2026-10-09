@@ -4,7 +4,7 @@ import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
-import top.likoslupus.cellulosesz.administration.moderation.audit.FileModerationAuditRepository
+import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditService
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanCommands
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanService
@@ -13,7 +13,7 @@ import top.likoslupus.cellulosesz.administration.moderation.ban.MinecraftBanBack
 import top.likoslupus.cellulosesz.administration.moderation.identity.MinecraftAccountResolver
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickCommands
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickService
-import top.likoslupus.cellulosesz.administration.moderation.mute.FileMuteRepository
+import top.likoslupus.cellulosesz.administration.moderation.mute.JdbcMuteRepository
 import top.likoslupus.cellulosesz.administration.moderation.mute.MuteCommands
 import top.likoslupus.cellulosesz.administration.moderation.mute.MuteService
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
@@ -27,11 +27,12 @@ import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
 import top.likoslupus.cellulosesz.core.command.messagePlayer
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
-import java.nio.file.Path
+import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import java.time.Clock
 import java.util.*
 
@@ -49,18 +50,19 @@ public class AdministrationFeature internal constructor(
     private val notifier: ModerationNotifier,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
+    private val permissions: PermissionService,
 ) {
 
     public fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
         val moderation = { settings().moderation }
-        KickCommands.register(dispatcher, kick, notifier, moderation, kernel)
-        BanCommands.register(dispatcher, bans, notifier, moderation, kernel)
-        IpBanCommands.register(dispatcher, bans, notifier, moderation, kernel)
-        MuteCommands.register(dispatcher, mutes, notifier, moderation, kernel)
-        PlayerControlCommands.register(dispatcher, control, kernel)
-        SocialSpyCommands.register(dispatcher, spies, kernel)
-        VanishCommands.register(dispatcher, vanish, kernel)
-        PlayerStateCommands.register(dispatcher)
+        KickCommands.register(dispatcher, kick, notifier, moderation, kernel, permissions)
+        BanCommands.register(dispatcher, bans, notifier, moderation, kernel, permissions)
+        IpBanCommands.register(dispatcher, bans, notifier, moderation, kernel, permissions)
+        MuteCommands.register(dispatcher, mutes, notifier, moderation, kernel, permissions)
+        PlayerControlCommands.register(dispatcher, control, kernel, permissions)
+        SocialSpyCommands.register(dispatcher, spies, kernel, permissions)
+        VanishCommands.register(dispatcher, vanish, kernel, permissions)
+        PlayerStateCommands.register(dispatcher, permissions)
     }
 
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
@@ -157,7 +159,9 @@ public class AdministrationFeature internal constructor(
 
 public fun createAdministrationFeature(
     kernel: RuntimeKernel,
-    dataRoot: () -> Path,
+    database: DatabaseRuntime,
+    namespace: String,
+    permissions: PermissionService,
     settings: () -> AdministrationSettings,
     known: MinecraftKnownPlayerResolver,
 ): AdministrationFeature {
@@ -165,11 +169,11 @@ public fun createAdministrationFeature(
     val accountResolver = MinecraftAccountResolver(known)
     val protection = TargetProtectionPolicy(kernel) { settings().moderation }
     val audit = ModerationAuditService(
-        repository = FileModerationAuditRepository(dataRoot),
+        repository = JdbcModerationAuditRepository(database, namespace),
         settings = { settings().moderation },
         clock = clock,
     )
-    val notifier = ModerationNotifier(kernel)
+    val notifier = ModerationNotifier(kernel, permissions)
     val kick = KickService(
         kernel = kernel,
         accountResolver = accountResolver,
@@ -187,7 +191,7 @@ public fun createAdministrationFeature(
     )
     val mutes = MuteService(
         kernel = kernel,
-        repository = FileMuteRepository(dataRoot),
+        repository = JdbcMuteRepository(database, namespace),
         accountResolver = accountResolver,
         protection = protection,
         audit = audit,
@@ -215,5 +219,6 @@ public fun createAdministrationFeature(
         notifier = notifier,
         settings = settings,
         kernel = kernel,
+        permissions = permissions,
     )
 }

@@ -7,7 +7,7 @@ public final class CellulosesZFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        CellulosesZ.INSTANCE.initialize();
+        CellulosesZ.INSTANCE.initialize(new FabricPlatformServices());
     }
 
 }

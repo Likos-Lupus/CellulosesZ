@@ -7,9 +7,11 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.message
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
@@ -25,6 +27,7 @@ internal object KitCommands {
         service: KitService,
         known: KnownPlayerResolver,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             literal("kit")
@@ -54,7 +57,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             literal("createkit")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.CREATE_KIT) }
                     .then(
                         argument("name", word())
                                 .executes { context ->
@@ -93,7 +96,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             literal("updatekit")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.UPDATE_KIT) }
                     .then(
                         argument("name", word())
                                 .suggests { _, builder ->
@@ -136,7 +139,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             literal("delkit")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.DEL_KIT) }
                     .then(
                         argument("name", word())
                                 .suggests { _, builder ->
@@ -148,7 +151,7 @@ internal object KitCommands {
         )
         dispatcher.register(
             literal("kitreset")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.KIT_RESET) }
                     .then(
                         argument("name", word())
                                 .suggests { _, builder ->

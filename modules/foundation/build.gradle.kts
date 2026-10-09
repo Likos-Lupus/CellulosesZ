@@ -14,11 +14,23 @@ dependencies {
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.tomlkt)
+    implementation(libs.hikari)
 
     compileOnly(libs.jspecify)
     testCompileOnly(libs.jspecify)
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+
+    // Local, Docker-free drivers for contract tests; integration drivers are added per test.
+    testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.h2)
+
+    testImplementation(libs.testcontainers)
+    testImplementation(libs.testcontainers.junit)
+    testImplementation(libs.testcontainers.postgresql)
+    testImplementation(libs.testcontainers.mysql)
+    testImplementation(libs.testcontainers.mariadb)
 }
 
 java {

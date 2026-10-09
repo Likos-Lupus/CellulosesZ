@@ -9,8 +9,10 @@ import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.command.ModerationFeedback
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 
@@ -21,10 +23,11 @@ internal object VanishCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: VanishService,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("vanish")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.VANISH) }
                     .executes { context -> apply(context, null, service, kernel) }
                     .then(
                         Commands.literal("on")

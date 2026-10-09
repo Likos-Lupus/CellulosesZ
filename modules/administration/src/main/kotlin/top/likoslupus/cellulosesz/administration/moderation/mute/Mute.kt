@@ -4,7 +4,7 @@ import top.likoslupus.cellulosesz.administration.moderation.audit.PersistedModer
 import java.time.Instant
 import java.util.*
 
-/** An active mute. Runtime value; persisted through [MuteFile]. */
+/** An active mute. Runtime value; persisted by the mute repository. */
 internal data class Mute(
     val playerId: UUID,
     val playerName: String,

@@ -3,9 +3,11 @@ package top.likoslupus.cellulosesz.movement.spawn
 import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.movement.command.launchResult
@@ -22,6 +24,7 @@ internal object SpawnCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("spawn")
@@ -52,7 +55,7 @@ internal object SpawnCommands {
         )
         dispatcher.register(
             Commands.literal("setspawn")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.SET_SPAWN) }
                     .executes { context ->
                         val source = context.source
                         val playerId = source.player?.uuid
@@ -76,7 +79,7 @@ internal object SpawnCommands {
         )
         dispatcher.register(
             Commands.literal("delspawn")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.DEL_SPAWN) }
                     .executes { context ->
                         val source = context.source
                         val playerId = source.player?.uuid

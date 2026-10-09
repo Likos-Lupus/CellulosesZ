@@ -5,9 +5,11 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.movement.command.launchResult
@@ -24,6 +26,7 @@ internal object WarpCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("warp")
@@ -47,7 +50,7 @@ internal object WarpCommands {
         )
         dispatcher.register(
             Commands.literal("setwarp")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.SET_WARP) }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->
@@ -63,7 +66,7 @@ internal object WarpCommands {
         )
         dispatcher.register(
             Commands.literal("delwarp")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.DEL_WARP) }
                     .then(
                         Commands.argument("name", StringArgumentType.word())
                                 .executes { context ->

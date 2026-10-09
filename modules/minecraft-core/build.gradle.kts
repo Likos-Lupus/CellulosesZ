@@ -31,6 +31,7 @@ dependencies {
     testCompileOnly(libs.jspecify)
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
+    testImplementation(libs.sqlite.jdbc)
 }
 
 java {

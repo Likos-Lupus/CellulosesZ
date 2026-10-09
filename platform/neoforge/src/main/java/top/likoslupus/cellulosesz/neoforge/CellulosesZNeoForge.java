@@ -14,7 +14,7 @@ public final class CellulosesZNeoForge {
     public static final String MOD_ID = "cellulosesz";
 
     public CellulosesZNeoForge(IEventBus modEventBus) {
-        CellulosesZ.INSTANCE.initialize();
+        CellulosesZ.INSTANCE.initialize(new NeoForgePlatformServices(modEventBus));
     }
 
 }

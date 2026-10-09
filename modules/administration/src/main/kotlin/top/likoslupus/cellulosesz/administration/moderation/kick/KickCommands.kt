@@ -9,7 +9,9 @@ import top.likoslupus.cellulosesz.administration.config.ModerationSettings
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 
 /** `/kick` and `/kickall`. */
@@ -21,10 +23,11 @@ internal object KickCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("kick")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.KICK) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->
@@ -54,7 +57,7 @@ internal object KickCommands {
         )
         dispatcher.register(
             Commands.literal("kickall")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.KICK_ALL) }
                     .executes { context ->
                         kickAll(
                             context,

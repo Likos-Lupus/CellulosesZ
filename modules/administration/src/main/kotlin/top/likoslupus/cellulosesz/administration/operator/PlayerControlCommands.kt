@@ -7,8 +7,10 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 
@@ -21,10 +23,11 @@ internal object PlayerControlCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: PlayerControlService,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("kill")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.KILL) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->
@@ -40,7 +43,7 @@ internal object PlayerControlCommands {
 
         dispatcher.register(
             Commands.literal("gamemode")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.GAMEMODE) }
                     .then(
                         Commands.argument("mode", StringArgumentType.word())
                                 .executes { context -> gameMode(context, null, service, kernel) }
@@ -60,7 +63,12 @@ internal object PlayerControlCommands {
 
         dispatcher.register(
             Commands.literal("sudo")
-                    .requires { it.canUseModeratorCommands() && it.player == null }
+                    .requires {
+                        it.requiresPermission(
+                            permissions,
+                            CommandPermissions.SUDO
+                        ) && it.player == null
+                    }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .then(

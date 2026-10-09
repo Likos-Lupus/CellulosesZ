@@ -7,9 +7,11 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import net.minecraft.resources.Identifier
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
@@ -28,6 +30,7 @@ internal object TeleportCommands {
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("back")
@@ -53,6 +56,7 @@ internal object TeleportCommands {
                                         teleports,
                                         teleportSettings,
                                         kernel,
+                                        permissions,
                                     )
                                 }
                                 .then(
@@ -65,6 +69,7 @@ internal object TeleportCommands {
                                                     teleports,
                                                     teleportSettings,
                                                     kernel,
+                                                    permissions,
                                                 )
                                             }
                                 )
@@ -72,7 +77,7 @@ internal object TeleportCommands {
         )
         dispatcher.register(
             Commands.literal("tphere")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.TP_HERE) }
                     .then(
                         Commands.argument("target", StringArgumentType.word())
                                 .executes { context ->
@@ -88,7 +93,7 @@ internal object TeleportCommands {
         )
         dispatcher.register(
             Commands.literal("tppos")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.TP_POS) }
                     .then(
                         Commands.argument("x", DoubleArgumentType.doubleArg())
                                 .then(
@@ -174,6 +179,7 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ): Int {
         val source = context.source
         if (secondName == null) {
@@ -195,7 +201,7 @@ internal object TeleportCommands {
             )
         }
 
-        if (!source.canUseModeratorCommands()) {
+        if (!source.requiresPermission(permissions, CommandPermissions.TP)) {
             return source.replyError(Messages.prefixed("no permission"))
         }
 

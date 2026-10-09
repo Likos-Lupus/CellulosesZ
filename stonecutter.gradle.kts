@@ -65,7 +65,12 @@ tasks.register("verifyArchitecture") {
             "net.fabricmc.",
             "net.neoforged."
         )
-        val loaderForbidden = listOf("net.fabricmc.", "net.neoforged.")
+        val loaderForbidden = listOf(
+            "net.fabricmc.",
+            "net.neoforged.",
+            "me.lucko.",
+            "net.luckperms.",
+        )
 
         fun kotlinFiles(root: File): List<File> =
             if (!root.isDirectory) {
@@ -208,6 +213,24 @@ tasks.register("verifyArchitecture") {
             }
         }
 
+        // Storage: JDBC access belongs to repositories/infrastructure; Hikari only to foundation DB.
+        modulesDir.listFiles().orEmpty().filter { it.isDirectory }.forEach { module ->
+            kotlinFiles(module.resolve("src/main/kotlin")).forEach { file ->
+                val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                val text = file.readText()
+                if (text.contains("java.sql.") &&
+                    !file.name.contains("Jdbc") &&
+                    !file.name.endsWith("Repository.kt") &&
+                    !relative.contains("/database/")
+                ) {
+                    violations += "$relative: JDBC access must live in a repository ('java.sql')"
+                }
+                if (text.contains("HikariDataSource") && !relative.contains("/foundation/")) {
+                    violations += "$relative: HikariDataSource is owned by foundation only"
+                }
+            }
+        }
+
         // Communication: JSON serialization and atomic writes are owned by repositories only.
         val communicationIoAllowlist = setOf(
             "modules/communication/src/main/kotlin/top/likoslupus/cellulosesz/communication/preferences/FileMessagingPreferencesRepository.kt",
@@ -287,6 +310,56 @@ tasks.register("verifyArchitecture") {
                         violations += "$relative: Java file is not on the allowlist"
                     }
                 }
+
+        // Command catalog: every registered top-level command must have a CommandDescriptor and
+        // vice versa (aliases count as described). Catalogs are parsed by the shape produced by
+        // their private `command("literal", ...)` helper; registrations by the
+        // `dispatcher.register(... literal("x"))` / `register(dispatcher, "x", ...)` shapes used by
+        // the command objects.
+        val commandCatalogs = mapOf(
+            "movement" to "modules/movement/src/main/kotlin/top/likoslupus/cellulosesz/movement/command/MovementCommandCatalog.kt",
+            "communication" to "modules/communication/src/main/kotlin/top/likoslupus/cellulosesz/communication/command/CommunicationCommandCatalog.kt",
+            "administration" to "modules/administration/src/main/kotlin/top/likoslupus/cellulosesz/administration/command/AdministrationCommandCatalog.kt",
+            "utility" to "modules/utility/src/main/kotlin/top/likoslupus/cellulosesz/utility/command/UtilityCommandCatalog.kt",
+        )
+        val registeredLiteralPattern =
+            Regex("""dispatcher\.register\(\s*(?:Commands\.)?literal\("([^"]+)"\)""")
+        val registeredHelperPattern = Regex("""register\(\s*dispatcher,\s*"([^"]+)"""")
+        val describedLiteralPattern = Regex("""command\("([^"]+)"""")
+        val describedAliasPattern = Regex("""command\("([^"]+)"[^\n]*?aliases\s*=\s*setOf\(([^)]*)\)""")
+        val quotedPattern = Regex("\"([^\"]+)\"")
+        commandCatalogs.forEach { (moduleName, catalogRelative) ->
+            val catalogFile = architectureRoot.resolve(catalogRelative)
+            if (!catalogFile.isFile) {
+                violations += "$catalogRelative: missing command catalog"
+                return@forEach
+            }
+            val catalogText = catalogFile.readText()
+            val described = describedLiteralPattern.findAll(catalogText)
+                    .map { it.groupValues[1] }
+                    .toMutableSet()
+            val aliases = mutableSetOf<String>()
+            describedAliasPattern.findAll(catalogText).forEach { match ->
+                quotedPattern.findAll(match.groupValues[2]).forEach { aliases += it.groupValues[1] }
+            }
+            val registered = mutableSetOf<String>()
+            kotlinFiles(modulesDir.resolve(moduleName).resolve("src/main/kotlin")).forEach { file ->
+                if (file.canonicalFile != catalogFile.canonicalFile) {
+                    val text = file.readText()
+                    registeredLiteralPattern.findAll(text)
+                            .forEach { registered += it.groupValues[1] }
+                    registeredHelperPattern.findAll(text)
+                            .forEach { registered += it.groupValues[1] }
+                }
+            }
+            val expected = described + aliases
+            (registered - expected).forEach {
+                violations += "$catalogRelative: command '$it' is registered but not in the command catalog"
+            }
+            (described - registered).forEach {
+                violations += "$catalogRelative: command '$it' is described but not registered"
+            }
+        }
 
         if (violations.isNotEmpty()) {
             throw GradleException(
@@ -371,7 +444,8 @@ tasks.register("inspectArtifacts") {
         val requiredFlattened = listOf(
             "top/likoslupus/cellulosesz/application/bootstrap/CellulosesZ.class",
             "top/likoslupus/cellulosesz/movement/home/HomeService.class",
-            "top/likoslupus/cellulosesz/utility/kit/FileKitRepository.class",
+            "top/likoslupus/cellulosesz/utility/kit/JdbcKitRepository.class",
+            "top/likoslupus/cellulosesz/foundation/database/HikariDatabaseRuntime.class",
         )
         requiredFlattened.forEach { entry ->
             if (entry !in fabricEntries) {
@@ -386,7 +460,7 @@ tasks.register("inspectArtifacts") {
             violations += "fabric jar is missing fabric.mod.json"
         }
         val fabricModJson = entryText(fabricJar, "fabric.mod.json").orEmpty()
-        if (!fabricModJson.contains("\"environment\": \"*\"")) {
+        if (!Regex("\"environment\"\\s*:\\s*\"\\*\"").containsMatchIn(fabricModJson)) {
             violations += "fabric.mod.json must declare \"environment\": \"*\" (client-loadable, server-gated)"
         }
         if ("META-INF/neoforge.mods.toml" !in neoEntries) {
@@ -394,6 +468,17 @@ tasks.register("inspectArtifacts") {
         }
         if (neoEntries.none { it.startsWith("META-INF/jars/kotlin-stdlib") }) {
             violations += "neoforge jar is missing the Kotlin stdlib Jar-in-Jar"
+        }
+
+        // Storage/config runtime and JDBC drivers must ship as nested jars in BOTH cells.
+        val requiredNested = listOf("HikariCP", "sqlite-jdbc", "tomlkt")
+        requiredNested.forEach { jar ->
+            if (fabricEntries.none { it.startsWith("META-INF/jars/") && it.contains(jar) }) {
+                violations += "fabric jar is missing nested runtime jar: $jar"
+            }
+            if (neoEntries.none { it.startsWith("META-INF/jars/") && it.contains(jar) }) {
+                violations += "neoforge jar is missing nested runtime jar: $jar"
+            }
         }
 
         // Externals must never be bundled; loaders must not leak into each other.
@@ -406,9 +491,9 @@ tasks.register("inspectArtifacts") {
                 .forEach {
                     violations += "distribution jar bundles external class $it"
                 }
-        if (fabricEntries.any { it.startsWith("META-INF/jars/") }) {
-            violations += "fabric jar must not contain Jar-in-Jar payloads"
-        }
+        // Fabric nests controlled runtime jars (Hikari/drivers/tomlkt/permissions) under
+        // META-INF/jars; only loader/Minecraft classes must never be flattened. That is covered by
+        // the external-class check above.
 
         if (violations.isNotEmpty()) {
             throw GradleException(

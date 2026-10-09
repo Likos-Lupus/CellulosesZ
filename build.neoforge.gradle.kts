@@ -99,6 +99,15 @@ dependencies {
     include(libs.kotlinx.coroutines.core.jvm) { isTransitive = false }
     include(libs.kotlinx.serialization.core.jvm) { isTransitive = false }
     include(libs.kotlinx.serialization.json.jvm) { isTransitive = false }
+
+    // Storage/config runtime and JDBC drivers shipped Jar-in-Jar.
+    include(libs.hikari) { isTransitive = false }
+    include(libs.tomlkt) { isTransitive = false }
+    include(libs.sqlite.jdbc) { isTransitive = false }
+    include(libs.h2) { isTransitive = false }
+    include(libs.postgresql) { isTransitive = false }
+    include(libs.mariadb) { isTransitive = false }
+    include(libs.mysql) { isTransitive = false }
 }
 
 java {

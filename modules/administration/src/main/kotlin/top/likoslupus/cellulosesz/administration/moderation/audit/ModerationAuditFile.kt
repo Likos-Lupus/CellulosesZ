@@ -4,8 +4,6 @@ import kotlinx.serialization.Serializable
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 
-internal const val AUDIT_SCHEMA_VERSION: Int = 1
-
 /** Actions recorded in the structured moderation audit log. */
 @Serializable
 internal enum class ModerationAuditAction {
@@ -91,9 +89,7 @@ internal data class PersistedModerationTarget(
 }
 
 /** One immutable moderation audit record. */
-@Serializable
 internal data class ModerationAuditFile(
-    val schemaVersion: Int = AUDIT_SCHEMA_VERSION,
     val id: String,
     val occurredAtEpochMillis: Long,
     val actor: PersistedModerationActor,

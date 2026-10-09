@@ -50,7 +50,11 @@ jobs:
           echo "Inspecting $FABRIC_JAR"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "fabric-language-kotlin"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
-          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"environment": "*"'
+          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"environment"'
+          unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"*"'
+          for jar in HikariCP sqlite-jdbc tomlkt fabric-permissions-api; do
+            unzip -l "$FABRIC_JAR" | grep -q "META-INF/jars/$jar" || { echo "missing nested runtime jar: $jar"; exit 1; }
+          done
 
       - name: Inspect NeoForge artifact Kotlin runtime (Jar-in-Jar)
         run: |
@@ -58,7 +62,7 @@ jobs:
           NEOFORGE_JAR=$(ls versions/26.1.2-neoforge/build/libs/*-neoforge.jar)
           echo "Inspecting $NEOFORGE_JAR"
           unzip -p "$NEOFORGE_JAR" META-INF/neoforge.mods.toml | grep -q 'modLoader = "javafml"'
-          for module in kotlin-stdlib kotlinx-coroutines-core-jvm kotlinx-serialization-core-jvm kotlinx-serialization-json-jvm; do
+          for module in kotlin-stdlib kotlinx-coroutines-core-jvm kotlinx-serialization-core-jvm kotlinx-serialization-json-jvm HikariCP sqlite-jdbc tomlkt; do
             unzip -l "$NEOFORGE_JAR" | grep -q "META-INF/jars/$module" \
               || { echo "missing Jar-in-Jar: $module"; exit 1; }
           done

@@ -60,7 +60,11 @@ depend on features. Loader APIs (`net.fabricmc.*`, `net.neoforged.*`, `net.minec
   switch to `Dispatchers.IO` themselves.
 - Minecraft state is only touched on the server thread via `RuntimeKernel.onServerThread`.
 - Filesystem I/O uses `Dispatchers.IO` (injected where practical); the server thread never blocks on
-  I/O.
+  I/O while `RUNNING`. The one deliberate exception is the bounded storage lifecycle: TOML initial
+  load, Hikari connect, schema create/probe and endpoint migration run blocking during
+  `SERVER_STARTING` (and pool close during `SERVER_STOPPING`) so that no game action can run before
+  durable state is ready. These blocking entry points are named `*Blocking` and are only called from
+  the composition root.
 - Teleport transient state (pending teleports, cooldowns, requests) is also server-thread confined;
   it is plain in-memory maps with no locking.
 - `ServerPlayer` is never held across suspension: capture UUID + immutable input, do the I/O, then
@@ -129,25 +133,56 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Config
 
-- `foundation.ConfigStore<T>` is generic: decode candidate, validate the whole candidate, then
-  atomically publish; a failed reload keeps the previous snapshot and generation.
-- Root schema (`CellulosesConfig`) lives in `application`; feature settings types
-  (`MovementSettings` with its `homes`/`teleport`/`requests`/`history` children, `MessagingSettings`
-  with its `privateMessages`/`mail`/`helpOp`/`announcements` children) live with their owners, and
-  each owner validates its own subtree.
-- JSONC with comments and trailing commas; unknown keys rejected; defaults encoded.
+- Configuration is TOML at `<config-dir>/cellulosesz/cellulosesz.toml`. The default file is a
+  packaged, commented template (`application/src/main/resources/defaults/cellulosesz.toml`) written
+  once on first boot; a test asserts the template decodes to the Kotlin defaults.
+- `foundation.ConfigStore<T>` is format-agnostic (a `ConfigDecoder<T>`; `TomlConfigCodec` for TOML).
+  It starts uninitialized; `current` throws until `initialLoadBlocking()` succeeds, so no feature
+  ever runs against an unloaded config. Reload decodes and validates the whole candidate and
+  validates the transition before publishing; a failed reload keeps the previous snapshot.
+- There is no config `schemaVersion`: new fields are defaults, unknown keys are rejected.
+- Root schema (`CellulosesConfig`) lives in `application`; feature settings types live with their
+  owners and validate their own subtree, including the `[database]` section
+  (`foundation.database.DatabaseSettingsValidation`).
 
 ## Persistence
 
-- Config: `<config-dir>/cellulosesz/cellulosesz.jsonc`.
-- Data: `<world>/cellulosesz/` — `movement/` (`homes/<uuid>.json`, `warps.json`, `spawn.json`,
-  `teleport-history/<uuid>.json`), `administration/moderation/mutes/<uuid>.json`,
-  `administration/moderation/audit/<utc-day>/<millis>-<uuid>.json`,
-  `communication/preferences/<uuid>.json`, `communication/mail/<uuid>.json`,
-  `utility/kits.json`, and `utility/kit-claims/<uuid>.json`.
-- Writes go through `AtomicFile` (temp file + fsync + atomic move); per-file serialization uses
-  `KeyedMutex` or a repository `Mutex`.
-- Corrupt machine data raises a typed `*DataException` and is never silently overwritten.
+- Machine business state is stored through JDBC + HikariCP (`foundation.database.DatabaseRuntime`).
+  Backends: SQLite (default, single-connection pool), H2, MySQL, MariaDB, PostgreSQL — each with its
+  own independent `[database.<backend>]` TOML section; only `database.type` is initialized.
+- Fixed `cz_*` tables carry a `namespace` column (never a per-namespace table name). Repositories
+  own all SQL; commands and services never import `java.sql`, and only foundation knows Hikari.
+- The schema is created with `CREATE TABLE IF NOT EXISTS` and verified with a compatibility probe;
+  there is no schema-version migration in this pre-release project.
+- Changing the active endpoint (backend/path/host/database/schema/namespace) triggers a cold-start
+  migration copied table-by-table in a single target transaction, guarded by
+  `cz_storage_migration_journal`. The previous endpoint is recorded in
+  `<world>/cellulosesz/.storage/last-successful.json`. The source is read-only and is never deleted;
+  a non-empty target without a matching journal record is refused. A password or pool change
+  reconnects without moving data.
+- `AtomicFile` is retained only for the default TOML template and the `last-successful` sidecar.
+  Corrupt rows raise a typed `*DataException` and are never silently repaired.
+- Player identity is a durable index (`cz_players`/`cz_player_names`) hydrated into the in-memory
+  resolver at boot; command handling never queries the database for identity.
+
+## Permissions and health
+
+- Authorization has a single seam: `core.permission.PermissionBridge.test(source, spec)` wrapped by
+  `PermissionService`; commands check `source.hasPermission(permissions, spec)`. The node catalog is
+  `CommandPermissions` (`cellulosesz.command.<primary>`). Undefined nodes fall back to the spec's
+  `VanillaPermissionFallback`, so installing no permission manager changes nothing.
+- Fabric integrates via `fabric-permissions-api`; NeoForge registers every node with the NeoForge
+  `PermissionAPI` on `PermissionGatherEvent.Nodes`. LuckPerms is a compatibility target through
+  those APIs; common modules never import a loader or `net.luckperms.*`. Non-player sources
+  (console/RCON)
+  use the vanilla fallback.
+- `ApplicationHealth` carries an explicit bootstrap state (UNINITIALIZED → CONFIG_READY →
+  BOOTSTRAPPING_STORAGE → STORAGE_READY → LOADING_STATE → READY → STOPPING → STOPPED, or FAILED)
+  plus a secret-free `summary()`. A fatal storage failure never reaches READY.
+- Bootstrap order at `SERVER_STARTING`: initialize the pool (fail fast), create/probe schema,
+  migrate if the endpoint changed, hydrate the identity cache, then load feature state.
+  `/cellulosesz status`
+  prints the health summary; it never prints passwords or JDBC credentials.
 
 ## Side and environment
 
@@ -168,16 +203,18 @@ TeleportIntent → preflight → optional delay → late destination resolve
   cells. Build-tool plugin versions are hoisted into the settings `plugins {}` block (from
   `gradle.properties`) so the whole build shares one plugin classloader.
 - Loader cells compile only `platform/<loader>/` and flatten each internal module's compiled output
-  into the distribution jar. External mods are never bundled; NeoForge ships the Kotlin runtime as
-  Jar-in-Jar.
+  into the distribution jar. Loader/API mods are never bundled. CellulosesZ's own runtime libraries
+  (HikariCP, tomlkt, the five JDBC drivers, and — on Fabric — fabric-permissions-api) ship as
+  controlled nested/Jar-in-Jar dependencies (never flattened), so SQLite native resources and
+  service metadata survive. NeoForge additionally ships the Kotlin runtime as Jar-in-Jar.
 - Artifacts: `versions/<cell>/build/libs/cellulosesz-<version>+26.1.2-<loader>.jar`.
 
 ## Verification
 
-| Task                      | Purpose                                                                                                                                                                                                                                                                     |
-|---------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, communication repository IO ownership, utility repository IO ownership and kit inventory single path. |
-| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                  |
-| `checkModules`            | Runs every module's `check` (including unit tests) once.                                                                                                                                                                                                                    |
-| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                           |
-| `inspectArtifacts`        | Flattened classes present; externals absent; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                    |
+| Task                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                      |
+|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, JDBC ownership (repositories/infrastructure only, Hikari in foundation only), utility kit inventory single path, command-catalog coverage (registered top-level commands vs. per-module `CommandDescriptor` catalogs). |
+| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                                                                                                                                   |
+| `checkModules`            | Runs every module's `check` (including unit tests, incl. SQLite/H2 storage tests) once.                                                                                                                                                                                                                                                                                                      |
+| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                                                                                                                                            |
+| `inspectArtifacts`        | Flattened classes present; loader/Minecraft classes absent; both cells carry the Hikari/sqlite/tomlkt nested runtimes; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                                                           |

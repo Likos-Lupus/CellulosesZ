@@ -8,8 +8,10 @@ import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.command.ModerationFeedback
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 
@@ -20,10 +22,11 @@ internal object SocialSpyCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: SocialSpyService,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("socialspy")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.SOCIAL_SPY) }
                     .executes { context -> apply(context, null, service, kernel) }
                     .then(
                         Commands.literal("on")

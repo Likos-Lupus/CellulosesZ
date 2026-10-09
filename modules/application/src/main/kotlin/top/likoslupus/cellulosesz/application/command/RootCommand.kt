@@ -4,7 +4,10 @@ import com.mojang.brigadier.CommandDispatcher
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
+import top.likoslupus.cellulosesz.application.health.ApplicationHealth
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
@@ -18,10 +21,17 @@ internal object RootCommand {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         config: ConfigStore<CellulosesConfig>,
         kernel: RuntimeKernel,
+        health: ApplicationHealth,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal(ROOT_LITERAL)
-                    .requires { source -> source.canUseModeratorCommands() }
+                    .requires { source ->
+                        source.requiresPermission(
+                            permissions,
+                            CommandPermissions.ROOT
+                        )
+                    }
                     .then(
                         Commands.literal("status")
                                 .executes { context ->
@@ -29,7 +39,7 @@ internal object RootCommand {
                                     source.sendSuccess(
                                         {
                                             Messages.prefixed(
-                                                "state=${kernel.state} configGeneration=${config.generation}"
+                                                "${health.summary()} configGeneration=${config.generation}"
                                             )
                                         },
                                         false,
@@ -64,7 +74,9 @@ internal object RootCommand {
                                         }
                                     }
                                     if (job == null) {
-                                        source.sendFailure(Messages.prefixed("runtime is shutting down; reload rejected"))
+                                        source.sendFailure(
+                                            Messages.prefixed("runtime is shutting down; reload rejected")
+                                        )
                                         0
                                     } else {
                                         source.sendSuccess(

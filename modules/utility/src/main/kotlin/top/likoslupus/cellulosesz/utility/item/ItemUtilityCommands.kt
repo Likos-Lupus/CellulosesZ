@@ -8,9 +8,11 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands.argument
 import net.minecraft.commands.Commands.literal
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 import java.util.*
@@ -21,10 +23,11 @@ internal object ItemUtilityCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: ItemUtilityService,
         known: KnownPlayerResolver,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             literal("repair")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.REPAIR) }
                     .executes { context ->
                         repair(
                             context,
@@ -101,7 +104,7 @@ internal object ItemUtilityCommands {
         )
         dispatcher.register(
             literal("more")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.MORE) }
                     .executes { context -> more(context, null, service) }
                     .then(
                         argument("amount", integer(1))

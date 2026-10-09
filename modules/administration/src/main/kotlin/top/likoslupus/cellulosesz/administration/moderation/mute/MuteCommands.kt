@@ -9,10 +9,12 @@ import top.likoslupus.cellulosesz.administration.config.ModerationSettings
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import java.time.Instant
@@ -26,10 +28,11 @@ internal object MuteCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("mute")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.MUTE) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->
@@ -61,7 +64,7 @@ internal object MuteCommands {
         )
         dispatcher.register(
             Commands.literal("tempmute")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.TEMP_MUTE) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .then(
@@ -102,7 +105,7 @@ internal object MuteCommands {
         )
         dispatcher.register(
             Commands.literal("unmute")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.UNMUTE) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->
@@ -124,7 +127,7 @@ internal object MuteCommands {
         )
         dispatcher.register(
             Commands.literal("muteinfo")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.MUTE_INFO) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .executes { context ->

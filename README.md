@@ -159,40 +159,41 @@ needed there. This mod adds **no client UI**.
 | `/cellulosesz status`                          | Moderator      | Show runtime state and config generation.      |
 | `/cellulosesz reload`                          | Moderator      | Reload the configuration transactionally.      |
 
-Moderator commands use the vanilla Minecraft 26.1.2 permission `COMMANDS_MODERATOR`.
+Each command has a stable permission node (`cellulosesz.command.<command>`). When a node is
+undefined it falls back to the exact vanilla behaviour (`ALLOW_ALL` for player commands,
+`COMMANDS_MODERATOR`
+for moderator commands), so installing no permission manager changes nothing. On Fabric the nodes
+are served through `fabric-permissions-api` (LuckPerms-compatible); on NeoForge through the NeoForge
+`PermissionAPI`.
 
-## Configuration
+## Configuration and storage
 
 The config file is created on first start at:
 
 ```text
-<config-dir>/cellulosesz/cellulosesz.jsonc
+<config-dir>/cellulosesz/cellulosesz.toml
 ```
 
-It is JSONC (comments and trailing commas allowed), strictly validated, and rejects unknown keys.
-Per-world data is stored under:
+It is TOML, strictly validated, and rejects unknown keys. The active storage backend is selected by
+`[database].type` — `sqlite` (default), `h2`, `mysql`, `mariadb`, or `postgresql`; each backend has
+its own `[database.<backend>]` section and only the active one is initialized. Business data lives
+in fixed `cz_*` tables (with a `namespace` column) rather than files:
 
 ```text
-<world>/cellulosesz/
-├─ movement/
-│  ├─ homes/<uuid>.json
-│  ├─ warps.json
-│  ├─ spawn.json
-│  └─ teleport-history/<uuid>.json
-├─ communication/
-│  ├─ preferences/<uuid>.json
-│  └─ mail/<uuid>.json
-├─ administration/
-│  └─ moderation/
-│     ├─ mutes/<uuid>.json
-│     └─ audit/<utc-day>/...
-└─ utility/
-   ├─ kits.json
-   └─ kit-claims/<uuid>.json
+cz_players, cz_player_names            # durable player identity
+cz_homes, cz_warps, cz_spawn, cz_teleport_history
+cz_messaging_preferences, cz_ignored_players, cz_mailboxes, cz_mail_messages
+cz_mutes, cz_moderation_audit, cz_moderation_audit_details
+cz_kits, cz_kit_items, cz_kit_claims
+cz_storage_migration_journal
 ```
 
-A legacy `<world>/cellulosesz/kits.json` (schema v1) is migrated once into `utility/kits.json`
-(schema v2); the legacy file is renamed to `kits.json.v1.bak`.
+The SQLite database defaults to `<world>/cellulosesz/cellulosesz.db`. Changing the active endpoint
+(backend, path, host/database/schema, or namespace) migrates data on the next cold start; the
+previous endpoint is remembered in `<world>/cellulosesz/.storage/last-successful.json`, the source
+is never deleted, and a password or pool change reconnects without moving data.
+`/cellulosesz reload`
+cannot hot-swap the active database — a change to it requires a restart.
 
 ## Building from Source
 

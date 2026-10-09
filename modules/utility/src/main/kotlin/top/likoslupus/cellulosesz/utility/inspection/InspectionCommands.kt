@@ -4,9 +4,11 @@ import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 
@@ -16,6 +18,7 @@ internal object InspectionCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         service: InspectionService,
         known: KnownPlayerResolver,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("enderchest")
@@ -37,7 +40,7 @@ internal object InspectionCommands {
         )
         dispatcher.register(
             Commands.literal("invsee")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.INVSEE) }
                     .then(
                         Commands.argument("player", StringArgumentType.word())
                                 .suggests { context, builder ->

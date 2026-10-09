@@ -8,8 +8,10 @@ import net.minecraft.commands.Commands
 import net.minecraft.commands.arguments.DimensionArgument
 import top.likoslupus.cellulosesz.communication.command.communicationLaunch
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
-import top.likoslupus.cellulosesz.core.command.canUseModeratorCommands
 import top.likoslupus.cellulosesz.core.command.message
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 
 /** `/broadcast` and `/broadcastworld`: moderator-only literal announcements. */
@@ -19,10 +21,11 @@ internal object AnnouncementCommands {
         dispatcher: CommandDispatcher<CommandSourceStack>,
         announcements: AnnouncementService,
         kernel: RuntimeKernel,
+        permissions: PermissionService,
     ) {
         dispatcher.register(
             Commands.literal("broadcast")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires { it.requiresPermission(permissions, CommandPermissions.BROADCAST) }
                     .then(
                         Commands.argument("message", StringArgumentType.greedyString())
                                 .executes { context ->
@@ -32,7 +35,12 @@ internal object AnnouncementCommands {
         )
         dispatcher.register(
             Commands.literal("broadcastworld")
-                    .requires { it.canUseModeratorCommands() }
+                    .requires {
+                        it.requiresPermission(
+                            permissions,
+                            CommandPermissions.BROADCAST_WORLD
+                        )
+                    }
                     .then(
                         Commands.argument("dimension", DimensionArgument.dimension())
                                 .then(
