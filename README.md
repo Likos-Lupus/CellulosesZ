@@ -42,6 +42,9 @@ with the legacy CellulosesZ or with EssentialsX.
 - **Portable workstations** — `/workbench`, `/anvil`, `/grindstone`, `/stonecutter`, `/loom`,
   `/cartographytable`, `/smithingtable` (disabled by default).
 - **Inventory inspection** — `/enderchest`, `/disposal`, and read-only `/invsee <player>`.
+- **Localized messages** — server-side translations (`en_us`, `zh_cn`) with `/cellulosesz language`
+  and a per-player preference; Adventure-rendered primary/secondary colors. CellulosesZ language
+  controls CellulosesZ-owned text only, not the player's Minecraft client language.
 - **Admin root** — `/cellulosesz status`, `/cellulosesz reload`.
 
 ## Design highlights
@@ -53,8 +56,8 @@ with the legacy CellulosesZ or with EssentialsX.
   teleport backend may call the Minecraft teleport API, enforced by `verifyArchitecture`.
 - **Crash-safe persistence** — every durable write goes through a temp file, `fsync` and an atomic
   move; corrupt machine data is never silently overwritten.
-- **Strict, typed config** — JSONC with comments and trailing commas, unknown keys rejected, and a
-  transactional reload that keeps the previous snapshot on failure.
+- **Strict, typed config** — TOML with comments, unknown keys rejected, and a transactional reload
+  that keeps the previous snapshot on failure.
 - **No runtime magic** — no reflection scanning, no service locator, no runtime module graph.
 
 ## Requirements
@@ -158,6 +161,7 @@ needed there. This mod adds **no client UI**.
 | `/invsee <player>`                             | Moderator      | View a player's inventory (read-only).         |
 | `/cellulosesz status`                          | Moderator      | Show runtime state and config generation.      |
 | `/cellulosesz reload`                          | Moderator      | Reload the configuration transactionally.      |
+| `/cellulosesz language [list\|server\|<lang>]` | Player         | View or change your CellulosesZ language.      |
 
 Each command has a stable permission node (`cellulosesz.command.<command>`). When a node is
 undefined it falls back to the exact vanilla behaviour (`ALLOW_ALL` for player commands,

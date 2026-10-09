@@ -63,7 +63,8 @@ tasks.register("verifyArchitecture") {
             "net.minecraft.",
             "dev.architectury.",
             "net.fabricmc.",
-            "net.neoforged."
+            "net.neoforged.",
+            "net.kyori."
         )
         val loaderForbidden = listOf(
             "net.fabricmc.",
@@ -227,6 +228,21 @@ tasks.register("verifyArchitecture") {
                 }
                 if (text.contains("HikariDataSource") && !relative.contains("/foundation/")) {
                     violations += "$relative: HikariDataSource is owned by foundation only"
+                }
+            }
+        }
+
+        // Adventure: the platform (audience lifecycle, loader quirks) is owned by minecraft-core's
+        // text/adventure package. Feature modules may use net.kyori.adventure.text but must never
+        // reach for net.kyori.adventure.platform directly.
+        modulesDir.listFiles().orEmpty().filter { it.isDirectory }.forEach { module ->
+            kotlinFiles(module.resolve("src/main/kotlin")).forEach { file ->
+                val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                if (file.readText().contains("net.kyori.adventure.platform.") &&
+                    !relative.contains("/core/text/adventure/")
+                ) {
+                    violations +=
+                        "$relative: Adventure platform API is owned by core/text/adventure"
                 }
             }
         }
@@ -480,6 +496,28 @@ tasks.register("inspectArtifacts") {
                 violations += "neoforge jar is missing nested runtime jar: $jar"
             }
         }
+
+        // Adventure platform mod ships as a nested jar per cell; its own Adventure libraries are
+        // nested inside it. Adventure classes must never be flattened into the distribution.
+        if (
+            fabricEntries.none {
+                it.startsWith("META-INF/jars/")
+                        && it.contains("adventure-platform-fabric")
+            }
+        ) {
+            violations += "fabric jar is missing nested adventure-platform-fabric"
+        }
+        if (
+            neoEntries.none {
+                it.startsWith("META-INF/jars/")
+                        && it.contains("adventure-platform-neoforge")
+            }
+        ) {
+            violations += "neoforge jar is missing nested adventure-platform-neoforge"
+        }
+        (fabricEntries + neoEntries)
+                .filter { it.startsWith("net/kyori/") }
+                .forEach { violations += "distribution jar flattens Adventure class $it" }
 
         // Externals must never be bundled; loaders must not leak into each other.
         (fabricEntries + neoEntries)

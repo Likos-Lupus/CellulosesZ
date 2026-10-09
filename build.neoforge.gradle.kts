@@ -25,8 +25,10 @@ val internalModules = listOf(
     ":modules:application",
 )
 
-// Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers. They are both
-// depended on (dev launch classpath) and nested Jar-in-Jar (shipped jar).
+// Runtime libraries the distribution needs: Hikari/tomlkt, the JDBC drivers and the Adventure
+// platform mod. They are both depended on (dev launch classpath) and nested Jar-in-Jar (shipped
+// jar). The Adventure platform jar is self-contained (its Adventure libraries are nested inside
+// its own META-INF/jarjar), so only the platform mod itself is nested here.
 val bundledRuntime = listOf(
     libs.hikari,
     libs.tomlkt,
@@ -35,6 +37,7 @@ val bundledRuntime = listOf(
     libs.postgresql,
     libs.mariadb,
     libs.mysql,
+    libs.adventure.platform.neoforge,
 )
 
 architectury {

@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.application.config
 
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettingsValidation
 import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidation
+import top.likoslupus.cellulosesz.core.text.TextSettingsValidation
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
 import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettingsValidation
@@ -16,6 +18,8 @@ internal object ConfigValidation {
     fun validate(config: CellulosesConfig): List<ValidationError> =
         buildList {
             addAll(DatabaseSettingsValidation.validate(config.database))
+            addAll(LocalizationSettingsValidation.validate(config.localization))
+            addAll(TextSettingsValidation.validate(config.text))
             addAll(MovementSettingsValidation.validate(config.movement))
             addAll(MessagingSettingsValidation.validate(config.messaging))
             addAll(AdministrationSettingsValidation.validate(config.administration))

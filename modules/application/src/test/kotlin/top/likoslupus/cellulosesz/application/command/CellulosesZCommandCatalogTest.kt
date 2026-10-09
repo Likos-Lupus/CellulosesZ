@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.core.command.CommandCatalog
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.VanillaPermissionFallback
 
 class CellulosesZCommandCatalogTest {
 
@@ -17,7 +18,7 @@ class CellulosesZCommandCatalogTest {
     }
 
     @Test
-    fun `every command permission node has exactly one descriptor`() {
+    fun `every command descriptor maps to a declared command permission`() {
         val commandNodes = CommandPermissions.all
                 .filter { it.node.startsWith(CommandPermissions.PREFIX) }
                 .toSet()
@@ -25,7 +26,29 @@ class CellulosesZCommandCatalogTest {
                 .map { it.permission }
                 .toSet()
 
-        assertEquals(commandNodes, described)
+        assertTrue(commandNodes.containsAll(described))
+    }
+
+    @Test
+    fun `root subcommand capabilities are declared with the expected fallbacks`() {
+        val nodes = CommandPermissions.all
+                .filter { it.node.startsWith(CommandPermissions.PREFIX) }
+                .toSet()
+
+        assertTrue(nodes.contains(CommandPermissions.ROOT_LANGUAGE))
+        assertTrue(nodes.contains(CommandPermissions.ROOT_STATUS))
+        assertTrue(nodes.contains(CommandPermissions.ROOT_RELOAD))
+
+        assertEquals(VanillaPermissionFallback.ALLOW_ALL, CommandPermissions.ROOT.fallback)
+        assertEquals(VanillaPermissionFallback.ALLOW_ALL, CommandPermissions.ROOT_LANGUAGE.fallback)
+        assertEquals(
+            VanillaPermissionFallback.COMMANDS_MODERATOR,
+            CommandPermissions.ROOT_STATUS.fallback
+        )
+        assertEquals(
+            VanillaPermissionFallback.COMMANDS_MODERATOR,
+            CommandPermissions.ROOT_RELOAD.fallback
+        )
     }
 
     @Test

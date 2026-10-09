@@ -28,7 +28,9 @@ val internalModules = listOf(
 )
 
 // Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers, plus the Fabric
-// permission helper. They are both depended on (dev launch classpath) and nested (shipped jar).
+// permission helper and the Adventure platform mod. They are both depended on (dev launch
+// classpath) and nested (shipped jar). The Adventure platform jar is self-contained (its Adventure
+// libraries are nested inside it), so only the platform mod itself is nested here.
 val bundledRuntime = listOf(
     libs.hikari,
     libs.tomlkt,
@@ -38,6 +40,7 @@ val bundledRuntime = listOf(
     libs.mariadb,
     libs.mysql,
     libs.fabric.permissions.api,
+    libs.adventure.platform.fabric,
 )
 
 architectury {

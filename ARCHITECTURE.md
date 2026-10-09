@@ -184,6 +184,25 @@ TeleportIntent → preflight → optional delay → late destination resolve
   `/cellulosesz status`
   prints the health summary; it never prints passwords or JDBC credentials.
 
+## Text and localization
+
+- The text foundation lives in `minecraft-core`: `core.text` (keys, `MessageTheme`, `TextSettings`)
+  and `core.text.i18n` (canonical `LanguageId`, bundled `TranslationCatalog`, the tiny template
+  compiler, locale policy, `LocalizedMessages`). The Adventure platform bridge is confined to
+  `core.text.adventure` (`AdventureRuntime`, feedback helpers).
+- Adventure (`adventure-api` 4.26.1, `adventure-platform-mod` 6.9.0) is the rich-text output. Both
+  loaders nest the self-contained Adventure platform mod as Jar-in-Jar; no Adventure classes are
+  flattened (`inspectArtifacts` enforces this).
+- Locale policy: explicit per-player preference → configured server default; console uses the server
+  default. The Minecraft client locale is not consulted. Overrides are stored in
+  `cz_player_languages`, hydrated at startup, and **never queried on the render path**.
+- Ordinary messages use a two-role template: plain text is `primary`, `[[...]]` marks a `secondary`
+  span, `{0}`, `{1}`, ... are positional arguments. Bundled UTF-8 `.properties` live under
+  `cellulosesz/i18n`; `en_us` is the baseline and every locale must match its key and per-key
+  placeholder sets. Argument values are bound literally and never re-parsed.
+- The legacy `Messages.prefixed/raw` API remains for incremental migration; new localized code uses
+  `MessageKey` + `LocalizedMessages`. Future command-document Markdown is a separate subsystem.
+
 ## Side and environment
 
 - CellulosesZ is a **server-side utility that is client-loadable**. The Fabric metadata declares
@@ -211,10 +230,10 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Verification
 
-| Task                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                      |
-|---------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, JDBC ownership (repositories/infrastructure only, Hikari in foundation only), utility kit inventory single path, command-catalog coverage (registered top-level commands vs. per-module `CommandDescriptor` catalogs). |
-| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                                                                                                                                   |
-| `checkModules`            | Runs every module's `check` (including unit tests, incl. SQLite/H2 storage tests) once.                                                                                                                                                                                                                                                                                                      |
-| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                                                                                                                                            |
-| `inspectArtifacts`        | Flattened classes present; loader/Minecraft classes absent; both cells carry the Hikari/sqlite/tomlkt nested runtimes; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                                                           |
+| Task                      | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|---------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `verifyArchitecture`      | Source rules, foundation import ban, loader import ban, mixin-package/loader-shim Java allowlist, single teleport path, single ban/control path, command file IO ban, JDBC ownership (repositories/infrastructure only, Hikari in foundation only), Adventure platform locality (`core/text/adventure` only), utility kit inventory single path, command-catalog coverage (registered top-level commands vs. per-module `CommandDescriptor` catalogs). |
+| `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `checkModules`            | Runs every module's `check` (including unit tests, incl. SQLite/H2 storage tests) once.                                                                                                                                                                                                                                                                                                                                                                |
+| `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `inspectArtifacts`        | Flattened classes present; loader/Minecraft classes absent; both cells carry the Hikari/sqlite/tomlkt nested runtimes; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                                                                                                                     |

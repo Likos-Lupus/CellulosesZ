@@ -24,10 +24,30 @@ public object CommandPermissions {
         )
 
     public val ROOT: PermissionSpec =
+        playerNode(
+            "cellulosesz",
+            "Use the CellulosesZ command"
+        )
+
+    public val ROOT_LANGUAGE: PermissionSpec =
         PermissionSpec(
-            "cellulosesz.command.cellulosesz",
+            "cellulosesz.command.cellulosesz.language",
+            VanillaPermissionFallback.ALLOW_ALL,
+            "Change your CellulosesZ language"
+        )
+
+    public val ROOT_STATUS: PermissionSpec =
+        PermissionSpec(
+            "cellulosesz.command.cellulosesz.status",
             VanillaPermissionFallback.COMMANDS_MODERATOR,
-            "CellulosesZ admin root"
+            "View CellulosesZ status"
+        )
+
+    public val ROOT_RELOAD: PermissionSpec =
+        PermissionSpec(
+            "cellulosesz.command.cellulosesz.reload",
+            VanillaPermissionFallback.COMMANDS_MODERATOR,
+            "Reload CellulosesZ configuration"
         )
 
     /** Internal capability used by moderator notices and staff broadcasts (not a command node). */
@@ -319,6 +339,9 @@ public object CommandPermissions {
     /** Every declared node, in declaration order. */
     public val all: List<PermissionSpec> = listOf(
         ROOT,
+        ROOT_LANGUAGE,
+        ROOT_STATUS,
+        ROOT_RELOAD,
         MODERATOR,
         SET_HOME,
         HOME,

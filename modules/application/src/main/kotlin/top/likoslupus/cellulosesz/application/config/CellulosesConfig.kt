@@ -3,6 +3,8 @@ package top.likoslupus.cellulosesz.application.config
 import kotlinx.serialization.Serializable
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
+import top.likoslupus.cellulosesz.core.text.TextSettings
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettings
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
 import top.likoslupus.cellulosesz.utility.config.UtilitySettings
@@ -16,6 +18,8 @@ import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 public data class CellulosesConfig(
     public val diagnostics: DiagnosticsConfig = DiagnosticsConfig(),
     public val database: DatabaseSettings = DatabaseSettings(),
+    public val localization: LocalizationSettings = LocalizationSettings(),
+    public val text: TextSettings = TextSettings(),
     public val movement: MovementSettings = MovementSettings(),
     public val messaging: MessagingSettings = MessagingSettings(),
     public val administration: AdministrationSettings = AdministrationSettings(),

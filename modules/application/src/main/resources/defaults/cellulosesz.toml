@@ -89,6 +89,21 @@ ssl-mode = "prefer"
 maximum-pool-size = 10
 
 # ---------------------------------------------------------------------------
+# Localization and text. CellulosesZ renders its own messages server-side; this
+# controls CellulosesZ-owned text only, not the player's Minecraft client language.
+# ---------------------------------------------------------------------------
+[localization]
+# Default language for players without an explicit /cellulosesz language preference.
+# Must be one of the bundled languages (en_us, zh_cn).
+defaultLanguage = "en_us"
+
+[text.colors]
+# Ordinary command/body text.
+primary = "#E0E0E0"
+# Highlighted values and the CellulosesZ prefix.
+secondary = "#A0A0A0"
+
+# ---------------------------------------------------------------------------
 # Movement
 # ---------------------------------------------------------------------------
 [movement.teleport]

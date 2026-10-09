@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.communication.config.MailSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
+import top.likoslupus.cellulosesz.core.text.TextColorSettings
+import top.likoslupus.cellulosesz.core.text.TextSettings
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettings
 import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettings
 import top.likoslupus.cellulosesz.foundation.database.MySqlSettings
@@ -143,6 +146,44 @@ class ConfigValidationTest {
         )
 
         assertTrue(errors.any { it.path == "utility.kits.maxKits" })
+    }
+
+    @Test
+    fun `rejects an unsupported default language`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(localization = LocalizationSettings(defaultLanguage = "fr_fr"))
+        )
+
+        assertTrue(errors.any { it.path == "localization.defaultLanguage" })
+    }
+
+    @Test
+    fun `rejects a malformed default language`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(localization = LocalizationSettings(defaultLanguage = "english"))
+        )
+
+        assertTrue(errors.any { it.path == "localization.defaultLanguage" })
+    }
+
+    @Test
+    fun `rejects an invalid primary color`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(text = TextSettings(colors = TextColorSettings(primary = "red")))
+        )
+
+        assertTrue(errors.any { it.path == "text.colors.primary" })
+    }
+
+    @Test
+    fun `rejects an invalid secondary color`() {
+        val errors = ConfigValidation.validate(
+            CellulosesConfig(
+                text = TextSettings(colors = TextColorSettings(secondary = "#GGGGGG"))
+            )
+        )
+
+        assertTrue(errors.any { it.path == "text.colors.secondary" })
     }
 
     @Test

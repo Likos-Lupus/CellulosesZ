@@ -26,6 +26,14 @@ import top.likoslupus.cellulosesz.core.player.identity.JdbcPlayerIdentityReposit
 import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
+import top.likoslupus.cellulosesz.core.text.i18n.preference.JdbcPlayerLanguagePreferenceRepository
+import top.likoslupus.cellulosesz.core.text.i18n.preference.LocalizationSqlSchema
+import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
+import top.likoslupus.cellulosesz.core.text.toMessageTheme
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
 import top.likoslupus.cellulosesz.foundation.config.TomlConfigCodec
@@ -49,6 +57,7 @@ public object CellulosesZ {
 
     private val businessContributors: List<SqlSchemaContributor> = listOf(
         IdentitySqlSchema,
+        LocalizationSqlSchema,
         MovementSqlSchema,
         CommunicationSqlSchema,
         AdministrationSqlSchema,
@@ -93,6 +102,17 @@ public object CellulosesZ {
         val known = MinecraftKnownPlayerResolver(kernel)
         val identityRepository = JdbcPlayerIdentityRepository(database, namespace)
 
+        val catalog = TranslationCatalog.loadBundled()
+        val languageRepository = JdbcPlayerLanguagePreferenceRepository(database, namespace)
+        val languagePreferences = PlayerLanguagePreferences(languageRepository)
+        val languageResolver = LanguageResolver(catalog, languagePreferences) {
+            config.current.localization
+        }
+        val messages = LocalizedMessages(catalog, languageResolver) {
+            config.current.text.colors.toMessageTheme()
+        }
+        val adventure = AdventureRuntime()
+
         val movement = createMovementFeature(
             kernel = kernel,
             database = database,
@@ -126,7 +146,18 @@ public object CellulosesZ {
         )
 
         CommandRegistrationEvent.EVENT.register { dispatcher, _, _ ->
-            RootCommand.register(dispatcher, config, kernel, health, permissions)
+            RootCommand.register(
+                dispatcher = dispatcher,
+                config = config,
+                kernel = kernel,
+                health = health,
+                permissions = permissions,
+                messages = messages,
+                adventure = adventure,
+                languages = languagePreferences,
+                resolver = languageResolver,
+                catalog = catalog,
+            )
             movement.registerCommands(dispatcher)
             communication.registerCommands(
                 dispatcher = dispatcher,
@@ -160,6 +191,7 @@ public object CellulosesZ {
 
         LifecycleEvent.SERVER_STARTING.register { server ->
             kernel.onServerStarting(server)
+            adventure.start(server)
             health.transition(ApplicationHealth.State.BOOTSTRAPPING_STORAGE)
 
             val bootstrap = StorageBootstrap(dataRoot(kernel), businessContributors)
@@ -173,6 +205,8 @@ public object CellulosesZ {
             val identities = identityRepository.loadAllBlocking()
             known.hydrate(identities.map { KnownPlayerIdentity(it.id, it.name) })
             health.identityRecords = identities.size
+
+            languagePreferences.hydrate(languageRepository.loadAllBlocking())
 
             administration.onServerStarting()
             communication.onServerStarting()
@@ -194,6 +228,7 @@ public object CellulosesZ {
             health.transition(ApplicationHealth.State.STOPPED)
         }
         LifecycleEvent.SERVER_STOPPED.register {
+            adventure.stop()
             kernel.onServerStopped()
         }
 
