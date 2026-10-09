@@ -27,6 +27,19 @@ val internalModules = listOf(
     ":modules:application",
 )
 
+// Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers, plus the Fabric
+// permission helper. They are both depended on (dev launch classpath) and nested (shipped jar).
+val bundledRuntime = listOf(
+    libs.hikari,
+    libs.tomlkt,
+    libs.sqlite.jdbc,
+    libs.h2,
+    libs.postgresql,
+    libs.mariadb,
+    libs.mysql,
+    libs.fabric.permissions.api,
+)
+
 architectury {
     platformSetupLoomIde()
     fabric()
@@ -65,7 +78,6 @@ dependencies {
     implementation(libs.fabric.api)
     implementation(libs.fabric.language.kotlin)
     implementation(libs.architectury.fabric)
-    implementation(libs.fabric.permissions.api)
 
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
@@ -76,16 +88,11 @@ dependencies {
         (dependency as ModuleDependency).isTransitive = false
     }
 
-    // Storage/config/permission runtime is nested as Fabric jars (not flattened), so driver
-    // resource layout (SQLite natives, service files) and license metadata survive intact.
-    include(libs.hikari) { isTransitive = false }
-    include(libs.tomlkt) { isTransitive = false }
-    include(libs.sqlite.jdbc) { isTransitive = false }
-    include(libs.h2) { isTransitive = false }
-    include(libs.postgresql) { isTransitive = false }
-    include(libs.mariadb) { isTransitive = false }
-    include(libs.mysql) { isTransitive = false }
-    include(libs.fabric.permissions.api) { isTransitive = false }
+    // These must be on the dev launch classpath as well as nested into the shipped jar: `include`
+    // only nests, so without the plain `implementation` the dimension run is missing
+    // Toml/Hikari/drivers. Nesting (not flattening) keeps SQLite natives and driver service files.
+    bundledRuntime.forEach { implementation(it) }
+    bundledRuntime.forEach { include(it) { isTransitive = false } }
 }
 
 java {

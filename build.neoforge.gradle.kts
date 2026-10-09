@@ -25,6 +25,18 @@ val internalModules = listOf(
     ":modules:application",
 )
 
+// Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers. They are both
+// depended on (dev launch classpath) and nested Jar-in-Jar (shipped jar).
+val bundledRuntime = listOf(
+    libs.hikari,
+    libs.tomlkt,
+    libs.sqlite.jdbc,
+    libs.h2,
+    libs.postgresql,
+    libs.mariadb,
+    libs.mysql,
+)
+
 architectury {
     platformSetupLoomIde()
     neoForge()
@@ -100,14 +112,10 @@ dependencies {
     include(libs.kotlinx.serialization.core.jvm) { isTransitive = false }
     include(libs.kotlinx.serialization.json.jvm) { isTransitive = false }
 
-    // Storage/config runtime and JDBC drivers shipped Jar-in-Jar.
-    include(libs.hikari) { isTransitive = false }
-    include(libs.tomlkt) { isTransitive = false }
-    include(libs.sqlite.jdbc) { isTransitive = false }
-    include(libs.h2) { isTransitive = false }
-    include(libs.postgresql) { isTransitive = false }
-    include(libs.mariadb) { isTransitive = false }
-    include(libs.mysql) { isTransitive = false }
+    // Storage/config runtime and JDBC drivers: `implementation` puts them on the dev launch
+    // classpath and `include` nests them into the shipped jar (`include` alone was not enough).
+    bundledRuntime.forEach { implementation(it) }
+    bundledRuntime.forEach { include(it) { isTransitive = false } }
 }
 
 java {

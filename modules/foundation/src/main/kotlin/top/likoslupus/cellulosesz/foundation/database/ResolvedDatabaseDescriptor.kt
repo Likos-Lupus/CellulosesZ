@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.foundation.database
 
+import java.nio.file.Files
 import java.nio.file.Path
 
 /**
@@ -19,6 +20,25 @@ public class ResolvedDatabaseDescriptor(
     public val signature: StorageConnectionSignature,
     public val redactedEndpoint: String,
 ) {
+
+    /** The on-disk database file for file-backed backends (SQLite/H2), or null for remote ones. */
+    public val localFilePath: Path?
+        get() = when (type) {
+            DatabaseType.SQLITE,
+            DatabaseType.H2 -> identity.path?.let(Path::of)
+            DatabaseType.MYSQL,
+            DatabaseType.MARIADB,
+            DatabaseType.POSTGRESQL -> null
+        }
+
+    /**
+     * Creates the parent directory of the local database file, if any. SQLite (and H2 file mode)
+     * never creates missing directories, so a fresh world or server would otherwise fail to open
+     * the database with `SQLITE_CANTOPEN`.
+     */
+    public fun ensureLocalStorageDirectories() {
+        localFilePath?.parent?.let { Files.createDirectories(it) }
+    }
 
     override fun toString(): String =
         "ResolvedDatabaseDescriptor(type=$type, endpoint=$redactedEndpoint)"

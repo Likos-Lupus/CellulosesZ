@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.neoforge;
 
-import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import top.likoslupus.cellulosesz.application.bootstrap.CellulosesZ;
 
@@ -13,8 +12,8 @@ public final class CellulosesZNeoForge {
 
     public static final String MOD_ID = "cellulosesz";
 
-    public CellulosesZNeoForge(IEventBus modEventBus) {
-        CellulosesZ.INSTANCE.initialize(new NeoForgePlatformServices(modEventBus));
+    public CellulosesZNeoForge() {
+        CellulosesZ.INSTANCE.initialize(new NeoForgePlatformServices());
     }
 
 }

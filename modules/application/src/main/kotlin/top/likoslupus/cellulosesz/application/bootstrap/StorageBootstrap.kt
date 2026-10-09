@@ -10,6 +10,7 @@ import top.likoslupus.cellulosesz.foundation.database.schema.SqlDialects
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlSchemaContributor
 import top.likoslupus.cellulosesz.foundation.database.state.LastStorageState
 import top.likoslupus.cellulosesz.foundation.database.state.LastStorageStateStore
+import java.nio.file.Files
 import java.nio.file.Path
 
 /** The bound runtime plus a human-readable migration summary. */
@@ -37,6 +38,8 @@ public class StorageBootstrap(
 
     public fun startBlocking(settings: DatabaseSettings): StorageBootstrapResult {
         val target = DatabaseDescriptorResolver.resolve(settings, storageRoot)
+        Files.createDirectories(storageRoot)
+        target.ensureLocalStorageDirectories()
         val runtime = HikariDatabaseRuntime.create(target)
 
         try {

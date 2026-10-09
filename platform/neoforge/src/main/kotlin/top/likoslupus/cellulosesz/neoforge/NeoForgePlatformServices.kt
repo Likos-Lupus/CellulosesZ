@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.neoforge
 
 import net.minecraft.commands.CommandSourceStack
-import net.neoforged.bus.api.IEventBus
+import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.server.permission.PermissionAPI
 import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent
 import net.neoforged.neoforge.server.permission.nodes.PermissionNode
@@ -19,7 +19,7 @@ import top.likoslupus.cellulosesz.core.permission.vanillaFallback
  */
 internal object NeoForgePermissionNodes {
 
-    fun register(bus: IEventBus): Map<String, PermissionNode<Boolean>> {
+    fun register(): Map<String, PermissionNode<Boolean>> {
         val nodes = CommandPermissions.all.associate { spec ->
             val path = spec.node
                     .removePrefix("cellulosesz.")
@@ -37,7 +37,7 @@ internal object NeoForgePermissionNodes {
             )
             spec.node to node
         }
-        bus.addListener(PermissionGatherEvent.Nodes::class.java) {
+        NeoForge.EVENT_BUS.addListener(PermissionGatherEvent.Nodes::class.java) {
             it.addNodes(nodes.values)
         }
         return nodes
@@ -64,13 +64,9 @@ internal class NeoForgePermissionBridge(
     }
 }
 
-class NeoForgePlatformServices(
-    modEventBus: IEventBus,
-) : PlatformServices {
+class NeoForgePlatformServices : PlatformServices {
 
-    private val nodes: Map<String, PermissionNode<Boolean>> = NeoForgePermissionNodes.register(
-        modEventBus
-    )
+    private val nodes: Map<String, PermissionNode<Boolean>> = NeoForgePermissionNodes.register()
 
     override val loaderName: String
         get() = "neoforge"
