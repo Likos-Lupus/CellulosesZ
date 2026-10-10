@@ -1,12 +1,14 @@
 package top.likoslupus.cellulosesz.movement.home
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.movement.command.launchResult
@@ -16,75 +18,101 @@ import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object HomeCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: HomeService,
         backend: TeleportBackend,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-    ) {
-        dispatcher.register(
-            Commands.literal("sethome")
-                    .executes { context -> setHome(context, null, service, backend, kernel) }
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    setHome(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        backend,
-                                        kernel,
-                                    )
-                                }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "sethome",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.SET_HOME,
+            documentation = "movement/sethome",
+        ) {
+            executesPlayer {
+                setHome(
+                    context,
+                    null,
+                    service,
+                    backend,
+                    kernel
+                )
+            }
+            argument("name", word()) { name ->
+                executesPlayer {
+                    setHome(
+                        context,
+                        get(name),
+                        service,
+                        backend,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("home")
-                    .executes { context ->
-                        goHome(
-                            context,
-                            null,
-                            service,
-                            teleports,
-                            teleportSettings,
-                            kernel
-                        )
-                    }
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    goHome(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        teleports,
-                                        teleportSettings,
-                                        kernel,
-                                    )
-                                }
+                }
+            }
+        },
+        command(
+            name = "home",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.HOME,
+            documentation = "movement/home",
+        ) {
+            executesPlayer {
+                goHome(
+                    context,
+                    null,
+                    service,
+                    teleports,
+                    teleportSettings,
+                    kernel
+                )
+            }
+            argument("name", word()) { name ->
+                executesPlayer {
+                    goHome(
+                        context,
+                        get(name),
+                        service,
+                        teleports,
+                        teleportSettings,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("delhome")
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    deleteHome(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        kernel,
-                                    )
-                                }
+                }
+            }
+        },
+        command(
+            name = "delhome",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.DEL_HOME,
+            documentation = "movement/delhome",
+        ) {
+            argument("name", word()) { name ->
+                executesPlayer {
+                    deleteHome(
+                        context,
+                        get(name),
+                        service,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("homes")
-                    .executes { context -> listHomes(context, service, kernel) }
-        )
-    }
+                }
+            }
+        },
+        command(
+            name = "homes",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.HOMES,
+            documentation = "movement/homes",
+        ) {
+            executesPlayer {
+                listHomes(
+                    context,
+                    service,
+                    kernel
+                )
+            }
+        },
+    )
 
     private fun setHome(
         context: CommandContext<CommandSourceStack>,
@@ -140,7 +168,8 @@ internal object HomeCommands {
                         is TeleportOutcome.Success ->
                             Messages.prefixed("teleported to home '${result.home.name.value}'")
 
-                        else -> TeleportFeedback.failure(outcome) ?: return@launch
+                        else -> TeleportFeedback.failure(outcome)
+                            ?: return@launch
                     }
                 }
 

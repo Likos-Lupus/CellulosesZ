@@ -1,120 +1,117 @@
 package top.likoslupus.cellulosesz.administration.moderation.ban
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
-import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.greedyString
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import java.time.Instant
 
 /** `/banip`, `/tempbanip` and `/unbanip`. Target is an IP literal or an online player. */
 internal object IpBanCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         bans: BanService,
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("banip")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.BAN_IP) }
-                    .then(
-                        Commands.argument("target", StringArgumentType.word())
-                                .executes { context ->
-                                    ipBan(
-                                        context,
-                                        null,
-                                        false,
-                                        bans,
-                                        notifier,
-                                        settings,
-                                        kernel
-                                    )
-                                }
-                                .then(
-                                    Commands.argument("reason", StringArgumentType.greedyString())
-                                            .executes { context ->
-                                                ipBan(
-                                                    context,
-                                                    StringArgumentType.getString(context, "reason"),
-                                                    false,
-                                                    bans,
-                                                    notifier,
-                                                    settings,
-                                                    kernel,
-                                                )
-                                            }
-                                )
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "banip",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.BAN_IP,
+            documentation = "administration/banip",
+        ) {
+            argument("target", word()) {
+                executes {
+                    ipBan(
+                        context,
+                        null,
+                        false,
+                        bans,
+                        notifier,
+                        settings,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("tempbanip")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.TEMP_BAN_IP) }
-                    .then(
-                        Commands.argument("target", StringArgumentType.word())
-                                .then(
-                                    Commands.argument("duration", StringArgumentType.word())
-                                            .executes { context ->
-                                                ipBan(
-                                                    context,
-                                                    null,
-                                                    true,
-                                                    bans,
-                                                    notifier,
-                                                    settings,
-                                                    kernel
-                                                )
-                                            }
-                                            .then(
-                                                Commands.argument(
-                                                    "reason",
-                                                    StringArgumentType.greedyString()
-                                                )
-                                                        .executes { context ->
-                                                            ipBan(
-                                                                context,
-                                                                StringArgumentType.getString(
-                                                                    context,
-                                                                    "reason"
-                                                                ),
-                                                                true,
-                                                                bans,
-                                                                notifier,
-                                                                settings,
-                                                                kernel,
-                                                            )
-                                                        }
-                                            )
-                                )
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("unbanip")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.UNBAN_IP) }
-                    .then(
-                        Commands.argument("target", StringArgumentType.word())
-                                .executes { context ->
-                                    val source = context.source
-                                    val target = StringArgumentType.getString(context, "target")
-                                    val actor = source.moderationActor()
-                                    moderationLaunch(source, kernel, "processing IP unban...") {
-                                        ModerationFeedback.ipUnban(bans.unbanIp(actor, target))
-                                    }
-                                }
-                    )
-        )
-    }
+                }
+                argument("reason", greedyString()) { reason ->
+                    executes {
+                        ipBan(
+                            context,
+                            get(reason),
+                            false,
+                            bans,
+                            notifier,
+                            settings,
+                            kernel
+                        )
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "tempbanip",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.TEMP_BAN_IP,
+            documentation = "administration/tempbanip",
+        ) {
+            argument("target", word()) {
+                argument("duration", word()) {
+                    executes {
+                        ipBan(
+                            context,
+                            null,
+                            true,
+                            bans,
+                            notifier,
+                            settings,
+                            kernel
+                        )
+                    }
+                    argument("reason", greedyString()) { reason ->
+                        executes {
+                            ipBan(
+                                context,
+                                get(reason),
+                                true,
+                                bans,
+                                notifier,
+                                settings,
+                                kernel
+                            )
+                        }
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "unbanip",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.UNBAN_IP,
+            documentation = "administration/unbanip",
+        ) {
+            argument("target", word()) { target ->
+                executes {
+                    val source = context.source
+                    val actor = source.moderationActor()
+                    moderationLaunch(source, kernel, "processing IP unban...") {
+                        ModerationFeedback.ipUnban(bans.unbanIp(actor, get(target)))
+                    }
+                }
+            }
+        },
+    )
 
     private fun ipBan(
         context: CommandContext<CommandSourceStack>,

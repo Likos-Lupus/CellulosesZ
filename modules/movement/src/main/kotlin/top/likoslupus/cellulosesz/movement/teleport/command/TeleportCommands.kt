@@ -1,17 +1,16 @@
 package top.likoslupus.cellulosesz.movement.teleport.command
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.DoubleArgumentType
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import net.minecraft.resources.Identifier
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.double
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
@@ -24,116 +23,120 @@ import java.util.*
 /** Direct teleport commands. All of them funnel through [TeleportCoordinator]. */
 internal object TeleportCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         teleports: TeleportCoordinator,
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("back")
-                    .executes { context ->
-                        back(
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "back",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.BACK,
+            documentation = "movement/back",
+        ) {
+            executesPlayer {
+                back(
+                    context,
+                    teleports,
+                    history,
+                    teleportSettings,
+                    kernel
+                )
+            }
+        },
+
+        command(
+            name = "tp",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP,
+            documentation = "movement/tp",
+        ) {
+            argument("first", word()) { first ->
+                executes {
+                    direct(
+                        context,
+                        get(first),
+                        null,
+                        teleports,
+                        teleportSettings,
+                        kernel
+                    )
+                }
+                argument("second", word()) { second ->
+                    executes {
+                        direct(
                             context,
+                            get(first),
+                            get(second),
                             teleports,
-                            history,
                             teleportSettings,
                             kernel
                         )
                     }
-        )
-        dispatcher.register(
-            Commands.literal("tp")
-                    .then(
-                        Commands.argument("first", StringArgumentType.word())
-                                .executes { context ->
-                                    direct(
-                                        context,
-                                        StringArgumentType.getString(context, "first"),
-                                        null,
-                                        teleports,
-                                        teleportSettings,
-                                        kernel,
-                                        permissions,
-                                    )
-                                }
-                                .then(
-                                    Commands.argument("second", StringArgumentType.word())
-                                            .executes { context ->
-                                                direct(
-                                                    context,
-                                                    StringArgumentType.getString(context, "first"),
-                                                    StringArgumentType.getString(context, "second"),
-                                                    teleports,
-                                                    teleportSettings,
-                                                    kernel,
-                                                    permissions,
-                                                )
-                                            }
+                }
+            }
+        },
+
+        command(
+            name = "tphere",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_HERE,
+            documentation = "movement/tphere",
+        ) {
+            argument("target", word()) { target ->
+                executesPlayer {
+                    teleportHere(
+                        context,
+                        get(target),
+                        teleports,
+                        teleportSettings,
+                        kernel
+                    )
+                }
+            }
+        },
+
+        command(
+            name = "tppos",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_POS,
+            documentation = "movement/tppos",
+        ) {
+            argument("x", double()) { x ->
+                argument("y", double()) { y ->
+                    argument("z", double()) { z ->
+                        executesPlayer {
+                            teleportPos(
+                                context,
+                                null,
+                                get(x),
+                                get(y),
+                                get(z),
+                                teleports,
+                                teleportSettings,
+                                kernel,
+                            )
+                        }
+                        argument("dimension", word()) { dimension ->
+                            executesPlayer {
+                                teleportPos(
+                                    context,
+                                    get(dimension),
+                                    get(x),
+                                    get(y),
+                                    get(z),
+                                    teleports,
+                                    teleportSettings,
+                                    kernel,
                                 )
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("tphere")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.TP_HERE) }
-                    .then(
-                        Commands.argument("target", StringArgumentType.word())
-                                .executes { context ->
-                                    teleportHere(
-                                        context,
-                                        StringArgumentType.getString(context, "target"),
-                                        teleports,
-                                        teleportSettings,
-                                        kernel,
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("tppos")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.TP_POS) }
-                    .then(
-                        Commands.argument("x", DoubleArgumentType.doubleArg())
-                                .then(
-                                    Commands.argument("y", DoubleArgumentType.doubleArg())
-                                            .then(
-                                                Commands.argument(
-                                                    "z",
-                                                    DoubleArgumentType.doubleArg()
-                                                )
-                                                        .executes { context ->
-                                                            teleportPos(
-                                                                context,
-                                                                null,
-                                                                teleports,
-                                                                teleportSettings,
-                                                                kernel,
-                                                            )
-                                                        }
-                                                        .then(
-                                                            Commands.argument(
-                                                                "dimension",
-                                                                StringArgumentType.word()
-                                                            ).executes { context ->
-                                                                teleportPos(
-                                                                    context,
-                                                                    StringArgumentType.getString(
-                                                                        context,
-                                                                        "dimension"
-                                                                    ),
-                                                                    teleports,
-                                                                    teleportSettings,
-                                                                    kernel,
-                                                                )
-                                                            }
-                                                        )
-                                            )
-                                )
-                    )
-        )
-    }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+    )
 
     private fun back(
         context: CommandContext<CommandSourceStack>,
@@ -149,22 +152,22 @@ internal object TeleportCommands {
         val job = kernel.launch {
             val message = when (val previous = history.previous(playerId)) {
                 null -> Messages.prefixed("no previous location")
-                else ->
-                    when (
-                        val outcome = teleports.execute(
-                            intent(
-                                playerId,
-                                previous,
-                                TeleportCause.BACK,
-                                teleportSettings
-                            )
+                else -> when (
+                    val outcome = teleports.execute(
+                        intent(
+                            playerId,
+                            previous,
+                            TeleportCause.BACK,
+                            teleportSettings
                         )
-                    ) {
-                        is TeleportOutcome.Success ->
-                            Messages.prefixed("teleported back")
+                    )
+                ) {
+                    is TeleportOutcome.Success ->
+                        Messages.prefixed("teleported back")
 
-                        else -> TeleportFeedback.failure(outcome) ?: return@launch
-                    }
+                    else -> TeleportFeedback.failure(outcome)
+                        ?: return@launch
+                }
             }
             kernel.messagePlayer(playerId, message)
         }
@@ -179,7 +182,6 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
     ): Int {
         val source = context.source
         if (secondName == null) {
@@ -188,21 +190,18 @@ internal object TeleportCommands {
             val target = PlayerResolver.onlineByName(source.server, firstName)
                 ?: return source.replyError(Messages.prefixed("player '$firstName' is not online"))
 
-            return if (subject.uuid == target.uuid) {
-                source.replyError(Messages.prefixed("you are already there"))
-            } else launch(
-                source,
-                subject.uuid,
-                target.uuid,
-                TeleportCause.DIRECT,
-                teleports,
-                teleportSettings,
-                kernel
-            )
-        }
-
-        if (!source.requiresPermission(permissions, CommandPermissions.TP)) {
-            return source.replyError(Messages.prefixed("no permission"))
+            return when (subject.uuid) {
+                target.uuid -> source.replyError(Messages.prefixed("you are already there"))
+                else -> launch(
+                    source,
+                    subject.uuid,
+                    target.uuid,
+                    TeleportCause.DIRECT,
+                    teleports,
+                    teleportSettings,
+                    kernel
+                )
+            }
         }
 
         val subject = PlayerResolver.onlineByName(source.server, firstName)
@@ -246,6 +245,9 @@ internal object TeleportCommands {
     private fun teleportPos(
         context: CommandContext<CommandSourceStack>,
         dimension: String?,
+        x: Double,
+        y: Double,
+        z: Double,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
@@ -262,9 +264,9 @@ internal object TeleportCommands {
 
         val position = StoredPosition(
             dimension = resolvedDimension,
-            x = DoubleArgumentType.getDouble(context, "x"),
-            y = DoubleArgumentType.getDouble(context, "y"),
-            z = DoubleArgumentType.getDouble(context, "z"),
+            x = x,
+            y = y,
+            z = z,
             yaw = executor.yRot,
             pitch = executor.xRot,
         )

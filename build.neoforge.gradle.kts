@@ -38,6 +38,7 @@ val bundledRuntime = listOf(
     libs.mariadb,
     libs.mysql,
     libs.adventure.platform.neoforge,
+    libs.commonmark,
 )
 
 architectury {

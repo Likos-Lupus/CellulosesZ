@@ -1,3 +1,4 @@
+// TODO: Split this god build file, especially for the check part
 import java.util.zip.ZipFile
 
 plugins {
@@ -39,6 +40,136 @@ val dependencyAllowlist: Map<String, Set<String>> = mapOf(
         ":modules:utility",
     ),
 )
+
+// Command catalog generation. The single source of truth is the DSL `command(...)` declarations;
+// `generateCommandCatalog` rewrites the README section between the markers and `verifyArchitecture`
+// fails when the README is stale.
+val commandCatalogStartMarker = "<!-- BEGIN COMMAND CATALOG -->"
+val commandCatalogEndMarker = "<!-- END COMMAND CATALOG -->"
+
+private fun commandModuleSources(): List<Pair<String, File>> {
+    val modules = listOf(
+        "movement" to "modules/movement",
+        "communication" to "modules/communication",
+        "administration" to "modules/administration",
+        "utility" to "modules/utility",
+        "application" to "modules/application",
+    )
+    val out = mutableListOf<Pair<String, File>>()
+    modules.forEach { (name, base) ->
+        val dir = architectureRoot.resolve(base).resolve("src/main/kotlin")
+        if (dir.isDirectory) {
+            dir.walkTopDown().filter { it.isFile && it.extension == "kt" }
+                    .forEach { out += name to it }
+        }
+    }
+    return out
+}
+
+fun commandCatalogTable(): String {
+    val blockPattern = Regex("""command\(([\s\S]*?)\)\s*\{""")
+    val namePattern = Regex("""name\s*=\s*"([^"]+)"""")
+    val permissionPattern = Regex("""permission\s*=\s*CommandPermissions\.(\w+)""")
+    val documentationPattern = Regex("""documentation\s*=\s*"([^"]+)"""")
+    val aliasesPattern = Regex("""aliases\s*=\s*setOf\(([^)]*)\)""")
+    val quotedPattern = Regex("\"([^\"]+)\"")
+
+    val permissionsFile = architectureRoot.resolve(
+        "modules/minecraft-core/src/main/kotlin/top/likoslupus/cellulosesz/core/permission/CommandPermissions.kt"
+    )
+    val accessByConstant = mutableMapOf<String, String>()
+    if (permissionsFile.isFile) {
+        Regex("""val\s+(\w+)\s*:\s*PermissionSpec\s*=\s*(playerNode|moderatorNode)\(""")
+                .findAll(permissionsFile.readText())
+                .forEach { match ->
+                    accessByConstant[match.groupValues[1]] =
+                        if (match.groupValues[2] == "playerNode") "Player" else "Moderator"
+                }
+    }
+
+    data class Row(
+        val moduleOrder: Int,
+        val name: String,
+        val access: String,
+        val documentation: String,
+        val aliases: List<String>
+    )
+
+    val moduleOrder = listOf(
+        "movement",
+        "communication",
+        "administration",
+        "utility",
+        "application"
+    )
+    val rows = mutableListOf<Row>()
+    listOf<Row>(
+        Row(
+            moduleOrder.indexOf("application"),
+            "cellulosesz",
+            "Player",
+            "core/cellulosesz",
+            emptyList()
+        ),
+    ).forEach(rows::add)
+
+    commandModuleSources().forEach { (module, file) ->
+        val text = file.readText()
+        blockPattern.findAll(text).forEach { match ->
+            val header = match.groupValues[1]
+            val name = namePattern.find(header)?.groupValues?.get(1) ?: return@forEach
+            val documentation = documentationPattern.find(header)?.groupValues?.get(1)
+                ?: return@forEach
+            val constant = permissionPattern.find(header)?.groupValues?.get(1).orEmpty()
+            val aliases = aliasesPattern.find(header)?.groupValues?.get(1)
+                    ?.let { inner ->
+                        quotedPattern.findAll(inner)
+                                .map { it.groupValues[1] }
+                                .toList()
+                    }
+                ?: emptyList()
+            rows += Row(
+                moduleOrder.indexOf(module).coerceAtLeast(0),
+                name,
+                accessByConstant[constant] ?: "Player",
+                documentation,
+                aliases,
+            )
+        }
+    }
+
+    val table = StringBuilder()
+    table.appendLine("| Command | Access | Documentation |")
+    table.appendLine("|:--|:--|:--|")
+    rows.sortedWith(compareBy({ it.moduleOrder }, { it.name })).forEach { row ->
+        val aliases = if (row.aliases.isEmpty()) "" else " (alias ${row.aliases.joinToString(", ") { "`/$it`" }})"
+        table.appendLine("| `/${row.name}`$aliases | ${row.access} | `${row.documentation}` |")
+    }
+    return table.toString().trimEnd()
+}
+
+tasks.register("generateCommandCatalog") {
+    group = "verification"
+    description = "Regenerates the README command catalog from the command DSL declarations."
+    doLast {
+        val readme = architectureRoot.resolve("README.md")
+        val table = commandCatalogTable()
+        val updated = replaceCommandCatalog(readme.readText(), table)
+        readme.writeText(updated)
+        logger.lifecycle("README command catalog regenerated")
+    }
+}
+
+fun replaceCommandCatalog(existing: String, table: String): String {
+    val start = existing.indexOf(commandCatalogStartMarker)
+    val end = existing.indexOf(commandCatalogEndMarker)
+    if (start < 0 || end < 0 || end < start) {
+        throw GradleException("README.md is missing the command catalog markers")
+    }
+    return existing.substring(0, start + commandCatalogStartMarker.length) +
+            "\n\n" + table + "\n\n" +
+            existing.substring(end)
+}
 
 tasks.register("verifyArchitecture") {
     group = "verification"
@@ -327,53 +458,94 @@ tasks.register("verifyArchitecture") {
                     }
                 }
 
-        // Command catalog: every registered top-level command must have a CommandDescriptor and
-        // vice versa (aliases count as described). Catalogs are parsed by the shape produced by
-        // their private `command("literal", ...)` helper; registrations by the
-        // `dispatcher.register(... literal("x"))` / `register(dispatcher, "x", ...)` shapes used by
-        // the command objects.
-        val commandCatalogs = mapOf(
-            "movement" to "modules/movement/src/main/kotlin/top/likoslupus/cellulosesz/movement/command/MovementCommandCatalog.kt",
-            "communication" to "modules/communication/src/main/kotlin/top/likoslupus/cellulosesz/communication/command/CommunicationCommandCatalog.kt",
-            "administration" to "modules/administration/src/main/kotlin/top/likoslupus/cellulosesz/administration/command/AdministrationCommandCatalog.kt",
-            "utility" to "modules/utility/src/main/kotlin/top/likoslupus/cellulosesz/utility/command/UtilityCommandCatalog.kt",
+        // Command declarations: every `command(name = "...")` across the feature modules and the
+        // application root must be unique, and every `documentation = "id"` must resolve to both an
+        // en_us and a zh_cn Markdown resource. This replaces the old source-text catalog gate.
+        val commandModules = listOf(
+            "movement" to "modules/movement",
+            "communication" to "modules/communication",
+            "administration" to "modules/administration",
+            "utility" to "modules/utility",
+            "application" to "modules/application",
         )
-        val registeredLiteralPattern =
-            Regex("""dispatcher\.register\(\s*(?:Commands\.)?literal\("([^"]+)"\)""")
-        val registeredHelperPattern = Regex("""register\(\s*dispatcher,\s*"([^"]+)"""")
-        val describedLiteralPattern = Regex("""command\("([^"]+)"""")
-        val describedAliasPattern = Regex("""command\("([^"]+)"[^\n]*?aliases\s*=\s*setOf\(([^)]*)\)""")
-        val quotedPattern = Regex("\"([^\"]+)\"")
-        commandCatalogs.forEach { (moduleName, catalogRelative) ->
-            val catalogFile = architectureRoot.resolve(catalogRelative)
-            if (!catalogFile.isFile) {
-                violations += "$catalogRelative: missing command catalog"
+        val categoryModule = mapOf(
+            "movement" to "movement",
+            "communication" to "communication",
+            "administration" to "administration",
+            "utility" to "utility",
+            "core" to "application",
+        )
+        val namePattern = Regex("""command\(\s*name\s*=\s*"([^"]+)"""")
+        val documentationPattern = Regex("""documentation\s*=\s*"([^"]+)"""")
+        val declaredNames = mutableMapOf<String, String>()
+        val docIds = mutableSetOf<String>()
+        commandModules.forEach { (module, base) ->
+            kotlinFiles(architectureRoot.resolve(base).resolve("src/main/kotlin")).forEach { file ->
+                val text = file.readText()
+                namePattern.findAll(text).forEach { match ->
+                    val previous = declaredNames.putIfAbsent(match.groupValues[1], module)
+                    if (previous != null) {
+                        violations +=
+                            "${match.groupValues[1]}: duplicate command declaration (also in $previous)"
+                    }
+                }
+                documentationPattern.findAll(text).forEach { docIds += it.groupValues[1] }
+            }
+        }
+        docIds.forEach { id ->
+            val module = categoryModule[id.substringBefore('/')]
+            if (module == null) {
+                violations += "command documentation '$id' has no module mapping"
                 return@forEach
             }
-            val catalogText = catalogFile.readText()
-            val described = describedLiteralPattern.findAll(catalogText)
-                    .map { it.groupValues[1] }
-                    .toMutableSet()
-            val aliases = mutableSetOf<String>()
-            describedAliasPattern.findAll(catalogText).forEach { match ->
-                quotedPattern.findAll(match.groupValues[2]).forEach { aliases += it.groupValues[1] }
-            }
-            val registered = mutableSetOf<String>()
-            kotlinFiles(modulesDir.resolve(moduleName).resolve("src/main/kotlin")).forEach { file ->
-                if (file.canonicalFile != catalogFile.canonicalFile) {
-                    val text = file.readText()
-                    registeredLiteralPattern.findAll(text)
-                            .forEach { registered += it.groupValues[1] }
-                    registeredHelperPattern.findAll(text)
-                            .forEach { registered += it.groupValues[1] }
+            listOf("en_us", "zh_cn").forEach { lang ->
+                val resource = architectureRoot
+                        .resolve("modules").resolve(module)
+                        .resolve("src/main/resources/cellulosesz/help")
+                        .resolve(lang).resolve("$id.md")
+                if (!resource.isFile) {
+                    violations += "$id: missing $lang command documentation"
                 }
             }
-            val expected = described + aliases
-            (registered - expected).forEach {
-                violations += "$catalogRelative: command '$it' is registered but not in the command catalog"
+        }
+        commandModules.forEach { (module, base) ->
+            val helpRoot = architectureRoot.resolve(base)
+                    .resolve("src/main/resources/cellulosesz/help")
+            val idsByLang = mutableMapOf<String, Set<String>>()
+            listOf("en_us", "zh_cn").forEach { lang ->
+                val dir = helpRoot.resolve(lang)
+                val ids = if (dir.isDirectory) {
+                    dir.walkTopDown().filter { it.isFile && it.extension == "md" }
+                            .map { it.relativeTo(dir).invariantSeparatorsPath.removeSuffix(".md") }
+                            .toSet()
+                } else {
+                    emptySet()
+                }
+                idsByLang[lang] = ids
+                (ids - docIds).forEach {
+                    violations += "$it: orphan $lang command documentation in $module"
+                }
             }
-            (described - registered).forEach {
-                violations += "$catalogRelative: command '$it' is described but not registered"
+            val en = idsByLang["en_us"] ?: emptySet()
+            val zh = idsByLang["zh_cn"] ?: emptySet()
+            (en - zh).forEach { violations += "$it: command documentation missing zh_cn" }
+            (zh - en).forEach { violations += "$it: command documentation missing en_us" }
+        }
+
+        // The README command catalog must stay in sync with the DSL declarations.
+        val readme = architectureRoot.resolve("README.md")
+        if (readme.isFile) {
+            val existing = readme.readText()
+            val start = existing.indexOf(commandCatalogStartMarker)
+            val end = existing.indexOf(commandCatalogEndMarker)
+            if (start < 0 || end < 0) {
+                violations += "README.md is missing the command catalog markers"
+            } else {
+                val current = existing.substring(start + commandCatalogStartMarker.length, end)
+                        .trim()
+                if (current != commandCatalogTable().trim()) {
+                    violations += "README command catalog is stale; run ./gradlew generateCommandCatalog"
+                }
             }
         }
 
@@ -487,7 +659,7 @@ tasks.register("inspectArtifacts") {
         }
 
         // Storage/config runtime and JDBC drivers must ship as nested jars in BOTH cells.
-        val requiredNested = listOf("HikariCP", "sqlite-jdbc", "tomlkt")
+        val requiredNested = listOf("HikariCP", "sqlite-jdbc", "tomlkt", "commonmark")
         requiredNested.forEach { jar ->
             if (fabricEntries.none { it.startsWith("META-INF/jars/") && it.contains(jar) }) {
                 violations += "fabric jar is missing nested runtime jar: $jar"
@@ -516,8 +688,23 @@ tasks.register("inspectArtifacts") {
             violations += "neoforge jar is missing nested adventure-platform-neoforge"
         }
         (fabricEntries + neoEntries)
-                .filter { it.startsWith("net/kyori/") }
-                .forEach { violations += "distribution jar flattens Adventure class $it" }
+                .filter { it.startsWith("net/kyori/") || it.startsWith("org/commonmark/") }
+                .forEach { violations += "distribution jar flattens external class $it" }
+
+        // Command help resources ship per module and are flattened into the distribution.
+        listOf(
+            "cellulosesz/help/en_us/core/cellulosesz.md",
+            "cellulosesz/help/zh_cn/core/cellulosesz.md",
+            "cellulosesz/help/en_us/movement/home.md",
+            "cellulosesz/help/zh_cn/movement/home.md",
+        ).forEach { entry ->
+            if (entry !in fabricEntries) {
+                violations += "fabric jar is missing help resource $entry"
+            }
+            if (entry !in neoEntries) {
+                violations += "neoforge jar is missing help resource $entry"
+            }
+        }
 
         // Externals must never be bundled; loaders must not leak into each other.
         (fabricEntries + neoEntries)

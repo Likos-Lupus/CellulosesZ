@@ -1,20 +1,21 @@
 package top.likoslupus.cellulosesz.administration.moderation.mute
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.greedyString
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import java.time.Instant
@@ -22,132 +23,124 @@ import java.time.Instant
 /** `/mute`, `/tempmute`, `/unmute` and `/muteinfo`. */
 internal object MuteCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         mutes: MuteService,
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("mute")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.MUTE) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    mute(
-                                        context,
-                                        null,
-                                        false,
-                                        mutes,
-                                        notifier,
-                                        settings,
-                                        kernel
-                                    )
-                                }
-                                .then(
-                                    Commands.argument("reason", StringArgumentType.greedyString())
-                                            .executes { context ->
-                                                mute(
-                                                    context,
-                                                    StringArgumentType.getString(context, "reason"),
-                                                    false,
-                                                    mutes,
-                                                    notifier,
-                                                    settings,
-                                                    kernel,
-                                                )
-                                            }
-                                )
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "mute",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.MUTE,
+            documentation = "administration/mute",
+        ) {
+            argument("player", word()) {
+                executes {
+                    mute(
+                        context,
+                        null,
+                        false,
+                        mutes,
+                        notifier,
+                        settings,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("tempmute")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.TEMP_MUTE) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .then(
-                                    Commands.argument("duration", StringArgumentType.word())
-                                            .executes { context ->
-                                                mute(
-                                                    context,
-                                                    null,
-                                                    true,
-                                                    mutes,
-                                                    notifier,
-                                                    settings,
-                                                    kernel
-                                                )
-                                            }
-                                            .then(
-                                                Commands.argument(
-                                                    "reason",
-                                                    StringArgumentType.greedyString()
-                                                )
-                                                        .executes { context ->
-                                                            mute(
-                                                                context,
-                                                                StringArgumentType.getString(
-                                                                    context,
-                                                                    "reason"
-                                                                ),
-                                                                true,
-                                                                mutes,
-                                                                notifier,
-                                                                settings,
-                                                                kernel,
-                                                            )
-                                                        }
-                                            )
-                                )
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("unmute")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.UNMUTE) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    val source = context.source
-                                    val target = StringArgumentType.getString(context, "player")
-                                    val actor = source.moderationActor()
-                                    moderationLaunch(source, kernel, "processing unmute...") {
-                                        val result = mutes.unmute(actor, target)
-                                        if (result is UnmuteResult.Unmuted) {
-                                            kernel.messagePlayer(
-                                                result.target.id,
-                                                Messages.prefixed("you have been unmuted"),
-                                            )
-                                        }
-                                        ModerationFeedback.unmute(result)
-                                    }
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("muteinfo")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.MUTE_INFO) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    val source = context.source
-                                    val target = StringArgumentType.getString(context, "player")
-                                    val mute = mutes.info(target)
-                                    if (mute == null) {
-                                        source.replyError(Messages.prefixed("that player is not muted"))
-                                    } else {
-                                        source.reply(
-                                            ModerationFeedback.muteInfo(
-                                                mute,
-                                                Instant.now()
-                                            )
-                                        )
-                                    }
-                                }
-                    )
-        )
-    }
+                }
+                argument("reason", greedyString()) { reason ->
+                    executes {
+                        mute(
+                            context,
+                            get(reason),
+                            false,
+                            mutes,
+                            notifier,
+                            settings,
+                            kernel
+                        )
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "tempmute",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.TEMP_MUTE,
+            documentation = "administration/tempmute",
+        ) {
+            argument("player", word()) {
+                argument("duration", word()) {
+                    executes {
+                        mute(
+                            context,
+                            null,
+                            true,
+                            mutes,
+                            notifier,
+                            settings,
+                            kernel
+                        )
+                    }
+                    argument("reason", greedyString()) { reason ->
+                        executes {
+                            mute(
+                                context,
+                                get(reason),
+                                true,
+                                mutes,
+                                notifier,
+                                settings,
+                                kernel
+                            )
+                        }
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "unmute",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.UNMUTE,
+            documentation = "administration/unmute",
+        ) {
+            argument("player", word()) { player ->
+                executes {
+                    val source = context.source
+                    val target = get(player)
+                    val actor = source.moderationActor()
+                    moderationLaunch(source, kernel, "processing unmute...") {
+                        val result = mutes.unmute(actor, target)
+                        if (result is UnmuteResult.Unmuted) {
+                            kernel.messagePlayer(
+                                result.target.id,
+                                Messages.prefixed("you have been unmuted"),
+                            )
+                        }
+                        ModerationFeedback.unmute(result)
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "muteinfo",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.MUTE_INFO,
+            documentation = "administration/muteinfo",
+        ) {
+            argument("player", word()) { player ->
+                executes {
+                    val source = context.source
+                    when (val mute = mutes.info(get(player))) {
+                        null -> source.replyError(Messages.prefixed("that player is not muted"))
+                        else -> source.reply(ModerationFeedback.muteInfo(mute, Instant.now()))
+                    }
+                }
+            }
+        },
+    )
 
     private fun mute(
         context: CommandContext<CommandSourceStack>,
@@ -187,9 +180,8 @@ internal object MuteCommands {
                     notifyModerators(
                         kernel,
                         notifier,
-                        "${actor.displayName} muted ${result.target.name} ${
-                            ModerationFeedback.expiry(result.expiresAt, Instant.now())
-                        }",
+                        "${actor.displayName} muted ${result.target.name} " +
+                                ModerationFeedback.expiry(result.expiresAt, Instant.now()),
                     )
                 }
             }

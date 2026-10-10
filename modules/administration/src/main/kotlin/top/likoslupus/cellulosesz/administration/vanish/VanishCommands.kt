@@ -1,44 +1,63 @@
 package top.likoslupus.cellulosesz.administration.vanish
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.command.ModerationFeedback
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 
 /** `/vanish [on|off]` — self-only, session-only. */
 internal object VanishCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: VanishService,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("vanish")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.VANISH) }
-                    .executes { context -> apply(context, null, service, kernel) }
-                    .then(
-                        Commands.literal("on")
-                                .executes { context -> apply(context, true, service, kernel) }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "vanish",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.VANISH,
+            documentation = "administration/vanish",
+        ) {
+            executesPlayer {
+                apply(
+                    context,
+                    null,
+                    service,
+                    kernel
+                )
+            }
+            literal("on") {
+                executesPlayer {
+                    apply(
+                        context,
+                        true,
+                        service,
+                        kernel
                     )
-                    .then(
-                        Commands.literal("off")
-                                .executes { context -> apply(context, false, service, kernel) }
+                }
+            }
+            literal("off") {
+                executesPlayer {
+                    apply(
+                        context,
+                        false,
+                        service,
+                        kernel
                     )
-        )
-    }
+                }
+            }
+        },
+    )
 
     private fun apply(
         context: CommandContext<CommandSourceStack>,

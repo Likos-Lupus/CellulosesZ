@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.administration
 
-import com.mojang.brigadier.CommandDispatcher
-import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
@@ -26,6 +24,7 @@ import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyCommands
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
@@ -50,19 +49,18 @@ public class AdministrationFeature internal constructor(
     private val notifier: ModerationNotifier,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
-    private val permissions: PermissionService,
 ) {
 
-    public fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    public fun commands(): List<CommandDefinition> {
         val moderation = { settings().moderation }
-        KickCommands.register(dispatcher, kick, notifier, moderation, kernel, permissions)
-        BanCommands.register(dispatcher, bans, notifier, moderation, kernel, permissions)
-        IpBanCommands.register(dispatcher, bans, notifier, moderation, kernel, permissions)
-        MuteCommands.register(dispatcher, mutes, notifier, moderation, kernel, permissions)
-        PlayerControlCommands.register(dispatcher, control, kernel, permissions)
-        SocialSpyCommands.register(dispatcher, spies, kernel, permissions)
-        VanishCommands.register(dispatcher, vanish, kernel, permissions)
-        PlayerStateCommands.register(dispatcher, permissions)
+        return KickCommands.commands(kick, notifier, moderation, kernel) +
+                BanCommands.commands(bans, notifier, moderation, kernel) +
+                IpBanCommands.commands(bans, notifier, moderation, kernel) +
+                MuteCommands.commands(mutes, notifier, moderation, kernel) +
+                PlayerControlCommands.commands(control, kernel) +
+                SocialSpyCommands.commands(spies, kernel) +
+                VanishCommands.commands(vanish, kernel) +
+                PlayerStateCommands.commands()
     }
 
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
@@ -219,6 +217,5 @@ public fun createAdministrationFeature(
         notifier = notifier,
         settings = settings,
         kernel = kernel,
-        permissions = permissions,
     )
 }

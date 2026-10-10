@@ -1,15 +1,14 @@
 package top.likoslupus.cellulosesz.movement.warp
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.movement.command.launchResult
@@ -19,67 +18,74 @@ import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object WarpCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: WarpService,
         backend: TeleportBackend,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("warp")
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    useWarp(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        teleports,
-                                        teleportSettings,
-                                        kernel,
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("warps")
-                    .executes { context -> listWarps(context, service, kernel) }
-        )
-        dispatcher.register(
-            Commands.literal("setwarp")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.SET_WARP) }
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    setWarp(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        backend,
-                                        kernel,
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("delwarp")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.DEL_WARP) }
-                    .then(
-                        Commands.argument("name", StringArgumentType.word())
-                                .executes { context ->
-                                    deleteWarp(
-                                        context,
-                                        StringArgumentType.getString(context, "name"),
-                                        service,
-                                        kernel,
-                                    )
-                                }
-                    )
-        )
-    }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "warp",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.WARP,
+            documentation = "movement/warp",
+        ) {
+            argument("name", word()) { name ->
+                executesPlayer { useWarp(
+                    context,
+                    get(name),
+                    service,
+                    teleports,
+                    teleportSettings,
+                    kernel
+                ) }
+            }
+        },
+        command(
+            name = "warps",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.WARPS,
+            documentation = "movement/warps",
+        ) {
+            executesPlayer { listWarps(
+                context,
+                service,
+                kernel
+            ) }
+        },
+        command(
+            name = "setwarp",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.SET_WARP,
+            documentation = "movement/setwarp",
+        ) {
+            argument("name", word()) { name ->
+                executesPlayer { setWarp(
+                    context,
+                    get(name),
+                    service,
+                    backend,
+                    kernel
+                ) }
+            }
+        },
+        command(
+            name = "delwarp",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.DEL_WARP,
+            documentation = "movement/delwarp",
+        ) {
+            argument("name", word()) { name ->
+                executesPlayer { deleteWarp(
+                    context,
+                    get(name),
+                    service,
+                    kernel
+                ) }
+            }
+        },
+    )
 
     private fun useWarp(
         context: CommandContext<CommandSourceStack>,
@@ -100,7 +106,10 @@ internal object WarpCommands {
                         subjectId = playerId,
                         destination = TeleportDestination.Fixed(result.warp.position),
                         cause = TeleportCause.WARP,
-                        policy = teleportPolicyFor(TeleportCause.WARP, teleportSettings()),
+                        policy = teleportPolicyFor(
+                            TeleportCause.WARP,
+                            teleportSettings()
+                        ),
                     )
 
                     when (val outcome = teleports.execute(intent)) {

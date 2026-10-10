@@ -1,19 +1,17 @@
 package top.likoslupus.cellulosesz.application.command
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
-import com.mojang.brigadier.builder.LiteralArgumentBuilder
 import kotlinx.coroutines.CancellationException
 import net.kyori.adventure.text.Component as AdventureComponent
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageArgument
 import top.likoslupus.cellulosesz.core.text.Messages
@@ -32,113 +30,92 @@ internal object RootCommand {
 
     private val LOGGER = LoggerFactory.getLogger(RootCommand::class.java)
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun definition(
         config: ConfigStore<CellulosesConfig>,
         kernel: RuntimeKernel,
         health: ApplicationHealth,
-        permissions: PermissionService,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         languages: PlayerLanguagePreferences,
         resolver: LanguageResolver,
         catalog: TranslationCatalog,
-    ) {
-        dispatcher.register(
-            Commands.literal(ROOT_LITERAL)
-                    .then(
-                        Commands.literal("status")
-                                .requires { source ->
-                                    source.requiresPermission(
-                                        permissions,
-                                        CommandPermissions.ROOT_STATUS
-                                    )
-                                }
-                                .executes { context ->
-                                    context.source.sendSuccess(
-                                        { Messages.prefixed(health.summary()) },
-                                        false,
-                                    )
-                                    1
-                                }
+    ): CommandDefinition =
+        command(
+            name = ROOT_LITERAL,
+            category = CommandCategory.ROOT,
+            permission = CommandPermissions.ROOT,
+            documentation = "core/cellulosesz",
+        ) {
+            literal("status", permission = CommandPermissions.ROOT_STATUS) {
+                executes {
+                    source.sendSuccess(
+                        { Messages.prefixed(health.summary()) },
+                        false,
                     )
-                    .then(
-                        Commands.literal("reload")
-                                .requires { source ->
-                                    source.requiresPermission(
-                                        permissions,
-                                        CommandPermissions.ROOT_RELOAD
-                                    )
-                                }
-                                .executes { context -> reload(context.source, config, kernel) }
+                    1
+                }
+            }
+            literal("reload", permission = CommandPermissions.ROOT_RELOAD) {
+                executes {
+                    reload(
+                        source,
+                        config,
+                        kernel
                     )
-                    .then(
-                        languageNode(
-                            permissions = permissions,
+                }
+            }
+            literal(
+                name = "language",
+                permission = CommandPermissions.ROOT_LANGUAGE,
+                documentation = "core/language",
+            ) {
+                executes {
+                    showLanguage(
+                        source,
+                        messages,
+                        adventure,
+                        languages,
+                        resolver
+                    )
+                }
+                literal("list") {
+                    executes {
+                        listLanguages(
+                            source,
+                            messages,
+                            adventure,
+                            catalog
+                        )
+                    }
+                }
+                literal("server") {
+                    executesPlayer {
+                        resetLanguage(
+                            source,
+                            kernel,
+                            messages,
+                            adventure,
+                            languages,
+                            resolver
+                        )
+                    }
+                }
+                argument("language", word()) { language ->
+                    suggests { catalog.languages.forEach { suggest(it.value) } }
+                    executesPlayer {
+                        setLanguage(
+                            source = source,
+                            raw = get(language),
                             kernel = kernel,
                             messages = messages,
                             adventure = adventure,
                             languages = languages,
-                            resolver = resolver,
                             catalog = catalog,
                         )
-                    )
-        )
-    }
-
-    private fun languageNode(
-        permissions: PermissionService,
-        kernel: RuntimeKernel,
-        messages: LocalizedMessages,
-        adventure: AdventureRuntime,
-        languages: PlayerLanguagePreferences,
-        resolver: LanguageResolver,
-        catalog: TranslationCatalog,
-    ): LiteralArgumentBuilder<CommandSourceStack> =
-        Commands.literal("language")
-                .requires { source ->
-                    source.requiresPermission(permissions, CommandPermissions.ROOT_LANGUAGE)
+                    }
                 }
-                .executes { context ->
-                    showLanguage(context.source, messages, adventure, languages, resolver)
-                }
-                .then(
-                    Commands.literal("list")
-                            .executes { context ->
-                                listLanguages(context.source, messages, adventure, catalog)
-                            }
-                )
-                .then(
-                    Commands.literal("server")
-                            .executes { context ->
-                                resetLanguage(
-                                    source = context.source,
-                                    kernel = kernel,
-                                    messages = messages,
-                                    adventure = adventure,
-                                    languages = languages,
-                                    resolver = resolver,
-                                )
-                            }
-                )
-                .then(
-                    Commands.argument("language", StringArgumentType.word())
-                            .suggests { _, builder ->
-                                catalog.languages.forEach { builder.suggest(it.value) }
-                                builder.buildFuture()
-                            }
-                            .executes { context ->
-                                setLanguage(
-                                    source = context.source,
-                                    raw = StringArgumentType.getString(context, "language"),
-                                    kernel = kernel,
-                                    messages = messages,
-                                    adventure = adventure,
-                                    languages = languages,
-                                    catalog = catalog,
-                                )
-                            }
-                )
+            }
+        }
 
     private fun showLanguage(
         source: CommandSourceStack,
@@ -151,19 +128,14 @@ internal object RootCommand {
         val explicit = playerId?.let(languages::explicit)
         val effective = resolver.effective(playerId)
 
-        val component = if (explicit != null) {
-            messages.renderPrefixedFor(
-                playerId,
-                CoreMessageKeys.LANGUAGE_CURRENT,
-                listOf(MessageArgument(effective.value)),
-            )
-        } else {
-            messages.renderPrefixedFor(
-                playerId,
-                CoreMessageKeys.LANGUAGE_CURRENT_INHERITED,
-                listOf(MessageArgument(effective.value)),
-            )
-        }
+        val component = messages.renderPrefixedFor(
+            playerId,
+            when {
+                explicit != null -> CoreMessageKeys.LANGUAGE_CURRENT
+                else -> CoreMessageKeys.LANGUAGE_CURRENT_INHERITED
+            },
+            listOf(MessageArgument(effective.value)),
+        )
 
         return source.reply(adventure, component)
     }
@@ -279,13 +251,13 @@ internal object RootCommand {
         adventure: AdventureRuntime,
         shuttingDown: Boolean
     ): Int =
-        if (shuttingDown) {
-            source.replyError(
+        when {
+            shuttingDown -> source.replyError(
                 adventure,
                 AdventureComponent.text("${Messages.PREFIX}runtime is shutting down")
             )
-        } else {
-            1
+
+            else -> 1
         }
 
     private fun requiresPlayer(): AdventureComponent =
@@ -318,12 +290,16 @@ internal object RootCommand {
                 }
             }
         }
-        return if (job == null) {
-            source.sendFailure(Messages.prefixed("runtime is shutting down; reload rejected"))
-            0
-        } else {
-            source.sendSuccess({ Messages.prefixed("reloading config...") }, false)
-            1
+        return when (job) {
+            null -> {
+                source.sendFailure(Messages.prefixed("runtime is shutting down; reload rejected"))
+                0
+            }
+
+            else -> {
+                source.sendSuccess({ Messages.prefixed("reloading config...") }, false)
+                1
+            }
         }
     }
 

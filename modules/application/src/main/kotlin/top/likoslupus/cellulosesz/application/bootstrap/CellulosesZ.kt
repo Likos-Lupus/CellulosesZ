@@ -9,6 +9,7 @@ import net.minecraft.world.level.storage.LevelResource
 import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.application.command.RootCommand
+import top.likoslupus.cellulosesz.application.command.help.SelectiveVanillaHelpOverlay
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigDefaults
 import top.likoslupus.cellulosesz.application.config.ConfigValidation
@@ -17,6 +18,9 @@ import top.likoslupus.cellulosesz.communication.CommunicationIntegration
 import top.likoslupus.cellulosesz.communication.CommunicationSqlSchema
 import top.likoslupus.cellulosesz.communication.SendGateResult
 import top.likoslupus.cellulosesz.communication.createCommunicationFeature
+import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
+import top.likoslupus.cellulosesz.core.command.help.CommandHelpResolver
+import top.likoslupus.cellulosesz.core.command.registry.CommandRegistry
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
@@ -27,6 +31,8 @@ import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
+import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
 import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
@@ -117,7 +123,6 @@ public object CellulosesZ {
             kernel = kernel,
             database = database,
             namespace = namespace,
-            permissions = permissions,
             settings = { config.current.movement },
         )
         val administration = createAdministrationFeature(
@@ -140,53 +145,68 @@ public object CellulosesZ {
             kernel = kernel,
             database = database,
             namespace = namespace,
-            permissions = permissions,
             settings = { config.current.utility },
             known = known,
         )
 
-        CommandRegistrationEvent.EVENT.register { dispatcher, _, _ ->
-            RootCommand.register(
-                dispatcher = dispatcher,
-                config = config,
-                kernel = kernel,
-                health = health,
-                permissions = permissions,
-                messages = messages,
-                adventure = adventure,
-                languages = languagePreferences,
-                resolver = languageResolver,
-                catalog = catalog,
-            )
-            movement.registerCommands(dispatcher)
-            communication.registerCommands(
-                dispatcher = dispatcher,
-                integration = CommunicationIntegration(
-                    senderGate = {
-                        when {
-                            administration.isMuted(it) -> SendGateResult.Denied(
-                                Messages.prefixed("you are muted")
-                            )
+        val integration = CommunicationIntegration(
+            senderGate = {
+                when {
+                    administration.isMuted(it) -> SendGateResult.Denied(
+                        Messages.prefixed("you are muted")
+                    )
 
-                            else -> SendGateResult.Allowed
-                        }
-                    },
-                    targetReachability = { senderId, targetId ->
-                        administration.canBeSeenBy(senderId, targetId)
-                    },
-                    observer = {
-                        administration.observePrivateMessage(
-                            senderId = it.senderId,
-                            senderName = it.senderName,
-                            targetId = it.targetId,
-                            targetName = it.targetName,
-                            text = it.text,
-                        )
-                    },
-                ),
-            )
-            administration.registerCommands(dispatcher)
-            utility.registerCommands(dispatcher)
+                    else -> SendGateResult.Allowed
+                }
+            },
+            targetReachability = { senderId, targetId ->
+                administration.canBeSeenBy(senderId, targetId)
+            },
+            observer = {
+                administration.observePrivateMessage(
+                    senderId = it.senderId,
+                    senderName = it.senderName,
+                    targetId = it.targetId,
+                    targetName = it.targetName,
+                    text = it.text,
+                )
+            },
+        )
+
+        val commandRegistry = CommandRegistry(
+            buildList {
+                add(
+                    RootCommand.definition(
+                        config = config,
+                        kernel = kernel,
+                        health = health,
+                        messages = messages,
+                        adventure = adventure,
+                        languages = languagePreferences,
+                        resolver = languageResolver,
+                        catalog = catalog,
+                    )
+                )
+                addAll(movement.commands())
+                addAll(communication.commands(integration))
+                addAll(administration.commands())
+                addAll(utility.commands())
+            }
+        )
+        val helpResolver = CommandHelpResolver(commandRegistry.definitions, permissions)
+        val documentation = CommandDocumentationService(
+            loader = MarkdownDocumentLoader(),
+            messages = messages,
+            languages = languageResolver,
+            permissions = permissions,
+        )
+        val helpOverlay = SelectiveVanillaHelpOverlay(helpResolver, documentation, adventure) {
+            DocumentTheme.from(config.current.text.colors.toMessageTheme())
+        }
+
+        CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
+            commandRegistry.register(dispatcher, buildContext, permissions)
+            helpOverlay.install(dispatcher)
         }
 
         LifecycleEvent.SERVER_STARTING.register { server ->

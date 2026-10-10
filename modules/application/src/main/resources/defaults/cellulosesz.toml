@@ -99,9 +99,9 @@ defaultLanguage = "en_us"
 
 [text.colors]
 # Ordinary command/body text.
-primary = "#E0E0E0"
+primary = "#5291df"
 # Highlighted values and the CellulosesZ prefix.
-secondary = "#A0A0A0"
+secondary = "#f6c35d"
 
 # ---------------------------------------------------------------------------
 # Movement

@@ -41,6 +41,7 @@ val bundledRuntime = listOf(
     libs.mysql,
     libs.fabric.permissions.api,
     libs.adventure.platform.fabric,
+    libs.commonmark,
 )
 
 architectury {

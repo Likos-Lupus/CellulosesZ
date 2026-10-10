@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.movement
 
-import com.mojang.brigadier.CommandDispatcher
-import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
-import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
@@ -46,52 +44,15 @@ public class MovementFeature internal constructor(
     private val history: TeleportHistoryService,
     private val settings: () -> MovementSettings,
     private val kernel: RuntimeKernel,
-    private val permissions: PermissionService,
 ) {
 
-    public fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
+    public fun commands(): List<CommandDefinition> {
         val teleportSettings = { settings().teleport }
-        HomeCommands.register(
-            dispatcher,
-            homes,
-            backend,
-            teleports,
-            teleportSettings,
-            kernel
-        )
-        WarpCommands.register(
-            dispatcher,
-            warps,
-            backend,
-            teleports,
-            teleportSettings,
-            kernel,
-            permissions,
-        )
-        SpawnCommands.register(
-            dispatcher,
-            spawn,
-            backend,
-            teleports,
-            teleportSettings,
-            kernel,
-            permissions,
-        )
-        TeleportRequestCommands.register(
-            dispatcher,
-            requests,
-            teleports,
-            teleportSettings,
-            kernel
-        )
-        TeleportCommands.register(
-            dispatcher,
-            teleports,
-            history,
-            teleportSettings,
-            kernel,
-            permissions,
-        )
+        return HomeCommands.commands(homes, backend, teleports, teleportSettings, kernel) +
+                WarpCommands.commands(warps, backend, teleports, teleportSettings, kernel) +
+                SpawnCommands.commands(spawn, backend, teleports, teleportSettings, kernel) +
+                TeleportRequestCommands.commands(requests, teleports, teleportSettings, kernel) +
+                TeleportCommands.commands(teleports, history, teleportSettings, kernel)
     }
 
     /** Cancels a delayed teleport when the player moves. Must run on the server thread. */
@@ -121,7 +82,6 @@ public fun createMovementFeature(
     kernel: RuntimeKernel,
     database: DatabaseRuntime,
     namespace: String,
-    permissions: PermissionService,
     settings: () -> MovementSettings,
 ): MovementFeature {
     val backend = MinecraftTeleportBackend(kernel, SafeDestinationResolver())
@@ -147,6 +107,5 @@ public fun createMovementFeature(
         history = history,
         settings = settings,
         kernel = kernel,
-        permissions = permissions,
     )
 }

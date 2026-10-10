@@ -1,17 +1,17 @@
 package top.likoslupus.cellulosesz.communication.mail.command
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.IntegerArgumentType
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.communication.command.communicationLaunch
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.mail.*
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.*
 import top.likoslupus.cellulosesz.core.command.message
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.foundation.time.DurationParser
@@ -19,75 +19,83 @@ import top.likoslupus.cellulosesz.foundation.time.DurationParser
 /** `/mail` summary, `/mail read`, `/mail send`, `/mail sendtemp` and `/mail clear`. */
 internal object MailCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         mail: MailService,
         kernel: RuntimeKernel,
-    ) {
-        dispatcher.register(
-            Commands.literal("mail")
-                    .executes { context -> summary(context, mail, kernel) }
-                    .then(
-                        Commands.literal("read")
-                                .executes { context -> read(context, mail, kernel, 1) }
-                                .then(
-                                    Commands.argument("page", IntegerArgumentType.integer(1))
-                                            .executes { context ->
-                                                read(
-                                                    context,
-                                                    mail,
-                                                    kernel,
-                                                    IntegerArgumentType.getInteger(context, "page")
-                                                )
-                                            }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "mail",
+            category = CommandCategory.COMMUNICATION,
+            permission = CommandPermissions.MAIL,
+            documentation = "communication/mail",
+        ) {
+            executes {
+                summary(
+                    context,
+                    mail,
+                    kernel
+                )
+            }
+            literal("read") {
+                executes {
+                    read(
+                        context,
+                        mail,
+                        kernel,
+                        1
+                    )
+                }
+                argument("page", integer(1)) { page ->
+                    executes {
+                        read(
+                            context,
+                            mail,
+                            kernel,
+                            get(page)
+                        )
+                    }
+                }
+            }
+            literal("send") {
+                argument("player", word()) {
+                    argument("message", greedyString()) {
+                        executes {
+                            send(
+                                context,
+                                mail,
+                                kernel,
+                                null
+                            )
+                        }
+                    }
+                }
+            }
+            literal("sendtemp") {
+                argument("player", word()) {
+                    argument("duration", word()) {
+                        argument("message", greedyString()) {
+                            executes {
+                                sendTemp(
+                                    context,
+                                    mail,
+                                    kernel
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+            literal("clear") {
+                executes {
+                    clear(
+                        context,
+                        mail,
+                        kernel
                     )
-                    .then(
-                        Commands.literal("send")
-                                .then(
-                                    Commands.argument("player", StringArgumentType.word())
-                                            .then(
-                                                Commands.argument(
-                                                    "message",
-                                                    StringArgumentType.greedyString()
-                                                )
-                                                        .executes { context ->
-                                                            send(context, mail, kernel, null)
-                                                        }
-                                            )
-                                )
-                    )
-                    .then(
-                        Commands.literal("sendtemp")
-                                .then(
-                                    Commands.argument("player", StringArgumentType.word())
-                                            .then(
-                                                Commands.argument(
-                                                    "duration",
-                                                    StringArgumentType.word()
-                                                )
-                                                        .then(
-                                                            Commands.argument(
-                                                                "message",
-                                                                StringArgumentType.greedyString()
-                                                            )
-                                                                    .executes { context ->
-                                                                        sendTemp(
-                                                                            context,
-                                                                            mail,
-                                                                            kernel
-                                                                        )
-                                                                    }
-                                                        )
-                                            )
-                                )
-                    )
-                    .then(
-                        Commands.literal("clear")
-                                .executes { context -> clear(context, mail, kernel) }
-                    )
-        )
-    }
+                }
+            }
+        },
+    )
 
     private fun summary(
         context: CommandContext<CommandSourceStack>,
@@ -201,7 +209,12 @@ internal object MailCommands {
                     "invalid duration; use s, m, h, d, w (for example 1d12h)"
                 )
             )
-        return send(context, mail, kernel, duration.duration)
+        return send(
+            context,
+            mail,
+            kernel,
+            duration.duration
+        )
     }
 
     private fun clear(

@@ -1,13 +1,15 @@
 package top.likoslupus.cellulosesz.movement.request
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
@@ -19,86 +21,101 @@ import java.util.*
 
 internal object TeleportRequestCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: TeleportRequestService,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-    ) {
-        dispatcher.register(
-            Commands.literal("tpa")
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    send(
-                                        context,
-                                        StringArgumentType.getString(context, "player"),
-                                        TeleportRequestType.TO_TARGET,
-                                        service,
-                                    )
-                                }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "tpa",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TPA,
+            documentation = "movement/tpa",
+        ) {
+            argument("player", word()) { player ->
+                executesPlayer {
+                    send(
+                        context,
+                        get(player),
+                        TeleportRequestType.TO_TARGET,
+                        service
                     )
-        )
-        dispatcher.register(
-            Commands.literal("tpahere")
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    send(
-                                        context,
-                                        StringArgumentType.getString(context, "player"),
-                                        TeleportRequestType.BRING_TARGET,
-                                        service,
-                                    )
-                                }
+                }
+            }
+        },
+        command(
+            name = "tpahere",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TPA_HERE,
+            documentation = "movement/tpahere",
+        ) {
+            argument("player", word()) { player ->
+                executesPlayer {
+                    send(
+                        context,
+                        get(player),
+                        TeleportRequestType.BRING_TARGET,
+                        service
                     )
-        )
-        dispatcher.register(
-            Commands.literal("tpaccept")
-                    .executes { context ->
-                        accept(
-                            context,
-                            null,
-                            service,
-                            teleports,
-                            teleportSettings,
-                            kernel
-                        )
-                    }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    accept(
-                                        context,
-                                        StringArgumentType.getString(context, "player"),
-                                        service,
-                                        teleports,
-                                        teleportSettings,
-                                        kernel,
-                                    )
-                                }
+                }
+            }
+        },
+        command(
+            name = "tpaccept",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_ACCEPT,
+            documentation = "movement/tpaccept",
+        ) {
+            executesPlayer { accept(
+                context,
+                null,
+                service,
+                teleports,
+                teleportSettings,
+                kernel
+            ) }
+            argument("player", word()) { player ->
+                executesPlayer {
+                    accept(
+                        context,
+                        get(player),
+                        service,
+                        teleports,
+                        teleportSettings,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("tpdeny")
-                    .executes { context -> deny(context, null, service) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    deny(
-                                        context,
-                                        StringArgumentType.getString(context, "player"),
-                                        service
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("tpcancel")
-                    .executes { context -> cancel(context, service) }
-        )
-    }
+                }
+            }
+        },
+        command(
+            name = "tpdeny",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_DENY,
+            documentation = "movement/tpdeny",
+        ) {
+            executesPlayer { deny(
+                context,
+                null,
+                service
+            ) }
+            argument("player", word()) { player ->
+                executesPlayer { deny(
+                    context,
+                    get(player),
+                    service
+                ) }
+            }
+        },
+        command(
+            name = "tpcancel",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_CANCEL,
+            documentation = "movement/tpcancel",
+        ) {
+            executesPlayer { cancel(context, service) }
+        },
+    )
 
     private fun send(
         context: CommandContext<CommandSourceStack>,
@@ -112,10 +129,9 @@ internal object TeleportRequestCommands {
         val target = PlayerResolver.onlineByName(source.server, targetName)
             ?: return source.replyError(Messages.prefixed("player '$targetName' is not online"))
 
-        val verb = if (type == TeleportRequestType.TO_TARGET) {
-            "wants to teleport to you"
-        } else {
-            "wants you to teleport to them"
+        val verb = when (type) {
+            TeleportRequestType.TO_TARGET -> "wants to teleport to you"
+            else -> "wants you to teleport to them"
         }
 
         return when (service.send(sender.uuid, target.uuid, type)) {

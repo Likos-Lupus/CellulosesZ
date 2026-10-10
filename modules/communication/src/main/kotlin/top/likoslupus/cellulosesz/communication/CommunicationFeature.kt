@@ -1,9 +1,8 @@
 package top.likoslupus.cellulosesz.communication
 
-import com.mojang.brigadier.CommandDispatcher
-import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
@@ -53,19 +52,15 @@ public class CommunicationFeature internal constructor(
     private val kernel: RuntimeKernel,
     private val known: MinecraftKnownPlayerResolver,
     private val settings: () -> MessagingSettings,
-    private val permissions: PermissionService,
 ) {
 
-    public fun registerCommands(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
-        integration: CommunicationIntegration,
-    ) {
+    public fun commands(integration: CommunicationIntegration): List<CommandDefinition> {
         holder.value = integration
-        PrivateMessageCommands.register(dispatcher, messages)
-        MessagingPreferenceCommands.register(dispatcher, preferences, known, kernel)
-        MailCommands.register(dispatcher, mail, kernel)
-        HelpOpCommands.register(dispatcher, helpOp, kernel)
-        AnnouncementCommands.register(dispatcher, announcements, kernel, permissions)
+        return PrivateMessageCommands.commands(messages) +
+                MessagingPreferenceCommands.commands(preferences, known, kernel) +
+                MailCommands.commands(mail, kernel) +
+                HelpOpCommands.commands(helpOp, kernel) +
+                AnnouncementCommands.commands(announcements, kernel)
     }
 
     public fun onServerStarting() {
@@ -177,6 +172,5 @@ public fun createCommunicationFeature(
         kernel = kernel,
         known = known,
         settings = settings,
-        permissions = permissions,
     )
 }

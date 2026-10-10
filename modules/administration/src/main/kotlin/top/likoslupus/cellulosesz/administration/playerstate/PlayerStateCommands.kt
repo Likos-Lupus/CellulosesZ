@@ -1,17 +1,16 @@
 package top.likoslupus.cellulosesz.administration.playerstate
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Abilities
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.text.Messages
 
@@ -21,67 +20,55 @@ import top.likoslupus.cellulosesz.core.text.Messages
  */
 internal object PlayerStateCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("heal")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.HEAL) }
-                    .executes { context -> heal(context, null) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    heal(
-                                        context,
-                                        StringArgumentType.getString(context, "player")
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("feed")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.FEED) }
-                    .executes { context -> feed(context, null) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    feed(
-                                        context,
-                                        StringArgumentType.getString(context, "player")
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("fly")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.FLY) }
-                    .executes { context -> fly(context, null) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    fly(
-                                        context,
-                                        StringArgumentType.getString(context, "player")
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            Commands.literal("god")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.GOD) }
-                    .executes { context -> god(context, null) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    god(
-                                        context,
-                                        StringArgumentType.getString(context, "player")
-                                    )
-                                }
-                    )
-        )
-    }
+    fun commands(): List<CommandDefinition> = listOf(
+        command(
+            name = "heal",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.HEAL,
+            documentation = "administration/heal",
+        ) {
+            executes { heal(context, null) }
+            argument("player", word()) { player ->
+                executes { heal(context, get(player)) }
+            }
+        },
+
+        command(
+            name = "feed",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.FEED,
+            documentation = "administration/feed",
+        ) {
+            executes { feed(context, null) }
+            argument("player", word()) { player ->
+                executes { feed(context, get(player)) }
+            }
+        },
+
+        command(
+            name = "fly",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.FLY,
+            documentation = "administration/fly",
+        ) {
+            executes { fly(context, null) }
+            argument("player", word()) { player ->
+                executes { fly(context, get(player)) }
+            }
+        },
+
+        command(
+            name = "god",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.GOD,
+            documentation = "administration/god",
+        ) {
+            executes { god(context, null) }
+            argument("player", word()) { player ->
+                executes { god(context, get(player)) }
+            }
+        },
+    )
 
     private fun heal(
         context: CommandContext<CommandSourceStack>,

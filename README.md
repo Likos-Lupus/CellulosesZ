@@ -100,68 +100,82 @@ needed there. This mod adds **no client UI**.
 
 ## Commands
 
-| Command                                        | Permission     | Description                                    |
-|:-----------------------------------------------|:---------------|:-----------------------------------------------|
-| `/sethome [name]`                              | Player         | Save the current position as a home.           |
-| `/home [name]`                                 | Player         | Teleport to a saved home.                      |
-| `/delhome <name>`                              | Player         | Delete a saved home.                           |
-| `/homes`                                       | Player         | List your homes.                               |
-| `/tpa <player>`                                | Player         | Request to teleport to another player.         |
-| `/tpahere <player>`                            | Player         | Request a player to teleport to you.           |
-| `/tpaccept [player]`                           | Player         | Accept a pending teleport request.             |
-| `/tpdeny [player]`                             | Player         | Deny a pending teleport request.               |
-| `/tpcancel`                                    | Player         | Cancel your outgoing teleport request.         |
-| `/back`                                        | Player         | Return to your previous location.              |
-| `/tp <player>`                                 | Player         | Teleport to another player.                    |
-| `/tp <player> <target>`                        | Moderator      | Teleport a player to another player.           |
-| `/tphere <target>`                             | Moderator      | Teleport a player to you.                      |
-| `/tppos <x> <y> <z> [dim]`                     | Moderator      | Teleport to coordinates.                       |
-| `/msg <player> <message>`                      | Player         | Send a private message.                        |
-| `/reply <message>`                             | Player         | Reply to the last private message.             |
-| `/r <message>`                                 | Player         | Alias of `/reply`.                             |
-| `/ignore`                                      | Player         | List ignored players.                          |
-| `/ignore add <player>`                         | Player         | Stop receiving private messages from a player. |
-| `/ignore remove <player>`                      | Player         | Reverse `/ignore add`.                         |
-| `/msgtoggle`                                   | Player         | Show your private-message receive state.       |
-| `/msgtoggle on`                                | Player         | Enable receiving private messages.             |
-| `/msgtoggle off`                               | Player         | Disable receiving private messages.            |
-| `/mail`                                        | Player         | Show a mailbox summary.                        |
-| `/mail read [page]`                            | Player         | Read and mark mail as read.                    |
-| `/mail send <player> <message>`                | Player/Console | Send durable mail.                             |
-| `/mail sendtemp <player> <duration> <message>` | Player/Console | Send expiring mail.                            |
-| `/mail clear`                                  | Player         | Delete all your mail.                          |
-| `/helpop <message>`                            | Player/Console | Contact online moderators.                     |
-| `/broadcast <message>`                         | Moderator      | Announce to all players.                       |
-| `/broadcastworld <dimension> <message>`        | Moderator      | Announce to one dimension.                     |
-| `/warp <name>`                                 | Player         | Teleport to a warp.                            |
-| `/warps`                                       | Player         | List warps.                                    |
-| `/setwarp <name>`                              | Moderator      | Create or update a warp.                       |
-| `/delwarp <name>`                              | Moderator      | Delete a warp.                                 |
-| `/spawn`                                       | Player         | Teleport to the configured spawn.              |
-| `/setspawn`                                    | Moderator      | Set the spawn to your current position.        |
-| `/delspawn`                                    | Moderator      | Reset the spawn to vanilla.                    |
-| `/kit <name>`                                  | Player         | Claim a kit.                                   |
-| `/kits`                                        | Player         | List kits with per-player availability.        |
-| `/showkit <name>`                              | Player         | Preview a kit's contents.                      |
-| `/createkit <name> [once\|cooldown <dur>]`     | Moderator      | Create a kit from your inventory.              |
-| `/updatekit <name> [once\|cooldown <dur>]`     | Moderator      | Update a kit, preserving its reuse history.    |
-| `/delkit <name>`                               | Moderator      | Delete a kit.                                  |
-| `/kitreset <name> [player]`                    | Moderator      | Reset a kit's cooldown / used state.           |
-| `/heal [player]`                               | Moderator      | Restore health.                                |
-| `/feed [player]`                               | Moderator      | Restore hunger.                                |
-| `/kick <player> [reason]`                      | Moderator      | Disconnect a player.                           |
-| `/fly [player]`                                | Moderator      | Toggle flight.                                 |
-| `/god [player]`                                | Moderator      | Toggle invulnerability.                        |
-| `/repair [hand\|all] [player]`                 | Moderator      | Repair the held or all items.                  |
-| `/more [amount]`                               | Moderator      | Fill the held stack (never oversized).         |
-| `/condense`                                    | Player         | Condense items into compact blocks.            |
-| `/enderchest`                                  | Player         | Open your ender chest.                         |
-| `/disposal`                                    | Player         | Open a temporary trash menu.                   |
-| `/workbench`, `/anvil`, …                      | Player         | Open a portable workstation (if enabled).      |
-| `/invsee <player>`                             | Moderator      | View a player's inventory (read-only).         |
-| `/cellulosesz status`                          | Moderator      | Show runtime state and config generation.      |
-| `/cellulosesz reload`                          | Moderator      | Reload the configuration transactionally.      |
-| `/cellulosesz language [list\|server\|<lang>]` | Player         | View or change your CellulosesZ language.      |
+<!-- BEGIN COMMAND CATALOG -->
+
+| Command               | Access    | Documentation                  |
+|:----------------------|:----------|:-------------------------------|
+| `/back`               | Player    | `movement/back`                |
+| `/delhome`            | Player    | `movement/delhome`             |
+| `/delspawn`           | Moderator | `movement/delspawn`            |
+| `/delwarp`            | Moderator | `movement/delwarp`             |
+| `/home`               | Player    | `movement/home`                |
+| `/homes`              | Player    | `movement/homes`               |
+| `/sethome`            | Player    | `movement/sethome`             |
+| `/setspawn`           | Moderator | `movement/setspawn`            |
+| `/setwarp`            | Moderator | `movement/setwarp`             |
+| `/spawn`              | Player    | `movement/spawn`               |
+| `/tp`                 | Player    | `movement/tp`                  |
+| `/tpa`                | Player    | `movement/tpa`                 |
+| `/tpaccept`           | Player    | `movement/tpaccept`            |
+| `/tpahere`            | Player    | `movement/tpahere`             |
+| `/tpcancel`           | Player    | `movement/tpcancel`            |
+| `/tpdeny`             | Player    | `movement/tpdeny`              |
+| `/tphere`             | Moderator | `movement/tphere`              |
+| `/tppos`              | Moderator | `movement/tppos`               |
+| `/warp`               | Player    | `movement/warp`                |
+| `/warps`              | Player    | `movement/warps`               |
+| `/broadcast`          | Moderator | `communication/broadcast`      |
+| `/broadcastworld`     | Moderator | `communication/broadcastworld` |
+| `/helpop`             | Player    | `communication/helpop`         |
+| `/ignore`             | Player    | `communication/ignore`         |
+| `/mail`               | Player    | `communication/mail`           |
+| `/msg`                | Player    | `communication/msg`            |
+| `/msgtoggle`          | Player    | `communication/msgtoggle`      |
+| `/reply` (alias `/r`) | Player    | `communication/reply`          |
+| `/ban`                | Moderator | `administration/ban`           |
+| `/banip`              | Moderator | `administration/banip`         |
+| `/feed`               | Moderator | `administration/feed`          |
+| `/fly`                | Moderator | `administration/fly`           |
+| `/gamemode`           | Moderator | `administration/gamemode`      |
+| `/god`                | Moderator | `administration/god`           |
+| `/heal`               | Moderator | `administration/heal`          |
+| `/kick`               | Moderator | `administration/kick`          |
+| `/kickall`            | Moderator | `administration/kickall`       |
+| `/kill`               | Moderator | `administration/kill`          |
+| `/mute`               | Moderator | `administration/mute`          |
+| `/muteinfo`           | Moderator | `administration/muteinfo`      |
+| `/socialspy`          | Moderator | `administration/socialspy`     |
+| `/sudo`               | Moderator | `administration/sudo`          |
+| `/tempban`            | Moderator | `administration/tempban`       |
+| `/tempbanip`          | Moderator | `administration/tempbanip`     |
+| `/tempmute`           | Moderator | `administration/tempmute`      |
+| `/unban`              | Moderator | `administration/unban`         |
+| `/unbanip`            | Moderator | `administration/unbanip`       |
+| `/unmute`             | Moderator | `administration/unmute`        |
+| `/vanish`             | Moderator | `administration/vanish`        |
+| `/anvil`              | Player    | `utility/anvil`                |
+| `/cartographytable`   | Player    | `utility/cartographytable`     |
+| `/condense`           | Player    | `utility/condense`             |
+| `/createkit`          | Moderator | `utility/createkit`            |
+| `/delkit`             | Moderator | `utility/delkit`               |
+| `/disposal`           | Player    | `utility/disposal`             |
+| `/enderchest`         | Player    | `utility/enderchest`           |
+| `/grindstone`         | Player    | `utility/grindstone`           |
+| `/invsee`             | Moderator | `utility/invsee`               |
+| `/kit`                | Player    | `utility/kit`                  |
+| `/kitreset`           | Moderator | `utility/kitreset`             |
+| `/kits`               | Player    | `utility/kits`                 |
+| `/loom`               | Player    | `utility/loom`                 |
+| `/more`               | Moderator | `utility/more`                 |
+| `/repair`             | Moderator | `utility/repair`               |
+| `/showkit`            | Player    | `utility/showkit`              |
+| `/smithingtable`      | Player    | `utility/smithingtable`        |
+| `/stonecutter`        | Player    | `utility/stonecutter`          |
+| `/updatekit`          | Moderator | `utility/updatekit`            |
+| `/workbench`          | Player    | `utility/workbench`            |
+| `/cellulosesz`        | Player    | `core/cellulosesz`             |
+
+<!-- END COMMAND CATALOG -->
 
 Each command has a stable permission node (`cellulosesz.command.<command>`). When a node is
 undefined it falls back to the exact vanilla behaviour (`ALLOW_ALL` for player commands,
@@ -169,6 +183,10 @@ undefined it falls back to the exact vanilla behaviour (`ALLOW_ALL` for player c
 for moderator commands), so installing no permission manager changes nothing. On Fabric the nodes
 are served through `fabric-permissions-api` (LuckPerms-compatible); on NeoForge through the NeoForge
 `PermissionAPI`.
+
+The catalog above and the per-command documentation are generated from the command declarations.
+Every command has an `en_us` and `zh_cn` Markdown document; `/help <command>` shows it (paginated
+with `--page N`) while plain `/help` and every non-CellulosesZ query keep vanilla behaviour.
 
 ## Configuration and storage
 

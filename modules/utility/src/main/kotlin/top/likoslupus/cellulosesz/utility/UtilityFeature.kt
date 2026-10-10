@@ -1,9 +1,7 @@
 package top.likoslupus.cellulosesz.utility
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.serialization.JsonOps
-import net.minecraft.commands.CommandSourceStack
-import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
@@ -32,15 +30,13 @@ public class UtilityFeature internal constructor(
     private val inspection: InspectionService,
     private val known: KnownPlayerResolver,
     private val kernel: RuntimeKernel,
-    private val permissions: PermissionService,
 ) {
 
-    public fun registerCommands(dispatcher: CommandDispatcher<CommandSourceStack>) {
-        KitCommands.register(dispatcher, kits, known, kernel, permissions)
-        ItemUtilityCommands.register(dispatcher, items, known, permissions)
-        WorkstationCommands.register(dispatcher, workstations)
-        InspectionCommands.register(dispatcher, inspection, known, permissions)
-    }
+    public fun commands(): List<CommandDefinition> =
+        KitCommands.commands(kits, known, kernel) +
+                ItemUtilityCommands.commands(items, known) +
+                WorkstationCommands.commands(workstations) +
+                InspectionCommands.commands(inspection, known)
 
     public fun onServerStarting() {
         kits.beginLoad()
@@ -57,7 +53,6 @@ public fun createUtilityFeature(
     kernel: RuntimeKernel,
     database: DatabaseRuntime,
     namespace: String,
-    permissions: PermissionService,
     settings: () -> UtilitySettings,
     known: KnownPlayerResolver,
 ): UtilityFeature {
@@ -98,6 +93,5 @@ public fun createUtilityFeature(
         inspection = inspection,
         known = known,
         kernel = kernel,
-        permissions = permissions,
     )
 }

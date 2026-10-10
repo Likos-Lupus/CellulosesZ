@@ -1,130 +1,129 @@
 package top.likoslupus.cellulosesz.utility.item
 
-import com.mojang.brigadier.CommandDispatcher
-import com.mojang.brigadier.arguments.IntegerArgumentType.getInteger
-import com.mojang.brigadier.arguments.IntegerArgumentType.integer
-import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands.argument
-import net.minecraft.commands.Commands.literal
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.integer
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 import java.util.*
 
 internal object ItemUtilityCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: ItemUtilityService,
         known: KnownPlayerResolver,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            literal("repair")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.REPAIR) }
-                    .executes { context ->
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "repair",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.REPAIR,
+            documentation = "utility/repair",
+        ) {
+            executes {
+                repair(
+                    context,
+                    RepairScope.HAND,
+                    null,
+                    service,
+                    known
+                )
+            }
+            literal("hand") {
+                executes {
+                    repair(
+                        context,
+                        RepairScope.HAND,
+                        null,
+                        service,
+                        known
+                    )
+                }
+                argument("player", word()) { player ->
+                    suggests {
+                        source.server.playerList.players.forEach {
+                            suggest(it.gameProfile.name)
+                        }
+                    }
+                    executes {
                         repair(
                             context,
                             RepairScope.HAND,
-                            null,
+                            get(player),
                             service,
                             known
                         )
                     }
-                    .then(
-                        literal("hand")
-                                .executes { context ->
-                                    repair(
-                                        context,
-                                        RepairScope.HAND,
-                                        null,
-                                        service,
-                                        known
-                                    )
-                                }
-                                .then(
-                                    argument("player", StringArgumentType.word())
-                                            .suggests { context, builder ->
-                                                context.source.server.playerList.players
-                                                        .forEach { builder.suggest(it.gameProfile.name) }
-                                                builder.buildFuture()
-                                            }
-                                            .executes { context ->
-                                                repair(
-                                                    context,
-                                                    RepairScope.HAND,
-                                                    StringArgumentType.getString(
-                                                        context,
-                                                        "player"
-                                                    ),
-                                                    service,
-                                                    known,
-                                                )
-                                            }
-                                )
+                }
+            }
+            literal("all") {
+                executes {
+                    repair(
+                        context,
+                        RepairScope.ALL,
+                        null,
+                        service,
+                        known
                     )
-                    .then(
-                        literal("all")
-                                .executes { context ->
-                                    repair(
-                                        context,
-                                        RepairScope.ALL,
-                                        null,
-                                        service,
-                                        known
-                                    )
-                                }
-                                .then(
-                                    argument("player", StringArgumentType.word())
-                                            .suggests { context, builder ->
-                                                context.source.server.playerList.players
-                                                        .forEach { builder.suggest(it.gameProfile.name) }
-                                                builder.buildFuture()
-                                            }
-                                            .executes { context ->
-                                                repair(
-                                                    context,
-                                                    RepairScope.ALL,
-                                                    StringArgumentType.getString(
-                                                        context,
-                                                        "player"
-                                                    ),
-                                                    service,
-                                                    known,
-                                                )
-                                            }
-                                )
+                }
+                argument("player", word()) { player ->
+                    suggests {
+                        source.server.playerList.players.forEach {
+                            suggest(it.gameProfile.name)
+                        }
+                    }
+                    executes {
+                        repair(
+                            context,
+                            RepairScope.ALL,
+                            get(player),
+                            service,
+                            known
+                        )
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "more",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.MORE,
+            documentation = "utility/more",
+        ) {
+            executes {
+                more(
+                    context,
+                    null,
+                    service
+                )
+            }
+            argument("amount", integer(min = 1)) { amount ->
+                executes {
+                    more(
+                        context,
+                        get(amount),
+                        service
                     )
-        )
-        dispatcher.register(
-            literal("more")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.MORE) }
-                    .executes { context -> more(context, null, service) }
-                    .then(
-                        argument("amount", integer(1))
-                                .executes { context ->
-                                    more(
-                                        context,
-                                        getInteger(
-                                            context,
-                                            "amount"
-                                        ),
-                                        service,
-                                    )
-                                }
-                    )
-        )
-        dispatcher.register(
-            literal("condense")
-                    .executes { context -> condense(context, service) }
-        )
-    }
+                }
+            }
+        },
+
+        command(
+            name = "condense",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.CONDENSE,
+            documentation = "utility/condense",
+        ) {
+            executes { condense(context, service) }
+        },
+    )
 
     private fun repair(
         context: CommandContext<CommandSourceStack>,
@@ -136,14 +135,7 @@ internal object ItemUtilityCommands {
         context.source.let {
             when (val targetId = resolveTarget(it.player?.uuid, rawTarget, known)) {
                 null -> it.replyError(UtilityMessages.prefixed("player not found or offline"))
-                else -> it.reply(
-                    UtilityMessages.repair(
-                        service.repair(
-                            targetId,
-                            scope
-                        )
-                    )
-                )
+                else -> it.reply(UtilityMessages.repair(service.repair(targetId, scope)))
             }
         }
 
@@ -155,14 +147,7 @@ internal object ItemUtilityCommands {
         context.source.let {
             when (val playerId = it.player?.uuid) {
                 null -> it.replyError(UtilityMessages.requiresPlayer())
-                else -> it.reply(
-                    UtilityMessages.more(
-                        service.more(
-                            playerId,
-                            amount
-                        )
-                    )
-                )
+                else -> it.reply(UtilityMessages.more(service.more(playerId, amount)))
             }
         }
 
@@ -173,16 +158,9 @@ internal object ItemUtilityCommands {
         context.source.let {
             when (val playerId = it.player?.uuid) {
                 null -> it.replyError(UtilityMessages.requiresPlayer())
-                else -> it.reply(
-                    UtilityMessages.condense(
-                        service.condense(
-                            playerId
-                        )
-                    )
-                )
+                else -> it.reply(UtilityMessages.condense(service.condense(playerId)))
             }
         }
-
 
     private fun resolveTarget(
         selfId: UUID?,

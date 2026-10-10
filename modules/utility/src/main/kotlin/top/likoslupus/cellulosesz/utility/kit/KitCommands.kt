@@ -1,17 +1,15 @@
 package top.likoslupus.cellulosesz.utility.kit
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType.getString
-import com.mojang.brigadier.arguments.StringArgumentType.word
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands.argument
-import net.minecraft.commands.Commands.literal
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.message
 import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
@@ -22,162 +20,201 @@ import java.time.Duration
 
 internal object KitCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         service: KitService,
         known: KnownPlayerResolver,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            literal("kit")
-                    .then(
-                        argument("name", word())
-                                .suggests { _, builder ->
-                                    service.configuredNames().forEach(builder::suggest)
-                                    builder.buildFuture()
-                                }
-                                .executes { context -> claim(context, service, kernel) }
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "kit",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.KIT,
+            documentation = "utility/kit",
+        ) {
+            argument("name", word()) { _ ->
+                suggests { service.configuredNames().forEach { suggest(it) } }
+                executes { claim(context, service, kernel) }
+            }
+        },
+
+        command(
+            name = "kits",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.KITS,
+            documentation = "utility/kits",
+        ) {
+            executes { list(context, service, kernel) }
+        },
+
+        command(
+            name = "showkit",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.SHOW_KIT,
+            documentation = "utility/showkit",
+        ) {
+            argument("name", word()) { _ ->
+                suggests { service.configuredNames().forEach { suggest(it) } }
+                executes { show(context, service, kernel) }
+            }
+        },
+
+        command(
+            name = "createkit",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.CREATE_KIT,
+            documentation = "utility/createkit",
+        ) {
+            argument("name", word()) { _ ->
+                executes {
+                    create(
+                        context,
+                        KitReusePolicy.Always,
+                        service,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            literal("kits")
-                    .executes { context -> list(context, service, kernel) }
-        )
-        dispatcher.register(
-            literal("showkit")
-                    .then(
-                        argument("name", word())
-                                .suggests { _, builder ->
-                                    service.configuredNames().forEach(builder::suggest)
-                                    builder.buildFuture()
-                                }
-                                .executes { context -> show(context, service, kernel) }
+                }
+                literal("once") {
+                    executes {
+                        create(
+                            context,
+                            KitReusePolicy.Once,
+                            service,
+                            kernel
+                        )
+                    }
+                }
+                literal("cooldown") {
+                    argument("duration", word()) { _ ->
+                        executes {
+                            createWithDuration(
+                                context,
+                                service,
+                                kernel
+                            )
+                        }
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "updatekit",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.UPDATE_KIT,
+            documentation = "utility/updatekit",
+        ) {
+            argument("name", word()) { _ ->
+                suggests { service.configuredNames().forEach { suggest(it) } }
+                executes {
+                    update(
+                        context,
+                        null,
+                        service,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            literal("createkit")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.CREATE_KIT) }
-                    .then(
-                        argument("name", word())
-                                .executes { context ->
-                                    create(context, KitReusePolicy.Always, service, kernel)
-                                }
-                                .then(
-                                    literal("once")
-                                            .executes { context ->
-                                                create(
-                                                    context,
-                                                    KitReusePolicy.Once,
-                                                    service,
-                                                    kernel
-                                                )
-                                            }
-                                )
-                                .then(
-                                    literal("cooldown")
-                                            .then(
-                                                argument("duration", word())
-                                                        .executes { context ->
-                                                            val duration = parseDuration(context)
-                                                                ?: return@executes context.source.replyError(
-                                                                    UtilityMessages.prefixed("invalid cooldown duration")
-                                                                )
-                                                            create(
-                                                                context,
-                                                                KitReusePolicy.Cooldown(duration),
-                                                                service,
-                                                                kernel,
-                                                            )
-                                                        }
-                                            )
-                                )
+                }
+                literal("once") {
+                    executes {
+                        update(
+                            context,
+                            KitReusePolicy.Once,
+                            service,
+                            kernel
+                        )
+                    }
+                }
+                literal("cooldown") {
+                    argument("duration", word()) { _ ->
+                        executes {
+                            updateWithDuration(
+                                context,
+                                service,
+                                kernel
+                            )
+                        }
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "delkit",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.DEL_KIT,
+            documentation = "utility/delkit",
+        ) {
+            argument("name", word()) { _ ->
+                suggests {
+                    service.configuredNames().forEach {
+                        suggest(it)
+                    }
+                }
+                executes {
+                    delete(
+                        context,
+                        service,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            literal("updatekit")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.UPDATE_KIT) }
-                    .then(
-                        argument("name", word())
-                                .suggests { _, builder ->
-                                    service.configuredNames().forEach(builder::suggest)
-                                    builder.buildFuture()
-                                }
-                                .executes { context ->
-                                    update(context, null, service, kernel)
-                                }
-                                .then(
-                                    literal("once")
-                                            .executes { context ->
-                                                update(
-                                                    context,
-                                                    KitReusePolicy.Once,
-                                                    service,
-                                                    kernel
-                                                )
-                                            }
-                                )
-                                .then(
-                                    literal("cooldown")
-                                            .then(
-                                                argument("duration", word())
-                                                        .executes { context ->
-                                                            val duration = parseDuration(context)
-                                                                ?: return@executes context.source.replyError(
-                                                                    UtilityMessages.prefixed("invalid cooldown duration")
-                                                                )
-                                                            update(
-                                                                context,
-                                                                KitReusePolicy.Cooldown(duration),
-                                                                service,
-                                                                kernel,
-                                                            )
-                                                        }
-                                            )
-                                )
+                }
+            }
+        },
+
+        command(
+            name = "kitreset",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.KIT_RESET,
+            documentation = "utility/kitreset",
+        ) {
+            argument("name", word()) { _ ->
+                suggests { service.configuredNames().forEach { suggest(it) } }
+                executes {
+                    resetSelf(
+                        context,
+                        service,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            literal("delkit")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.DEL_KIT) }
-                    .then(
-                        argument("name", word())
-                                .suggests { _, builder ->
-                                    service.configuredNames().forEach(builder::suggest)
-                                    builder.buildFuture()
-                                }
-                                .executes { context -> delete(context, service, kernel) }
-                    )
-        )
-        dispatcher.register(
-            literal("kitreset")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.KIT_RESET) }
-                    .then(
-                        argument("name", word())
-                                .suggests { _, builder ->
-                                    service.configuredNames().forEach(builder::suggest)
-                                    builder.buildFuture()
-                                }
-                                .executes { context -> resetSelf(context, service, kernel) }
-                                .then(
-                                    argument("player", word())
-                                            .suggests { context, builder ->
-                                                context.source.server.playerList.players
-                                                        .forEach { builder.suggest(it.gameProfile.name) }
-                                                builder.buildFuture()
-                                            }
-                                            .executes { context ->
-                                                resetOther(context, service, known, kernel)
-                                            }
-                                )
-                    )
-        )
+                }
+                argument("player", word()) { _ ->
+                    suggests {
+                        source.server.playerList.players.forEach {
+                            suggest(it.gameProfile.name)
+                        }
+                    }
+                    executes {
+                        resetOther(
+                            context,
+                            service,
+                            known,
+                            kernel
+                        )
+                    }
+                }
+            }
+        },
+    )
+
+    private fun createWithDuration(
+        context: CommandContext<CommandSourceStack>,
+        service: KitService,
+        kernel: RuntimeKernel,
+    ): Int {
+        val duration = parseDuration(context)
+            ?: return context.source.replyError(UtilityMessages.prefixed("invalid cooldown duration"))
+        return create(context, KitReusePolicy.Cooldown(duration), service, kernel)
+    }
+
+    private fun updateWithDuration(
+        context: CommandContext<CommandSourceStack>,
+        service: KitService,
+        kernel: RuntimeKernel,
+    ): Int {
+        val duration = parseDuration(context)
+            ?: return context.source.replyError(UtilityMessages.prefixed("invalid cooldown duration"))
+        return update(context, KitReusePolicy.Cooldown(duration), service, kernel)
     }
 
     private fun parseDuration(context: CommandContext<CommandSourceStack>): Duration? =
-        DurationParser
-                .parse(getString(context, "duration"))
-                ?.duration
+        DurationParser.parse(getString(context, "duration"))?.duration
 
     private fun claim(
         context: CommandContext<CommandSourceStack>,
@@ -189,17 +226,13 @@ internal object KitCommands {
             ?: return source.replyError(UtilityMessages.requiresPlayer())
         val name = getString(context, "name")
 
-        return utilityLaunch(
-            source,
-            kernel,
-            "claiming kit..."
-        ) {
+        return utilityLaunch(source, kernel, "claiming kit...") {
             kernel.message(
                 target = it,
                 message = UtilityMessages.claim(
-                    requestedName = name,
-                    result = service.claim(playerId, name)
-                )
+                    name,
+                    service.claim(playerId, name)
+                ),
             )
         }
     }
@@ -211,16 +244,10 @@ internal object KitCommands {
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-        return utilityLaunch(
-            source,
-            kernel,
-            "loading kits..."
-        ) {
+        return utilityLaunch(source, kernel, "loading kits...") {
             kernel.message(
                 target = it,
-                message = UtilityMessages.list(
-                    service.list(playerId)
-                )
+                message = UtilityMessages.list(service.list(playerId))
             )
         }
     }
@@ -232,18 +259,10 @@ internal object KitCommands {
     ): Int {
         val source = context.source
         val name = getString(context, "name")
-        return utilityLaunch(
-            source,
-            kernel,
-            "loading kit..."
-        ) {
+        return utilityLaunch(source, kernel, "loading kit...") {
             kernel.message(
                 it,
-                UtilityMessages.show(
-                    service.show(
-                        name
-                    )
-                )
+                UtilityMessages.show(service.show(name))
             )
         }
     }
@@ -258,20 +277,16 @@ internal object KitCommands {
         val playerId = source.player?.uuid
             ?: return source.replyError(UtilityMessages.requiresPlayer())
         val name = getString(context, "name")
-        return utilityLaunch(
-            source,
-            kernel,
-            "creating kit..."
-        ) {
+        return utilityLaunch(source, kernel, "creating kit...") {
             kernel.message(
                 target = it,
                 message = UtilityMessages.create(
                     service.create(
-                        playerId = playerId,
-                        rawName = name,
-                        reuse = reuse
+                        playerId,
+                        name,
+                        reuse
                     )
-                )
+                ),
             )
         }
     }
@@ -286,20 +301,16 @@ internal object KitCommands {
         val playerId = source.player?.uuid
             ?: return source.replyError(UtilityMessages.requiresPlayer())
         val name = getString(context, "name")
-        return utilityLaunch(
-            source,
-            kernel,
-            "updating kit..."
-        ) {
+        return utilityLaunch(source, kernel, "updating kit...") {
             kernel.message(
                 target = it,
                 message = UtilityMessages.update(
                     service.update(
-                        playerId = playerId,
-                        rawName = name,
-                        reuse = reuse
+                        playerId,
+                        name,
+                        reuse
                     )
-                )
+                ),
             )
         }
     }
@@ -311,17 +322,11 @@ internal object KitCommands {
     ): Int {
         val source = context.source
         val name = getString(context, "name")
-        return utilityLaunch(
-            source,
-            kernel,
-            "deleting kit..."
-        ) {
+        return utilityLaunch(source, kernel, "deleting kit...") {
             kernel.message(
                 target = it,
                 message = UtilityMessages.delete(
-                    service.delete(
-                        name
-                    )
+                    service.delete(name)
                 )
             )
         }
@@ -354,7 +359,10 @@ internal object KitCommands {
         val raw = getString(context, "player")
         val target = known.onlineByName(raw) ?: known.knownByName(raw)
         return when (target) {
-            null -> source.replyError(UtilityMessages.prefixed("player '$raw' is not known to this server"))
+            null -> source.replyError(
+                UtilityMessages.prefixed("player '$raw' is not known to this server")
+            )
+
             else -> reset(
                 source,
                 target = target,
@@ -372,19 +380,15 @@ internal object KitCommands {
         service: KitService,
         kernel: RuntimeKernel,
     ): Int =
-        utilityLaunch(
-            source,
-            kernel,
-            "resetting kit..."
-        ) {
+        utilityLaunch(source, kernel, "resetting kit...") {
             kernel.message(
                 target = it,
                 message = UtilityMessages.reset(
                     service.reset(
-                        rawName = name,
-                        target = target
+                        name,
+                        target
                     )
-                )
+                ),
             )
         }
 

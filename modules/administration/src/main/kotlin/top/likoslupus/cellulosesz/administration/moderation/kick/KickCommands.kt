@@ -1,88 +1,91 @@
 package top.likoslupus.cellulosesz.administration.moderation.kick
 
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.commands.Commands
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
-import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.greedyString
+import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 
 /** `/kick` and `/kickall`. */
 internal object KickCommands {
 
-    fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    fun commands(
         kick: KickService,
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
-        permissions: PermissionService,
-    ) {
-        dispatcher.register(
-            Commands.literal("kick")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.KICK) }
-                    .then(
-                        Commands.argument("player", StringArgumentType.word())
-                                .executes { context ->
-                                    kick(
-                                        context,
-                                        null,
-                                        kick,
-                                        notifier,
-                                        settings,
-                                        kernel
-                                    )
-                                }
-                                .then(
-                                    Commands.argument("reason", StringArgumentType.greedyString())
-                                            .executes { context ->
-                                                kick(
-                                                    context,
-                                                    StringArgumentType.getString(context, "reason"),
-                                                    kick,
-                                                    notifier,
-                                                    settings,
-                                                    kernel,
-                                                )
-                                            }
-                                )
+    ): List<CommandDefinition> = listOf(
+        command(
+            name = "kick",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.KICK,
+            documentation = "administration/kick",
+        ) {
+            argument("player", word()) {
+                executes {
+                    kick(
+                        context,
+                        null,
+                        kick,
+                        notifier,
+                        settings,
+                        kernel
                     )
-        )
-        dispatcher.register(
-            Commands.literal("kickall")
-                    .requires { it.requiresPermission(permissions, CommandPermissions.KICK_ALL) }
-                    .executes { context ->
-                        kickAll(
+                }
+                argument("reason", greedyString()) { reason ->
+                    executes {
+                        kick(
                             context,
-                            null,
+                            get(reason),
                             kick,
                             notifier,
                             settings,
                             kernel
                         )
                     }
-                    .then(
-                        Commands.argument("reason", StringArgumentType.greedyString())
-                                .executes { context ->
-                                    kickAll(
-                                        context,
-                                        StringArgumentType.getString(context, "reason"),
-                                        kick,
-                                        notifier,
-                                        settings,
-                                        kernel,
-                                    )
-                                }
+                }
+            }
+        },
+
+        command(
+            name = "kickall",
+            category = CommandCategory.ADMINISTRATION,
+            permission = CommandPermissions.KICK_ALL,
+            documentation = "administration/kickall",
+        ) {
+            executes {
+                kickAll(
+                    context,
+                    null,
+                    kick,
+                    notifier,
+                    settings,
+                    kernel
+                )
+            }
+            argument("reason", greedyString()) { reason ->
+                executes {
+                    kickAll(
+                        context,
+                        get(reason),
+                        kick,
+                        notifier,
+                        settings,
+                        kernel
                     )
-        )
-    }
+                }
+            }
+        },
+    )
 
     private fun kick(
         context: CommandContext<CommandSourceStack>,
