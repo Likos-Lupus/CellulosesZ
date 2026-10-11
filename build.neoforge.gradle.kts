@@ -25,10 +25,9 @@ val internalModules = listOf(
     ":modules:application",
 )
 
-// Runtime libraries the distribution needs: Hikari/tomlkt, the JDBC drivers and the Adventure
-// platform mod. They are both depended on (dev launch classpath) and nested Jar-in-Jar (shipped
-// jar). The Adventure platform jar is self-contained (its Adventure libraries are nested inside
-// its own META-INF/jarjar), so only the platform mod itself is nested here.
+// Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers. They are both
+// depended on (dev launch classpath) and nested Jar-in-Jar (shipped jar). The Adventure platform
+// mod is handled separately below because its dev classpath needs a fix.
 val bundledRuntime = listOf(
     libs.hikari,
     libs.tomlkt,
@@ -37,7 +36,6 @@ val bundledRuntime = listOf(
     libs.postgresql,
     libs.mariadb,
     libs.mysql,
-    libs.adventure.platform.neoforge,
     libs.commonmark,
 )
 
@@ -120,6 +118,20 @@ dependencies {
     // classpath and `include` nests them into the shipped jar (`include` alone was not enough).
     bundledRuntime.forEach { implementation(it) }
     bundledRuntime.forEach { include(it) { isTransitive = false } }
+
+    // adventure-platform-neoforge 6.9.0 is broken in development environments: its POM pulls the
+    // untransformed `adventure-platform-mod-shared` onto the dev classpath, so both it and the
+    // nested `adventure-platform-neoforge-services` register Adventure's service providers. Logging
+    // in then fails because `net.kyori.adventure.util.Services.service(...)` requires exactly one
+    // `ComponentLoggerProvider` and finds two (upstream issue #255). The platform's nested copy is
+    // the one used at runtime, so drop the transitive artifact and keep it compile-only. This is the
+    // workaround recommended by upstream (PaperMC/adventure-platform-mod#263); a fixed build is only
+    // published for Minecraft 26.2+, so it cannot simply be bumped here.
+    implementation(libs.adventure.platform.neoforge) {
+        exclude(group = "net.kyori", module = "adventure-platform-mod-shared")
+    }
+    include(libs.adventure.platform.neoforge) { isTransitive = false }
+    compileOnly(libs.adventure.platform.mod.shared)
 }
 
 java {

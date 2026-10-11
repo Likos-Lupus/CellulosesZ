@@ -19,4 +19,9 @@ public object CoreMessageKeys {
     public val HELP_DOCUMENT_RESTRICTED: MessageKey = MessageKey("help.document.restricted")
     public val HELP_DOCUMENT_INVALID_PAGE: MessageKey = MessageKey("help.document.invalid_page")
 
+    public val CORE_INFO_VERSION: MessageKey = MessageKey("core.info.version")
+    public val CORE_INFO_LOADER: MessageKey = MessageKey("core.info.loader")
+    public val CORE_INFO_MINECRAFT: MessageKey = MessageKey("core.info.minecraft")
+    public val CORE_INFO_HINT: MessageKey = MessageKey("core.info.hint")
+
 }

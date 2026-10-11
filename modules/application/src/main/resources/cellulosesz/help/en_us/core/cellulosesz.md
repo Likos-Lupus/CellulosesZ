@@ -1,6 +1,7 @@
 # /cellulosesz
 
-Administrative root command.
+Administrative root command. With no subcommand it prints the mod version, the loader and the
+Minecraft version.
 
 ## Subcommands
 

@@ -15,13 +15,17 @@ public enum class KernelState {
 }
 
 /**
- * Owns the application's coroutine tree and the server thread boundary. One JVM server lifecycle
- * corresponds to exactly one kernel lifecycle; there is no implicit restart.
+ * Owns the application's coroutine tree and the server thread boundary. A dedicated server runs one
+ * session per JVM, but an integrated client can start, stop and start a new server in the same JVM
+ * (for example after leaving and reopening a world). [onServerStarting] therefore opens a fresh
+ * session: once the previous one has stopped, the coroutine tree and state are rebuilt so the kernel
+ * is reusable. Between sessions there is no live server reference and [launch] is inert.
  */
 public class RuntimeKernel {
 
-    private val supervisor: CompletableJob = SupervisorJob()
-    private val scope: CoroutineScope = CoroutineScope(
+    @Volatile private var supervisor: CompletableJob = SupervisorJob()
+
+    @Volatile private var scope: CoroutineScope = CoroutineScope(
         supervisor + Dispatchers.Default + CoroutineName("CellulosesZ")
     )
 
@@ -32,6 +36,11 @@ public class RuntimeKernel {
     public val state: KernelState get() = stateRef.get()
 
     public fun onServerStarting(server: MinecraftServer) {
+        if (stateRef.get() == KernelState.STOPPED) {
+            supervisor = SupervisorJob()
+            scope = CoroutineScope(supervisor + Dispatchers.Default + CoroutineName("CellulosesZ"))
+            stateRef.set(KernelState.CREATED)
+        }
         serverRef.set(server)
         dispatcherRef.set(MinecraftServerDispatcher(server))
     }

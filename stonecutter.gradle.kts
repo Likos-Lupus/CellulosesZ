@@ -138,13 +138,32 @@ fun commandCatalogTable(): String {
         }
     }
 
-    val table = StringBuilder()
-    table.appendLine("| Command | Access | Documentation |")
-    table.appendLine("|:--|:--|:--|")
-    rows.sortedWith(compareBy({ it.moduleOrder }, { it.name })).forEach { row ->
-        val aliases = if (row.aliases.isEmpty()) "" else " (alias ${row.aliases.joinToString(", ") { "`/$it`" }})"
-        table.appendLine("| `/${row.name}`$aliases | ${row.access} | `${row.documentation}` |")
+    val header = listOf("Command", "Access", "Documentation")
+    val cells = rows
+            .sortedWith(compareBy({ it.moduleOrder }, { it.name }))
+            .map { row ->
+                val aliases = if (row.aliases.isEmpty()) {
+                    ""
+                } else {
+                    " (alias ${row.aliases.joinToString(", ") { "`/$it`" }})"
+                }
+                listOf("`/${row.name}`$aliases", row.access, "`${row.documentation}`")
+            }
+    val widths = header.indices.map { index ->
+        maxOf(header[index].length, cells.maxOfOrNull { it[index].length } ?: 0)
     }
+    val renderRow = { values: List<String> ->
+        values.mapIndexed { index, value -> " ${value.padEnd(widths[index])} " }
+                .joinToString("|", prefix = "|", postfix = "|")
+    }
+    val table = StringBuilder()
+    table.appendLine(renderRow(header))
+    table.appendLine(
+        header.indices.joinToString("|", prefix = "|", postfix = "|") { index ->
+            ":" + "-".repeat(widths[index] + 1)
+        }
+    )
+    cells.forEach { table.appendLine(renderRow(it)) }
     return table.toString().trimEnd()
 }
 
@@ -542,8 +561,24 @@ tasks.register("verifyArchitecture") {
                 violations += "README.md is missing the command catalog markers"
             } else {
                 val current = existing.substring(start + commandCatalogStartMarker.length, end)
-                        .trim()
-                if (current != commandCatalogTable().trim()) {
+                // Compare the rows semantically: column padding, dash-run length and alignment are
+                // formatting only and must not be reported as drift.
+                val parseRows = { text: String ->
+                    text.lineSequence()
+                            .map { it.trim() }
+                            .filter { it.startsWith("|") }
+                            .map { line ->
+                                line.trim('|')
+                                        .split("|")
+                                        .map { cell -> cell.trim() }
+                            }
+                            .filter { cells ->
+                                cells.any { it.isNotEmpty() } &&
+                                        cells.none { it.matches(Regex(":?-+:?")) }
+                            }
+                            .toList()
+                }
+                if (parseRows(current) != parseRows(commandCatalogTable())) {
                     violations += "README command catalog is stale; run ./gradlew generateCommandCatalog"
                 }
             }

@@ -31,6 +31,7 @@ import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.document.ClasspathCommandDocumentSource
 import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
 import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
 import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
@@ -185,6 +186,8 @@ public object CellulosesZ {
                         languages = languagePreferences,
                         resolver = languageResolver,
                         catalog = catalog,
+                        modVersion = modVersion(),
+                        loaderName = platform.loaderName,
                     )
                 )
                 addAll(movement.commands())
@@ -195,7 +198,15 @@ public object CellulosesZ {
         )
         val helpResolver = CommandHelpResolver(commandRegistry.definitions, permissions)
         val documentation = CommandDocumentationService(
-            loader = MarkdownDocumentLoader(),
+            loader = MarkdownDocumentLoader(
+                listOf(
+                    ClasspathCommandDocumentSource(movement::class.java),
+                    ClasspathCommandDocumentSource(communication::class.java),
+                    ClasspathCommandDocumentSource(administration::class.java),
+                    ClasspathCommandDocumentSource(utility::class.java),
+                    ClasspathCommandDocumentSource(CellulosesZ::class.java),
+                )
+            ),
             messages = messages,
             languages = languageResolver,
             permissions = permissions,
@@ -311,6 +322,10 @@ public object CellulosesZ {
         Platform.getConfigFolder()
                 .resolve("cellulosesz")
                 .resolve("cellulosesz.toml")
+
+    private fun modVersion(): String =
+        runCatching { Platform.getMod("cellulosesz").version }
+                .getOrDefault("unknown")
 
     private fun dataRoot(kernel: RuntimeKernel): Path =
         kernel.requireServer()

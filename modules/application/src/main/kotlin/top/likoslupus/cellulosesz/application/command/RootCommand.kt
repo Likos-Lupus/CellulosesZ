@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.application.command
 
 import kotlinx.coroutines.CancellationException
 import net.kyori.adventure.text.Component as AdventureComponent
+import net.minecraft.SharedConstants
 import net.minecraft.commands.CommandSourceStack
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
@@ -39,6 +40,8 @@ internal object RootCommand {
         languages: PlayerLanguagePreferences,
         resolver: LanguageResolver,
         catalog: TranslationCatalog,
+        modVersion: String,
+        loaderName: String,
     ): CommandDefinition =
         command(
             name = ROOT_LITERAL,
@@ -46,6 +49,15 @@ internal object RootCommand {
             permission = CommandPermissions.ROOT,
             documentation = "core/cellulosesz",
         ) {
+            executes {
+                showInfo(
+                    source,
+                    modVersion,
+                    loaderName,
+                    messages,
+                    adventure
+                )
+            }
             literal("status", permission = CommandPermissions.ROOT_STATUS) {
                 executes {
                     source.sendSuccess(
@@ -116,6 +128,45 @@ internal object RootCommand {
                 }
             }
         }
+
+    private fun showInfo(
+        source: CommandSourceStack,
+        modVersion: String,
+        loaderName: String,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val minecraftVersion = SharedConstants.getCurrentVersion().name()
+        source.reply(
+            adventure,
+            messages.renderPrefixedFor(
+                playerId,
+                CoreMessageKeys.CORE_INFO_VERSION,
+                listOf(MessageArgument(modVersion)),
+            ),
+        )
+        source.reply(
+            adventure,
+            messages.renderPrefixedFor(
+                playerId,
+                CoreMessageKeys.CORE_INFO_LOADER,
+                listOf(MessageArgument(loaderName)),
+            ),
+        )
+        source.reply(
+            adventure,
+            messages.renderPrefixedFor(
+                playerId,
+                CoreMessageKeys.CORE_INFO_MINECRAFT,
+                listOf(MessageArgument(minecraftVersion)),
+            ),
+        )
+        return source.reply(
+            adventure,
+            messages.renderPrefixedFor(playerId, CoreMessageKeys.CORE_INFO_HINT),
+        )
+    }
 
     private fun showLanguage(
         source: CommandSourceStack,
