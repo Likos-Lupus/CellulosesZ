@@ -1,10 +1,11 @@
 package top.likoslupus.cellulosesz.communication.staff
 
 import kotlinx.coroutines.runBlocking
-import net.minecraft.network.chat.Component
+import net.kyori.adventure.text.Component
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import top.likoslupus.cellulosesz.communication.FakePresentation
 import top.likoslupus.cellulosesz.communication.FakeTimeSource
 import top.likoslupus.cellulosesz.communication.ImmediateServerThreadRunner
 import top.likoslupus.cellulosesz.communication.PlayerDirectory
@@ -19,6 +20,7 @@ class HelpOpServiceTest {
     private val service = HelpOpService(
         runner = ImmediateServerThreadRunner,
         directory = directory,
+        presentation = FakePresentation(),
         settings = { settings },
         timeSource = FakeTimeSource(),
     )
@@ -108,9 +110,11 @@ class HelpOpServiceTest {
         val moderators = mutableListOf<OnlinePlayerIdentity>()
         val sent = mutableListOf<Pair<UUID, Component>>()
 
-        override fun online(): List<OnlinePlayerIdentity> = moderators
+        override fun online(): List<OnlinePlayerIdentity> =
+            moderators
 
-        override fun moderators(): List<OnlinePlayerIdentity> = moderators
+        override fun moderators(): List<OnlinePlayerIdentity> =
+            moderators
 
         override fun onlineIn(dimensionId: String): List<OnlinePlayerIdentity> =
             emptyList()

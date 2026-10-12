@@ -4,14 +4,16 @@ import net.kyori.adventure.text.Component as AdventureComponent
 import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextDecoration
 import net.minecraft.commands.CommandSourceStack
+import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.registry.CommandUsage
 import top.likoslupus.cellulosesz.core.permission.PermissionService
-import top.likoslupus.cellulosesz.core.text.document.AdventureDocumentRenderer
-import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
-import top.likoslupus.cellulosesz.core.text.document.MarkdownDocument
-import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
-import top.likoslupus.cellulosesz.core.text.i18n.*
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.document.*
+import top.likoslupus.cellulosesz.core.text.i18n.BundledTranslations
+import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.i18n.renderFor
 import java.util.*
 
 /** One rendered page of command documentation. */
@@ -23,8 +25,8 @@ public class HelpResult(
 
 /**
  * Renders a resolved command document for a source: it loads the bundled Markdown for the effective
- * locale, prepends the executable usage projection, paginates and appends a clickable navigation
- * line. It never queries storage and never executes a command.
+ * locale, prepends the executable usage projection, paginates over layout blocks and appends a
+ * clickable navigation line. It never queries storage and never executes a command.
  */
 public class CommandDocumentationService(
     private val loader: MarkdownDocumentLoader,
@@ -41,51 +43,62 @@ public class CommandDocumentationService(
         val playerId = source.player?.uuid
 
         if (!resolution.permitted) {
-            return HelpResult(
-                listOf(
-                    messages.renderFor(
-                        playerId,
-                        CoreMessageKeys.HELP_DOCUMENT_RESTRICTED
-                    )
-                ),
-                1,
-                1,
+            return single(
+                messages.renderFor(
+                    playerId,
+                    MessageKey("help.document.restricted")
+                )
             )
         }
 
-        val document = loadDocument(resolution.definition.documentation, playerId)
-            ?: return HelpResult(
-                listOf(
-                    messages.renderFor(
-                        playerId,
-                        CoreMessageKeys.HELP_DOCUMENT_MISSING,
-                        resolution.definition.name,
-                    )
-                ),
-                1,
-                1,
+        val document = when (val result = loadDocument(resolution.documentation, playerId)) {
+            is DocumentLoadResult.Found -> result.document
+
+            DocumentLoadResult.Missing -> return single(
+                messages.renderFor(
+                    playerId,
+                    MessageKey("help.document.missing"),
+                    resolution.definition.name,
+                )
             )
 
-        val lines = mutableListOf<AdventureComponent>()
-        lines += messages.renderFor(playerId, CoreMessageKeys.HELP_USAGE)
+            is DocumentLoadResult.Invalid -> {
+                LOGGER.warn(
+                    "invalid help document '{}': {}",
+                    resolution.definition.documentation.value,
+                    result.reason,
+                )
+                return single(
+                    messages.renderFor(
+                        playerId,
+                        MessageKey("help.document.missing"),
+                        resolution.definition.name,
+                    )
+                )
+            }
+        }
+
+        val blocks = mutableListOf<RenderedBlock>()
+        val usageHeader = messages.renderFor(playerId, MessageKey("help.usage"))
                 .decorate(TextDecoration.BOLD)
-        CommandUsage.patterns(resolution.definition, source, permissions)
-                .forEach {
-                    lines += AdventureComponent.text(
+        val patternLines = CommandUsage.patterns(resolution.definition, source, permissions)
+                .map {
+                    AdventureComponent.text(
                         it,
                         theme.body
                     )
                 }
-        lines += AdventureComponent.empty()
-        lines += AdventureDocumentRenderer(theme).render(document)
+        blocks += RenderedBlock(lines = listOf(usageHeader) + patternLines)
+        blocks += RenderedBlock(lines = listOf(AdventureComponent.empty()))
+        blocks += AdventureDocumentRenderer(theme).renderBlocks(document)
 
-        val pages = CommandHelpPaginator.paginate(lines)
+        val pages = DocumentPaginator.paginate(blocks)
         val clamped = resolution.page.coerceIn(1, pages.size)
         val page = pages[clamped - 1].toMutableList()
         page += if (clamped != resolution.page) {
             messages.renderFor(
                 playerId,
-                CoreMessageKeys.HELP_DOCUMENT_INVALID_PAGE,
+                MessageKey("help.document.invalid_page"),
                 resolution.page.toString(),
             )
         } else {
@@ -105,10 +118,27 @@ public class CommandDocumentationService(
         )
     }
 
-    private fun loadDocument(id: CommandDocumentId, playerId: UUID?): MarkdownDocument? =
-        loader.load(id, languages.effective(playerId))
-            ?: loader.load(id, languages.serverDefault())
-            ?: loader.load(id, BundledTranslations.baseline)
+    private fun single(component: AdventureComponent): HelpResult =
+        HelpResult(listOf(component), 1, 1)
+
+    private fun loadDocument(id: CommandDocumentId, playerId: UUID?): DocumentLoadResult {
+        val order = listOf(
+            languages.effective(playerId),
+            languages.serverDefault(),
+            BundledTranslations.baseline,
+        ).distinct()
+
+        var invalid: DocumentLoadResult.Invalid? = null
+        order.forEach { language ->
+            when (val result = loader.load(id, language)) {
+                is DocumentLoadResult.Found -> return result
+                is DocumentLoadResult.Invalid -> if (invalid == null) invalid = result
+                DocumentLoadResult.Missing -> Unit
+            }
+        }
+        return invalid
+            ?: DocumentLoadResult.Missing
+    }
 
     private fun navigation(
         playerId: UUID?,
@@ -131,7 +161,7 @@ public class CommandDocumentationService(
         builder.append(
             messages.renderFor(
                 playerId,
-                CoreMessageKeys.HELP_PAGE,
+                MessageKey("help.page"),
                 page.toString(),
                 pageCount.toString(),
             )
@@ -158,5 +188,11 @@ public class CommandDocumentationService(
         AdventureComponent
                 .text(" $label ", theme.link)
                 .clickEvent(ClickEvent.suggestCommand("/help $canonical --page $target"))
+
+    private companion object {
+
+        private val LOGGER = LoggerFactory.getLogger(CommandDocumentationService::class.java)
+
+    }
 
 }

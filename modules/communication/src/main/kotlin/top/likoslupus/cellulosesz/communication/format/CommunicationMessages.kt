@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.communication.format
 
-import net.minecraft.network.chat.Component
+import top.likoslupus.cellulosesz.communication.SenderRestriction
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementResult
 import top.likoslupus.cellulosesz.communication.mail.*
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageOutcome
@@ -8,122 +8,153 @@ import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
 import top.likoslupus.cellulosesz.communication.preferences.IgnoreUpdateResult
 import top.likoslupus.cellulosesz.communication.preferences.PreferenceUpdateResult
 import top.likoslupus.cellulosesz.communication.staff.HelpOpResult
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.model.*
 
 /**
- * Owns every user-facing communication string. Deliberately not a keyed template registry: user
- * text is literal, and this project has no localization framework.
+ * Maps communication domain results to semantic values. It holds no language and no colour: the
+ * presentation layer renders per recipient. User-entered text is only ever carried as [TextArgument.Literal].
  */
 internal object CommunicationMessages {
-
-    fun prefixed(message: String): Component =
-        Messages.prefixed(message)
 
     fun incomingPrivateMessage(
         senderName: String,
         body: MessageBody,
-    ): Component =
-        Component.literal("[$senderName -> you] ${body.value}")
+    ): Notice =
+        Notice(
+            LocalizedText(
+                MessageKey("communication.msg.incoming"),
+                listOf(playerName(senderName), literal(body.value)),
+            ),
+            NoticeTone.INFO,
+        )
 
     fun outgoingPrivateMessage(
         targetName: String,
         body: MessageBody,
-    ): Component =
-        Component.literal("[you -> $targetName] ${body.value}")
+    ): Notice =
+        Notice(
+            LocalizedText(
+                MessageKey("communication.msg.outgoing"),
+                listOf(playerName(targetName), literal(body.value)),
+            ),
+            NoticeTone.INFO,
+        )
 
-    fun privateMessageFeedback(outcome: PrivateMessageOutcome): Component =
-        prefixed(
+    fun senderRestricted(reason: SenderRestriction): Notice =
+        when (reason) {
+            SenderRestriction.MUTED -> error(MessageKey("communication.msg.sender_muted"))
+        }
+
+    fun privateMessageFeedback(outcome: PrivateMessageOutcome): Notice =
+        error(
             when (outcome) {
                 is PrivateMessageOutcome.Delivered ->
-                    return outgoingPrivateMessage(outcome.target.name, outcome.body)
+                    return outgoingPrivateMessage(
+                        outcome.target.name,
+                        outcome.body
+                    )
 
                 PrivateMessageOutcome.Disabled ->
-                    "private messaging is disabled"
+                    MessageKey("communication.msg.disabled")
 
                 PrivateMessageOutcome.InvalidMessage ->
-                    "your message is empty or too long"
+                    MessageKey("communication.msg.invalid")
 
                 PrivateMessageOutcome.SenderRequired,
                 PrivateMessageOutcome.SenderOffline ->
-                    "this command requires a player"
+                    MessageKey("core.error.player_required")
 
                 is PrivateMessageOutcome.SenderRestricted ->
-                    return outcome.feedback
+                    senderRestricted(outcome.reason)
 
                 is PrivateMessageOutcome.TargetOffline ->
                     when (val name = outcome.name) {
-                        null -> "that player is not online"
-                        else -> "player '$name' is not online"
+                        null -> MessageKey("communication.msg.target_offline")
+                        else -> return error(
+                            MessageKey("communication.msg.target_offline_named"),
+                            playerName(name)
+                        )
                     }
 
                 PrivateMessageOutcome.SelfTarget ->
-                    "you cannot message yourself"
+                    MessageKey("communication.msg.self")
 
                 PrivateMessageOutcome.NoReplyTarget ->
-                    "you have no one to reply to"
+                    MessageKey("communication.msg.no_reply_target")
 
                 PrivateMessageOutcome.RecipientUnavailable ->
-                    "that player is not accepting private messages"
+                    MessageKey("communication.msg.recipient_unavailable")
 
                 PrivateMessageOutcome.RecipientStateLoading ->
-                    "that player's messaging state is still loading"
+                    MessageKey("communication.msg.recipient_loading")
             }
         )
 
-    fun requiresPlayer(): Component =
-        prefixed("this command requires a player")
+    fun storageUnavailable(): Notice =
+        error(MessageKey("communication.preference.storage_unavailable"))
 
-    fun storageUnavailable(): Component =
-        prefixed("communication storage is unavailable")
-
-    fun runtimeStopping(): Component =
-        prefixed("runtime is shutting down")
+    fun runtimeStopping(): Notice =
+        error(MessageKey("core.error.runtime_stopping"))
 
     // Preferences -----------------------------------------------------------------------------
 
-    fun receiveStatus(enabled: Boolean): Component =
-        prefixed(
+    fun receiveStatus(enabled: Boolean): Notice =
+        info(
             when {
-                enabled -> "private messages are enabled"
-                else -> "private messages are disabled"
+                enabled -> MessageKey("communication.preference.receive_enabled")
+                else -> MessageKey("communication.preference.receive_disabled")
             }
         )
 
-    fun receiveUpdated(enabled: Boolean): Component =
-        prefixed(
+    fun receiveUpdated(enabled: Boolean): Notice =
+        success(
             when {
-                enabled -> "you will now receive private messages"
-                else -> "you will no longer receive private messages"
+                enabled -> MessageKey("communication.preference.receive_updated_on")
+                else -> MessageKey("communication.preference.receive_updated_off")
             }
         )
 
-    fun alreadySet(): Component =
-        prefixed("that setting is already applied")
+    fun alreadySet(): Notice =
+        info(MessageKey("communication.preference.already_set"))
 
-    fun ignoreUpdated(name: String): Component =
-        prefixed("now ignoring $name")
-
-    fun noLongerIgnoring(name: String): Component =
-        prefixed("no longer ignoring $name")
-
-    fun alreadyIgnored(name: String): Component =
-        prefixed("$name is already ignored")
-
-    fun notIgnored(name: String): Component =
-        prefixed("$name is not ignored")
-
-    fun ignoreListFull(): Component =
-        prefixed("your ignore list is full")
-
-    fun ignoreList(names: List<String>): Component =
-        prefixed(
-            when {
-                names.isEmpty() -> "you are not ignoring anyone"
-                else -> "ignored: ${names.joinToString(", ")}"
-            }
+    fun ignoreUpdated(name: String): Notice =
+        success(
+            MessageKey("communication.preference.ignore_updated"),
+            playerName(name)
         )
 
-    fun preferenceFeedback(result: PreferenceUpdateResult): Component =
+    fun noLongerIgnoring(name: String): Notice =
+        success(
+            MessageKey("communication.preference.ignore_removed"),
+            playerName(name)
+        )
+
+    fun alreadyIgnored(name: String): Notice =
+        info(
+            MessageKey("communication.preference.ignore_already"),
+            playerName(name)
+        )
+
+    fun notIgnored(name: String): Notice =
+        info(
+            MessageKey("communication.preference.ignore_not"),
+            playerName(name)
+        )
+
+    fun ignoreListFull(): Notice =
+        error(MessageKey("communication.preference.ignore_full"))
+
+    fun ignoreList(names: List<String>): Notice =
+        when {
+            names.isEmpty() -> info(MessageKey("communication.preference.ignore_empty"))
+            else -> info(
+                MessageKey("communication.preference.ignore_list"),
+                literal(names.joinToString(", "))
+            )
+        }
+
+    fun preferenceFeedback(result: PreferenceUpdateResult): Notice =
         when (result) {
             is PreferenceUpdateResult.Updated ->
                 receiveUpdated(result.preferences.receivePrivateMessages)
@@ -133,126 +164,229 @@ internal object CommunicationMessages {
             PreferenceUpdateResult.RuntimeStopping -> runtimeStopping()
         }
 
-    fun ignoreFeedback(result: IgnoreUpdateResult): Component =
-        prefixed(
-            when (result) {
-                is IgnoreUpdateResult.Updated -> "ignore list updated"
-                IgnoreUpdateResult.AlreadyIgnored -> "that player is already ignored"
-                IgnoreUpdateResult.NotIgnored -> "that player is not ignored"
-                IgnoreUpdateResult.IgnoreListFull -> return ignoreListFull()
-                IgnoreUpdateResult.StorageUnavailable -> return storageUnavailable()
-                IgnoreUpdateResult.RuntimeStopping -> return runtimeStopping()
-            }
-        )
+    fun ignoreFeedback(
+        result: IgnoreUpdateResult,
+        name: String,
+    ): Notice =
+        when (result) {
+            is IgnoreUpdateResult.Updated -> info(MessageKey("communication.preference.ignore_list_updated"))
+            IgnoreUpdateResult.AlreadyIgnored -> alreadyIgnored(name)
+            IgnoreUpdateResult.NotIgnored -> notIgnored(name)
+            IgnoreUpdateResult.IgnoreListFull -> ignoreListFull()
+            IgnoreUpdateResult.StorageUnavailable -> storageUnavailable()
+            IgnoreUpdateResult.RuntimeStopping -> runtimeStopping()
+        }
 
     // Mail ------------------------------------------------------------------------------------
 
-    fun mailDisabled(): Component =
-        prefixed("mail is disabled")
+    fun mailDisabled(): Notice =
+        error(MessageKey("communication.mail.disabled"))
 
-    fun mailInvalid(): Component =
-        prefixed("your mail is empty or too long")
+    fun mailInvalid(): Notice =
+        error(MessageKey("communication.mail.invalid"))
 
-    fun mailSelf(): Component =
-        prefixed("you cannot mail yourself")
+    fun mailSelf(): Notice =
+        error(MessageKey("communication.mail.self"))
 
-    fun mailTargetUnknown(name: String): Component =
-        prefixed("player '$name' is not known to this server")
+    fun mailTargetUnknown(name: String): Notice =
+        error(
+            MessageKey("communication.mail.target_unknown"),
+            playerName(name)
+        )
 
-    fun mailRateLimited(): Component =
-        prefixed("you are sending mail too quickly")
+    fun mailRateLimited(): Notice =
+        error(MessageKey("communication.mail.rate_limited"))
 
-    fun mailSent(name: String): Component =
-        prefixed("mail sent to $name")
+    fun mailSent(name: String): Notice =
+        success(MessageKey("communication.mail.sent"), playerName(name))
 
-    fun mailStorageUnavailable(): Component =
-        prefixed("mail storage is unavailable")
+    fun mailStorageUnavailable(): Notice =
+        error(MessageKey("communication.mail.storage_unavailable"))
 
-    fun mailSummary(result: MailSummaryResult): Component =
+    fun mailSummary(result: MailSummaryResult): Notice =
         when (result) {
             MailSummaryResult.StorageUnavailable -> mailStorageUnavailable()
             is MailSummaryResult.Summary ->
                 when {
-                    result.total == 0 -> prefixed("you have no mail")
-                    else -> prefixed(
-                        "you have ${result.total} mail message(s), ${result.unread} unread. " +
-                                "Use /mail read to view them."
+                    result.total == 0 -> info(MessageKey("communication.mail.none"))
+                    else -> info(
+                        MessageKey("communication.mail.summary"),
+                        count(result.total),
+                        count(result.unread),
                     )
                 }
         }
 
-    fun mailSendFeedback(result: MailSendResult): Component =
+    fun mailSendFeedback(result: MailSendResult): Notice =
         when (result) {
             is MailSendResult.Sent -> mailSent(result.target.name)
             MailSendResult.Disabled -> mailDisabled()
             MailSendResult.InvalidMessage -> mailInvalid()
-            is MailSendResult.SenderRestricted -> result.feedback
+            is MailSendResult.SenderRestricted -> senderRestricted(result.reason)
             is MailSendResult.TargetUnknown -> mailTargetUnknown(result.name)
             MailSendResult.SelfTarget -> mailSelf()
             MailSendResult.RateLimited -> mailRateLimited()
-            MailSendResult.MailboxFull -> prefixed("that player's mailbox is full")
-            MailSendResult.DurationTooLong -> prefixed("temporary mail duration exceeds the configured maximum")
+            MailSendResult.MailboxFull -> error(MessageKey("communication.mail.mailbox_full"))
+            MailSendResult.DurationTooLong -> error(MessageKey("communication.mail.duration_too_long"))
             MailSendResult.StorageUnavailable -> mailStorageUnavailable()
         }
 
-    fun mailEmpty(): Component =
-        prefixed("you have no mail")
+    fun mailView(result: MailViewResult): ListPage =
+        when (result) {
+            is MailViewResult.Loaded -> ListPage(
+                title = LocalizedText(MessageKey("communication.mail.read_title")),
+                rows = result.page.mapIndexed { offset, message ->
+                    ListRow(
+                        main = mailLine(
+                            index = (result.pageIndex - 1) * MAIL_PAGE_SIZE + offset + 1,
+                            message = message,
+                        )
+                    )
+                },
+                emptyText = LocalizedText(MessageKey("communication.mail.none")),
+                summary = LocalizedText(
+                    MessageKey("communication.mail.read_summary"),
+                    listOf(
+                        count(result.pageIndex),
+                        count(result.pageCount),
+                        count(result.total),
+                        count(result.unread),
+                    ),
+                ),
+            )
 
-    fun mailCleared(): Component =
-        prefixed("your mail has been cleared")
+            MailViewResult.Empty -> ListPage(
+                title = LocalizedText(MessageKey("communication.mail.read_title")),
+                rows = emptyList(),
+                emptyText = LocalizedText(MessageKey("communication.mail.none")),
+            )
 
-    fun mailHeader(view: MailViewResult.Loaded): Component =
-        prefixed(
-            "mail page ${view.pageIndex}/${view.pageCount} " +
-                    "(${view.total} total, ${view.unread} unread)"
+            MailViewResult.StorageUnavailable -> ListPage(
+                title = LocalizedText(MessageKey("communication.mail.read_title")),
+                rows = emptyList(),
+                emptyText = LocalizedText(MessageKey("communication.mail.storage_unavailable")),
+            )
+        }
+
+    fun mailCleared(): Notice =
+        success(MessageKey("communication.mail.cleared"))
+
+    fun unreadMailNotice(count: Int): Notice =
+        info(
+            MessageKey("communication.mail.unread_notice"),
+            count(count)
         )
 
-    fun mailLine(index: Int, message: MailMessage): Component {
-        val flag = when (message.readAt) {
-            null -> " (unread)"
-            else -> ""
-        }
-        return prefixed("#$index from ${message.sender.displayName}$flag: ${message.body.value}")
-    }
-
-    fun unreadMailNotice(count: Int): Component =
-        prefixed("you have $count unread mail message(s); use /mail read")
-
-    fun newMailNotice(fromName: String): Component =
-        prefixed("you have new mail from $fromName")
+    fun newMailNotice(fromName: String): Notice =
+        info(
+            MessageKey("communication.mail.new_mail"),
+            playerName(fromName)
+        )
 
     // HelpOp ----------------------------------------------------------------------------------
 
     fun helpOpIncoming(
         senderName: String,
         body: MessageBody,
-    ): Component =
-        Component.literal("[HelpOp] $senderName: ${body.value}")
-
-    fun helpOpFeedback(result: HelpOpResult): Component =
-        prefixed(
-            when (result) {
-                is HelpOpResult.Delivered -> "your message was sent to ${result.recipientCount} moderator(s)"
-                HelpOpResult.LoggedOnly -> "no moderators are online; your message was logged"
-                HelpOpResult.Disabled -> "helpop is disabled"
-                HelpOpResult.InvalidMessage -> "your message is empty or too long"
-                HelpOpResult.RateLimited -> "you are sending help requests too quickly"
-            }
+    ): Notice =
+        Notice(
+            LocalizedText(
+                MessageKey("communication.helpop.incoming"),
+                listOf(playerName(senderName), literal(body.value)),
+            ),
+            NoticeTone.INFO,
         )
+
+    fun helpOpFeedback(result: HelpOpResult): Notice =
+        when (result) {
+            is HelpOpResult.Delivered -> success(
+                MessageKey("communication.helpop.delivered"),
+                count(result.recipientCount),
+            )
+
+            HelpOpResult.LoggedOnly -> info(MessageKey("communication.helpop.logged_only"))
+            HelpOpResult.Disabled -> error(MessageKey("communication.helpop.disabled"))
+            HelpOpResult.InvalidMessage -> error(MessageKey("communication.helpop.invalid"))
+            HelpOpResult.RateLimited -> error(MessageKey("communication.helpop.rate_limited"))
+        }
 
     // Announcements ---------------------------------------------------------------------------
 
-    fun broadcastLine(body: MessageBody): Component =
-        Component.literal("[Broadcast] ${body.value}")
-
-    fun announcementFeedback(result: AnnouncementResult): Component =
-        prefixed(
-            when (result) {
-                is AnnouncementResult.Delivered -> "announcement sent to ${result.recipientCount} player(s)"
-                AnnouncementResult.NoRecipients -> "no players received the announcement"
-                AnnouncementResult.Disabled -> "announcements are disabled"
-                AnnouncementResult.InvalidMessage -> "your announcement is empty or too long"
-            }
+    fun broadcastLine(body: MessageBody): Notice =
+        Notice(
+            LocalizedText(
+                MessageKey("communication.broadcast.line"),
+                listOf(literal(body.value))
+            ),
+            NoticeTone.INFO,
         )
+
+    fun announcementFeedback(result: AnnouncementResult): Notice =
+        when (result) {
+            is AnnouncementResult.Delivered -> success(
+                MessageKey("communication.broadcast.delivered"),
+                count(result.recipientCount),
+            )
+
+            AnnouncementResult.NoRecipients ->
+                info(MessageKey("communication.broadcast.no_recipients"))
+
+            AnnouncementResult.Disabled ->
+                error(MessageKey("communication.broadcast.disabled"))
+
+            AnnouncementResult.InvalidMessage ->
+                error(MessageKey("communication.broadcast.invalid"))
+        }
+
+    private fun mailLine(
+        index: Int,
+        message: MailMessage,
+    ): LocalizedText {
+        val arguments = listOf(
+            count(index),
+            playerName(message.sender.displayName),
+            literal(message.body.value),
+        )
+        return when (message.readAt) {
+            null -> LocalizedText(
+                MessageKey("communication.mail.read_line_unread"),
+                arguments
+            )
+
+            else -> LocalizedText(
+                MessageKey("communication.mail.read_line"),
+                arguments
+            )
+        }
+    }
+
+    private fun error(key: MessageKey, vararg arguments: TextArgument): Notice =
+        Notice(
+            LocalizedText(key, arguments.toList()),
+            NoticeTone.ERROR
+        )
+
+    private fun success(key: MessageKey, vararg arguments: TextArgument): Notice =
+        Notice(
+            LocalizedText(key, arguments.toList()),
+            NoticeTone.SUCCESS
+        )
+
+    private fun info(key: MessageKey, vararg arguments: TextArgument): Notice =
+        Notice(
+            LocalizedText(key, arguments.toList()),
+            NoticeTone.INFO
+        )
+
+    private fun literal(value: String): TextArgument =
+        TextArgument.Literal(value)
+
+    private fun playerName(value: String): TextArgument =
+        TextArgument.PlayerName(value)
+
+    private fun count(value: Int): TextArgument =
+        TextArgument.Count(value.toLong())
+
+    private const val MAIL_PAGE_SIZE: Int = 10
 
 }

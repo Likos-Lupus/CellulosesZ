@@ -7,18 +7,25 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.integer
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotices
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
-import java.util.*
 
 internal object ItemUtilityCommands {
 
     fun commands(
         service: ItemUtilityService,
         known: KnownPlayerResolver,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "repair",
@@ -32,7 +39,10 @@ internal object ItemUtilityCommands {
                     RepairScope.HAND,
                     null,
                     service,
-                    known
+                    known,
+                    messages,
+                    adventure,
+                    presentation
                 )
             }
             literal("hand") {
@@ -42,14 +52,15 @@ internal object ItemUtilityCommands {
                         RepairScope.HAND,
                         null,
                         service,
-                        known
+                        known,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
                 argument("player", word()) { player ->
                     suggests {
-                        source.server.playerList.players.forEach {
-                            suggest(it.gameProfile.name)
-                        }
+                        source.server.playerList.players.forEach { suggest(it.gameProfile.name) }
                     }
                     executes {
                         repair(
@@ -57,7 +68,10 @@ internal object ItemUtilityCommands {
                             RepairScope.HAND,
                             get(player),
                             service,
-                            known
+                            known,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                 }
@@ -69,14 +83,15 @@ internal object ItemUtilityCommands {
                         RepairScope.ALL,
                         null,
                         service,
-                        known
+                        known,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
                 argument("player", word()) { player ->
                     suggests {
-                        source.server.playerList.players.forEach {
-                            suggest(it.gameProfile.name)
-                        }
+                        source.server.playerList.players.forEach { suggest(it.gameProfile.name) }
                     }
                     executes {
                         repair(
@@ -84,7 +99,10 @@ internal object ItemUtilityCommands {
                             RepairScope.ALL,
                             get(player),
                             service,
-                            known
+                            known,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                 }
@@ -101,7 +119,10 @@ internal object ItemUtilityCommands {
                 more(
                     context,
                     null,
-                    service
+                    service,
+                    messages,
+                    adventure,
+                    presentation
                 )
             }
             argument("amount", integer(min = 1)) { amount ->
@@ -109,7 +130,10 @@ internal object ItemUtilityCommands {
                     more(
                         context,
                         get(amount),
-                        service
+                        service,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
             }
@@ -121,7 +145,15 @@ internal object ItemUtilityCommands {
             permission = CommandPermissions.CONDENSE,
             documentation = "utility/condense",
         ) {
-            executes { condense(context, service) }
+            executes {
+                condense(
+                    context,
+                    service,
+                    messages,
+                    adventure,
+                    presentation
+                )
+            }
         },
     )
 
@@ -131,45 +163,83 @@ internal object ItemUtilityCommands {
         rawTarget: String?,
         service: ItemUtilityService,
         known: KnownPlayerResolver,
-    ): Int =
-        context.source.let {
-            when (val targetId = resolveTarget(it.player?.uuid, rawTarget, known)) {
-                null -> it.replyError(UtilityMessages.prefixed("player not found or offline"))
-                else -> it.reply(UtilityMessages.repair(service.repair(targetId, scope)))
-            }
-        }
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val executorId = source.player?.uuid
+        val targetId = when (rawTarget) {
+            null -> executorId
+            else -> known.onlineByName(rawTarget)?.id
+        } ?: return source.replyError(
+            adventure,
+            messages.renderFor(
+                executorId,
+                MessageKey("utility.error.player_not_found")
+            )
+        )
+        return source.replyNotices(
+            adventure,
+            presentation,
+            executorId,
+            UtilityMessages.repair(
+                service.repair(targetId, scope)
+            )
+        )
+    }
 
     private fun more(
         context: CommandContext<CommandSourceStack>,
         amount: Int?,
         service: ItemUtilityService,
-    ): Int =
-        context.source.let {
-            when (val playerId = it.player?.uuid) {
-                null -> it.replyError(UtilityMessages.requiresPlayer())
-                else -> it.reply(UtilityMessages.more(service.more(playerId, amount)))
-            }
-        }
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val playerId = source.player?.uuid
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            UtilityMessages.more(
+                service.more(playerId, amount)
+            )
+        )
+    }
 
     private fun condense(
         context: CommandContext<CommandSourceStack>,
         service: ItemUtilityService,
-    ): Int =
-        context.source.let {
-            when (val playerId = it.player?.uuid) {
-                null -> it.replyError(UtilityMessages.requiresPlayer())
-                else -> it.reply(UtilityMessages.condense(service.condense(playerId)))
-            }
-        }
-
-    private fun resolveTarget(
-        selfId: UUID?,
-        rawTarget: String?,
-        known: KnownPlayerResolver,
-    ): UUID? =
-        when (rawTarget) {
-            null -> selfId
-            else -> known.onlineByName(rawTarget)?.id
-        }
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val playerId = source.player?.uuid
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            UtilityMessages.condense(
+                service.condense(playerId)
+            )
+        )
+    }
 
 }

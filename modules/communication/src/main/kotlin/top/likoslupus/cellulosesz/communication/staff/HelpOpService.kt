@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.communication.config.HelpOpSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
 import top.likoslupus.cellulosesz.core.runtime.ServerThreadRunner
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import java.util.*
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.TimeMark
@@ -29,6 +30,7 @@ internal sealed interface HelpOpResult {
 internal class HelpOpService(
     private val runner: ServerThreadRunner,
     private val directory: PlayerDirectory,
+    private val presentation: TextPresentation,
     private val settings: () -> HelpOpSettings,
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
@@ -59,10 +61,14 @@ internal class HelpOpService(
             return HelpOpResult.RateLimited
         }
 
-        val payload = CommunicationMessages.helpOpIncoming(senderName, body)
+        val notice = CommunicationMessages.helpOpIncoming(senderName, body)
         val recipientCount = runner.run {
             val recipients = directory.moderators()
-            recipients.forEach { directory.send(it.id, payload) }
+            recipients.forEach { recipient ->
+                presentation.renderFor(recipient.id, notice).forEach { line ->
+                    directory.send(recipient.id, line)
+                }
+            }
             recipients.size
         }
 
@@ -86,7 +92,9 @@ internal class HelpOpService(
         }
 
         val now = timeSource.markNow()
-        val window = windows.getOrPut(senderId) { Window(now, 0) }
+        val window = windows.getOrPut(senderId) {
+            Window(now, 0)
+        }
         if (window.start.elapsedNow() >= 1.minutes) {
             window.start = now
             window.count = 0

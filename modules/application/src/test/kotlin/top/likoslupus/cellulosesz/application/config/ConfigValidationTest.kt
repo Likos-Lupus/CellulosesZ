@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.communication.config.MailSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
-import top.likoslupus.cellulosesz.core.text.TextColorSettings
+import top.likoslupus.cellulosesz.core.text.TextColorOverrides
 import top.likoslupus.cellulosesz.core.text.TextSettings
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettings
 import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
@@ -167,19 +167,19 @@ class ConfigValidationTest {
     }
 
     @Test
-    fun `rejects an invalid primary color`() {
+    fun `rejects an invalid body color`() {
         val errors = ConfigValidation.validate(
-            CellulosesConfig(text = TextSettings(colors = TextColorSettings(primary = "red")))
+            CellulosesConfig(text = TextSettings(colors = TextColorOverrides(body = "red")))
         )
 
-        assertTrue(errors.any { it.path == "text.colors.primary" })
+        assertTrue(errors.any { it.path == "text.colors.body" })
     }
 
     @Test
     fun `rejects an invalid secondary color`() {
         val errors = ConfigValidation.validate(
             CellulosesConfig(
-                text = TextSettings(colors = TextColorSettings(secondary = "#GGGGGG"))
+                text = TextSettings(colors = TextColorOverrides(secondary = "#GGGGGG"))
             )
         )
 

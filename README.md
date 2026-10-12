@@ -42,8 +42,9 @@ with the legacy CellulosesZ or with EssentialsX.
 - **Portable workstations** — `/workbench`, `/anvil`, `/grindstone`, `/stonecutter`, `/loom`,
   `/cartographytable`, `/smithingtable` (disabled by default).
 - **Inventory inspection** — `/enderchest`, `/disposal`, and read-only `/invsee <player>`.
-- **Localized messages** — server-side translations (`en_us`, `zh_cn`) with `/cellulosesz language`
-  and a per-player preference; Adventure-rendered primary/secondary colors. CellulosesZ language
+- **Localized messages** — server-side per-module translations (`en_us`, `zh_cn`) with
+  `/cellulosesz language` and a per-player preference; semantic presentation (notices, lists,
+  details, paginated help) rendered per recipient from a token-based theme. CellulosesZ language
   controls CellulosesZ-owned text only, not the player's Minecraft client language.
 - **Admin root** — `/cellulosesz status`, `/cellulosesz reload`.
 

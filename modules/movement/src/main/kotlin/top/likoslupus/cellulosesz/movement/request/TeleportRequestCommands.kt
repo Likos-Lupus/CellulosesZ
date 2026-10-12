@@ -3,20 +3,26 @@ package top.likoslupus.cellulosesz.movement.request
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.i18n.renderFor
+import top.likoslupus.cellulosesz.core.text.model.Notice
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
-import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 import java.util.*
 
 internal object TeleportRequestCommands {
@@ -26,6 +32,9 @@ internal object TeleportRequestCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "tpa",
@@ -39,11 +48,15 @@ internal object TeleportRequestCommands {
                         context,
                         get(player),
                         TeleportRequestType.TO_TARGET,
-                        service
+                        service,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
         },
+
         command(
             name = "tpahere",
             category = CommandCategory.MOVEMENT,
@@ -56,25 +69,34 @@ internal object TeleportRequestCommands {
                         context,
                         get(player),
                         TeleportRequestType.BRING_TARGET,
-                        service
+                        service,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
         },
+
         command(
             name = "tpaccept",
             category = CommandCategory.MOVEMENT,
             permission = CommandPermissions.TP_ACCEPT,
             documentation = "movement/tpaccept",
         ) {
-            executesPlayer { accept(
-                context,
-                null,
-                service,
-                teleports,
-                teleportSettings,
-                kernel
-            ) }
+            executesPlayer {
+                accept(
+                    context,
+                    null,
+                    service,
+                    teleports,
+                    teleportSettings,
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
             argument("player", word()) { player ->
                 executesPlayer {
                     accept(
@@ -83,37 +105,60 @@ internal object TeleportRequestCommands {
                         service,
                         teleports,
                         teleportSettings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
         },
+
         command(
             name = "tpdeny",
             category = CommandCategory.MOVEMENT,
             permission = CommandPermissions.TP_DENY,
             documentation = "movement/tpdeny",
         ) {
-            executesPlayer { deny(
-                context,
-                null,
-                service
-            ) }
-            argument("player", word()) { player ->
-                executesPlayer { deny(
+            executesPlayer {
+                deny(
                     context,
-                    get(player),
-                    service
-                ) }
+                    null,
+                    service,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
+            argument("player", word()) { player ->
+                executesPlayer {
+                    deny(
+                        context,
+                        get(player),
+                        service,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
             }
         },
+
         command(
             name = "tpcancel",
             category = CommandCategory.MOVEMENT,
             permission = CommandPermissions.TP_CANCEL,
             documentation = "movement/tpcancel",
         ) {
-            executesPlayer { cancel(context, service) }
+            executesPlayer {
+                cancel(
+                    context,
+                    service,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
         },
     )
 
@@ -122,40 +167,86 @@ internal object TeleportRequestCommands {
         targetName: String,
         type: TeleportRequestType,
         service: TeleportRequestService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val sender = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         val target = PlayerResolver.onlineByName(source.server, targetName)
-            ?: return source.replyError(Messages.prefixed("player '$targetName' is not online"))
-
-        val verb = when (type) {
-            TeleportRequestType.TO_TARGET -> "wants to teleport to you"
-            else -> "wants you to teleport to them"
-        }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    sender.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    targetName
+                ),
+            )
 
         return when (service.send(sender.uuid, target.uuid, type)) {
             TpaSendResult.Self ->
-                source.replyError(Messages.prefixed("you cannot request yourself"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.self")
+                    )
+                )
 
             TpaSendResult.SenderAlreadyHasRequest ->
-                source.replyError(Messages.prefixed("you already have a pending request; use /tpcancel"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.already_pending")
+                    )
+                )
 
             TpaSendResult.TargetQueueFull ->
-                source.replyError(Messages.prefixed("${target.name.string} has too many pending requests"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.target_queue_full"),
+                        target.name.string,
+                    ),
+                )
 
             is TpaSendResult.Sent -> {
-                target.sendSystemMessage(
-                    Messages.prefixed("${sender.name.string} $verb (use /tpaccept or /tpdeny)")
+                notify(
+                    target.uuid,
+                    adventure,
+                    presentation,
+                    MovementMessages.requestReceived(type, sender.name.string)
                 )
-                source.reply(Messages.prefixed("teleport request sent to ${target.name.string}"))
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    sender.uuid,
+                    MovementMessages.requestSent(target.name.string)
+                )
             }
 
             is TpaSendResult.Refreshed -> {
-                target.sendSystemMessage(
-                    Messages.prefixed("${sender.name.string} $verb (use /tpaccept or /tpdeny)")
+                notify(
+                    target.uuid,
+                    adventure,
+                    presentation,
+                    MovementMessages.requestReceived(type, sender.name.string)
                 )
-                source.reply(Messages.prefixed("teleport request to ${target.name.string} refreshed"))
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    sender.uuid,
+                    MovementMessages.requestRefreshed(target.name.string),
+                )
             }
         }
     }
@@ -167,22 +258,50 @@ internal object TeleportRequestCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val accepter = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
         val senderId = senderName?.let { PlayerResolver.onlineByName(source.server, it)?.uuid }
         if (senderName != null && senderId == null) {
-            return source.replyError(Messages.prefixed("player '$senderName' is not online"))
+            return source.replyError(
+                adventure,
+                messages.renderFor(
+                    accepter.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    senderName
+                ),
+            )
         }
 
         return when (val result = service.accept(accepter.uuid, senderId)) {
             TpaAcceptResult.None ->
-                source.replyError(Messages.prefixed("no pending teleport request"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        accepter.uuid,
+                        MessageKey("movement.request.none")
+                    )
+                )
 
             TpaAcceptResult.Ambiguous ->
-                source.replyError(Messages.prefixed("multiple pending requests; specify a player"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        accepter.uuid,
+                        MessageKey("movement.request.ambiguous")
+                    )
+                )
 
             is TpaAcceptResult.Accepted -> {
                 val request = result.request
@@ -190,30 +309,47 @@ internal object TeleportRequestCommands {
                     TeleportRequestType.TO_TARGET -> request.senderId
                     TeleportRequestType.BRING_TARGET -> request.targetId
                 }
-                val destinationId = if (subjectId == request.senderId) request.targetId else request.senderId
+                val destinationId = when (subjectId) {
+                    request.senderId -> request.targetId
+                    else -> request.senderId
+                }
                 val subjectName = nameOf(source, subjectId)
 
-                val job = kernel.launch {
+                movementLaunch(
+                    source,
+                    kernel,
+                    messages,
+                    adventure,
+                    MessageKey("movement.pending.accept_request"),
+                ) { _ ->
                     val intent = TeleportIntent(
                         subjectId = subjectId,
                         destination = TeleportDestination.Player(destinationId),
                         cause = TeleportCause.REQUEST,
-                        policy = teleportPolicyFor(TeleportCause.REQUEST, teleportSettings()),
+                        policy = teleportPolicyFor(
+                            TeleportCause.REQUEST,
+                            teleportSettings()
+                        ),
                     )
-                    val message = when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success ->
-                            Messages.prefixed("teleport request accepted")
-
-                        else -> TeleportFeedback.failure(outcome) ?: return@launch
+                    val notices = when (val outcome = teleports.execute(intent)) {
+                        is TeleportOutcome.Success -> listOf(MovementMessages.requestAccepted())
+                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
                     }
-                    kernel.messagePlayer(subjectId, message)
-                    kernel.messagePlayer(
+                    kernel.sendNotices(
+                        CommandFeedbackTarget.Player(subjectId),
+                        adventure,
+                        presentation,
+                        subjectId,
+                        notices,
+                    )
+                    kernel.sendNotices(
+                        CommandFeedbackTarget.Player(destinationId),
+                        adventure,
+                        presentation,
                         destinationId,
-                        Messages.prefixed("$subjectName accepted the teleport request"),
+                        listOf(MovementMessages.requestAcceptedNotify(subjectName)),
                     )
                 }
-
-                launchResult(source, job, "accepting teleport request...")
             }
         }
     }
@@ -222,28 +358,63 @@ internal object TeleportRequestCommands {
         context: CommandContext<CommandSourceStack>,
         senderName: String?,
         service: TeleportRequestService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val target = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         val senderId = senderName?.let { PlayerResolver.onlineByName(source.server, it)?.uuid }
         if (senderName != null && senderId == null) {
-            return source.replyError(Messages.prefixed("player '$senderName' is not online"))
+            return source.replyError(
+                adventure,
+                messages.renderFor(
+                    target.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    senderName
+                ),
+            )
         }
 
         return when (val result = service.deny(target.uuid, senderId)) {
             TpaDenyResult.None ->
-                source.replyError(Messages.prefixed("no pending teleport request"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        target.uuid,
+                        MessageKey("movement.request.none")
+                    )
+                )
 
             TpaDenyResult.Ambiguous ->
-                source.replyError(Messages.prefixed("multiple pending requests; specify a player"))
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        target.uuid,
+                        MessageKey("movement.request.ambiguous")
+                    )
+                )
 
             is TpaDenyResult.Denied -> {
-                PlayerResolver.onlineById(source.server, result.request.senderId)
-                        ?.sendSystemMessage(
-                            Messages.prefixed("${target.name.string} denied your teleport request")
-                        )
-                source.reply(Messages.prefixed("teleport request denied"))
+                notify(
+                    result.request.senderId,
+                    adventure,
+                    presentation,
+                    MovementMessages.requestDeniedNotify(target.name.string),
+                )
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    target.uuid,
+                    MovementMessages.requestDenied()
+                )
             }
         }
     }
@@ -251,22 +422,58 @@ internal object TeleportRequestCommands {
     private fun cancel(
         context: CommandContext<CommandSourceStack>,
         service: TeleportRequestService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val sender = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
         val request = service.cancel(sender.uuid)
-            ?: return source.replyError(Messages.prefixed("you have no pending teleport request"))
-
-        PlayerResolver.onlineById(source.server, request.targetId)
-                ?.sendSystemMessage(
-                    Messages.prefixed("${sender.name.string} cancelled their teleport request")
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    sender.uuid,
+                    MessageKey("movement.request.cancel_none")
                 )
-        return source.reply(Messages.prefixed("teleport request cancelled"))
+            )
+
+        notify(
+            request.targetId,
+            adventure,
+            presentation,
+            MovementMessages.requestCancelledNotify(sender.name.string),
+        )
+        return source.replyNotice(
+            adventure,
+            presentation,
+            sender.uuid,
+            MovementMessages.requestCancelled()
+        )
+    }
+
+    private fun notify(
+        targetId: UUID,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+        notice: Notice,
+    ) {
+        val audience = adventure.audience(CommandFeedbackTarget.Player(targetId))
+        presentation.renderFor(targetId, notice)
+                .forEach(audience::sendMessage)
     }
 
     private fun nameOf(source: CommandSourceStack, playerId: UUID): String =
-        PlayerResolver.onlineById(source.server, playerId)?.name?.string ?: "player"
+        PlayerResolver.onlineById(
+            source.server,
+            playerId
+        )?.name?.string ?: "player"
 
 }

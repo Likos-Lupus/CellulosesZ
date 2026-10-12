@@ -6,6 +6,7 @@ import dev.architectury.platform.Platform
 import kotlinx.coroutines.Dispatchers
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.storage.LevelResource
+import top.likoslupus.cellulosesz.administration.AdministrationFeature
 import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.application.command.RootCommand
@@ -14,40 +15,37 @@ import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigDefaults
 import top.likoslupus.cellulosesz.application.config.ConfigValidation
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
-import top.likoslupus.cellulosesz.communication.CommunicationIntegration
-import top.likoslupus.cellulosesz.communication.CommunicationSqlSchema
-import top.likoslupus.cellulosesz.communication.SendGateResult
-import top.likoslupus.cellulosesz.communication.createCommunicationFeature
+import top.likoslupus.cellulosesz.communication.*
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
 import top.likoslupus.cellulosesz.core.command.help.CommandHelpResolver
 import top.likoslupus.cellulosesz.core.command.registry.CommandRegistry
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
-import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.player.identity.IdentitySqlSchema
 import top.likoslupus.cellulosesz.core.player.identity.JdbcPlayerIdentityRepository
 import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.document.ClasspathCommandDocumentSource
 import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
 import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
-import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
-import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
-import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
+import top.likoslupus.cellulosesz.core.text.i18n.*
 import top.likoslupus.cellulosesz.core.text.i18n.preference.JdbcPlayerLanguagePreferenceRepository
 import top.likoslupus.cellulosesz.core.text.i18n.preference.LocalizationSqlSchema
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
-import top.likoslupus.cellulosesz.core.text.toMessageTheme
+import top.likoslupus.cellulosesz.core.text.presentation.createTextPresentation
+import top.likoslupus.cellulosesz.core.text.theme.TextThemeResolver
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
 import top.likoslupus.cellulosesz.foundation.config.TomlConfigCodec
 import top.likoslupus.cellulosesz.foundation.database.DeferredDatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlSchemaContributor
+import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import top.likoslupus.cellulosesz.movement.createMovementFeature
+import top.likoslupus.cellulosesz.utility.UtilityFeature
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import top.likoslupus.cellulosesz.utility.createUtilityFeature
 import java.nio.file.Path
@@ -109,15 +107,23 @@ public object CellulosesZ {
         val known = MinecraftKnownPlayerResolver(kernel)
         val identityRepository = JdbcPlayerIdentityRepository(database, namespace)
 
-        val catalog = TranslationCatalog.loadBundled()
+        val catalog = TranslationCatalog.load(
+            listOf(
+                TranslationSource("core", BundledTranslations::class.java),
+                TranslationSource("movement", MovementFeature::class.java),
+                TranslationSource("communication", CommunicationFeature::class.java),
+                TranslationSource("administration", AdministrationFeature::class.java),
+                TranslationSource("utility", UtilityFeature::class.java),
+            )
+        )
         val languageRepository = JdbcPlayerLanguagePreferenceRepository(database, namespace)
         val languagePreferences = PlayerLanguagePreferences(languageRepository)
         val languageResolver = LanguageResolver(catalog, languagePreferences) {
             config.current.localization
         }
-        val messages = LocalizedMessages(catalog, languageResolver) {
-            config.current.text.colors.toMessageTheme()
-        }
+        val presentationTheme = { TextThemeResolver.resolve(config.current.text) }
+        val messages = LocalizedMessages(catalog, languageResolver, presentationTheme)
+        val presentation = createTextPresentation(messages, languageResolver, presentationTheme)
         val adventure = AdventureRuntime()
 
         val movement = createMovementFeature(
@@ -125,6 +131,9 @@ public object CellulosesZ {
             database = database,
             namespace = namespace,
             settings = { config.current.movement },
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
         )
         val administration = createAdministrationFeature(
             kernel = kernel,
@@ -133,6 +142,9 @@ public object CellulosesZ {
             permissions = permissions,
             settings = { config.current.administration },
             known = known,
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
         )
         val communication = createCommunicationFeature(
             kernel = kernel,
@@ -141,6 +153,9 @@ public object CellulosesZ {
             permissions = permissions,
             settings = { config.current.messaging },
             known = known,
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
         )
         val utility = createUtilityFeature(
             kernel = kernel,
@@ -148,15 +163,15 @@ public object CellulosesZ {
             namespace = namespace,
             settings = { config.current.utility },
             known = known,
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
         )
 
         val integration = CommunicationIntegration(
             senderGate = {
                 when {
-                    administration.isMuted(it) -> SendGateResult.Denied(
-                        Messages.prefixed("you are muted")
-                    )
-
+                    administration.isMuted(it) -> SendGateResult.Denied(SenderRestriction.MUTED)
                     else -> SendGateResult.Allowed
                 }
             },
@@ -183,6 +198,7 @@ public object CellulosesZ {
                         health = health,
                         messages = messages,
                         adventure = adventure,
+                        presentation = presentation,
                         languages = languagePreferences,
                         resolver = languageResolver,
                         catalog = catalog,
@@ -212,7 +228,7 @@ public object CellulosesZ {
             permissions = permissions,
         )
         val helpOverlay = SelectiveVanillaHelpOverlay(helpResolver, documentation, adventure) {
-            DocumentTheme.from(config.current.text.colors.toMessageTheme())
+            DocumentTheme.from(presentationTheme())
         }
 
         CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
@@ -294,7 +310,9 @@ public object CellulosesZ {
             if (player != null
                 && administration.isMuted(player.uuid)
             ) {
-                player.sendSystemMessage(Messages.prefixed("you are muted"))
+                presentation.renderFor(player.uuid, administration.mutedChatNotice()).forEach {
+                    adventure.audience(CommandFeedbackTarget.Player(player.uuid)).sendMessage(it)
+                }
                 EventResult.interruptFalse()
             } else {
                 EventResult.pass()
@@ -307,12 +325,11 @@ public object CellulosesZ {
             val affected = movement.onPlayerQuit(it.uuid)
             if (kernel.state == KernelState.RUNNING) {
                 affected.forEach { senderId ->
-                    PlayerResolver.onlineById(
-                        kernel.requireServer(),
-                        senderId
-                    )?.sendSystemMessage(
-                        Messages.prefixed("teleport request cancelled: target went offline")
-                    )
+                    presentation.renderFor(senderId, movement.requestTargetOfflineNotice())
+                            .forEach {
+                                adventure.audience(CommandFeedbackTarget.Player(senderId))
+                                        .sendMessage(it)
+                            }
                 }
             }
         }

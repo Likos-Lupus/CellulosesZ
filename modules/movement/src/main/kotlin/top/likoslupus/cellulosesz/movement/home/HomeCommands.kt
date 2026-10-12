@@ -6,15 +6,19 @@ import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.core.text.presentation.sendPage
+import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
-import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object HomeCommands {
 
@@ -24,6 +28,9 @@ internal object HomeCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "sethome",
@@ -37,7 +44,10 @@ internal object HomeCommands {
                     null,
                     service,
                     backend,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
             argument("name", word()) { name ->
@@ -47,7 +57,10 @@ internal object HomeCommands {
                         get(name),
                         service,
                         backend,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -65,7 +78,10 @@ internal object HomeCommands {
                     service,
                     teleports,
                     teleportSettings,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
             argument("name", word()) { name ->
@@ -76,7 +92,10 @@ internal object HomeCommands {
                         service,
                         teleports,
                         teleportSettings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -93,7 +112,10 @@ internal object HomeCommands {
                         context,
                         get(name),
                         service,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -108,7 +130,10 @@ internal object HomeCommands {
                 listHomes(
                     context,
                     service,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         },
@@ -120,27 +145,39 @@ internal object HomeCommands {
         service: HomeService,
         backend: TeleportBackend,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val position = backend.position(playerId)
-            val message = Messages.prefixed(
-                when (position) {
-                    null -> "you are no longer online"
-                    else -> when (service.set(playerId, rawName, position)) {
-                        SetHomeResult.Success -> "home saved"
-                        SetHomeResult.InvalidName -> "invalid home name; use a-z, 0-9, '_' or '-', up to 32 characters"
-                        SetHomeResult.LimitReached -> "home limit reached"
-                    }
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "saving home...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.saving_home")
+        ) { target ->
+            val notice = when (val position = backend.position(playerId)) {
+                null -> MovementMessages.playerOffline()
+                else -> MovementMessages.homeSet(service.set(playerId, rawName, position))
+            }
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
     }
 
     private fun goHome(
@@ -150,39 +187,55 @@ internal object HomeCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
-        val job = kernel.launch {
-            val message = when (val result = service.get(playerId, rawName)) {
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.teleport")
+        ) { target ->
+            val notices = when (val result = service.get(playerId, rawName)) {
                 is HomeLookupResult.Found -> {
                     val intent = TeleportIntent(
                         subjectId = playerId,
                         destination = TeleportDestination.Fixed(result.home.position),
                         cause = TeleportCause.HOME,
-                        policy = teleportPolicyFor(TeleportCause.HOME, teleportSettings()),
+                        policy = teleportPolicyFor(
+                            TeleportCause.HOME,
+                            teleportSettings()
+                        ),
                     )
                     when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success ->
-                            Messages.prefixed("teleported to home '${result.home.name.value}'")
-
-                        else -> TeleportFeedback.failure(outcome)
-                            ?: return@launch
+                        is TeleportOutcome.Success -> listOf(MovementMessages.teleportToHome(result.home))
+                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
                     }
                 }
 
-                HomeLookupResult.InvalidName ->
-                    Messages.prefixed("invalid home name")
-
-                HomeLookupResult.NotFound ->
-                    Messages.prefixed("home not found")
+                HomeLookupResult.InvalidName,
+                HomeLookupResult.NotFound -> listOfNotNull(MovementMessages.homeLookupError(result))
             }
-            kernel.messagePlayer(playerId, message)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                notices
+            )
         }
-
-        return launchResult(source, job, "teleporting...")
     }
 
     private fun deleteHome(
@@ -190,46 +243,74 @@ internal object HomeCommands {
         rawName: String,
         service: HomeService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val message = Messages.prefixed(
-                when (service.delete(playerId, rawName)) {
-                    DeleteHomeResult.Deleted -> "home '$rawName' deleted"
-                    DeleteHomeResult.InvalidName -> "invalid home name"
-                    DeleteHomeResult.NotFound -> "home '$rawName' not found"
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "deleting home...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.deleting_home")
+        ) { target ->
+            val notice = MovementMessages.homeDelete(
+                rawName,
+                service.delete(playerId, rawName)
+            )
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
     }
 
     private fun listHomes(
         context: CommandContext<CommandSourceStack>,
         service: HomeService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val homes = service.list(playerId).map { it.name.value }
-            val message = Messages.prefixed(
-                when {
-                    homes.isEmpty() -> "you have no homes"
-                    else -> "homes: ${homes.joinToString(", ")}"
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "loading homes...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.loading_homes")
+        ) { target ->
+            kernel.sendPage(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                MovementMessages.homes(service.list(playerId))
+            )
+        }
     }
 
 }

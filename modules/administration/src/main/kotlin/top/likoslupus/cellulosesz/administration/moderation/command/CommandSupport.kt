@@ -3,16 +3,22 @@ package top.likoslupus.cellulosesz.administration.moderation.command
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
-import top.likoslupus.cellulosesz.core.command.message
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.model.Notice
+import top.likoslupus.cellulosesz.core.text.model.NoticeTone
+import top.likoslupus.cellulosesz.core.text.presentation.DisplayChannel
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.foundation.time.DurationParser
 import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 
@@ -46,49 +52,74 @@ internal fun durationFor(
         )
     }
 
-internal fun invalidReason(source: CommandSourceStack): Int =
+internal fun invalidReason(
+    source: CommandSourceStack,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+): Int =
     source.replyError(
-        Messages.prefixed(
-            "invalid moderation reason"
-        )
+        adventure,
+        messages.renderFor(
+            source.player?.uuid,
+            MessageKey("administration.error.invalid_reason")
+        ),
     )
 
-internal fun invalidDuration(source: CommandSourceStack): Int =
+internal fun invalidDuration(
+    source: CommandSourceStack,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+): Int =
     source.replyError(
-        Messages.prefixed(
-            "invalid duration; use s, m, h, d, w (for example 1d12h)"
-        )
+        adventure,
+        messages.renderFor(
+            source.player?.uuid,
+            MessageKey("administration.error.invalid_duration")
+        ),
     )
 
 /**
- * Server-thread notification used after an action has been committed.
+ * Server-thread notification used after an action has been committed. The semantic notices are
+ * rendered once per moderator by [ModerationNotifier].
  */
 internal suspend fun notifyModerators(
     kernel: RuntimeKernel,
     notifier: ModerationNotifier,
-    message: String,
+    notices: List<Notice>,
 ) {
-    kernel.onServerThread { notifier.notify(message) }
+    kernel.onServerThread { notifier.notify(notices) }
 }
 
 /**
- * Shared async moderation orchestration: acknowledge immediately, then deliver the final component
- * to the captured feedback target. Never holds a [CommandSourceStack] across suspension.
+ * Shared async moderation orchestration: acknowledge immediately, then run the block with the
+ * captured feedback target. Never holds a [CommandSourceStack] across suspension.
  */
 internal fun moderationLaunch(
     source: CommandSourceStack,
     kernel: RuntimeKernel,
-    pending: String,
-    block: suspend () -> Component,
-): Int =
-    when (
-        kernel.launch {
-            kernel.message(
-                target = source.feedbackTarget(),
-                message = block()
-            )
-        }
-    ) {
-        null -> source.replyError(Messages.prefixed("runtime is shutting down"))
-        else -> source.reply(Messages.prefixed(pending))
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
+    pending: LocalizedText,
+    block: suspend (CommandFeedbackTarget) -> Unit,
+): Int {
+    val playerId = source.player?.uuid
+    val target = source.feedbackTarget()
+    return when (kernel.launch { block(target) }) {
+        null -> source.replyError(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.error.runtime_stopping")
+            ),
+        )
+
+        else -> source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            Notice(pending, NoticeTone.INFO),
+            DisplayChannel.ACTION_BAR,
+        )
     }
+}

@@ -6,15 +6,19 @@ import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.core.text.presentation.sendPage
+import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
-import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object WarpCommands {
 
@@ -24,6 +28,9 @@ internal object WarpCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "warp",
@@ -32,28 +39,40 @@ internal object WarpCommands {
             documentation = "movement/warp",
         ) {
             argument("name", word()) { name ->
-                executesPlayer { useWarp(
-                    context,
-                    get(name),
-                    service,
-                    teleports,
-                    teleportSettings,
-                    kernel
-                ) }
+                executesPlayer {
+                    useWarp(
+                        context,
+                        get(name),
+                        service,
+                        teleports,
+                        teleportSettings,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
             }
         },
+
         command(
             name = "warps",
             category = CommandCategory.MOVEMENT,
             permission = CommandPermissions.WARPS,
             documentation = "movement/warps",
         ) {
-            executesPlayer { listWarps(
-                context,
-                service,
-                kernel
-            ) }
+            executesPlayer {
+                listWarps(
+                    context,
+                    service,
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
         },
+
         command(
             name = "setwarp",
             category = CommandCategory.MOVEMENT,
@@ -61,15 +80,21 @@ internal object WarpCommands {
             documentation = "movement/setwarp",
         ) {
             argument("name", word()) { name ->
-                executesPlayer { setWarp(
-                    context,
-                    get(name),
-                    service,
-                    backend,
-                    kernel
-                ) }
+                executesPlayer {
+                    setWarp(
+                        context,
+                        get(name),
+                        service,
+                        backend,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
             }
         },
+
         command(
             name = "delwarp",
             category = CommandCategory.MOVEMENT,
@@ -77,12 +102,17 @@ internal object WarpCommands {
             documentation = "movement/delwarp",
         ) {
             argument("name", word()) { name ->
-                executesPlayer { deleteWarp(
-                    context,
-                    get(name),
-                    service,
-                    kernel
-                ) }
+                executesPlayer {
+                    deleteWarp(
+                        context,
+                        get(name),
+                        service,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
             }
         },
     )
@@ -94,66 +124,87 @@ internal object WarpCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
-        val job = kernel.launch {
-            val message = when (val result = service.get(name)) {
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.teleport")
+        ) { target ->
+            val notices = when (val result = service.get(name)) {
                 is WarpLookupResult.Found -> {
                     val intent = TeleportIntent(
                         subjectId = playerId,
                         destination = TeleportDestination.Fixed(result.warp.position),
                         cause = TeleportCause.WARP,
-                        policy = teleportPolicyFor(
-                            TeleportCause.WARP,
-                            teleportSettings()
-                        ),
+                        policy = teleportPolicyFor(TeleportCause.WARP, teleportSettings()),
                     )
-
                     when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success ->
-                            Messages.prefixed("teleported to warp '$name'")
-
-                        else -> TeleportFeedback.failure(outcome)
-                            ?: return@launch
+                        is TeleportOutcome.Success -> listOf(MovementMessages.teleportToWarp(result.warp))
+                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
                     }
                 }
 
-                WarpLookupResult.InvalidName ->
-                    Messages.prefixed("invalid warp name")
-
-                WarpLookupResult.NotFound ->
-                    Messages.prefixed("warp '$name' not found")
+                WarpLookupResult.InvalidName,
+                WarpLookupResult.NotFound -> listOfNotNull(MovementMessages.warpLookupError(result))
             }
-            kernel.messagePlayer(playerId, message)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                notices
+            )
         }
-
-        return launchResult(source, job, "teleporting...")
     }
 
     private fun listWarps(
         context: CommandContext<CommandSourceStack>,
         service: WarpService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val warps = service.list().map { it.name.value }
-            val message = Messages.prefixed(
-                when {
-                    warps.isEmpty() -> "no warps defined"
-                    else -> "warps: ${warps.joinToString(", ")}"
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "loading warps...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.loading_warps")
+        ) { target ->
+            kernel.sendPage(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                MovementMessages.warps(service.list())
+            )
+        }
     }
 
     private fun setWarp(
@@ -162,26 +213,39 @@ internal object WarpCommands {
         service: WarpService,
         backend: TeleportBackend,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val position = backend.position(playerId)
-            val message = Messages.prefixed(
-                when (position) {
-                    null -> "you are no longer online"
-                    else -> when (service.set(name, position)) {
-                        SetWarpResult.Success -> "warp '$name' created"
-                        SetWarpResult.InvalidName -> "invalid warp name"
-                    }
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "saving warp...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.saving_warp")
+        ) { target ->
+            val notice = when (val position = backend.position(playerId)) {
+                null -> MovementMessages.playerOffline()
+                else -> MovementMessages.warpSet(name, service.set(name, position))
+            }
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
     }
 
     private fun deleteWarp(
@@ -189,23 +253,36 @@ internal object WarpCommands {
         name: String,
         service: WarpService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val message = Messages.prefixed(
-                when (service.delete(name)) {
-                    DeleteWarpResult.Deleted -> "warp '$name' deleted"
-                    DeleteWarpResult.InvalidName -> "invalid warp name"
-                    DeleteWarpResult.NotFound -> "warp '$name' not found"
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(source, job, "deleting warp...")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.deleting_warp")
+        ) { target ->
+            val notice = MovementMessages.warpDelete(name, service.delete(name))
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
     }
 
 }

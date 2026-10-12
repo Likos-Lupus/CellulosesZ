@@ -5,6 +5,15 @@ public class MarkdownDocument public constructor(
     public val blocks: List<MarkdownBlock>,
 )
 
+/** A restricted callout kind (`> [!TIP]`, `> [!NOTE]`, `> [!WARNING]`). */
+public enum class CalloutKind {
+
+    TIP,
+    NOTE,
+    WARNING,
+
+}
+
 /** A block-level element of a command document. */
 public sealed interface MarkdownBlock {
 
@@ -33,6 +42,11 @@ public sealed interface MarkdownBlock {
     ) : MarkdownBlock
 
     public data class Quote(
+        public val blocks: List<MarkdownBlock>,
+    ) : MarkdownBlock
+
+    public data class Callout(
+        public val kind: CalloutKind,
         public val blocks: List<MarkdownBlock>,
     ) : MarkdownBlock
 

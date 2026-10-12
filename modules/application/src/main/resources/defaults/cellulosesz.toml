@@ -97,11 +97,27 @@ maximum-pool-size = 10
 # Must be one of the bundled languages (en_us, zh_cn).
 defaultLanguage = "en_us"
 
-[text.colors]
-# Ordinary command/body text.
-primary = "#5291df"
-# Highlighted values and the CellulosesZ prefix.
-secondary = "#f6c35d"
+[text]
+# Preset palette: default | high-contrast | minimal.
+theme = "default"
+# Layout density: comfortable | compact.
+density = "comfortable"
+
+# Optional colour overrides. Uncomment and edit individual tokens; the selected preset supplies any
+# token you leave commented.
+# [text.colors]
+# body = "#E8EDF4"
+# secondary = "#B8C4D2"
+# muted = "#8D9DB1"
+# brand = "#78AFFF"
+# heading = "#F5C86B"
+# value = "#F8DB98"
+# action = "#85C9FF"
+# success = "#86D7A0"
+# warning = "#FFCF79"
+# error = "#FF858B"
+# code = "#C4B3F5"
+# divider = "#71819A"
 
 # ---------------------------------------------------------------------------
 # Movement

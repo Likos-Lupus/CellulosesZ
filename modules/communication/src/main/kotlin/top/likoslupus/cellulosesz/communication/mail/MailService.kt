@@ -2,9 +2,9 @@ package top.likoslupus.cellulosesz.communication.mail
 
 import com.mojang.logging.LogUtils
 import kotlinx.coroutines.CancellationException
-import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.communication.PrivateMessageSenderGate
 import top.likoslupus.cellulosesz.communication.SendGateResult
+import top.likoslupus.cellulosesz.communication.SenderRestriction
 import top.likoslupus.cellulosesz.communication.config.MailSettings
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
 import top.likoslupus.cellulosesz.communication.preferences.MessagingPreferencesRepository
@@ -21,7 +21,7 @@ internal sealed interface MailSendResult {
     data class Sent(val target: KnownPlayerIdentity) : MailSendResult
     data object Disabled : MailSendResult
     data object InvalidMessage : MailSendResult
-    data class SenderRestricted(val feedback: Component) : MailSendResult
+    data class SenderRestricted(val reason: SenderRestriction) : MailSendResult
     data class TargetUnknown(val name: String) : MailSendResult
     data object SelfTarget : MailSendResult
     data object RateLimited : MailSendResult
@@ -102,7 +102,7 @@ internal class MailService(
         if (sender is MailSender.Player) {
             when (val gate = senderGate().check(sender.id)) {
                 SendGateResult.Allowed -> Unit
-                is SendGateResult.Denied -> return MailSendResult.SenderRestricted(gate.feedback)
+                is SendGateResult.Denied -> return MailSendResult.SenderRestricted(gate.reason)
             }
         }
 
@@ -112,7 +112,7 @@ internal class MailService(
 
         if (sender is MailSender.Player
             && sender.id == target.id
-            ) {
+        ) {
             return MailSendResult.SelfTarget
         }
 
@@ -130,7 +130,7 @@ internal class MailService(
 
         if (sender is MailSender.Player
             && ignores(sender.id, target.id)
-            ) {
+        ) {
             // Privacy: never let a sender reliably probe another player's ignore list.
             return MailSendResult.Sent(target)
         }

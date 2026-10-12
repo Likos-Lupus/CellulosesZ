@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.communication.messaging
 
-import net.minecraft.network.chat.Component
+import top.likoslupus.cellulosesz.communication.SenderRestriction
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
 
 internal sealed interface PrivateMessageOutcome {
@@ -14,7 +14,7 @@ internal sealed interface PrivateMessageOutcome {
     data object InvalidMessage : PrivateMessageOutcome
     data object SenderRequired : PrivateMessageOutcome
     data object SenderOffline : PrivateMessageOutcome
-    data class SenderRestricted(val feedback: Component) : PrivateMessageOutcome
+    data class SenderRestricted(val reason: SenderRestriction) : PrivateMessageOutcome
     data class TargetOffline(val name: String?) : PrivateMessageOutcome
     data object SelfTarget : PrivateMessageOutcome
     data object NoReplyTarget : PrivateMessageOutcome

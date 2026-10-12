@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.communication
 
-import net.minecraft.network.chat.Component
+import net.kyori.adventure.text.Component
 import top.likoslupus.cellulosesz.communication.messaging.OnlinePlayerIdentity
 import java.util.*
 

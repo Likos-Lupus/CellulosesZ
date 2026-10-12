@@ -56,9 +56,17 @@ public object MarkdownDocumentParser {
                 listItems(node, depth, ordered = true, out = out)
 
             is BlockQuote -> {
-                val inner = mutableListOf<MarkdownBlock>()
-                blockChildren(node, depth, inner)
-                out += MarkdownBlock.Quote(inner)
+                val kind = calloutKind(node)
+                if (kind == null) {
+                    val inner = mutableListOf<MarkdownBlock>()
+                    blockChildren(node, depth, inner)
+                    out += MarkdownBlock.Quote(inner)
+                } else {
+                    stripCalloutMarker(node)
+                    val inner = mutableListOf<MarkdownBlock>()
+                    blockChildren(node, depth, inner)
+                    out += MarkdownBlock.Callout(kind, inner)
+                }
             }
 
             is ThematicBreak ->
@@ -118,6 +126,48 @@ public object MarkdownDocumentParser {
                 index++
             }
             item = next
+        }
+    }
+
+    private val CALLOUT_MARKER = Regex(
+        "^\\[!(TIP|NOTE|WARNING)]\\s*",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun calloutKind(quote: BlockQuote): CalloutKind? {
+        val paragraph = quote.firstChild as? Paragraph
+            ?: return null
+        val text = paragraph.firstChild as? Text
+            ?: return null
+        val match = CALLOUT_MARKER.find(text.literal)
+            ?: return null
+        return when (match.groupValues[1].uppercase()) {
+            "TIP" -> CalloutKind.TIP
+            "NOTE" -> CalloutKind.NOTE
+            "WARNING" -> CalloutKind.WARNING
+            else -> null
+        }
+    }
+
+    private fun stripCalloutMarker(quote: BlockQuote) {
+        val paragraph = quote.firstChild as? Paragraph
+            ?: return
+        val text = paragraph.firstChild as? Text
+            ?: return
+        val match = CALLOUT_MARKER.find(text.literal)
+            ?: return
+        val remainder = text.literal.substring(match.range.last + 1).trimStart()
+        if (remainder.isEmpty()) {
+            val after = text.next
+            text.unlink()
+            if (after is SoftLineBreak || after is HardLineBreak) {
+                after.unlink()
+            }
+            if (paragraph.firstChild == null) {
+                paragraph.unlink()
+            }
+        } else {
+            text.literal = remainder
         }
     }
 

@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
@@ -14,6 +15,12 @@ import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import java.time.Instant
 
 /** `/banip`, `/tempbanip` and `/unbanip`. Target is an IP literal or an online player. */
@@ -24,6 +31,9 @@ internal object IpBanCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "banip",
@@ -40,7 +50,10 @@ internal object IpBanCommands {
                         bans,
                         notifier,
                         settings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
                 argument("reason", greedyString()) { reason ->
@@ -52,7 +65,10 @@ internal object IpBanCommands {
                             bans,
                             notifier,
                             settings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                 }
@@ -75,7 +91,10 @@ internal object IpBanCommands {
                             bans,
                             notifier,
                             settings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                     argument("reason", greedyString()) { reason ->
@@ -87,7 +106,10 @@ internal object IpBanCommands {
                                 bans,
                                 notifier,
                                 settings,
-                                kernel
+                                kernel,
+                                messages,
+                                adventure,
+                                presentation
                             )
                         }
                     }
@@ -105,8 +127,29 @@ internal object IpBanCommands {
                 executes {
                     val source = context.source
                     val actor = source.moderationActor()
-                    moderationLaunch(source, kernel, "processing IP unban...") {
-                        ModerationFeedback.ipUnban(bans.unbanIp(actor, get(target)))
+                    val playerId = source.player?.uuid
+                    moderationLaunch(
+                        source,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                        LocalizedText(MessageKey("administration.pending.ip_unban")),
+                    ) { feedback ->
+                        kernel.sendNotices(
+                            feedback,
+                            adventure,
+                            presentation,
+                            playerId,
+                            listOf(
+                                AdministrationMessages.ipUnban(
+                                    bans.unbanIp(
+                                        actor,
+                                        get(target)
+                                    )
+                                )
+                            ),
+                        )
                     }
                 }
             }
@@ -121,6 +164,9 @@ internal object IpBanCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val config = settings()
@@ -128,19 +174,24 @@ internal object IpBanCommands {
             rawReason,
             config.defaultBanReason,
             config.maxReasonLength
-        ) ?: return invalidReason(source)
+        ) ?: return invalidReason(source, messages, adventure)
         val target = StringArgumentType.getString(context, "target")
         val duration = durationFor(context, temporary)
         if (temporary && duration == null) {
-            return invalidDuration(source)
+            return invalidDuration(source, messages, adventure)
         }
         val actor = source.moderationActor()
+        val playerId = source.player?.uuid
 
         return moderationLaunch(
             source,
             kernel,
-            "processing IP ban..."
-        ) {
+            messages,
+            adventure,
+            presentation,
+            LocalizedText(MessageKey("administration.pending.ip_ban")),
+        ) { feedback ->
+            val now = Instant.now()
             val result = bans.banIp(actor, target, reason, duration)
             if (result is IpBanResult.Applied
                 && config.notifyModerators
@@ -148,10 +199,16 @@ internal object IpBanCommands {
                 notifyModerators(
                     kernel,
                     notifier,
-                    "${actor.displayName} banned an IP address"
+                    AdministrationMessages.notifyIpBan(actor.displayName)
                 )
             }
-            ModerationFeedback.ipBan(result, Instant.now())
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                listOf(AdministrationMessages.ipBan(result, now)),
+            )
         }
     }
 

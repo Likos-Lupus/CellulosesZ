@@ -5,11 +5,12 @@ import net.kyori.adventure.text.TextComponent
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.core.text.MessageArgument
-import top.likoslupus.cellulosesz.core.text.MessageTheme
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.TextColorOverrides
+import top.likoslupus.cellulosesz.core.text.TextSettings
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferenceRepository
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
-import top.likoslupus.cellulosesz.core.text.parseHexColor
+import top.likoslupus.cellulosesz.core.text.theme.TextThemeResolver
 import java.util.*
 
 class LocalizedMessagesTest {
@@ -31,23 +32,37 @@ class LocalizedMessagesTest {
 
     }
 
-    private val catalog = TranslationCatalog.loadBundled()
+    private val catalog = TranslationCatalog.load(
+        listOf(
+            TranslationSource(
+                "core",
+                BundledTranslations::class.java
+            )
+        )
+    )
     private val preferences = PlayerLanguagePreferences(FakeRepository())
     private var defaultLanguage = "en_us"
     private val resolver = LanguageResolver(catalog, preferences) {
         LocalizationSettings(defaultLanguage)
     }
-    private val theme = MessageTheme(
-        primary = requireNotNull(parseHexColor("#111111")),
-        secondary = requireNotNull(parseHexColor("#222222")),
+    private val theme = TextThemeResolver.resolve(
+        TextSettings(
+            colors = TextColorOverrides(
+                body = "#111111",
+                value = "#222222"
+            )
+        )
     )
-    private val messages = LocalizedMessages(catalog, resolver) { theme }
+    private val messages = LocalizedMessages(
+        catalog,
+        resolver
+    ) { theme }
 
     @Test
     fun `primary and secondary roles receive their colors`() {
         val rendered = messages.renderFor(
             null,
-            CoreMessageKeys.LANGUAGE_CURRENT,
+            MessageKey("core.language.current"),
             listOf(MessageArgument("en_us")),
         )
 
@@ -56,31 +71,18 @@ class LocalizedMessagesTest {
 
         val label = children[0] as TextComponent
         assertEquals("Current language: ", label.content())
-        assertEquals(theme.primary, label.color())
+        assertEquals(theme.palette.body, label.color())
 
         val value = children[1] as TextComponent
         assertEquals("en_us", value.content())
-        assertEquals(theme.secondary, value.color())
-    }
-
-    @Test
-    fun `prefix is structural and secondary`() {
-        val rendered = messages.renderPrefixedFor(
-            null,
-            CoreMessageKeys.LANGUAGE_CHANGED,
-            listOf(MessageArgument("en_us")),
-        )
-
-        val prefix = rendered.children()[0] as TextComponent
-        assertEquals(Messages.PREFIX, prefix.content())
-        assertEquals(theme.secondary, prefix.color())
+        assertEquals(theme.palette.value, value.color())
     }
 
     @Test
     fun `argument content is literal and never parsed`() {
         val rendered = messages.renderFor(
             null,
-            CoreMessageKeys.LANGUAGE_UNKNOWN,
+            MessageKey("core.language.unknown"),
             listOf(MessageArgument("[[oops]] {1}")),
         )
 
@@ -96,7 +98,7 @@ class LocalizedMessagesTest {
 
             val rendered = messages.renderFor(
                 player,
-                CoreMessageKeys.LANGUAGE_CHANGED,
+                MessageKey("core.language.changed"),
                 listOf(MessageArgument("zh_cn")),
             )
 
@@ -112,7 +114,7 @@ class LocalizedMessagesTest {
 
         val rendered = messages.renderFor(
             UUID.randomUUID(),
-            CoreMessageKeys.LANGUAGE_CHANGED,
+            MessageKey("core.language.changed"),
             listOf(MessageArgument("zh_cn")),
         )
 
@@ -128,7 +130,7 @@ class LocalizedMessagesTest {
 
         val rendered = messages.renderFor(
             null,
-            CoreMessageKeys.LANGUAGE_CHANGED,
+            MessageKey("core.language.changed"),
             listOf(MessageArgument("zh_cn")),
         )
 

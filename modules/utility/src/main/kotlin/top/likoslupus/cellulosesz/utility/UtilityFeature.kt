@@ -5,6 +5,9 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.persistence.KeyedMutex
 import top.likoslupus.cellulosesz.utility.config.UtilitySettings
@@ -30,13 +33,37 @@ public class UtilityFeature internal constructor(
     private val inspection: InspectionService,
     private val known: KnownPlayerResolver,
     private val kernel: RuntimeKernel,
+    private val messages: LocalizedMessages,
+    private val adventure: AdventureRuntime,
+    private val presentation: TextPresentation,
 ) {
 
     public fun commands(): List<CommandDefinition> =
-        KitCommands.commands(kits, known, kernel) +
-                ItemUtilityCommands.commands(items, known) +
-                WorkstationCommands.commands(workstations) +
-                InspectionCommands.commands(inspection, known)
+        KitCommands.commands(
+            kits,
+            known,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + ItemUtilityCommands.commands(
+            items,
+            known,
+            messages,
+            adventure,
+            presentation
+        ) + WorkstationCommands.commands(
+            workstations,
+            messages,
+            adventure,
+            presentation
+        ) + InspectionCommands.commands(
+            inspection,
+            known,
+            messages,
+            adventure,
+            presentation
+        )
 
     public fun onServerStarting() {
         kits.beginLoad()
@@ -55,6 +82,9 @@ public fun createUtilityFeature(
     namespace: String,
     settings: () -> UtilitySettings,
     known: KnownPlayerResolver,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
 ): UtilityFeature {
     val runner = kernel.serverThreadRunner()
     val codec = KitItemCodec {
@@ -93,5 +123,8 @@ public fun createUtilityFeature(
         inspection = inspection,
         known = known,
         kernel = kernel,
+        messages = messages,
+        adventure = adventure,
+        presentation = presentation,
     )
 }

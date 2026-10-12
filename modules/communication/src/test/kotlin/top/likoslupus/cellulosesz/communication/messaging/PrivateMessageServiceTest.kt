@@ -1,14 +1,13 @@
 package top.likoslupus.cellulosesz.communication.messaging
 
-import net.minecraft.network.chat.Component
+import net.kyori.adventure.text.Component
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import top.likoslupus.cellulosesz.communication.CommunicationIntegration
-import top.likoslupus.cellulosesz.communication.PrivateMessageObservation
-import top.likoslupus.cellulosesz.communication.SendGateResult
+import top.likoslupus.cellulosesz.communication.*
 import top.likoslupus.cellulosesz.communication.config.PrivateMessageSettings
 import top.likoslupus.cellulosesz.communication.config.ReplyMode
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import java.util.*
 
 class PrivateMessageServiceTest {
@@ -38,6 +37,8 @@ class PrivateMessageServiceTest {
                 observer = { observations += it },
             )
         },
+        presentation = FakePresentation(),
+        adventure = AdventureRuntime(),
     )
 
     init {
@@ -103,7 +104,7 @@ class PrivateMessageServiceTest {
 
     @Test
     fun `denied sender is restricted and never resolved`() {
-        gate = { SendGateResult.Denied(Component.literal("muted")) }
+        gate = { SendGateResult.Denied(SenderRestriction.MUTED) }
 
         val outcome = service.send(
             aliceId,
@@ -211,6 +212,8 @@ class PrivateMessageServiceTest {
             integration = {
                 CommunicationIntegration(observer = { throw IllegalStateException("boom") })
             },
+            presentation = FakePresentation(),
+            adventure = AdventureRuntime(),
         )
 
         val outcome = throwing.send(
@@ -263,7 +266,7 @@ class PrivateMessageServiceTest {
         override fun onlineIdentityById(id: UUID): OnlinePlayerIdentity? =
             byId[id]
 
-        override fun deliverPrivateMessage(playerId: UUID, message: Component): Boolean {
+        override fun deliverPrivateMessage(playerId: UUID, messages: List<Component>): Boolean {
             if (!deliverResult) {
                 return false
             }
@@ -284,7 +287,8 @@ class PrivateMessageServiceTest {
         ): ReceiveDecision =
             decision
 
-        override fun replyMode(playerId: UUID): ReplyMode = mode
+        override fun replyMode(playerId: UUID): ReplyMode =
+            mode
 
     }
 

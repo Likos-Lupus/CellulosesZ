@@ -2,18 +2,22 @@ package top.likoslupus.cellulosesz.administration.socialspy
 
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.network.chat.Component
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
-import top.likoslupus.cellulosesz.administration.moderation.command.ModerationFeedback
 import top.likoslupus.cellulosesz.administration.moderation.command.moderationLaunch
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 
 /** `/socialspy [on|off]` — session-only self toggle. */
 internal object SocialSpyCommands {
@@ -21,6 +25,9 @@ internal object SocialSpyCommands {
     fun commands(
         service: SocialSpyService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "socialspy",
@@ -33,7 +40,10 @@ internal object SocialSpyCommands {
                     context,
                     null,
                     service,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation
                 )
             }
             literal("on") {
@@ -42,7 +52,10 @@ internal object SocialSpyCommands {
                         context,
                         true,
                         service,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
             }
@@ -52,7 +65,10 @@ internal object SocialSpyCommands {
                         context,
                         false,
                         service,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
             }
@@ -64,10 +80,16 @@ internal object SocialSpyCommands {
         enable: Boolean?,
         service: SocialSpyService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val player = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(null, MessageKey("core.error.player_required")),
+            )
         val desired = enable
             ?: !service.isSpying(player.uuid)
         val actor = source.moderationActor()
@@ -76,17 +98,27 @@ internal object SocialSpyCommands {
         return moderationLaunch(
             source,
             kernel,
-            "updating social spy..."
-        ) {
-            val result = service.set(actor, identity, desired)
-            feedback(result)
+            messages,
+            adventure,
+            presentation,
+            LocalizedText(MessageKey("administration.pending.socialspy")),
+        ) { feedback ->
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                identity.id,
+                listOf(
+                    AdministrationMessages.socialSpy(
+                        service.set(
+                            actor,
+                            identity,
+                            desired
+                        )
+                    )
+                ),
+            )
         }
-    }
-
-    private fun feedback(result: SocialSpyResult): Component {
-        val state = if (result.enabled) "enabled" else "disabled"
-        val note = ModerationFeedback.auditNote(result.auditRecorded)
-        return Messages.prefixed("social spy $state$note")
     }
 
 }

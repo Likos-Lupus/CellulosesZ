@@ -584,6 +584,71 @@ tasks.register("verifyArchitecture") {
             }
         }
 
+        // Information output: the decorative prefix and its retired APIs must not exist in production.
+        kotlinFiles(modulesDir)
+                .filter { it.invariantSeparatorsPath.contains("/src/main/kotlin/") }
+                .forEach { file ->
+                    val relative = file.relativeTo(architectureRoot).invariantSeparatorsPath
+                    val text = file.readText()
+                    listOf(
+                        "Messages.prefixed",
+                        "Messages.PREFIX",
+                        "renderPrefixedFor",
+                        "[CellulosesZ]"
+                    ).forEach { marker ->
+                        if (text.contains(marker)) {
+                            violations += "$relative: retired prefix API/marker '$marker' must not be used"
+                        }
+                    }
+                }
+
+        // Translation resources: identical key + placeholder sets per language, no cross-module duplicates.
+        val translationModules = listOf(
+            "minecraft-core" to "core",
+            "movement" to "movement",
+            "communication" to "communication",
+            "administration" to "administration",
+            "utility" to "utility",
+        )
+        val seenKeys = mutableMapOf<String, String>()
+        fun placeholders(value: String): Set<Int> =
+            Regex("\\{(\\d+)}").findAll(value).map { it.groupValues[1].toInt() }.toSet()
+
+        fun loadMessages(file: File): Map<String, String> {
+            val result = LinkedHashMap<String, String>()
+            file.readLines().forEach { line ->
+                val trimmed = line.trim()
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) return@forEach
+                val index = trimmed.indexOf('=')
+                if (index <= 0) return@forEach
+                result[trimmed.substring(0, index).trim()] = trimmed.substring(index + 1).trim()
+            }
+            return result
+        }
+        translationModules.forEach { (module, name) ->
+            val en = architectureRoot.resolve("modules/$module/src/main/resources/cellulosesz/i18n/$name/messages_en_us.properties")
+            val zh = architectureRoot.resolve("modules/$module/src/main/resources/cellulosesz/i18n/$name/messages_zh_cn.properties")
+            if (!en.isFile || !zh.isFile) {
+                violations += "modules/$module: missing en_us/zh_cn translation resources"
+                return@forEach
+            }
+            val enMap = loadMessages(en)
+            val zhMap = loadMessages(zh)
+            (enMap.keys - zhMap.keys).forEach { violations += "modules/$module: key '$it' missing from zh_cn" }
+            (zhMap.keys - enMap.keys).forEach { violations += "modules/$module: key '$it' missing from en_us" }
+            enMap.keys.intersect(zhMap.keys).forEach { key ->
+                if (placeholders(enMap.getValue(key)) != placeholders(zhMap.getValue(key))) {
+                    violations += "modules/$module: placeholder mismatch for '$key'"
+                }
+                val owner = seenKeys[key]
+                if (owner != null) {
+                    violations += "duplicate translation key '$key' in modules/$module and $owner"
+                } else {
+                    seenKeys[key] = "modules/$module"
+                }
+            }
+        }
+
         if (violations.isNotEmpty()) {
             throw GradleException(
                 "CellulosesZ architecture violations:\n - ${violations.joinToString("\n - ")}"
@@ -726,18 +791,29 @@ tasks.register("inspectArtifacts") {
                 .filter { it.startsWith("net/kyori/") || it.startsWith("org/commonmark/") }
                 .forEach { violations += "distribution jar flattens external class $it" }
 
-        // Command help resources ship per module and are flattened into the distribution.
+        // Command help resources and per-module translations ship per module and are flattened into
+        // the distribution.
         listOf(
             "cellulosesz/help/en_us/core/cellulosesz.md",
             "cellulosesz/help/zh_cn/core/cellulosesz.md",
             "cellulosesz/help/en_us/movement/home.md",
             "cellulosesz/help/zh_cn/movement/home.md",
+            "cellulosesz/i18n/core/messages_en_us.properties",
+            "cellulosesz/i18n/core/messages_zh_cn.properties",
+            "cellulosesz/i18n/movement/messages_en_us.properties",
+            "cellulosesz/i18n/movement/messages_zh_cn.properties",
+            "cellulosesz/i18n/communication/messages_en_us.properties",
+            "cellulosesz/i18n/communication/messages_zh_cn.properties",
+            "cellulosesz/i18n/administration/messages_en_us.properties",
+            "cellulosesz/i18n/administration/messages_zh_cn.properties",
+            "cellulosesz/i18n/utility/messages_en_us.properties",
+            "cellulosesz/i18n/utility/messages_zh_cn.properties",
         ).forEach { entry ->
             if (entry !in fabricEntries) {
-                violations += "fabric jar is missing help resource $entry"
+                violations += "fabric jar is missing resource $entry"
             }
             if (entry !in neoEntries) {
-                violations += "neoforge jar is missing help resource $entry"
+                violations += "neoforge jar is missing resource $entry"
             }
         }
 

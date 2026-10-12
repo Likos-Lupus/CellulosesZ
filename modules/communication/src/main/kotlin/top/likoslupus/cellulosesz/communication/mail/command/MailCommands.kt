@@ -7,13 +7,18 @@ import top.likoslupus.cellulosesz.communication.command.communicationLaunch
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.mail.*
 import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.*
-import top.likoslupus.cellulosesz.core.command.message
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.core.text.presentation.sendPage
 import top.likoslupus.cellulosesz.foundation.time.DurationParser
 
 /** `/mail` summary, `/mail read`, `/mail send`, `/mail sendtemp` and `/mail clear`. */
@@ -22,6 +27,9 @@ internal object MailCommands {
     fun commands(
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "mail",
@@ -33,7 +41,10 @@ internal object MailCommands {
                 summary(
                     context,
                     mail,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
             literal("read") {
@@ -42,7 +53,10 @@ internal object MailCommands {
                         context,
                         mail,
                         kernel,
-                        1
+                        messages,
+                        adventure,
+                        presentation,
+                        1,
                     )
                 }
                 argument("page", integer(1)) { page ->
@@ -51,7 +65,10 @@ internal object MailCommands {
                             context,
                             mail,
                             kernel,
-                            get(page)
+                            messages,
+                            adventure,
+                            presentation,
+                            get(page),
                         )
                     }
                 }
@@ -64,7 +81,10 @@ internal object MailCommands {
                                 context,
                                 mail,
                                 kernel,
-                                null
+                                messages,
+                                adventure,
+                                presentation,
+                                null,
                             )
                         }
                     }
@@ -78,7 +98,10 @@ internal object MailCommands {
                                 sendTemp(
                                     context,
                                     mail,
-                                    kernel
+                                    kernel,
+                                    messages,
+                                    adventure,
+                                    presentation,
                                 )
                             }
                         }
@@ -90,7 +113,10 @@ internal object MailCommands {
                     clear(
                         context,
                         mail,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -101,18 +127,32 @@ internal object MailCommands {
         context: CommandContext<CommandSourceStack>,
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val owner = owner(source)
-            ?: return source.replyError(CommunicationMessages.requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         return communicationLaunch(
             source,
             kernel,
-            "loading mail..."
-        ) {
-            kernel.message(
-                it,
-                CommunicationMessages.mailSummary(mail.summary(owner))
+            messages,
+            adventure,
+            MessageKey("communication.pending.loading_mail"),
+        ) { target ->
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                owner.id,
+                listOf(CommunicationMessages.mailSummary(mail.summary(owner))),
             )
         }
     }
@@ -121,43 +161,39 @@ internal object MailCommands {
         context: CommandContext<CommandSourceStack>,
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
         page: Int,
     ): Int {
         val source = context.source
         val owner = owner(source)
-            ?: return source.replyError(CommunicationMessages.requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         return communicationLaunch(
             source,
             kernel,
-            "loading mail..."
-        ) {
-            when (val view = mail.read(owner, page)) {
-                is MailViewResult.Loaded -> {
-                    kernel.message(
-                        it,
-                        CommunicationMessages.mailHeader(view)
+            messages,
+            adventure,
+            MessageKey("communication.pending.loading_mail"),
+        ) { target ->
+            kernel.sendPage(
+                target,
+                adventure,
+                presentation,
+                owner.id,
+                CommunicationMessages.mailView(
+                    mail.read(
+                        owner,
+                        page
                     )
-                    view.page.forEachIndexed { offset, message ->
-                        val index = (view.pageIndex - 1) * PAGE_SIZE + offset + 1
-                        kernel.message(
-                            it,
-                            CommunicationMessages.mailLine(index, message)
-                        )
-                    }
-                }
-
-                MailViewResult.Empty ->
-                    kernel.message(
-                        it,
-                        CommunicationMessages.mailEmpty()
-                    )
-
-                MailViewResult.StorageUnavailable ->
-                    kernel.message(
-                        it,
-                        CommunicationMessages.mailStorageUnavailable()
-                    )
-            }
+                ),
+            )
         }
     }
 
@@ -165,32 +201,44 @@ internal object MailCommands {
         context: CommandContext<CommandSourceStack>,
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
         duration: java.time.Duration?,
     ): Int {
         val source = context.source
         val sender = sender(source)
+        val senderId = (sender as? MailSender.Player)?.id
         val senderName = sender.displayName
         val target = StringArgumentType.getString(context, "player")
         val body = StringArgumentType.getString(context, "message")
         return communicationLaunch(
             source,
             kernel,
-            "sending mail..."
-        ) {
+            messages,
+            adventure,
+            MessageKey("communication.pending.sending_mail"),
+        ) { feedback ->
             val result = mail.send(
                 sender,
                 target,
                 body,
-                duration
+                duration,
             )
-            kernel.message(
-                it,
-                CommunicationMessages.mailSendFeedback(result)
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                senderId,
+                listOf(CommunicationMessages.mailSendFeedback(result)),
             )
             if (result is MailSendResult.Sent) {
-                kernel.messagePlayer(
+                kernel.sendNotices(
+                    CommandFeedbackTarget.Player(result.target.id),
+                    adventure,
+                    presentation,
                     result.target.id,
-                    CommunicationMessages.newMailNotice(senderName),
+                    listOf(CommunicationMessages.newMailNotice(senderName)),
                 )
             }
         }
@@ -200,20 +248,28 @@ internal object MailCommands {
         context: CommandContext<CommandSourceStack>,
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val rawDuration = StringArgumentType.getString(context, "duration")
         val duration = DurationParser.parse(rawDuration)
             ?: return source.replyError(
-                CommunicationMessages.prefixed(
-                    "invalid duration; use s, m, h, d, w (for example 1d12h)"
-                )
+                adventure,
+                messages.renderFor(
+                    source.player?.uuid,
+                    MessageKey("communication.mail.invalid_duration")
+                ),
             )
         return send(
             context,
             mail,
             kernel,
-            duration.duration
+            messages,
+            adventure,
+            presentation,
+            duration.duration,
         )
     }
 
@@ -221,20 +277,37 @@ internal object MailCommands {
         context: CommandContext<CommandSourceStack>,
         mail: MailService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val owner = owner(source)
-            ?: return source.replyError(CommunicationMessages.requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         return communicationLaunch(
             source,
             kernel,
-            "clearing mail..."
+            messages,
+            adventure,
+            MessageKey("communication.pending.clearing_mail"),
         ) { target ->
-            val component = when (mail.clear(owner)) {
+            val notice = when (mail.clear(owner)) {
                 MailClearResult.Cleared -> CommunicationMessages.mailCleared()
                 MailClearResult.StorageUnavailable -> CommunicationMessages.mailStorageUnavailable()
             }
-            kernel.message(target, component)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                owner.id,
+                listOf(notice)
+            )
         }
     }
 
@@ -242,7 +315,7 @@ internal object MailCommands {
         source.player?.let {
             KnownPlayerIdentity(
                 it.uuid,
-                it.gameProfile.name
+                it.gameProfile.name,
             )
         }
 
@@ -250,10 +323,8 @@ internal object MailCommands {
         source.player?.let {
             MailSender.Player(
                 it.uuid,
-                it.gameProfile.name
+                it.gameProfile.name,
             )
         } ?: MailSender.Console
-
-    private const val PAGE_SIZE: Int = 10
 
 }

@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.communication.messaging.command
 import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
+import top.likoslupus.cellulosesz.communication.command.replyNoticeOutcome
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageOutcome
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageService
@@ -11,14 +12,22 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 
 /** `/msg` and `/reply` (alias `/r`). Synchronous: no filesystem or suspension on the hot path. */
 internal object PrivateMessageCommands {
 
-    fun commands(messages: PrivateMessageService): List<CommandDefinition> = listOf(
+    fun commands(
+        service: PrivateMessageService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): List<CommandDefinition> = listOf(
         command(
             name = "msg",
             category = CommandCategory.COMMUNICATION,
@@ -30,8 +39,11 @@ internal object PrivateMessageCommands {
                     executesPlayer {
                         send(
                             context,
+                            service,
                             messages,
-                            get(player)
+                            adventure,
+                            presentation,
+                            get(player),
                         )
                     }
                 }
@@ -49,7 +61,10 @@ internal object PrivateMessageCommands {
                 executesPlayer {
                     reply(
                         context,
-                        messages
+                        service,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -58,39 +73,61 @@ internal object PrivateMessageCommands {
 
     private fun send(
         context: CommandContext<CommandSourceStack>,
-        messages: PrivateMessageService,
+        service: PrivateMessageService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
         targetName: String,
     ): Int {
         val source = context.source
         val senderId = source.player?.uuid
-            ?: return source.replyError(CommunicationMessages.requiresPlayer())
-        val text = StringArgumentType.getString(context, "message")
-        return source.respond(
-            messages.send(
-                senderId,
-                targetName,
-                text
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
+        val text = StringArgumentType.getString(context, "message")
+        val outcome = service.send(
+            senderId,
+            targetName,
+            text,
+        )
+        return source.replyNoticeOutcome(
+            adventure,
+            presentation,
+            senderId,
+            CommunicationMessages.privateMessageFeedback(outcome),
+            outcome is PrivateMessageOutcome.Delivered,
         )
     }
 
     private fun reply(
         context: CommandContext<CommandSourceStack>,
-        messages: PrivateMessageService,
+        service: PrivateMessageService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val senderId = source.player?.uuid
-            ?: return source.replyError(CommunicationMessages.requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         val text = StringArgumentType.getString(context, "message")
-        return source.respond(messages.reply(senderId, text))
+        val outcome = service.reply(senderId, text)
+        return source.replyNoticeOutcome(
+            adventure,
+            presentation,
+            senderId,
+            CommunicationMessages.privateMessageFeedback(outcome),
+            outcome is PrivateMessageOutcome.Delivered,
+        )
     }
-
-    private fun CommandSourceStack.respond(outcome: PrivateMessageOutcome): Int =
-        when (outcome) {
-            is PrivateMessageOutcome.Delivered ->
-                reply(CommunicationMessages.privateMessageFeedback(outcome))
-
-            else -> replyError(CommunicationMessages.privateMessageFeedback(outcome))
-        }
 
 }

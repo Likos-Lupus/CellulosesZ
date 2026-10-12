@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.administration
 
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditService
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanCommands
@@ -24,13 +25,21 @@ import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyCommands
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
-import top.likoslupus.cellulosesz.core.command.messagePlayer
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.message
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.model.Notice
+import top.likoslupus.cellulosesz.core.text.model.NoticeTone
+import top.likoslupus.cellulosesz.core.text.model.TextArgument
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import java.time.Clock
 import java.util.*
@@ -49,19 +58,73 @@ public class AdministrationFeature internal constructor(
     private val notifier: ModerationNotifier,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
+    private val messages: LocalizedMessages,
+    private val adventure: AdventureRuntime,
+    private val presentation: TextPresentation,
 ) {
 
     public fun commands(): List<CommandDefinition> {
         val moderation = { settings().moderation }
-        return KickCommands.commands(kick, notifier, moderation, kernel) +
-                BanCommands.commands(bans, notifier, moderation, kernel) +
-                IpBanCommands.commands(bans, notifier, moderation, kernel) +
-                MuteCommands.commands(mutes, notifier, moderation, kernel) +
-                PlayerControlCommands.commands(control, kernel) +
-                SocialSpyCommands.commands(spies, kernel) +
-                VanishCommands.commands(vanish, kernel) +
-                PlayerStateCommands.commands()
+        return KickCommands.commands(
+            kick,
+            notifier,
+            moderation,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + BanCommands.commands(
+            bans,
+            notifier,
+            moderation,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + IpBanCommands.commands(
+            bans,
+            notifier,
+            moderation,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + MuteCommands.commands(
+            mutes,
+            notifier,
+            moderation,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + PlayerControlCommands.commands(
+            control,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + SocialSpyCommands.commands(
+            spies,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + VanishCommands.commands(
+            vanish,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + PlayerStateCommands.commands(
+            messages,
+            adventure,
+            presentation
+        )
     }
+
+    /** Localized notice shown to a muted player whose chat is blocked. */
+    public fun mutedChatNotice(): Notice =
+        AdministrationMessages.mutedChat()
 
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
     public fun onServerStarting() {
@@ -130,7 +193,8 @@ public class AdministrationFeature internal constructor(
 
     /**
      * Called by the composition root after a private message is delivered. Given as primitives so
-     * administration never imports communication types. Must be called on the server thread.
+     * administration never imports communication types. Must be called on the server thread. The
+     * spy copy is rendered once per recipient so each moderator sees their own language.
      */
     public fun observePrivateMessage(
         senderId: UUID,
@@ -142,13 +206,23 @@ public class AdministrationFeature internal constructor(
         val recipients = spies.recipients(setOf(senderId, targetId))
         if (recipients.isEmpty()) return
 
-        val copy = Messages.raw("[spy] $senderName -> $targetName: $text")
+        val copy = Notice(
+            LocalizedText(
+                MessageKey("administration.socialspy.copy"),
+                listOf(
+                    TextArgument.PlayerName(senderName),
+                    TextArgument.PlayerName(targetName),
+                    TextArgument.Literal(text),
+                ),
+            ),
+            NoticeTone.INFO,
+        )
         kernel.launch {
-            recipients.forEach {
-                kernel.messagePlayer(
-                    it,
-                    copy
-                )
+            recipients.forEach { recipientId ->
+                val target = CommandFeedbackTarget.Player(recipientId)
+                presentation.renderFor(recipientId, copy).forEach { line ->
+                    kernel.message(target, adventure, line)
+                }
             }
         }
     }
@@ -162,6 +236,9 @@ public fun createAdministrationFeature(
     permissions: PermissionService,
     settings: () -> AdministrationSettings,
     known: MinecraftKnownPlayerResolver,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
 ): AdministrationFeature {
     val clock = Clock.systemUTC()
     val accountResolver = MinecraftAccountResolver(known)
@@ -171,7 +248,7 @@ public fun createAdministrationFeature(
         settings = { settings().moderation },
         clock = clock,
     )
-    val notifier = ModerationNotifier(kernel, permissions)
+    val notifier = ModerationNotifier(kernel, permissions, adventure, presentation)
     val kick = KickService(
         kernel = kernel,
         accountResolver = accountResolver,
@@ -217,5 +294,8 @@ public fun createAdministrationFeature(
         notifier = notifier,
         settings = settings,
         kernel = kernel,
+        messages = messages,
+        adventure = adventure,
+        presentation = presentation,
     )
 }

@@ -7,7 +7,7 @@ import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
 
 /**
- * Renders a parsed [MarkdownDocument] into a list of chat lines. It never runs a command: a
+ * Renders a parsed [MarkdownDocument] into layout blocks of chat lines. It never runs a command: a
  * `/command` link becomes `suggestCommand`, an `https://` link becomes `openUrl`, and any other
  * target is rendered as plain text. Console output is still readable because no line depends on
  * hover.
@@ -16,29 +16,58 @@ public class AdventureDocumentRenderer(
     private val theme: DocumentTheme,
 ) {
 
-    public fun render(document: MarkdownDocument): List<Component> {
-        val out = mutableListOf<Component>()
+    public fun render(document: MarkdownDocument): List<Component> =
+        renderBlocks(document).flatMap { it.lines }
+
+    /** Block-level rendering used by the paginator; internal so the public surface stays small. */
+    internal fun renderBlocks(document: MarkdownDocument): List<RenderedBlock> {
+        val out = mutableListOf<RenderedBlock>()
         document.blocks.forEach { appendBlock(it, depth = 0, out = out) }
         return out
     }
 
-    private fun appendBlock(block: MarkdownBlock, depth: Int, out: MutableList<Component>) {
+    private fun appendBlock(
+        block: MarkdownBlock,
+        depth: Int,
+        out: MutableList<RenderedBlock>
+    ) {
         when (block) {
             is MarkdownBlock.Heading ->
-                out += line(
-                    block.spans,
-                    theme.heading
-                ).decorate(TextDecoration.BOLD)
+                out += RenderedBlock(
+                    lines = listOf(
+                        line(
+                            block.spans,
+                            theme.heading
+                        ).decorate(TextDecoration.BOLD)
+                    ),
+                    keepWithNext = true,
+                )
 
             is MarkdownBlock.Paragraph ->
-                out += line(block.spans, theme.body)
+                out += RenderedBlock(
+                    lines = listOf(
+                        line(
+                            block.spans,
+                            theme.body
+                        )
+                    )
+                )
 
             is MarkdownBlock.BulletItem -> {
                 val prefix = Component.text(
                     "${"  ".repeat(block.depth)}• ",
                     theme.heading
                 )
-                out += prefix.append(line(block.spans, theme.body))
+                out += RenderedBlock(
+                    lines = listOf(
+                        prefix.append(
+                            line(
+                                block.spans,
+                                theme.body
+                            )
+                        )
+                    )
+                )
             }
 
             is MarkdownBlock.OrderedItem -> {
@@ -46,31 +75,56 @@ public class AdventureDocumentRenderer(
                     "${"  ".repeat(block.depth)}${block.number}. ",
                     theme.heading
                 )
-                out += prefix.append(line(block.spans, theme.body))
+                out += RenderedBlock(
+                    lines = listOf(
+                        prefix.append(
+                            line(
+                                block.spans,
+                                theme.body
+                            )
+                        )
+                    )
+                )
             }
 
             is MarkdownBlock.CodeBlock ->
-                block.lines.forEach { codeLine ->
-                    out += Component.text(
-                        "  $codeLine",
+                out += RenderedBlock(lines = block.lines.map {
+                    Component.text(
+                        "  $it",
                         theme.code
                     )
-                }
+                })
 
             is MarkdownBlock.Quote -> {
-                val inner = mutableListOf<Component>()
+                val inner = mutableListOf<RenderedBlock>()
                 block.blocks.forEach { appendBlock(it, depth + 1, inner) }
-                inner.forEach {
-                    out += Component
-                            .text("> ", theme.divider)
-                            .append(it)
+                val lines = inner.flatMap { it.lines }.map {
+                    Component.text("> ", theme.divider).append(it)
                 }
+                out += RenderedBlock(lines = lines)
+            }
+
+            is MarkdownBlock.Callout -> {
+                val inner = mutableListOf<RenderedBlock>()
+                block.blocks.forEach { appendBlock(it, depth + 1, inner) }
+                val color = when (block.kind) {
+                    CalloutKind.TIP -> theme.tip
+                    CalloutKind.NOTE -> theme.note
+                    CalloutKind.WARNING -> theme.warning
+                }
+                val marker = Component.text("▌ ", color)
+                inner.flatMap { it.lines }
+                        .forEach { out += RenderedBlock(lines = listOf(marker.append(it))) }
             }
 
             MarkdownBlock.Divider ->
-                out += Component.text(
-                    "─".repeat(32),
-                    theme.divider
+                out += RenderedBlock(
+                    lines = listOf(
+                        Component.text(
+                            "─".repeat(16),
+                            theme.divider
+                        )
+                    )
                 )
         }
     }
@@ -105,11 +159,17 @@ public class AdventureDocumentRenderer(
             span.target.startsWith("/") ->
                 component
                         .clickEvent(ClickEvent.suggestCommand(span.target))
-                        .hoverEvent(HoverEvent.showText(Component.text(span.target, theme.link)))
+                        .hoverEvent(
+                            HoverEvent.showText(
+                                Component.text(
+                                    span.target,
+                                    theme.link
+                                )
+                            )
+                        )
 
             span.target.startsWith("https://") ->
-                component
-                        .clickEvent(ClickEvent.openUrl(span.target))
+                component.clickEvent(ClickEvent.openUrl(span.target))
 
             else -> component
         }

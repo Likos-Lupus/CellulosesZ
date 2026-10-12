@@ -186,22 +186,38 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Text and localization
 
-- The text foundation lives in `minecraft-core`: `core.text` (keys, `MessageTheme`, `TextSettings`)
-  and `core.text.i18n` (canonical `LanguageId`, bundled `TranslationCatalog`, the tiny template
-  compiler, locale policy, `LocalizedMessages`). The Adventure platform bridge is confined to
-  `core.text.adventure` (`AdventureRuntime`, feedback helpers).
+- The text foundation lives in `minecraft-core`: `core.text` (keys, `MessageKey`, `TextSettings`),
+  `core.text.model` (`LocalizedText`, `TextArgument`, `Notice`, `ListPage`/`DetailView`,
+  `UiAction`), `core.text.theme` (semantic `TextRole` palette + presets + resolver),
+  `core.text.i18n` (canonical `LanguageId`, the per-module `TranslationCatalog`, the tiny template
+  compiler, locale policy, `LocalizedMessages`), and `core.text.presentation` (`RenderContext`,
+  renderers, `TextPresentation`, `replyNotice`/`sendNotices` helpers). The Adventure platform bridge
+  is confined to `core.text.adventure` (`AdventureRuntime`, `InformationOutput`, feedback helpers).
+- Presentation is **per recipient**: features build semantic values and `core.text.presentation`
+  renders them for the recipient's language. Broadcasts, private messages and staff notices are
+  rendered once per recipient, never pre-rendered and copied.
+- Theme: a named preset (`default`/`high-contrast`/`minimal`) plus a density and optional per-token
+  `#RRGGBB` overrides under `[text.colors]`; there is no legacy two-colour compatibility. Every
+  translatable word — including duration units and list/quote markers — lives in the catalog; only
+  formatting logic stays in code. The short-message `[[...]]` emphasis role maps to the palette
+  `value` token, not the `secondary` body tone.
 - Adventure (`adventure-api` 4.26.1, `adventure-platform-mod` 6.9.0) is the rich-text output. Both
   loaders nest the self-contained Adventure platform mod as Jar-in-Jar; no Adventure classes are
   flattened (`inspectArtifacts` enforces this).
 - Locale policy: explicit per-player preference → configured server default; console uses the server
   default. The Minecraft client locale is not consulted. Overrides are stored in
   `cz_player_languages`, hydrated at startup, and **never queried on the render path**.
-- Ordinary messages use a two-role template: plain text is `primary`, `[[...]]` marks a `secondary`
-  span, `{0}`, `{1}`, ... are positional arguments. Bundled UTF-8 `.properties` live under
-  `cellulosesz/i18n`; `en_us` is the baseline and every locale must match its key and per-key
-  placeholder sets. Argument values are bound literally and never re-parsed.
-- The legacy `Messages.prefixed/raw` API remains for incremental migration; new localized code uses
-  `MessageKey` + `LocalizedMessages`.
+- Ordinary messages use a two-role template: plain text is the body role, `[[...]]` marks the value
+  role, `{0}`, `{1}`, ... are positional arguments. Translation resources are per module
+  (`cellulosesz/i18n/<module>/messages_<lang>.properties`) loaded through explicit
+  `TranslationSource` anchors listed by the composition root; `en_us` is the baseline. A missing
+  file, a duplicate key across modules, or a placeholder-parity mismatch is a bootstrap failure.
+  Argument values are bound literally and never re-parsed. `verifyArchitecture` enforces key +
+  placeholder parity.
+- The decorative `[CellulosesZ]` prefix is gone: `Messages.PREFIX`/`prefixed`/`renderPrefixedFor`
+  are retired and banned by `verifyArchitecture`. `Messages.raw` remains only for surfaces that
+  cannot use Adventure (vanilla menu titles, disconnect reasons, the DSL's console "requires a
+  player" fallback).
 - Commands are declared with the immutable `command(...)` DSL in `core.command.dsl`; the
   `BrigadierCompiler` rebuilds a native Brigadier tree on every registration event and aliases are
   compiled as equivalent trees. Commands never carry a second string grammar, and `suggests {}` is

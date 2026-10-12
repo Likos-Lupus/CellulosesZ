@@ -1,22 +1,43 @@
 package top.likoslupus.cellulosesz.movement.command
 
-import kotlinx.coroutines.Job
 import net.minecraft.commands.CommandSourceStack
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
+import top.likoslupus.cellulosesz.core.command.feedbackTarget
+import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.DisplayChannel
+import top.likoslupus.cellulosesz.core.text.presentation.replyErrorLine
+import top.likoslupus.cellulosesz.core.text.presentation.replyLine
 
 /**
- * Shared Brigadier return for asynchronous movement commands: acknowledge immediately, or report a
- * shutting-down runtime when the kernel refused the task.
+ * Shared async movement orchestration: acknowledge immediately, then run the block with the captured
+ * feedback target. Never holds a [CommandSourceStack] across suspension.
  */
-internal fun launchResult(
+internal fun movementLaunch(
     source: CommandSourceStack,
-    job: Job?,
-    pending: String
-): Int =
-    if (job == null) {
-        source.replyError(Messages.prefixed("runtime is shutting down"))
-    } else {
-        source.reply(Messages.prefixed(pending))
+    kernel: RuntimeKernel,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    pending: MessageKey,
+    block: suspend (CommandFeedbackTarget) -> Unit,
+): Int {
+    val playerId = source.player?.uuid
+    val target = source.feedbackTarget()
+    return when (kernel.launch { block(target) }) {
+        null -> source.replyErrorLine(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.error.runtime_stopping")
+            )
+        )
+
+        else -> source.replyLine(
+            adventure,
+            messages.renderFor(playerId, pending),
+            DisplayChannel.ACTION_BAR
+        )
     }
+}

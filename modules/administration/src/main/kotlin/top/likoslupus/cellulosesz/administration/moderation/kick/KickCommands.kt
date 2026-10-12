@@ -4,6 +4,7 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
@@ -14,6 +15,12 @@ import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 
 /** `/kick` and `/kickall`. */
 internal object KickCommands {
@@ -23,6 +30,9 @@ internal object KickCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "kick",
@@ -38,7 +48,10 @@ internal object KickCommands {
                         kick,
                         notifier,
                         settings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
                 argument("reason", greedyString()) { reason ->
@@ -49,7 +62,10 @@ internal object KickCommands {
                             kick,
                             notifier,
                             settings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                 }
@@ -69,7 +85,10 @@ internal object KickCommands {
                     kick,
                     notifier,
                     settings,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation
                 )
             }
             argument("reason", greedyString()) { reason ->
@@ -80,7 +99,10 @@ internal object KickCommands {
                         kick,
                         notifier,
                         settings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
             }
@@ -94,6 +116,9 @@ internal object KickCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val config = settings()
@@ -101,15 +126,19 @@ internal object KickCommands {
             rawReason,
             config.defaultKickReason,
             config.maxReasonLength
-        ) ?: return invalidReason(source)
+        ) ?: return invalidReason(source, messages, adventure)
         val target = StringArgumentType.getString(context, "player")
         val actor = source.moderationActor()
+        val playerId = source.player?.uuid
 
         return moderationLaunch(
             source,
             kernel,
-            "kicking $target..."
-        ) {
+            messages,
+            adventure,
+            presentation,
+            AdministrationMessages.pendingKick(target),
+        ) { feedback ->
             val result = kick.kick(actor, target, reason)
             if (result is KickResult.Kicked
                 && config.notifyModerators
@@ -117,10 +146,16 @@ internal object KickCommands {
                 notifyModerators(
                     kernel,
                     notifier,
-                    "${actor.displayName} kicked ${result.target.name}"
+                    AdministrationMessages.notifyKick(actor.displayName, result.target.name)
                 )
             }
-            ModerationFeedback.kick(result)
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                listOf(AdministrationMessages.kick(result)),
+            )
         }
     }
 
@@ -131,6 +166,9 @@ internal object KickCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val config = settings()
@@ -138,23 +176,33 @@ internal object KickCommands {
             rawReason,
             config.defaultKickReason,
             config.maxReasonLength
-        ) ?: return invalidReason(source)
+        ) ?: return invalidReason(source, messages, adventure)
         val actor = source.moderationActor()
+        val playerId = source.player?.uuid
 
         return moderationLaunch(
             source,
             kernel,
-            "kicking all players..."
-        ) {
+            messages,
+            adventure,
+            presentation,
+            LocalizedText(MessageKey("administration.pending.kick_all")),
+        ) { feedback ->
             val result = kick.kickAll(actor, reason)
             if (config.notifyModerators) {
                 notifyModerators(
                     kernel,
                     notifier,
-                    "${actor.displayName} kicked ${result.kicked} player(s)"
+                    AdministrationMessages.notifyKickAll(actor.displayName, result.kicked)
                 )
             }
-            ModerationFeedback.kickAll(result)
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                AdministrationMessages.kickAll(result),
+            )
         }
     }
 

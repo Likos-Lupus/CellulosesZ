@@ -4,20 +4,26 @@ import com.mojang.brigadier.arguments.StringArgumentType
 import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.moderation.command.*
 import top.likoslupus.cellulosesz.administration.moderation.moderationActor
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
 import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyDetail
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import java.time.Instant
 
 /** `/mute`, `/tempmute`, `/unmute` and `/muteinfo`. */
@@ -28,6 +34,9 @@ internal object MuteCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "mute",
@@ -44,7 +53,10 @@ internal object MuteCommands {
                         mutes,
                         notifier,
                         settings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation
                     )
                 }
                 argument("reason", greedyString()) { reason ->
@@ -56,7 +68,10 @@ internal object MuteCommands {
                             mutes,
                             notifier,
                             settings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                 }
@@ -79,7 +94,10 @@ internal object MuteCommands {
                             mutes,
                             notifier,
                             settings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation
                         )
                     }
                     argument("reason", greedyString()) { reason ->
@@ -91,7 +109,10 @@ internal object MuteCommands {
                                 mutes,
                                 notifier,
                                 settings,
-                                kernel
+                                kernel,
+                                messages,
+                                adventure,
+                                presentation
                             )
                         }
                     }
@@ -110,15 +131,32 @@ internal object MuteCommands {
                     val source = context.source
                     val target = get(player)
                     val actor = source.moderationActor()
-                    moderationLaunch(source, kernel, "processing unmute...") {
+                    val playerId = source.player?.uuid
+                    moderationLaunch(
+                        source,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                        LocalizedText(MessageKey("administration.pending.unmute")),
+                    ) { feedback ->
                         val result = mutes.unmute(actor, target)
                         if (result is UnmuteResult.Unmuted) {
-                            kernel.messagePlayer(
+                            kernel.sendNotices(
+                                CommandFeedbackTarget.Player(result.target.id),
+                                adventure,
+                                presentation,
                                 result.target.id,
-                                Messages.prefixed("you have been unmuted"),
+                                listOf(AdministrationMessages.unmutedTargetNotice()),
                             )
                         }
-                        ModerationFeedback.unmute(result)
+                        kernel.sendNotices(
+                            feedback,
+                            adventure,
+                            presentation,
+                            playerId,
+                            listOf(AdministrationMessages.unmute(result)),
+                        )
                     }
                 }
             }
@@ -133,9 +171,22 @@ internal object MuteCommands {
             argument("player", word()) { player ->
                 executes {
                     val source = context.source
+                    val playerId = source.player?.uuid
                     when (val mute = mutes.info(get(player))) {
-                        null -> source.replyError(Messages.prefixed("that player is not muted"))
-                        else -> source.reply(ModerationFeedback.muteInfo(mute, Instant.now()))
+                        null -> source.replyError(
+                            adventure,
+                            messages.renderFor(
+                                playerId,
+                                MessageKey("administration.muteinfo.not_muted")
+                            ),
+                        )
+
+                        else -> source.replyDetail(
+                            adventure,
+                            presentation,
+                            playerId,
+                            AdministrationMessages.muteInfo(mute, Instant.now()),
+                        )
                     }
                 }
             }
@@ -150,6 +201,9 @@ internal object MuteCommands {
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val config = settings()
@@ -157,35 +211,53 @@ internal object MuteCommands {
             rawReason,
             config.defaultMuteReason,
             config.maxReasonLength
-        ) ?: return invalidReason(source)
+        ) ?: return invalidReason(source, messages, adventure)
         val target = StringArgumentType.getString(context, "player")
         val duration = durationFor(context, temporary)
         if (temporary && duration == null) {
-            return invalidDuration(source)
+            return invalidDuration(source, messages, adventure)
         }
         val actor = source.moderationActor()
+        val playerId = source.player?.uuid
 
         return moderationLaunch(
             source,
             kernel,
-            "processing mute..."
-        ) {
+            messages,
+            adventure,
+            presentation,
+            LocalizedText(MessageKey("administration.pending.mute")),
+        ) { feedback ->
+            val now = Instant.now()
             val result = mutes.mute(actor, target, reason, duration)
             if (result is MuteResult.Applied) {
-                kernel.messagePlayer(
+                kernel.sendNotices(
+                    CommandFeedbackTarget.Player(result.target.id),
+                    adventure,
+                    presentation,
                     result.target.id,
-                    Messages.prefixed("you have been muted: ${reason.value}"),
+                    listOf(AdministrationMessages.mutedTargetNotice(reason.value)),
                 )
                 if (config.notifyModerators) {
                     notifyModerators(
                         kernel,
                         notifier,
-                        "${actor.displayName} muted ${result.target.name} " +
-                                ModerationFeedback.expiry(result.expiresAt, Instant.now()),
+                        AdministrationMessages.notifyMute(
+                            actor.displayName,
+                            result.target.name,
+                            result.expiresAt,
+                            now,
+                        )
                     )
                 }
             }
-            ModerationFeedback.mute(result, Instant.now())
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                listOf(AdministrationMessages.mute(result, now)),
+            )
         }
     }
 

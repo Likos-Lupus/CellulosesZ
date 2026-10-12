@@ -3,8 +3,13 @@ package top.likoslupus.cellulosesz.movement
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.model.Notice
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.home.HomeCommands
 import top.likoslupus.cellulosesz.movement.home.HomeService
 import top.likoslupus.cellulosesz.movement.home.JdbcHomeRepository
@@ -44,16 +49,62 @@ public class MovementFeature internal constructor(
     private val history: TeleportHistoryService,
     private val settings: () -> MovementSettings,
     private val kernel: RuntimeKernel,
+    private val messages: LocalizedMessages,
+    private val adventure: AdventureRuntime,
+    private val presentation: TextPresentation,
 ) {
 
     public fun commands(): List<CommandDefinition> {
         val teleportSettings = { settings().teleport }
-        return HomeCommands.commands(homes, backend, teleports, teleportSettings, kernel) +
-                WarpCommands.commands(warps, backend, teleports, teleportSettings, kernel) +
-                SpawnCommands.commands(spawn, backend, teleports, teleportSettings, kernel) +
-                TeleportRequestCommands.commands(requests, teleports, teleportSettings, kernel) +
-                TeleportCommands.commands(teleports, history, teleportSettings, kernel)
+        return HomeCommands.commands(
+            homes,
+            backend,
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + WarpCommands.commands(
+            warps,
+            backend,
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + SpawnCommands.commands(
+            spawn,
+            backend,
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + TeleportRequestCommands.commands(
+            requests,
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + TeleportCommands.commands(
+            teleports,
+            history,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        )
     }
+
+    /** Localized notice for a requester whose pending teleport request was cancelled because the target left. */
+    public fun requestTargetOfflineNotice(): Notice =
+        MovementMessages.requestTargetOffline()
 
     /** Cancels a delayed teleport when the player moves. Must run on the server thread. */
     public fun onPlayerTick(player: ServerPlayer) {
@@ -83,6 +134,9 @@ public fun createMovementFeature(
     database: DatabaseRuntime,
     namespace: String,
     settings: () -> MovementSettings,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
 ): MovementFeature {
     val backend = MinecraftTeleportBackend(kernel, SafeDestinationResolver())
     val pending = PendingTeleportService()
@@ -107,5 +161,8 @@ public fun createMovementFeature(
         history = history,
         settings = settings,
         kernel = kernel,
+        messages = messages,
+        adventure = adventure,
+        presentation = presentation,
     )
 }

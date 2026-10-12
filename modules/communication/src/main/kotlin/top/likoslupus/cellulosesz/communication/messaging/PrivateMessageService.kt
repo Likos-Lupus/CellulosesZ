@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.communication.SendGateResult
 import top.likoslupus.cellulosesz.communication.config.PrivateMessageSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import java.util.*
 
 /**
@@ -22,6 +24,8 @@ internal class PrivateMessageService(
     private val replyState: ReplyState,
     private val settings: () -> PrivateMessageSettings,
     private val integration: () -> CommunicationIntegration,
+    private val presentation: TextPresentation,
+    private val adventure: AdventureRuntime,
 ) {
 
     fun send(
@@ -39,7 +43,7 @@ internal class PrivateMessageService(
 
         when (val gate = integration().senderGate.check(senderId)) {
             SendGateResult.Allowed -> Unit
-            is SendGateResult.Denied -> return PrivateMessageOutcome.SenderRestricted(gate.feedback)
+            is SendGateResult.Denied -> return PrivateMessageOutcome.SenderRestricted(gate.reason)
         }
 
         val sender = backend.onlineIdentityById(senderId)
@@ -71,7 +75,7 @@ internal class PrivateMessageService(
 
         when (val gate = integration().senderGate.check(senderId)) {
             SendGateResult.Allowed -> Unit
-            is SendGateResult.Denied -> return PrivateMessageOutcome.SenderRestricted(gate.feedback)
+            is SendGateResult.Denied -> return PrivateMessageOutcome.SenderRestricted(gate.reason)
         }
 
         val sender = backend.onlineIdentityById(senderId)
@@ -103,7 +107,12 @@ internal class PrivateMessageService(
         }
 
         val incoming = CommunicationMessages.incomingPrivateMessage(sender.name, body)
-        if (!backend.deliverPrivateMessage(target.id, incoming)) {
+        if (
+            !backend.deliverPrivateMessage(
+                target.id,
+                presentation.renderFor(target.id, incoming)
+            )
+        ) {
             return PrivateMessageOutcome.TargetOffline(null)
         }
 

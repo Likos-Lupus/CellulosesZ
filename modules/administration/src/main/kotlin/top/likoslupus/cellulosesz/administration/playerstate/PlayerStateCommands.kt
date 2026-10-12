@@ -4,15 +4,19 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.player.Abilities
+import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 
 /**
  * Operator control over individual player state (health, food, flight, invulnerability). This is not
@@ -20,16 +24,36 @@ import top.likoslupus.cellulosesz.core.text.Messages
  */
 internal object PlayerStateCommands {
 
-    fun commands(): List<CommandDefinition> = listOf(
+    fun commands(
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): List<CommandDefinition> = listOf(
         command(
             name = "heal",
             category = CommandCategory.ADMINISTRATION,
             permission = CommandPermissions.HEAL,
             documentation = "administration/heal",
         ) {
-            executes { heal(context, null) }
+            executes {
+                heal(
+                    context,
+                    null,
+                    messages,
+                    adventure,
+                    presentation
+                )
+            }
             argument("player", word()) { player ->
-                executes { heal(context, get(player)) }
+                executes {
+                    heal(
+                        context,
+                        get(player),
+                        messages,
+                        adventure,
+                        presentation
+                    )
+                }
             }
         },
 
@@ -39,9 +63,25 @@ internal object PlayerStateCommands {
             permission = CommandPermissions.FEED,
             documentation = "administration/feed",
         ) {
-            executes { feed(context, null) }
+            executes {
+                feed(
+                    context,
+                    null,
+                    messages,
+                    adventure,
+                    presentation
+                )
+            }
             argument("player", word()) { player ->
-                executes { feed(context, get(player)) }
+                executes {
+                    feed(
+                        context,
+                        get(player),
+                        messages,
+                        adventure,
+                        presentation
+                    )
+                }
             }
         },
 
@@ -51,9 +91,25 @@ internal object PlayerStateCommands {
             permission = CommandPermissions.FLY,
             documentation = "administration/fly",
         ) {
-            executes { fly(context, null) }
+            executes {
+                fly(
+                    context,
+                    null,
+                    messages,
+                    adventure,
+                    presentation
+                )
+            }
             argument("player", word()) { player ->
-                executes { fly(context, get(player)) }
+                executes {
+                    fly(
+                        context,
+                        get(player),
+                        messages,
+                        adventure,
+                        presentation
+                    )
+                }
             }
         },
 
@@ -63,45 +119,101 @@ internal object PlayerStateCommands {
             permission = CommandPermissions.GOD,
             documentation = "administration/god",
         ) {
-            executes { god(context, null) }
+            executes {
+                god(
+                    context,
+                    null,
+                    messages,
+                    adventure,
+                    presentation
+                )
+            }
             argument("player", word()) { player ->
-                executes { god(context, get(player)) }
+                executes {
+                    god(
+                        context,
+                        get(player),
+                        messages,
+                        adventure,
+                        presentation
+                    )
+                }
             }
         },
     )
 
     private fun heal(
         context: CommandContext<CommandSourceStack>,
-        targetName: String?
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
+        val playerId = source.player?.uuid
         val target = resolveTarget(source, targetName)
-            ?: return source.replyError(Messages.prefixed("player not found"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("administration.playerstate.player_not_found")
+                ),
+            )
 
         target.health = target.maxHealth
-        return source.reply(Messages.prefixed("healed ${target.name.string}"))
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            AdministrationMessages.healed(target.name.string)
+        )
     }
 
     private fun feed(
         context: CommandContext<CommandSourceStack>,
-        targetName: String?
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
+        val playerId = source.player?.uuid
         val target = resolveTarget(source, targetName)
-            ?: return source.replyError(Messages.prefixed("player not found"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("administration.playerstate.player_not_found")
+                ),
+            )
 
         target.foodData.foodLevel = 20
         target.foodData.setSaturation(20f)
-        return source.reply(Messages.prefixed("fed ${target.name.string}"))
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            AdministrationMessages.fed(target.name.string)
+        )
     }
 
     private fun fly(
         context: CommandContext<CommandSourceStack>,
-        targetName: String?
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
+        val playerId = source.player?.uuid
         val target = resolveTarget(source, targetName)
-            ?: return source.replyError(Messages.prefixed("player not found"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("administration.playerstate.player_not_found")
+                ),
+            )
 
         val current = target.abilities.pack()
         val enable = !current.mayFly()
@@ -117,22 +229,46 @@ internal object PlayerStateCommands {
             )
         )
         target.onUpdateAbilities()
-        val state = if (enable) "enabled" else "disabled"
-        return source.reply(Messages.prefixed("flight $state for ${target.name.string}"))
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            AdministrationMessages.flight(
+                target.name.string,
+                enable
+            ),
+        )
     }
 
     private fun god(
         context: CommandContext<CommandSourceStack>,
-        targetName: String?
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
+        val playerId = source.player?.uuid
         val target = resolveTarget(source, targetName)
-            ?: return source.replyError(Messages.prefixed("player not found"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("administration.playerstate.player_not_found")
+                ),
+            )
 
         val enable = !target.isInvulnerable
         target.isInvulnerable = enable
-        val state = if (enable) "enabled" else "disabled"
-        return source.reply(Messages.prefixed("god mode $state for ${target.name.string}"))
+        return source.replyNotice(
+            adventure,
+            presentation,
+            playerId,
+            AdministrationMessages.god(
+                target.name.string,
+                enable
+            ),
+        )
     }
 
     private fun resolveTarget(

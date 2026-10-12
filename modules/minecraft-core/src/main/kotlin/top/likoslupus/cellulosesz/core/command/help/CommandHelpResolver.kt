@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.core.command.help
 
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.dsl.CommandNodeSpec
 import top.likoslupus.cellulosesz.core.command.dsl.LiteralNodeSpec
 import top.likoslupus.cellulosesz.core.permission.PermissionService
@@ -13,6 +14,7 @@ public sealed interface HelpResolution {
         public val definition: CommandDefinition,
         public val subPath: List<String>,
         public val canonical: String,
+        public val documentation: CommandDocumentId,
         public val page: Int,
         public val permitted: Boolean,
     ) : HelpResolution
@@ -20,10 +22,12 @@ public sealed interface HelpResolution {
 }
 
 /**
- * Resolves a `/help` query to a CellulosesZ definition. Only literal sub-paths are resolved; a
- * query token that is not a literal child stops the walk (it is never interpreted as a game
- * argument). A trailing `--page N` is parsed as the single optional tail and never leaks into a
- * real command.
+ * Resolves a `/help` query to a CellulosesZ definition. Only literal sub-paths are resolved; a query
+ * token that is not a literal child stops the walk (it is never interpreted as a game argument). A
+ * trailing `--page N` is parsed as the single optional tail and never leaks into a real command.
+ *
+ * The most specific documentation id along the resolved path wins (node id, else nearest ancestor,
+ * else the root id), and permission is checked along the whole root -> leaf chain.
  */
 public class CommandHelpResolver(
     definitions: List<CommandDefinition>,
@@ -51,9 +55,7 @@ public class CommandHelpResolver(
 
         var requestedPage = 1
         val pageIndex = tokens.indexOf(PAGE_FLAG)
-        if (pageIndex >= 0
-            && pageIndex == tokens.size - 2
-        ) {
+        if (pageIndex >= 0 && pageIndex == tokens.size - 2) {
             requestedPage = tokens[pageIndex + 1].toIntOrNull() ?: 0
             tokens.subList(pageIndex, tokens.size).clear()
         }
@@ -61,19 +63,21 @@ public class CommandHelpResolver(
             return null
         }
 
-        val definition = byName[tokens.first()]
-            ?: return null
+        val definition = byName[tokens.first()] ?: return null
 
         val subPath = mutableListOf<String>()
+        val required = mutableListOf(definition.permission)
+        var effectiveDocumentation = definition.documentation
         var node: CommandNodeSpec? = definition.root
         var index = 1
         while (index < tokens.size) {
-            val token = tokens[index]
             val child = node?.children
                     ?.filterIsInstance<LiteralNodeSpec>()
-                    ?.firstOrNull { it.name == token }
+                    ?.firstOrNull { it.name == tokens[index] }
                 ?: break
-            subPath += token
+            subPath += tokens[index]
+            child.permission?.let(required::add)
+            child.documentation?.let { effectiveDocumentation = it }
             node = child
             index++
         }
@@ -83,8 +87,9 @@ public class CommandHelpResolver(
             definition = definition,
             subPath = subPath,
             canonical = canonical,
+            documentation = effectiveDocumentation,
             page = if (requestedPage < 1) 1 else requestedPage,
-            permitted = permissions.allows(source, definition.permission),
+            permitted = required.all { permissions.allows(source, it) },
         )
     }
 

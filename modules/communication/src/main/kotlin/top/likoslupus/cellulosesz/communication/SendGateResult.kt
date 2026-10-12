@@ -1,6 +1,11 @@
 package top.likoslupus.cellulosesz.communication
 
-import net.minecraft.network.chat.Component
+/** Why a sender was refused by the cross-feature gate. Typed so presentation is per-recipient. */
+public enum class SenderRestriction {
+
+    MUTED,
+
+}
 
 /**
  * Result of a cross-feature sender restriction check. Typed so the ambiguous "does `true` mean
@@ -11,7 +16,7 @@ public sealed interface SendGateResult {
     public data object Allowed : SendGateResult
 
     public data class Denied(
-        public val feedback: Component,
+        public val reason: SenderRestriction,
     ) : SendGateResult
 
 }

@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.application.command
 
 import kotlinx.coroutines.CancellationException
-import net.kyori.adventure.text.Component as AdventureComponent
 import net.minecraft.SharedConstants
 import net.minecraft.commands.CommandSourceStack
 import org.slf4j.LoggerFactory
@@ -15,15 +14,24 @@ import top.likoslupus.cellulosesz.core.command.feedbackTarget
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageArgument
-import top.likoslupus.cellulosesz.core.text.Messages
+import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.adventure.message
 import top.likoslupus.cellulosesz.core.text.adventure.reply
 import top.likoslupus.cellulosesz.core.text.adventure.replyError
-import top.likoslupus.cellulosesz.core.text.i18n.*
+import top.likoslupus.cellulosesz.core.text.i18n.LanguageId
+import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
+import top.likoslupus.cellulosesz.core.text.model.DetailField
+import top.likoslupus.cellulosesz.core.text.model.DetailView
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.model.TextArgument
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
+import java.util.*
 
 internal object RootCommand {
 
@@ -37,6 +45,7 @@ internal object RootCommand {
         health: ApplicationHealth,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
+        presentation: TextPresentation,
         languages: PlayerLanguagePreferences,
         resolver: LanguageResolver,
         catalog: TranslationCatalog,
@@ -60,11 +69,12 @@ internal object RootCommand {
             }
             literal("status", permission = CommandPermissions.ROOT_STATUS) {
                 executes {
-                    source.sendSuccess(
-                        { Messages.prefixed(health.summary()) },
-                        false,
+                    showStatus(
+                        source,
+                        health,
+                        presentation,
+                        adventure
                     )
-                    1
                 }
             }
             literal("reload", permission = CommandPermissions.ROOT_RELOAD) {
@@ -72,7 +82,9 @@ internal object RootCommand {
                     reload(
                         source,
                         config,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure
                     )
                 }
             }
@@ -140,33 +152,65 @@ internal object RootCommand {
         val minecraftVersion = SharedConstants.getCurrentVersion().name()
         source.reply(
             adventure,
-            messages.renderPrefixedFor(
+            messages.renderFor(
                 playerId,
-                CoreMessageKeys.CORE_INFO_VERSION,
-                listOf(MessageArgument(modVersion)),
-            ),
+                MessageKey("core.info.version"),
+                listOf(MessageArgument(modVersion))
+            )
         )
         source.reply(
             adventure,
-            messages.renderPrefixedFor(
+            messages.renderFor(
                 playerId,
-                CoreMessageKeys.CORE_INFO_LOADER,
-                listOf(MessageArgument(loaderName)),
-            ),
+                MessageKey("core.info.loader"),
+                listOf(MessageArgument(loaderName))
+            )
         )
         source.reply(
             adventure,
-            messages.renderPrefixedFor(
+            messages.renderFor(
                 playerId,
-                CoreMessageKeys.CORE_INFO_MINECRAFT,
-                listOf(MessageArgument(minecraftVersion)),
-            ),
+                MessageKey("core.info.minecraft"),
+                listOf(MessageArgument(minecraftVersion))
+            )
         )
         return source.reply(
             adventure,
-            messages.renderPrefixedFor(playerId, CoreMessageKeys.CORE_INFO_HINT),
+            messages.renderFor(playerId, MessageKey("core.info.hint"))
         )
     }
+
+    private fun showStatus(
+        source: CommandSourceStack,
+        health: ApplicationHealth,
+        presentation: TextPresentation,
+        adventure: AdventureRuntime,
+    ): Int {
+        val detail = DetailView(
+            title = LocalizedText(MessageKey("core.status.title")),
+            fields = listOf(
+                field(MessageKey("core.status.state"), health.state.name),
+                field(MessageKey("core.status.loader"), health.loader),
+                field(MessageKey("core.status.permissions"), health.permissionBackend),
+                field(MessageKey("core.status.storage"), health.storageType ?: "-"),
+                field(MessageKey("core.status.endpoint"), health.storageEndpoint ?: "-"),
+                field(MessageKey("core.status.identity"), health.identityRecords.toString()),
+                field(MessageKey("core.status.migration"), health.migration),
+            ),
+        )
+        val lines = presentation.renderFor(source.player?.uuid, detail)
+        lines.forEach { source.reply(adventure, it) }
+        return if (lines.isEmpty()) 0 else 1
+    }
+
+    private fun field(label: MessageKey, value: String): DetailField =
+        DetailField(
+            label = LocalizedText(label),
+            value = LocalizedText(
+                MessageKey("core.status.value"),
+                listOf(TextArgument.Literal(value))
+            ),
+        )
 
     private fun showLanguage(
         source: CommandSourceStack,
@@ -178,17 +222,18 @@ internal object RootCommand {
         val playerId = source.player?.uuid
         val explicit = playerId?.let(languages::explicit)
         val effective = resolver.effective(playerId)
-
-        val component = messages.renderPrefixedFor(
-            playerId,
-            when {
-                explicit != null -> CoreMessageKeys.LANGUAGE_CURRENT
-                else -> CoreMessageKeys.LANGUAGE_CURRENT_INHERITED
-            },
-            listOf(MessageArgument(effective.value)),
+        val key = when {
+            explicit != null -> MessageKey("core.language.current")
+            else -> MessageKey("core.language.current_inherited")
+        }
+        return source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                key,
+                listOf(MessageArgument(effective.value))
+            )
         )
-
-        return source.reply(adventure, component)
     }
 
     private fun listLanguages(
@@ -198,12 +243,14 @@ internal object RootCommand {
         catalog: TranslationCatalog,
     ): Int {
         val listed = catalog.languages.joinToString(", ") { it.value }
-        val component = messages.renderPrefixedFor(
-            source.player?.uuid,
-            CoreMessageKeys.LANGUAGE_AVAILABLE,
-            listOf(MessageArgument(listed)),
+        return source.reply(
+            adventure,
+            messages.renderFor(
+                source.player?.uuid,
+                MessageKey("core.language.available"),
+                listOf(MessageArgument(listed))
+            ),
         )
-        return source.reply(adventure, component)
     }
 
     private fun setLanguage(
@@ -216,16 +263,24 @@ internal object RootCommand {
         catalog: TranslationCatalog,
     ): Int {
         val player = source.player
-            ?: return source.replyError(adventure, requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
         val requested = LanguageId.parse(raw)
         if (requested == null || !catalog.supports(requested)) {
-            val component = messages.renderPrefixedFor(
-                player.uuid,
-                CoreMessageKeys.LANGUAGE_UNKNOWN,
-                listOf(MessageArgument(raw)),
+            return source.reply(
+                adventure,
+                messages.renderFor(
+                    player.uuid,
+                    MessageKey("core.language.unknown"),
+                    listOf(MessageArgument(raw))
+                ),
             )
-            return source.reply(adventure, component)
         }
 
         val target = source.feedbackTarget()
@@ -236,10 +291,10 @@ internal object RootCommand {
                 kernel.message(
                     target,
                     adventure,
-                    messages.renderPrefixedFor(
+                    messages.renderFor(
                         playerId,
-                        CoreMessageKeys.LANGUAGE_CHANGED,
-                        listOf(MessageArgument(requested.value)),
+                        MessageKey("core.language.changed"),
+                        listOf(MessageArgument(requested.value))
                     ),
                 )
             } catch (error: CancellationException) {
@@ -249,12 +304,20 @@ internal object RootCommand {
                 kernel.message(
                     target,
                     adventure,
-                    messages.renderPrefixedFor(playerId, CoreMessageKeys.LANGUAGE_STORAGE_FAILED),
+                    messages.renderFor(
+                        playerId,
+                        MessageKey("core.language.storage_failed")
+                    )
                 )
             }
         }
-
-        return acknowledge(source, adventure, job == null)
+        return acknowledge(
+            source,
+            adventure,
+            messages,
+            playerId,
+            job == null
+        )
     }
 
     private fun resetLanguage(
@@ -266,7 +329,13 @@ internal object RootCommand {
         resolver: LanguageResolver,
     ): Int {
         val player = source.player
-            ?: return source.replyError(adventure, requiresPlayer())
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
         val target = source.feedbackTarget()
         val playerId = player.uuid
@@ -276,9 +345,9 @@ internal object RootCommand {
                 kernel.message(
                     target,
                     adventure,
-                    messages.renderPrefixedFor(
+                    messages.renderFor(
                         playerId,
-                        CoreMessageKeys.LANGUAGE_RESET,
+                        MessageKey("core.language.reset"),
                         listOf(MessageArgument(resolver.effective(playerId).value)),
                     ),
                 )
@@ -289,68 +358,83 @@ internal object RootCommand {
                 kernel.message(
                     target,
                     adventure,
-                    messages.renderPrefixedFor(playerId, CoreMessageKeys.LANGUAGE_STORAGE_FAILED),
+                    messages.renderFor(playerId, MessageKey("core.language.storage_failed"))
                 )
             }
         }
-
-        return acknowledge(source, adventure, job == null)
+        return acknowledge(
+            source,
+            adventure,
+            messages,
+            playerId,
+            job == null
+        )
     }
 
     private fun acknowledge(
         source: CommandSourceStack,
         adventure: AdventureRuntime,
-        shuttingDown: Boolean
+        messages: LocalizedMessages,
+        playerId: UUID?,
+        shuttingDown: Boolean,
     ): Int =
         when {
             shuttingDown -> source.replyError(
                 adventure,
-                AdventureComponent.text("${Messages.PREFIX}runtime is shutting down")
+                messages.renderFor(playerId, MessageKey("core.error.runtime_stopping")),
             )
 
             else -> 1
         }
 
-    private fun requiresPlayer(): AdventureComponent =
-        AdventureComponent.text("${Messages.PREFIX}this command requires a player")
-
     private fun reload(
         source: CommandSourceStack,
         config: ConfigStore<CellulosesConfig>,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
     ): Int {
+        val playerId = source.player?.uuid
+        val target = source.feedbackTarget()
         val job = kernel.launch {
             when (val result = config.reload()) {
-                is ConfigReloadResult.Success -> kernel.onServerThread {
-                    source.sendSuccess(
-                        { Messages.prefixed("config reloaded (generation ${result.generation})") },
-                        true,
-                    )
-                }
+                is ConfigReloadResult.Success -> kernel.message(
+                    target,
+                    adventure,
+                    messages.renderFor(
+                        playerId,
+                        MessageKey("core.reload.succeeded"),
+                        listOf(MessageArgument(result.generation.toString())),
+                    ),
+                )
 
-                is ConfigReloadResult.Failure -> kernel.onServerThread {
-                    source.sendFailure(
-                        Messages.prefixed(
-                            "config reload failed: ${
+                is ConfigReloadResult.Failure -> kernel.message(
+                    target,
+                    adventure,
+                    messages.renderFor(
+                        playerId,
+                        MessageKey("core.reload.failed"),
+                        listOf(
+                            MessageArgument(
                                 result.errors.joinToString("; ") {
                                     "${it.path}: ${it.message}"
                                 }
-                            }"
-                        )
-                    )
-                }
+                            )
+                        ),
+                    ),
+                )
             }
         }
         return when (job) {
-            null -> {
-                source.sendFailure(Messages.prefixed("runtime is shutting down; reload rejected"))
-                0
-            }
+            null -> source.replyError(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.error.runtime_stopping")),
+            )
 
-            else -> {
-                source.sendSuccess({ Messages.prefixed("reloading config...") }, false)
-                1
-            }
+            else -> source.reply(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.reload.pending"))
+            )
         }
     }
 

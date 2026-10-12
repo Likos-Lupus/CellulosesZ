@@ -1,18 +1,21 @@
 package top.likoslupus.cellulosesz.communication
 
-import net.minecraft.network.chat.Component
+import net.kyori.adventure.text.Component
 import top.likoslupus.cellulosesz.communication.messaging.OnlinePlayerIdentity
 import top.likoslupus.cellulosesz.communication.messaging.toOnlineIdentity
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import java.util.*
 
 /** Minecraft-backed [PlayerDirectory]. All operations require the server thread. */
 internal class MinecraftPlayerDirectory(
     private val kernel: RuntimeKernel,
     private val permissions: PermissionService,
+    private val adventure: AdventureRuntime,
 ) : PlayerDirectory {
 
     override fun online(): List<OnlinePlayerIdentity> =
@@ -36,11 +39,13 @@ internal class MinecraftPlayerDirectory(
 
     override fun send(playerId: UUID, message: Component): Boolean =
         when (
-            val player = kernel.requireServer().playerList.getPlayer(playerId)
+            kernel.requireServer().playerList.getPlayer(playerId)
         ) {
             null -> false
             else -> {
-                player.sendSystemMessage(message)
+                adventure
+                        .audience(CommandFeedbackTarget.Player(playerId))
+                        .sendMessage(message)
                 true
             }
         }

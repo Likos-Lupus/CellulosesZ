@@ -14,7 +14,4 @@ public object BundledTranslations {
     /** The mandatory baseline; every key must exist here. */
     public val baseline: LanguageId = LanguageId.EN_US
 
-    public fun resource(language: LanguageId): String =
-        "/cellulosesz/i18n/messages_${language.value}.properties"
-
 }

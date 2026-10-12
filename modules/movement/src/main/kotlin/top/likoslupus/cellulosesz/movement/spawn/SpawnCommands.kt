@@ -5,15 +5,18 @@ import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
-import top.likoslupus.cellulosesz.movement.teleport.command.TeleportFeedback
 
 internal object SpawnCommands {
 
@@ -23,6 +26,9 @@ internal object SpawnCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "spawn",
@@ -37,10 +43,14 @@ internal object SpawnCommands {
                     backend,
                     teleports,
                     teleportSettings,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         },
+
         command(
             name = "setspawn",
             category = CommandCategory.MOVEMENT,
@@ -52,10 +62,14 @@ internal object SpawnCommands {
                     context,
                     service,
                     backend,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         },
+
         command(
             name = "delspawn",
             category = CommandCategory.MOVEMENT,
@@ -66,7 +80,10 @@ internal object SpawnCommands {
                 deleteSpawn(
                     context,
                     service,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         },
@@ -79,12 +96,27 @@ internal object SpawnCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
-        val job = kernel.launch {
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.teleport")
+        ) { target ->
             val position = service.configured() ?: backend.vanillaSpawnPosition()
             val intent = TeleportIntent(
                 subjectId = playerId,
@@ -95,19 +127,18 @@ internal object SpawnCommands {
                     teleportSettings()
                 ),
             )
-            val message = when (val outcome = teleports.execute(intent)) {
-                is TeleportOutcome.Success -> Messages.prefixed("teleported to spawn")
-                else -> TeleportFeedback.failure(outcome)
-                    ?: return@launch
+            val notices = when (val outcome = teleports.execute(intent)) {
+                is TeleportOutcome.Success -> listOf(MovementMessages.teleportToSpawn())
+                else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
             }
-            kernel.messagePlayer(playerId, message)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                notices
+            )
         }
-
-        return launchResult(
-            source,
-            job,
-            "teleporting..."
-        )
     }
 
     private fun setSpawn(
@@ -115,53 +146,78 @@ internal object SpawnCommands {
         service: SpawnService,
         backend: TeleportBackend,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
-        val job = kernel.launch {
-            val message = when (val position = backend.position(playerId)) {
-                null -> Messages.prefixed("you are no longer online")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.saving_spawn")
+        ) { target ->
+            val notice = when (val position = backend.position(playerId)) {
+                null -> MovementMessages.playerOffline()
                 else -> {
                     service.set(position)
-                    Messages.prefixed("spawn set")
+                    MovementMessages.spawnSet()
                 }
             }
-            kernel.messagePlayer(playerId, message)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
         }
-
-        return launchResult(
-            source,
-            job,
-            "saving spawn..."
-        )
     }
 
     private fun deleteSpawn(
         context: CommandContext<CommandSourceStack>,
         service: SpawnService,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
-
-        val job = kernel.launch {
-            val message = Messages.prefixed(
-                when (service.clear()) {
-                    ClearSpawnResult.Cleared -> "spawn reset to vanilla"
-                    ClearSpawnResult.NotConfigured -> "no custom spawn configured"
-                }
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
             )
-            kernel.messagePlayer(playerId, message)
-        }
 
-        return launchResult(
+        return movementLaunch(
             source,
-            job,
-            "clearing spawn..."
-        )
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.clearing_spawn")
+        ) { target ->
+            val notice = MovementMessages.spawnClear(service.clear())
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
     }
 
 }

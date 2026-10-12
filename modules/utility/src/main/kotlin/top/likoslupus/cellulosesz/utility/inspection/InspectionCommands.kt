@@ -4,10 +4,14 @@ import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.reply
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 
 internal object InspectionCommands {
@@ -15,6 +19,9 @@ internal object InspectionCommands {
     fun commands(
         service: InspectionService,
         known: KnownPlayerResolver,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "enderchest",
@@ -23,7 +30,12 @@ internal object InspectionCommands {
             documentation = "utility/enderchest",
         ) {
             executesPlayer {
-                source.reply(UtilityMessages.inspection(service.enderChest(playerId)))
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
+                    UtilityMessages.inspection(service.enderChest(playerId))
+                )
             }
         },
 
@@ -34,7 +46,12 @@ internal object InspectionCommands {
             documentation = "utility/disposal",
         ) {
             executesPlayer {
-                source.reply(UtilityMessages.inspection(service.disposal(playerId)))
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
+                    UtilityMessages.inspection(service.disposal(playerId))
+                )
             }
         },
 
@@ -54,15 +71,21 @@ internal object InspectionCommands {
                     val raw = get(player)
                     val targetId = known.onlineByName(raw)?.id
                         ?: return@executesPlayer source.replyError(
-                            UtilityMessages.prefixed("player not found or offline")
+                            adventure,
+                            messages.renderFor(
+                                playerId,
+                                MessageKey("utility.error.player_not_found")
+                            ),
                         )
-                    source.reply(
+                    source.replyNotice(
+                        adventure,
+                        presentation,
+                        playerId,
                         UtilityMessages.inspection(
                             service.inspect(
-                                playerId,
-                                targetId
+                                playerId, targetId
                             )
-                        )
+                        ),
                     )
                 }
             }

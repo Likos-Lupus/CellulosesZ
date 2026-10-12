@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.communication.config.AnnouncementSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
 import top.likoslupus.cellulosesz.core.runtime.ServerThreadRunner
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 
 internal sealed interface AnnouncementResult {
 
@@ -23,6 +24,7 @@ internal sealed interface AnnouncementResult {
 internal class AnnouncementService(
     private val runner: ServerThreadRunner,
     private val directory: PlayerDirectory,
+    private val presentation: TextPresentation,
     private val settings: () -> AnnouncementSettings,
 ) {
 
@@ -52,13 +54,17 @@ internal class AnnouncementService(
         val body = MessageBody.parse(rawMessage, config.maxMessageLength)
             ?: return AnnouncementResult.InvalidMessage
 
-        val payload = CommunicationMessages.broadcastLine(body)
+        val notice = CommunicationMessages.broadcastLine(body)
         val recipientCount = runner.run {
             val recipients = when (dimensionId) {
                 null -> directory.online()
                 else -> directory.onlineIn(dimensionId)
             }
-            recipients.forEach { directory.send(it.id, payload) }
+            recipients.forEach { recipient ->
+                presentation.renderFor(recipient.id, notice).forEach { line ->
+                    directory.send(recipient.id, line)
+                }
+            }
             recipients.size
         }
 

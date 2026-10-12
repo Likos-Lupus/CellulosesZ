@@ -6,7 +6,14 @@ import org.junit.jupiter.api.Test
 
 class TranslationCatalogTest {
 
-    private val catalog = TranslationCatalog.loadBundled()
+    private val catalog = TranslationCatalog.load(
+        listOf(
+            TranslationSource(
+                "core",
+                BundledTranslations::class.java
+            )
+        )
+    )
 
     @Test
     fun `all bundled languages are loadable`() {

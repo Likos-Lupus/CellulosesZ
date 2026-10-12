@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.communication.messaging
 
-import net.minecraft.network.chat.Component
+import net.kyori.adventure.text.Component
 import java.util.*
 
 /** A minimal seam over the server's player list and player message delivery. Server-thread only. */
@@ -15,6 +15,6 @@ internal interface MessagingBackend {
 
     fun onlineIdentityById(id: UUID): OnlinePlayerIdentity?
 
-    fun deliverPrivateMessage(playerId: UUID, message: Component): Boolean
+    fun deliverPrivateMessage(playerId: UUID, messages: List<Component>): Boolean
 
 }

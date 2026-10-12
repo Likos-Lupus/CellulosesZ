@@ -113,7 +113,7 @@ internal open class NodeScope : CommandSyntax {
         setExecution(
             CommandExecution(playerRequired = true) {
                 when (val player = it.source.player) {
-                    null -> it.source.replyError(Messages.prefixed("this command requires a player"))
+                    null -> it.source.replyError(Messages.raw("This command requires a player."))
                     else -> action(
                         PlayerExecutionScope(
                             it.source,

@@ -2,7 +2,6 @@ package top.likoslupus.cellulosesz.communication
 
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
-import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
@@ -19,12 +18,17 @@ import top.likoslupus.cellulosesz.communication.preferences.MessagingPreferences
 import top.likoslupus.cellulosesz.communication.preferences.command.MessagingPreferenceCommands
 import top.likoslupus.cellulosesz.communication.staff.HelpOpCommands
 import top.likoslupus.cellulosesz.communication.staff.HelpOpService
-import top.likoslupus.cellulosesz.core.command.messagePlayer
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
+import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.persistence.KeyedMutex
 import java.time.Clock
@@ -42,7 +46,7 @@ internal class IntegrationHolder {
  * Public surface of the communication bounded context. Internals stay `internal`.
  */
 public class CommunicationFeature internal constructor(
-    private val messages: PrivateMessageService,
+    private val privateMessages: PrivateMessageService,
     private val preferences: MessagingPreferencesService,
     private val mail: MailService,
     private val helpOp: HelpOpService,
@@ -52,15 +56,44 @@ public class CommunicationFeature internal constructor(
     private val kernel: RuntimeKernel,
     private val known: MinecraftKnownPlayerResolver,
     private val settings: () -> MessagingSettings,
+    private val messages: LocalizedMessages,
+    private val adventure: AdventureRuntime,
+    private val presentation: TextPresentation,
 ) {
 
     public fun commands(integration: CommunicationIntegration): List<CommandDefinition> {
         holder.value = integration
-        return PrivateMessageCommands.commands(messages) +
-                MessagingPreferenceCommands.commands(preferences, known, kernel) +
-                MailCommands.commands(mail, kernel) +
-                HelpOpCommands.commands(helpOp, kernel) +
-                AnnouncementCommands.commands(announcements, kernel)
+        return PrivateMessageCommands.commands(
+            privateMessages,
+            messages,
+            adventure,
+            presentation
+        ) + MessagingPreferenceCommands.commands(
+            preferences,
+            known,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + MailCommands.commands(
+            mail,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + HelpOpCommands.commands(
+            helpOp,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + AnnouncementCommands.commands(
+            announcements,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        )
     }
 
     public fun onServerStarting() {
@@ -97,9 +130,12 @@ public class CommunicationFeature internal constructor(
         when (val summary = mail.summary(identity)) {
             is MailSummaryResult.Summary ->
                 if (summary.unread > 0) {
-                    kernel.messagePlayer(
+                    kernel.sendNotices(
+                        CommandFeedbackTarget.Player(playerId),
+                        adventure,
+                        presentation,
                         playerId,
-                        CommunicationMessages.unreadMailNotice(summary.unread)
+                        listOf(CommunicationMessages.unreadMailNotice(summary.unread)),
                     )
                 }
 
@@ -116,6 +152,9 @@ public fun createCommunicationFeature(
     permissions: PermissionService,
     settings: () -> MessagingSettings,
     known: MinecraftKnownPlayerResolver,
+    messages: LocalizedMessages,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
 ): CommunicationFeature {
     val holder = IntegrationHolder()
     val runner = kernel.serverThreadRunner()
@@ -129,12 +168,14 @@ public fun createCommunicationFeature(
     val replyState = ReplyState(
         timeout = { settings().privateMessages.replyTimeoutSeconds?.seconds }
     )
-    val messages = PrivateMessageService(
-        backend = MinecraftMessagingBackend(kernel),
+    val privateMessages = PrivateMessageService(
+        backend = MinecraftMessagingBackend(kernel, adventure),
         recipients = preferences,
         replyState = replyState,
         settings = { settings().privateMessages },
         integration = { holder.value },
+        presentation = presentation,
+        adventure = adventure,
     )
 
     val mail = MailService(
@@ -149,20 +190,22 @@ public fun createCommunicationFeature(
         locks = KeyedMutex(),
     )
 
-    val directory = MinecraftPlayerDirectory(kernel, permissions)
+    val directory = MinecraftPlayerDirectory(kernel, permissions, adventure)
     val helpOp = HelpOpService(
         runner = runner,
         directory = directory,
+        presentation = presentation,
         settings = { settings().helpOp },
     )
     val announcements = AnnouncementService(
         runner = runner,
         directory = directory,
+        presentation = presentation,
         settings = { settings().announcements },
     )
 
     return CommunicationFeature(
-        messages = messages,
+        privateMessages = privateMessages,
         preferences = preferences,
         mail = mail,
         helpOp = helpOp,
@@ -172,5 +215,8 @@ public fun createCommunicationFeature(
         kernel = kernel,
         known = known,
         settings = settings,
+        messages = messages,
+        adventure = adventure,
+        presentation = presentation,
     )
 }

@@ -3,13 +3,21 @@ package top.likoslupus.cellulosesz.utility.workstation
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
-import top.likoslupus.cellulosesz.core.command.reply
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 
 internal object WorkstationCommands {
 
-    fun commands(service: WorkstationService): List<CommandDefinition> = listOf(
+    fun commands(
+        service: WorkstationService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): List<CommandDefinition> = listOf(
         command(
             name = "workbench",
             category = CommandCategory.UTILITY,
@@ -17,7 +25,10 @@ internal object WorkstationCommands {
             documentation = "utility/workbench",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -35,7 +46,10 @@ internal object WorkstationCommands {
             documentation = "utility/anvil",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -53,7 +67,10 @@ internal object WorkstationCommands {
             documentation = "utility/grindstone",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -71,7 +88,10 @@ internal object WorkstationCommands {
             documentation = "utility/stonecutter",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -89,7 +109,10 @@ internal object WorkstationCommands {
             documentation = "utility/loom",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -107,7 +130,10 @@ internal object WorkstationCommands {
             documentation = "utility/cartographytable",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,
@@ -125,7 +151,10 @@ internal object WorkstationCommands {
             documentation = "utility/smithingtable",
         ) {
             executesPlayer {
-                source.reply(
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
                     UtilityMessages.workstation(
                         service.open(
                             playerId,

@@ -4,18 +4,24 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.resources.Identifier
 import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.double
 import top.likoslupus.cellulosesz.core.command.dsl.word
-import top.likoslupus.cellulosesz.core.command.messagePlayer
-import top.likoslupus.cellulosesz.core.command.replyError
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.Messages
-import top.likoslupus.cellulosesz.movement.command.launchResult
+import top.likoslupus.cellulosesz.core.text.MessageKey
+import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.replyError
+import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.core.text.i18n.renderFor
+import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
+import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
 import java.util.*
@@ -28,6 +34,9 @@ internal object TeleportCommands {
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
         command(
             name = "back",
@@ -41,7 +50,10 @@ internal object TeleportCommands {
                     teleports,
                     history,
                     teleportSettings,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         },
@@ -60,7 +72,10 @@ internal object TeleportCommands {
                         null,
                         teleports,
                         teleportSettings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
                 argument("second", word()) { second ->
@@ -71,7 +86,10 @@ internal object TeleportCommands {
                             get(second),
                             teleports,
                             teleportSettings,
-                            kernel
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
                         )
                     }
                 }
@@ -91,7 +109,10 @@ internal object TeleportCommands {
                         get(target),
                         teleports,
                         teleportSettings,
-                        kernel
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
                     )
                 }
             }
@@ -116,6 +137,9 @@ internal object TeleportCommands {
                                 teleports,
                                 teleportSettings,
                                 kernel,
+                                messages,
+                                adventure,
+                                presentation,
                             )
                         }
                         argument("dimension", word()) { dimension ->
@@ -129,6 +153,9 @@ internal object TeleportCommands {
                                     teleports,
                                     teleportSettings,
                                     kernel,
+                                    messages,
+                                    adventure,
+                                    presentation,
                                 )
                             }
                         }
@@ -144,14 +171,29 @@ internal object TeleportCommands {
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
-        val job = kernel.launch {
-            val message = when (val previous = history.previous(playerId)) {
-                null -> Messages.prefixed("no previous location")
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.teleport")
+        ) { target ->
+            val notices = when (val previous = history.previous(playerId)) {
+                null -> listOf(MovementMessages.noPreviousLocation())
                 else -> when (
                     val outcome = teleports.execute(
                         intent(
@@ -162,17 +204,18 @@ internal object TeleportCommands {
                         )
                     )
                 ) {
-                    is TeleportOutcome.Success ->
-                        Messages.prefixed("teleported back")
-
-                    else -> TeleportFeedback.failure(outcome)
-                        ?: return@launch
+                    is TeleportOutcome.Success -> listOf(MovementMessages.teleportBack())
+                    else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
                 }
             }
-            kernel.messagePlayer(playerId, message)
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                notices
+            )
         }
-
-        return launchResult(source, job, "teleporting...")
     }
 
     private fun direct(
@@ -182,16 +225,39 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         if (secondName == null) {
             val subject = source.player
-                ?: return source.replyError(Messages.prefixed("this command requires a player"))
+                ?: return source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        null,
+                        MessageKey("core.error.player_required")
+                    )
+                )
             val target = PlayerResolver.onlineByName(source.server, firstName)
-                ?: return source.replyError(Messages.prefixed("player '$firstName' is not online"))
+                ?: return source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        subject.uuid,
+                        MessageKey("movement.teleport.player_not_online"),
+                        firstName
+                    ),
+                )
 
             return when (subject.uuid) {
-                target.uuid -> source.replyError(Messages.prefixed("you are already there"))
+                target.uuid -> source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        subject.uuid,
+                        MessageKey("movement.teleport.already_there")
+                    ),
+                )
+
                 else -> launch(
                     source,
                     subject.uuid,
@@ -199,15 +265,32 @@ internal object TeleportCommands {
                     TeleportCause.DIRECT,
                     teleports,
                     teleportSettings,
-                    kernel
+                    kernel,
+                    messages,
+                    adventure,
+                    presentation,
                 )
             }
         }
 
         val subject = PlayerResolver.onlineByName(source.server, firstName)
-            ?: return source.replyError(Messages.prefixed("player '$firstName' is not online"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    source.player?.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    firstName
+                ),
+            )
         val target = PlayerResolver.onlineByName(source.server, secondName)
-            ?: return source.replyError(Messages.prefixed("player '$secondName' is not online"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    source.player?.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    secondName
+                ),
+            )
         return launch(
             source,
             subject.uuid,
@@ -215,7 +298,10 @@ internal object TeleportCommands {
             TeleportCause.ADMIN,
             teleports,
             teleportSettings,
-            kernel
+            kernel,
+            messages,
+            adventure,
+            presentation,
         )
     }
 
@@ -225,12 +311,28 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val executor = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
         val target = PlayerResolver.onlineByName(source.server, targetName)
-            ?: return source.replyError(Messages.prefixed("player '$targetName' is not online"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    executor.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    targetName
+                ),
+            )
         return launch(
             source,
             target.uuid,
@@ -238,7 +340,10 @@ internal object TeleportCommands {
             TeleportCause.ADMIN,
             teleports,
             teleportSettings,
-            kernel
+            kernel,
+            messages,
+            adventure,
+            presentation,
         )
     }
 
@@ -251,15 +356,31 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int {
         val source = context.source
         val executor = source.player
-            ?: return source.replyError(Messages.prefixed("this command requires a player"))
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
 
         val resolvedDimension = dimension
             ?: executor.level().dimension().identifier().toString()
         if (Identifier.tryParse(resolvedDimension) == null) {
-            return source.replyError(Messages.prefixed("invalid dimension '$resolvedDimension'"))
+            return source.replyError(
+                adventure,
+                messages.renderFor(
+                    executor.uuid,
+                    MessageKey("movement.teleport.invalid_dimension"),
+                    resolvedDimension
+                ),
+            )
         }
 
         val position = StoredPosition(
@@ -277,7 +398,10 @@ internal object TeleportCommands {
             TeleportCause.ADMIN,
             teleports,
             teleportSettings,
-            kernel
+            kernel,
+            messages,
+            adventure,
+            presentation,
         )
     }
 
@@ -289,6 +413,9 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int = launchDestination(
         source,
         subjectId,
@@ -297,6 +424,9 @@ internal object TeleportCommands {
         teleports,
         teleportSettings,
         kernel,
+        messages,
+        adventure,
+        presentation,
     )
 
     private fun launch(
@@ -307,6 +437,9 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
     ): Int = launchDestination(
         source,
         subjectId,
@@ -315,6 +448,9 @@ internal object TeleportCommands {
         teleports,
         teleportSettings,
         kernel,
+        messages,
+        adventure,
+        presentation,
     )
 
     private fun launchDestination(
@@ -325,8 +461,17 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
-    ): Int {
-        val job = kernel.launch {
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int =
+        movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.teleport")
+        ) { _ ->
             val outcome = teleports.execute(
                 intent(
                     subjectId,
@@ -335,15 +480,18 @@ internal object TeleportCommands {
                     teleportSettings
                 )
             )
-            val message = when (outcome) {
-                is TeleportOutcome.Success -> Messages.prefixed("teleport complete")
-                else -> TeleportFeedback.failure(outcome) ?: return@launch
+            val notices = when (outcome) {
+                is TeleportOutcome.Success -> listOf(MovementMessages.teleportComplete())
+                else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
             }
-            kernel.messagePlayer(subjectId, message)
+            kernel.sendNotices(
+                CommandFeedbackTarget.Player(subjectId),
+                adventure,
+                presentation,
+                subjectId,
+                notices,
+            )
         }
-
-        return launchResult(source, job, "teleporting...")
-    }
 
     private fun intent(
         subjectId: UUID,
