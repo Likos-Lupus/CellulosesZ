@@ -54,13 +54,6 @@ internal object ActionRenderer {
                     action.command
                 )
 
-            is UiAction.HelpPage ->
-                clickable(
-                    label,
-                    ClickEvent.suggestCommand("/help ${action.commandPath} --page ${action.page}"),
-                    "/help ${action.commandPath} --page ${action.page}",
-                )
-
             is UiAction.TeleportDecision -> {
                 val base = if (action.accept) "/tpaccept" else "/tpdeny"
                 when {
@@ -95,7 +88,6 @@ internal object ActionRenderer {
     private fun commandOf(action: UiAction): String? =
         when (action) {
             is UiAction.SuggestCommand -> action.command
-            is UiAction.HelpPage -> "/help ${action.commandPath} --page ${action.page}"
             is UiAction.TeleportDecision -> {
                 val base = if (action.accept) "/tpaccept" else "/tpdeny"
                 if (NAME_PATTERN.matches(action.senderName)) "$base ${action.senderName}" else base

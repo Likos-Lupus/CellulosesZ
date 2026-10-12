@@ -153,4 +153,25 @@ class TextPresentationTest {
         assertEquals(3, lines.size)
     }
 
+    @Test
+    fun `comfortable density inserts a blank line before an optional summary`() {
+        val page = ListPage(
+            title = LocalizedText(MessageKey("help.usage")),
+            rows = emptyList(),
+            emptyText = LocalizedText(MessageKey("help.document.restricted")),
+            summary = LocalizedText(
+                MessageKey("help.document.missing"),
+                listOf(TextArgument.Literal("x"))
+            ),
+        )
+        val compact = DefaultTextPresentation(messages, resolver) {
+            TextThemeResolver.resolve(TextSettings(density = "compact"))
+        }
+
+        assertEquals(
+            compact.renderFor(null, page).size + 1,
+            presentation.renderFor(null, page).size,
+        )
+    }
+
 }

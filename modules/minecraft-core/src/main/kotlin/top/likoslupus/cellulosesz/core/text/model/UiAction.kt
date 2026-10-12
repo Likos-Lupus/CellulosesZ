@@ -15,13 +15,6 @@ public sealed interface UiAction {
         public val command: String,
     ) : UiAction
 
-    /** Read-only documentation navigation generated from a validated DSL command path. */
-    public data class HelpPage(
-        override val label: LocalizedText,
-        public val commandPath: String,
-        public val page: Int,
-    ) : UiAction
-
     /** Accept/deny a teleport request. The renderer builds a fixed `/tpaccept`/`/tpdeny` command. */
     public data class TeleportDecision(
         override val label: LocalizedText,

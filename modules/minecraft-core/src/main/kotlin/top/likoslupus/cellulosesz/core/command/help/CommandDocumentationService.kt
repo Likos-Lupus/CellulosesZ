@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.core.command.help
 
 import net.kyori.adventure.text.Component as AdventureComponent
-import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.format.TextDecoration
 import net.minecraft.commands.CommandSourceStack
 import org.slf4j.LoggerFactory
@@ -9,24 +8,20 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.registry.CommandUsage
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.text.MessageKey
-import top.likoslupus.cellulosesz.core.text.document.*
+import top.likoslupus.cellulosesz.core.text.document.AdventureDocumentRenderer
+import top.likoslupus.cellulosesz.core.text.document.DocumentLoadResult
+import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
+import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
 import top.likoslupus.cellulosesz.core.text.i18n.BundledTranslations
 import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.renderFor
 import java.util.*
 
-/** One rendered page of command documentation. */
-public class HelpResult(
-    public val lines: List<AdventureComponent>,
-    public val page: Int,
-    public val pageCount: Int,
-)
-
 /**
  * Renders a resolved command document for a source: it loads the bundled Markdown for the effective
- * locale, prepends the executable usage projection, paginates over layout blocks and appends a
- * clickable navigation line. It never queries storage and never executes a command.
+ * locale and prepends the executable usage projection. The whole document is emitted at once (no
+ * pagination). It never queries storage and never executes a command.
  */
 public class CommandDocumentationService(
     private val loader: MarkdownDocumentLoader,
@@ -35,26 +30,23 @@ public class CommandDocumentationService(
     private val permissions: PermissionService,
 ) {
 
-    public fun page(
+    public fun render(
         resolution: HelpResolution.Owned,
         source: CommandSourceStack,
         theme: DocumentTheme,
-    ): HelpResult {
+    ): List<AdventureComponent> {
         val playerId = source.player?.uuid
 
         if (!resolution.permitted) {
-            return single(
-                messages.renderFor(
-                    playerId,
-                    MessageKey("help.document.restricted")
-                )
+            return listOf(
+                messages.renderFor(playerId, MessageKey("help.document.restricted"))
             )
         }
 
         val document = when (val result = loadDocument(resolution.documentation, playerId)) {
             is DocumentLoadResult.Found -> result.document
 
-            DocumentLoadResult.Missing -> return single(
+            DocumentLoadResult.Missing ->return listOf(
                 messages.renderFor(
                     playerId,
                     MessageKey("help.document.missing"),
@@ -68,7 +60,7 @@ public class CommandDocumentationService(
                     resolution.definition.documentation.value,
                     result.reason,
                 )
-                return single(
+                return listOf(
                     messages.renderFor(
                         playerId,
                         MessageKey("help.document.missing"),
@@ -78,48 +70,15 @@ public class CommandDocumentationService(
             }
         }
 
-        val blocks = mutableListOf<RenderedBlock>()
-        val usageHeader = messages.renderFor(playerId, MessageKey("help.usage"))
+        val out = mutableListOf<AdventureComponent>()
+        out += messages.renderFor(playerId, MessageKey("help.usage"))
                 .decorate(TextDecoration.BOLD)
-        val patternLines = CommandUsage.patterns(resolution.definition, source, permissions)
-                .map {
-                    AdventureComponent.text(
-                        it,
-                        theme.body
-                    )
-                }
-        blocks += RenderedBlock(lines = listOf(usageHeader) + patternLines)
-        blocks += RenderedBlock(lines = listOf(AdventureComponent.empty()))
-        blocks += AdventureDocumentRenderer(theme).renderBlocks(document)
-
-        val pages = DocumentPaginator.paginate(blocks)
-        val clamped = resolution.page.coerceIn(1, pages.size)
-        val page = pages[clamped - 1].toMutableList()
-        page += if (clamped != resolution.page) {
-            messages.renderFor(
-                playerId,
-                MessageKey("help.document.invalid_page"),
-                resolution.page.toString(),
-            )
-        } else {
-            navigation(
-                playerId,
-                resolution.canonical,
-                clamped,
-                pages.size,
-                theme
-            )
-        }
-
-        return HelpResult(
-            page,
-            clamped,
-            pages.size
-        )
+        CommandUsage.patterns(resolution.definition, source, permissions)
+                .forEach { out += AdventureComponent.text(it, theme.body) }
+        out += AdventureComponent.empty()
+        out += AdventureDocumentRenderer(theme).render(document)
+        return out
     }
-
-    private fun single(component: AdventureComponent): HelpResult =
-        HelpResult(listOf(component), 1, 1)
 
     private fun loadDocument(id: CommandDocumentId, playerId: UUID?): DocumentLoadResult {
         val order = listOf(
@@ -136,58 +95,8 @@ public class CommandDocumentationService(
                 DocumentLoadResult.Missing -> Unit
             }
         }
-        return invalid
-            ?: DocumentLoadResult.Missing
+        return invalid ?: DocumentLoadResult.Missing
     }
-
-    private fun navigation(
-        playerId: UUID?,
-        canonical: String,
-        page: Int,
-        pageCount: Int,
-        theme: DocumentTheme,
-    ): AdventureComponent {
-        val builder = AdventureComponent.text()
-        if (page > 1) {
-            builder.append(
-                pageLink(
-                    "‹",
-                    canonical,
-                    page - 1,
-                    theme
-                )
-            )
-        }
-        builder.append(
-            messages.renderFor(
-                playerId,
-                MessageKey("help.page"),
-                page.toString(),
-                pageCount.toString(),
-            )
-        )
-        if (page < pageCount) {
-            builder.append(
-                pageLink(
-                    "›",
-                    canonical,
-                    page + 1,
-                    theme
-                )
-            )
-        }
-        return builder.build()
-    }
-
-    private fun pageLink(
-        label: String,
-        canonical: String,
-        target: Int,
-        theme: DocumentTheme,
-    ): AdventureComponent =
-        AdventureComponent
-                .text(" $label ", theme.link)
-                .clickEvent(ClickEvent.suggestCommand("/help $canonical --page $target"))
 
     private companion object {
 

@@ -2,14 +2,16 @@ package top.likoslupus.cellulosesz.core.text.document
 
 import net.kyori.adventure.text.format.TextColor
 import top.likoslupus.cellulosesz.core.text.MessageTheme
+import top.likoslupus.cellulosesz.core.text.theme.TextDensity
 import top.likoslupus.cellulosesz.core.text.theme.TextRole
 import top.likoslupus.cellulosesz.core.text.theme.TextTheme
 
 /**
- * Colors for a rendered command document, derived from the semantic palette so a document and a
- * command reply do not drift.
+ * Colours and density for a rendered command document, derived from the semantic theme so a document
+ * and a command reply do not drift.
  */
 public class DocumentTheme(
+    public val density: TextDensity,
     public val body: TextColor,
     public val heading: TextColor,
     public val code: TextColor,
@@ -24,6 +26,7 @@ public class DocumentTheme(
 
         public fun from(theme: TextTheme): DocumentTheme =
             DocumentTheme(
+                density = theme.density,
                 body = theme.palette.color(TextRole.BODY),
                 heading = theme.palette.color(TextRole.HEADING),
                 code = theme.palette.color(TextRole.CODE),
@@ -36,6 +39,7 @@ public class DocumentTheme(
 
         public fun from(theme: MessageTheme): DocumentTheme =
             DocumentTheme(
+                density = TextDensity.COMFORTABLE,
                 body = theme.primary,
                 heading = theme.secondary,
                 code = theme.secondary,

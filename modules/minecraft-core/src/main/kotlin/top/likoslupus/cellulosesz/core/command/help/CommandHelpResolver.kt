@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.dsl.CommandNodeSpec
 import top.likoslupus.cellulosesz.core.command.dsl.LiteralNodeSpec
 import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 
 /** The outcome of resolving a Vanilla `/help <query>` string against the CellulosesZ command set. */
 public sealed interface HelpResolution {
@@ -15,7 +16,6 @@ public sealed interface HelpResolution {
         public val subPath: List<String>,
         public val canonical: String,
         public val documentation: CommandDocumentId,
-        public val page: Int,
         public val permitted: Boolean,
     ) : HelpResolution
 
@@ -23,8 +23,7 @@ public sealed interface HelpResolution {
 
 /**
  * Resolves a `/help` query to a CellulosesZ definition. Only literal sub-paths are resolved; a query
- * token that is not a literal child stops the walk (it is never interpreted as a game argument). A
- * trailing `--page N` is parsed as the single optional tail and never leaks into a real command.
+ * token that is not a literal child stops the walk (it is never interpreted as a game argument).
  *
  * The most specific documentation id along the resolved path wins (node id, else nearest ancestor,
  * else the root id), and permission is checked along the whole root -> leaf chain.
@@ -48,17 +47,6 @@ public class CommandHelpResolver(
                 .trim()
                 .split(WHITESPACE)
                 .filter { it.isNotEmpty() }
-                .toMutableList()
-        if (tokens.isEmpty()) {
-            return null
-        }
-
-        var requestedPage = 1
-        val pageIndex = tokens.indexOf(PAGE_FLAG)
-        if (pageIndex >= 0 && pageIndex == tokens.size - 2) {
-            requestedPage = tokens[pageIndex + 1].toIntOrNull() ?: 0
-            tokens.subList(pageIndex, tokens.size).clear()
-        }
         if (tokens.isEmpty()) {
             return null
         }
@@ -88,7 +76,6 @@ public class CommandHelpResolver(
             subPath = subPath,
             canonical = canonical,
             documentation = effectiveDocumentation,
-            page = if (requestedPage < 1) 1 else requestedPage,
             permitted = required.all { permissions.allows(source, it) },
         )
     }
@@ -96,7 +83,6 @@ public class CommandHelpResolver(
     public companion object {
 
         private val WHITESPACE = Regex("\\s+")
-        private const val PAGE_FLAG = "--page"
 
     }
 

@@ -5,69 +5,49 @@ import net.kyori.adventure.text.event.ClickEvent
 import net.kyori.adventure.text.event.HoverEvent
 import net.kyori.adventure.text.format.TextColor
 import net.kyori.adventure.text.format.TextDecoration
+import top.likoslupus.cellulosesz.core.text.theme.toLayoutStyle
 
 /**
- * Renders a parsed [MarkdownDocument] into layout blocks of chat lines. It never runs a command: a
- * `/command` link becomes `suggestCommand`, an `https://` link becomes `openUrl`, and any other
- * target is rendered as plain text. Console output is still readable because no line depends on
- * hover.
+ * Renders a parsed [MarkdownDocument] into chat lines. It never runs a command: a `/command` link
+ * becomes `suggestCommand`, an `https://` link becomes `openUrl`, and any other target is rendered as
+ * plain text. Console output is still readable because no line depends on hover. On a comfortable
+ * density a blank line separates top-level blocks; compact keeps them adjacent.
  */
 public class AdventureDocumentRenderer(
     private val theme: DocumentTheme,
 ) {
 
-    public fun render(document: MarkdownDocument): List<Component> =
-        renderBlocks(document).flatMap { it.lines }
-
-    /** Block-level rendering used by the paginator; internal so the public surface stays small. */
-    internal fun renderBlocks(document: MarkdownDocument): List<RenderedBlock> {
-        val out = mutableListOf<RenderedBlock>()
-        document.blocks.forEach { appendBlock(it, depth = 0, out = out) }
+    public fun render(document: MarkdownDocument): List<Component> {
+        val spacing = theme.density.toLayoutStyle().sectionSpacing
+        val out = mutableListOf<Component>()
+        document.blocks.forEach { block ->
+            if (spacing && out.isNotEmpty()) {
+                out += Component.empty()
+            }
+            appendBlock(block, depth = 0, out = out)
+        }
         return out
     }
 
     private fun appendBlock(
         block: MarkdownBlock,
         depth: Int,
-        out: MutableList<RenderedBlock>
+        out: MutableList<Component>
     ) {
         when (block) {
             is MarkdownBlock.Heading ->
-                out += RenderedBlock(
-                    lines = listOf(
-                        line(
-                            block.spans,
-                            theme.heading
-                        ).decorate(TextDecoration.BOLD)
-                    ),
-                    keepWithNext = true,
-                )
+                out += line(block.spans, theme.heading)
+                        .decorate(TextDecoration.BOLD)
 
             is MarkdownBlock.Paragraph ->
-                out += RenderedBlock(
-                    lines = listOf(
-                        line(
-                            block.spans,
-                            theme.body
-                        )
-                    )
-                )
+                out += line(block.spans, theme.body)
 
             is MarkdownBlock.BulletItem -> {
                 val prefix = Component.text(
                     "${"  ".repeat(block.depth)}• ",
                     theme.heading
                 )
-                out += RenderedBlock(
-                    lines = listOf(
-                        prefix.append(
-                            line(
-                                block.spans,
-                                theme.body
-                            )
-                        )
-                    )
-                )
+                out += prefix.append(line(block.spans, theme.body))
             }
 
             is MarkdownBlock.OrderedItem -> {
@@ -75,56 +55,44 @@ public class AdventureDocumentRenderer(
                     "${"  ".repeat(block.depth)}${block.number}. ",
                     theme.heading
                 )
-                out += RenderedBlock(
-                    lines = listOf(
-                        prefix.append(
-                            line(
-                                block.spans,
-                                theme.body
-                            )
-                        )
-                    )
-                )
+                out += prefix.append(line(block.spans, theme.body))
             }
 
             is MarkdownBlock.CodeBlock ->
-                out += RenderedBlock(lines = block.lines.map {
-                    Component.text(
+                block.lines.forEach {
+                    out += Component.text(
                         "  $it",
                         theme.code
                     )
-                })
+                }
 
             is MarkdownBlock.Quote -> {
-                val inner = mutableListOf<RenderedBlock>()
+                val inner = mutableListOf<Component>()
                 block.blocks.forEach { appendBlock(it, depth + 1, inner) }
-                val lines = inner.flatMap { it.lines }.map {
-                    Component.text("> ", theme.divider).append(it)
+                inner.forEach {
+                    out += Component.text(
+                        "> ",
+                        theme.divider
+                    ).append(it)
                 }
-                out += RenderedBlock(lines = lines)
             }
 
             is MarkdownBlock.Callout -> {
-                val inner = mutableListOf<RenderedBlock>()
-                block.blocks.forEach { appendBlock(it, depth + 1, inner) }
                 val color = when (block.kind) {
                     CalloutKind.TIP -> theme.tip
                     CalloutKind.NOTE -> theme.note
                     CalloutKind.WARNING -> theme.warning
                 }
                 val marker = Component.text("▌ ", color)
-                inner.flatMap { it.lines }
-                        .forEach { out += RenderedBlock(lines = listOf(marker.append(it))) }
+                val inner = mutableListOf<Component>()
+                block.blocks.forEach { appendBlock(it, depth + 1, inner) }
+                inner.forEach { out += marker.append(it) }
             }
 
             MarkdownBlock.Divider ->
-                out += RenderedBlock(
-                    lines = listOf(
-                        Component.text(
-                            "─".repeat(16),
-                            theme.divider
-                        )
-                    )
+                out += Component.text(
+                    "─".repeat(16),
+                    theme.divider
                 )
         }
     }

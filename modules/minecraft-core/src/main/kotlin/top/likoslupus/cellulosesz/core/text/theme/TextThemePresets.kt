@@ -28,17 +28,17 @@ public object TextThemePresets {
 
     private val highContrast = TextPalette(
         body = hex("#FFFFFF"),
-        secondary = hex("#D6DFEA"),
-        muted = hex("#AEBBCB"),
-        brand = hex("#8FC1FF"),
-        heading = hex("#FFD479"),
-        value = hex("#FFE7A8"),
-        action = hex("#9BD6FF"),
-        success = hex("#9BE8B4"),
-        warning = hex("#FFDA8F"),
-        error = hex("#FF9A9F"),
-        code = hex("#D6C8FF"),
-        divider = hex("#93A3B8"),
+        secondary = hex("#AAAAAA"),
+        muted = hex("#555555"),
+        brand = hex("#447FFF"),
+        heading = hex("#FFAA00"),
+        value = hex("#55FFFF"),
+        action = hex("#00AAAA"),
+        success = hex("#55FF55"),
+        warning = hex("#FFFF55"),
+        error = hex("#FF5555"),
+        code = hex("#5555FF"),
+        divider = hex("#000000"),
     )
 
     private val minimal = TextPalette(

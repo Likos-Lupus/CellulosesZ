@@ -47,9 +47,9 @@ internal class SelectiveVanillaHelpOverlay(
             if (resolution == null) {
                 original.run(context)
             } else {
-                val page = documentation.page(resolution, context.source, theme())
-                page.lines.forEach { line -> context.source.reply(adventure, line) }
-                page.lines.size.coerceAtLeast(1)
+                val lines = documentation.render(resolution, context.source, theme())
+                lines.forEach { line -> context.source.reply(adventure, line) }
+                lines.size.coerceAtLeast(1)
             }
         }
 

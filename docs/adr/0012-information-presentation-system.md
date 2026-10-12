@@ -39,8 +39,9 @@ the decorative `[CellulosesZ]` prefix.
 7. **Prefix retirement.** `Messages.PREFIX`, `Messages.prefixed` and `renderPrefixedFor` are removed
    after migration. `Messages.raw` is retained only as a clearly-labelled vanilla-compatibility
    output for disconnect reasons and menu titles.
-8. **Block-level document pagination.** Command documents paginate over typed layout blocks with a
-   fixed page header/footer and a dynamic body budget; rendered `Component` lines are never cut.
+8. **Whole-document output and density.** A command document is rendered and sent in full (no
+   pagination); `[text] density` controls only vertical spacing, inserting a blank line between
+   sections and before optional elements on `comfortable`, and keeping them adjacent on `compact`.
 
 ## Consequences
 

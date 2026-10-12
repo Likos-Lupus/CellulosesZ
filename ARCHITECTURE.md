@@ -172,8 +172,7 @@ TeleportIntent → preflight → optional delay → late destination resolve
 - Fabric integrates via `fabric-permissions-api`; NeoForge registers every node with the NeoForge
   `PermissionAPI` on `PermissionGatherEvent.Nodes`. LuckPerms is a compatibility target through
   those APIs; common modules never import a loader or `net.luckperms.*`. Non-player sources
-  (console/RCON)
-  use the vanilla fallback.
+  (console/RCON) use the vanilla fallback.
 - `ApplicationHealth` carries an explicit bootstrap state (UNINITIALIZED → CONFIG_READY →
   BOOTSTRAPPING_STORAGE → STORAGE_READY → LOADING_STATE → READY → STOPPING → STOPPED, or FAILED)
   plus a secret-free `summary()`. A fatal storage failure never reaches READY.
@@ -223,10 +222,10 @@ TeleportIntent → preflight → optional delay → late destination resolve
 - Long command documentation is a separate pipeline: CommonMark resources under each module's
   `cellulosesz/help/<lang>/...` are parsed with commonmark-java and rendered to Adventure. Short
   command feedback keeps using the `{0}`/`[[...]]` template parser; Markdown never interprets those.
-- Vanilla `/help` is selectively enhanced: for a query that names a CellulosesZ command, the
-  paginated Markdown document is shown; every other query (including no-argument `/help`) is
-  delegated unchanged to the saved vanilla executor. The overlay uses only public Brigadier merge
-  behaviour — no Mixin and no second help command.
+- Vanilla `/help` is selectively enhanced: for a query that names a CellulosesZ command, its
+  Markdown document is shown in full; every other query (including no-argument `/help`) is delegated
+  unchanged to the saved vanilla executor. The overlay uses only public Brigadier merge behaviour —
+  no Mixin and no second help command.
 
 ## Side and environment
 

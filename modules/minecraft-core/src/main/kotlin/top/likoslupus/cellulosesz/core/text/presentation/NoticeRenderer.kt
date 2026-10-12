@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.model.Notice
 import top.likoslupus.cellulosesz.core.text.model.NoticeTone
 import top.likoslupus.cellulosesz.core.text.theme.TextRole
+import top.likoslupus.cellulosesz.core.text.theme.toLayoutStyle
 
 /**
  * Renders a [Notice] into chat lines: conclusion first, an optional second line, then one line of
@@ -16,9 +17,20 @@ internal class NoticeRenderer(
 ) {
 
     fun render(context: RenderContext, notice: Notice): List<Component> {
+        val spacing = context.theme.density.toLayoutStyle().sectionSpacing
         val out = mutableListOf<Component>()
         out += mainLine(context, notice)
+        if (spacing
+            && (notice.detail != null || notice.actions.isNotEmpty())
+        ) {
+            out += Component.empty()
+        }
         notice.detail?.let { out += messages.render(context.language, it) }
+        if (spacing
+            && notice.detail != null && notice.actions.isNotEmpty()
+        ) {
+            out += Component.empty()
+        }
         when (notice.actions.size) {
             0 -> Unit
             1 -> out += ActionRenderer.render(messages, context, notice.actions.single())

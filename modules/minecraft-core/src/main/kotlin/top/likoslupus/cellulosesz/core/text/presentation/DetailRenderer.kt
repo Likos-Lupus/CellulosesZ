@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.core.text.presentation
 
-import top.likoslupus.cellulosesz.core.text.MessageKey
-
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
+import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.model.DetailView
 import top.likoslupus.cellulosesz.core.text.model.LocalizedText
 import top.likoslupus.cellulosesz.core.text.theme.TextRole
+import top.likoslupus.cellulosesz.core.text.theme.toLayoutStyle
 
 /** Renders a [DetailView] as `label: value` lines with no fixed-width alignment. */
 internal class DetailRenderer(
@@ -16,6 +16,7 @@ internal class DetailRenderer(
 
     fun render(context: RenderContext, detail: DetailView): List<Component> {
         val palette = context.theme.palette
+        val spacing = context.theme.density.toLayoutStyle().sectionSpacing
         val out = mutableListOf<Component>()
         out += messages
                 .render(context.language, detail.title)
@@ -41,6 +42,9 @@ internal class DetailRenderer(
         }
 
         detail.footer?.let {
+            if (spacing) {
+                out += Component.empty()
+            }
             out += messages.render(
                 context.language,
                 it

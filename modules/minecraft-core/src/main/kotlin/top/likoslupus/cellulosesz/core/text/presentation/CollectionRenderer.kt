@@ -1,14 +1,14 @@
 package top.likoslupus.cellulosesz.core.text.presentation
 
-import top.likoslupus.cellulosesz.core.text.MessageKey
-
 import net.kyori.adventure.text.Component
 import net.kyori.adventure.text.format.TextDecoration
+import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.model.ListPage
 import top.likoslupus.cellulosesz.core.text.model.LocalizedText
 import top.likoslupus.cellulosesz.core.text.model.TextArgument
 import top.likoslupus.cellulosesz.core.text.theme.TextRole
+import top.likoslupus.cellulosesz.core.text.theme.toLayoutStyle
 
 /**
  * Renders a [ListPage]. An empty collection is a neutral message, not an error. Row numbering is
@@ -20,6 +20,7 @@ internal class CollectionRenderer(
 
     fun render(context: RenderContext, page: ListPage): List<Component> {
         val palette = context.theme.palette
+        val spacing = context.theme.density.toLayoutStyle().sectionSpacing
         val out = mutableListOf<Component>()
 
         var title = messages
@@ -40,6 +41,9 @@ internal class CollectionRenderer(
                 context.language,
                 it
             )
+        }
+        if (spacing && page.summary != null) {
+            out += Component.empty()
         }
 
         if (page.rows.isEmpty()) {
@@ -110,6 +114,9 @@ internal class CollectionRenderer(
             )
         }
         if (nav.isNotEmpty()) {
+            if (spacing && out.isNotEmpty()) {
+                out += Component.empty()
+            }
             out += nav.reduce { acc, component ->
                 acc
                         .append(Component.text("  "))

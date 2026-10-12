@@ -44,8 +44,8 @@ with the legacy CellulosesZ or with EssentialsX.
 - **Inventory inspection** — `/enderchest`, `/disposal`, and read-only `/invsee <player>`.
 - **Localized messages** — server-side per-module translations (`en_us`, `zh_cn`) with
   `/cellulosesz language` and a per-player preference; semantic presentation (notices, lists,
-  details, paginated help) rendered per recipient from a token-based theme. CellulosesZ language
-  controls CellulosesZ-owned text only, not the player's Minecraft client language.
+  details, whole help documents) rendered per recipient from a token-based theme. CellulosesZ
+  language controls CellulosesZ-owned text only, not the player's Minecraft client language.
 - **Admin root** — `/cellulosesz status`, `/cellulosesz reload`.
 
 ## Design highlights
@@ -186,8 +186,8 @@ are served through `fabric-permissions-api` (LuckPerms-compatible); on NeoForge 
 `PermissionAPI`.
 
 The catalog above and the per-command documentation are generated from the command declarations.
-Every command has an `en_us` and `zh_cn` Markdown document; `/help <command>` shows it (paginated
-with `--page N`) while plain `/help` and every non-CellulosesZ query keep vanilla behaviour.
+Every command has an `en_us` and `zh_cn` Markdown document; `/help <command>` shows it in full while
+plain `/help` and every non-CellulosesZ query keep vanilla behaviour.
 
 ## Configuration and storage
 
