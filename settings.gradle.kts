@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         mavenCentral()
         gradlePluginPortal()
@@ -13,7 +14,6 @@ pluginManagement {
 plugins {
     id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
     id("dev.kikugie.stonecutter") version providers.gradleProperty("stonecutter_version")
-    // Hoisted so every project shares one plugin classloader (see gradle.properties).
     id("org.jetbrains.kotlin.jvm") version providers.gradleProperty("kotlin_version") apply false
     id("org.jetbrains.kotlin.plugin.serialization") version providers.gradleProperty("kotlin_version") apply false
     id("dev.architectury.loom-no-remap") version providers.gradleProperty("architectury_loom_version") apply false
@@ -29,8 +29,6 @@ dependencyResolutionManagement {
     }
 }
 
-// Compile-time architecture modules. These are fixed single-version compiled subprojects that
-// establish Kotlin `internal` boundaries; they are NOT Stonecutter version cells.
 include(
     ":modules:foundation",
     ":modules:minecraft-core",
