@@ -11,7 +11,13 @@ displayName = "CellulosesZ"
 description = "Server utility mod for Minecraft 26.1.2."
 
 [[mixins]]
-config = "cellulosesz.mixins.json"
+config = "cellulosesz.administration.mixins.json"
+
+[[mixins]]
+config = "cellulosesz.player.mixins.json"
+
+[[mixins]]
+config = "cellulosesz.communication.mixins.json"
 
 [[dependencies.cellulosesz]]
 modId = "neoforge"

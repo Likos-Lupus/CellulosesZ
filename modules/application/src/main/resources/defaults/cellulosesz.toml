@@ -139,6 +139,11 @@ allowWater = false
 [movement.requests]
 timeoutSeconds = 60
 maxIncomingPerPlayer = 5
+maxOutgoingPerPlayer = 16
+maxRequestsServerWide = 4096
+maxBatchRecipients = 16
+batchCooldownSeconds = 120
+maxAutoAllowedPlayers = 128
 
 [movement.homes]
 maxPerPlayer = 10
@@ -146,6 +151,24 @@ defaultName = "home"
 
 [movement.history]
 enabled = true
+
+[movement.randomTeleport]
+enabled = true
+maxAttempts = 16
+maxRadius = 10000
+maxRegions = 32
+searchTimeoutSeconds = 20
+cooldownSeconds = 120
+maxConcurrentServerSearches = 2
+maxConcurrentPerPlayer = 1
+allowChunkGeneration = false
+allowWater = false
+
+[movement.terrain]
+enabled = true
+maxJumpDistance = 32
+requireLoadedChunks = true
+allowWater = false
 
 # ---------------------------------------------------------------------------
 # Communication
@@ -175,6 +198,24 @@ maxMessagesPerMinute = 6
 enabled = true
 maxMessageLength = 1000
 
+# Server info pages: /motd, /rules, /info and /customtext <page>. Markdown files live under
+# <config-dir>/cellulosesz/<rootDirectory>/<lang>/<page>.md (en_us is the fallback language).
+[messaging.serverPages]
+enabled = true
+rootDirectory = "pages"
+maxPageBytes = 65536
+maxPages = 128
+showMotdOnJoin = false
+
+# /me action messages. `audience` is `same_dimension` or `server`. When `overrideVanillaMe` is true
+# the vanilla /me executor is replaced; /czme is always available as a fallback.
+[messaging.actionMessage]
+enabled = true
+overrideVanillaMe = true
+audience = "same_dimension"
+maximumLength = 256
+messagesPerMinute = 8
+
 # ---------------------------------------------------------------------------
 # Administration
 # ---------------------------------------------------------------------------
@@ -187,6 +228,22 @@ defaultMuteReason = "Muted by an administrator"
 maxReasonLength = 256
 notifyModerators = true
 auditEnabled = true
+
+[administration.jail]
+enabled = true
+defaultJail = ""
+maxJails = 32
+allowedRadius = 8.0
+returnOnRelease = true
+confinementCheckIntervalTicks = 20
+restrictCommands = false
+
+[administration.playerAdjustments]
+# Upper bound for a single /exp give|take|set amount; larger values are clamped.
+maximumExperienceAdjustment = 1000000
+# Allowed /speed multiplier range (walk and fly). Values outside are clamped.
+minimumSpeedMultiplier = 0.1
+maximumSpeedMultiplier = 3.0
 
 # ---------------------------------------------------------------------------
 # Utility
@@ -204,6 +261,16 @@ repairAllIncludesArmor = true
 moreEnabled = false
 condenseEnabled = false
 
+[utility.itemEditing]
+# Caps for /itemname and /itemlore. Longer input is rejected, not truncated.
+maxItemNameLength = 64
+maxLoreLines = 10
+maxLoreLineLength = 80
+# When false, /hat only accepts items with an equipment capability (for example armor).
+allowAnyItemAsHat = false
+# Seconds a /clearinventory confirmation code stays valid.
+clearConfirmationSeconds = 15
+
 [utility.workstations]
 enabled = false
 allowed = [
@@ -215,3 +282,33 @@ allowed = [
     "CARTOGRAPHY",
     "SMITHING",
 ]
+
+# ---------------------------------------------------------------------------
+# Players (presence, sessions, nicknames, player queries)
+# ---------------------------------------------------------------------------
+[players.afk]
+enabled = true
+autoAfterSeconds = 300
+checkIntervalTicks = 20
+movementThreshold = 0.15
+rotationThresholdDegrees = 3.0
+manualClearOnActivity = false
+announceStateChanges = false
+
+[players.sessions]
+enabled = true
+heartbeatIntervalSeconds = 60
+maxRetryBufferSize = 1024
+
+[players.nicknames]
+enabled = true
+minimumVisibleLength = 2
+maximumVisibleLength = 24
+allowSpaces = true
+applyToVanillaDisplay = false
+
+[players.nearby]
+defaultRadius = 100
+maximumRadius = 256
+maximumResults = 20
+hideSpectators = true

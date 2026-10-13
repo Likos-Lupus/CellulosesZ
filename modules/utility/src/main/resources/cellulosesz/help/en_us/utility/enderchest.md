@@ -2,10 +2,15 @@
 
 Open your ender chest.
 
-## Example
+## Behavior
 
-`/enderchest`
+Opens your own ender chest. It's the same storage as a placed ender chest, and changes are saved as
+usual.
 
-## Related
+## Examples
+
+- `/enderchest`
+
+## Related commands
 
 - `/disposal`, `/invsee`

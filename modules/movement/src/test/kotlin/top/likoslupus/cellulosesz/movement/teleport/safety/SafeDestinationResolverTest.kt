@@ -130,6 +130,42 @@ class SafeDestinationResolverTest {
     }
 
     @Test
+    fun `disabled safety still rejects an unsafe REQUIRE_SAFE destination`() {
+        val probe = FakeProbe(
+            safe = emptySet(),
+            surface = SurfaceKind.BLOCKED
+        )
+
+        assertInstanceOf(
+            SafetyResult.Unsafe::class.java,
+            resolver.resolve(
+                position(10, 64, 10),
+                SafetyMode.REQUIRE_SAFE,
+                settings.copy(enabled = false),
+                probe,
+            ),
+        )
+    }
+
+    @Test
+    fun `disabled safety still accepts a safe REQUIRE_SAFE destination`() {
+        val probe = FakeProbe(safe = setOf(key(10, 64, 10)))
+
+        assertEquals(
+            position(10, 64, 10),
+            assertInstanceOf(
+                SafetyResult.Safe::class.java,
+                resolver.resolve(
+                    position(10, 64, 10),
+                    SafetyMode.REQUIRE_SAFE,
+                    settings.copy(enabled = false),
+                    probe,
+                ),
+            ).position,
+        )
+    }
+
+    @Test
     fun `water is rejected unless allowed`() {
         val probe = FakeProbe(safe = emptySet(), surface = SurfaceKind.WATER)
 

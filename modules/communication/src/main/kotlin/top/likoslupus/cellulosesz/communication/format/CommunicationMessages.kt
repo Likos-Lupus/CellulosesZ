@@ -1,10 +1,12 @@
 package top.likoslupus.cellulosesz.communication.format
 
 import top.likoslupus.cellulosesz.communication.SenderRestriction
+import top.likoslupus.cellulosesz.communication.action.ActionMessageResult
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementResult
 import top.likoslupus.cellulosesz.communication.mail.*
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageOutcome
 import top.likoslupus.cellulosesz.communication.messaging.model.MessageBody
+import top.likoslupus.cellulosesz.communication.page.ServerPageResult
 import top.likoslupus.cellulosesz.communication.preferences.IgnoreUpdateResult
 import top.likoslupus.cellulosesz.communication.preferences.PreferenceUpdateResult
 import top.likoslupus.cellulosesz.communication.staff.HelpOpResult
@@ -336,6 +338,54 @@ internal object CommunicationMessages {
 
             AnnouncementResult.InvalidMessage ->
                 error(MessageKey("communication.broadcast.invalid"))
+        }
+
+    // Action messages -------------------------------------------------------------------------
+
+    fun actionLine(
+        senderName: String,
+        body: MessageBody,
+    ): Notice =
+        Notice(
+            LocalizedText(
+                MessageKey("communication.action.line"),
+                listOf(playerName(senderName), literal(body.value)),
+            ),
+            NoticeTone.INFO,
+        )
+
+    fun actionFeedback(result: ActionMessageResult): Notice =
+        when (result) {
+            is ActionMessageResult.Delivered -> result.notice
+            ActionMessageResult.Disabled -> error(MessageKey("communication.action.disabled"))
+            ActionMessageResult.InvalidMessage -> error(MessageKey("communication.action.invalid"))
+            ActionMessageResult.RateLimited -> error(MessageKey("communication.action.rate_limited"))
+            ActionMessageResult.Muted -> error(MessageKey("communication.action.sender_muted"))
+        }
+
+    // Server pages ----------------------------------------------------------------------------
+
+    fun pageFeedback(
+        result: ServerPageResult,
+        pageName: String,
+        fixed: Boolean,
+    ): Notice =
+        when (result) {
+            is ServerPageResult.Found -> error(MessageKey("communication.page.invalid"))
+            ServerPageResult.Disabled -> error(MessageKey("communication.page.disabled"))
+            ServerPageResult.InvalidName -> error(MessageKey("communication.page.invalid_name"))
+            ServerPageResult.NoSuchPage -> when {
+                fixed -> error(MessageKey("communication.page.missing"), literal(pageName))
+                else -> error(MessageKey("communication.page.unknown"), literal(pageName))
+            }
+
+            ServerPageResult.RootMissing -> error(MessageKey("communication.page.root_missing"))
+            ServerPageResult.TooLarge ->
+                error(MessageKey("communication.page.too_large"), literal(pageName))
+
+            ServerPageResult.TooManyPages -> error(MessageKey("communication.page.too_many"))
+            ServerPageResult.Invalid ->
+                error(MessageKey("communication.page.invalid"), literal(pageName))
         }
 
     private fun mailLine(

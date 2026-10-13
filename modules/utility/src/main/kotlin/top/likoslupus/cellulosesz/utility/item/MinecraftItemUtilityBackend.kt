@@ -1,8 +1,15 @@
 package top.likoslupus.cellulosesz.utility.item
 
+import com.google.gson.JsonElement
+import com.mojang.serialization.DynamicOps
+import com.mojang.serialization.JsonOps
+import net.minecraft.core.component.DataComponents
+import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.EquipmentSlot
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.component.ItemLore
 import net.minecraft.world.item.crafting.CraftingInput
 import net.minecraft.world.item.crafting.RecipeType
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
@@ -84,7 +91,8 @@ internal class MinecraftItemUtilityBackend(
     }
 
     override fun condense(playerId: UUID): CondenseBackendResult {
-        val player = player(playerId) ?: return CondenseBackendResult.TargetOffline
+        val player = player(playerId)
+            ?: return CondenseBackendResult.TargetOffline
         val level = player.level()
         val size = player.inventory.nonEquipmentItems.size
         var conversions = 0
@@ -140,6 +148,164 @@ internal class MinecraftItemUtilityBackend(
             kernel.requireServer(),
             playerId
         )
+
+    override fun setItemName(
+        playerId: UUID,
+        name: String?,
+    ): ItemNameBackendResult {
+        val player = player(playerId)
+            ?: return ItemNameBackendResult.TargetOffline
+        val stack = player.mainHandItem
+        if (stack.isEmpty) {
+            return ItemNameBackendResult.NoHeldItem
+        }
+        if (name == null) {
+            stack.remove(DataComponents.CUSTOM_NAME)
+        } else {
+            stack.set(
+                DataComponents.CUSTOM_NAME,
+                Component.literal(name)
+            )
+        }
+        player.inventory.setChanged()
+        val displayName = stack.hoverName.string
+        return when (name) {
+            null -> ItemNameBackendResult.Cleared(displayName)
+            else -> ItemNameBackendResult.Set(displayName)
+        }
+    }
+
+    override fun setItemLore(
+        playerId: UUID,
+        lines: List<String>,
+    ): ItemLoreBackendResult {
+        val player = player(playerId)
+            ?: return ItemLoreBackendResult.TargetOffline
+        val stack = player.mainHandItem
+        if (stack.isEmpty) {
+            return ItemLoreBackendResult.NoHeldItem
+        }
+        if (lines.isEmpty()) {
+            stack.remove(DataComponents.LORE)
+        } else {
+            stack.set(
+                DataComponents.LORE,
+                ItemLore(lines.map { Component.literal(it) })
+            )
+        }
+        player.inventory.setChanged()
+        return when (lines.isEmpty()) {
+            true -> ItemLoreBackendResult.Cleared(0)
+            else -> ItemLoreBackendResult.Set(lines.size)
+        }
+    }
+
+    override fun wearHeldItem(
+        playerId: UUID,
+        allowAnyItem: Boolean,
+    ): HatBackendResult {
+        val player = player(playerId)
+            ?: return HatBackendResult.TargetOffline
+        val held = player.getItemInHand(InteractionHand.MAIN_HAND)
+        if (held.isEmpty) {
+            return HatBackendResult.NoHeldItem
+        }
+        val equipmentCapable = held.get(DataComponents.EQUIPPABLE) != null
+        if (!ItemEditingRules.isHatAllowed(equipmentCapable, allowAnyItem)) {
+            return HatBackendResult.NotAllowed
+        }
+        val name = held.hoverName.string
+        val previousHead = player.getItemBySlot(EquipmentSlot.HEAD)
+        player.setItemInHand(
+            InteractionHand.MAIN_HAND,
+            previousHead.copy()
+        )
+        player.setItemSlot(
+            EquipmentSlot.HEAD,
+            held.copy()
+        )
+        player.inventory.setChanged()
+        return HatBackendResult.Worn(name)
+    }
+
+    override fun snapshotInventory(
+        playerId: UUID,
+        scope: ClearScope,
+    ): InventorySnapshotResult {
+        val player = player(playerId)
+            ?: return InventorySnapshotResult.TargetOffline
+        val ops = kernel.requireServer()
+                .registryAccess()
+                .createSerializationContext(JsonOps.INSTANCE)
+        val captured = slots(player, scope)
+        return InventorySnapshotResult.Snapshot(
+            InventorySnapshot(
+                scope = scope,
+                stacks = captured.count { (_, stack) -> !stack.isEmpty },
+                fingerprints = captured.map { (slot, stack) ->
+                    SlotFingerprint(slot, digest(stack, ops))
+                },
+            )
+        )
+    }
+
+    override fun clearInventory(
+        playerId: UUID,
+        scope: ClearScope,
+    ): ClearInventoryBackendResult {
+        val player = player(playerId)
+            ?: return ClearInventoryBackendResult.TargetOffline
+        var stacks = 0
+        player.inventory.nonEquipmentItems.forEachIndexed { index, stack ->
+            if (!stack.isEmpty) {
+                stacks++
+            }
+            player.inventory.setItem(index, ItemStack.EMPTY)
+        }
+        if (scope == ClearScope.ALL) {
+            ARMOR_SLOTS.forEach { slot ->
+                if (!player.getItemBySlot(slot).isEmpty) {
+                    stacks++
+                }
+                player.setItemSlot(slot, ItemStack.EMPTY)
+            }
+            if (!player.offhandItem.isEmpty) {
+                stacks++
+            }
+            player.setItemInHand(InteractionHand.OFF_HAND, ItemStack.EMPTY)
+        }
+        player.inventory.setChanged()
+        return ClearInventoryBackendResult.Cleared(stacks)
+    }
+
+    /** Stable slot identities and live stacks covered by [scope], in a deterministic order. */
+    private fun slots(
+        player: ServerPlayer,
+        scope: ClearScope,
+    ): List<Pair<String, ItemStack>> =
+        buildList {
+            player.inventory.nonEquipmentItems.forEachIndexed { index, stack ->
+                add("main:$index" to stack)
+            }
+            if (scope == ClearScope.ALL) {
+                ARMOR_SLOTS.forEach { slot ->
+                    add("armor:${slot.name.lowercase(Locale.ROOT)}" to player.getItemBySlot(slot))
+                }
+                add("offhand" to player.offhandItem)
+            }
+        }
+
+    private fun digest(
+        stack: ItemStack,
+        ops: DynamicOps<JsonElement>,
+    ): String =
+        when {
+            stack.isEmpty -> EMPTY_DIGEST
+            else -> ItemStack.CODEC
+                    .encodeStart(ops, stack)
+                    .getOrThrow()
+                    .toString()
+        }
 
     private fun repairTargets(
         player: ServerPlayer,
@@ -248,6 +414,19 @@ internal class MinecraftItemUtilityBackend(
         }
 
         return null
+    }
+
+    private companion object {
+
+        private val ARMOR_SLOTS = listOf(
+            EquipmentSlot.HEAD,
+            EquipmentSlot.CHEST,
+            EquipmentSlot.LEGS,
+            EquipmentSlot.FEET,
+        )
+
+        private const val EMPTY_DIGEST: String = "empty"
+
     }
 
 }

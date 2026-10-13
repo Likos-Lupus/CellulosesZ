@@ -131,4 +131,102 @@ internal class JdbcHomeRepository(
             }
         }
 
+    override suspend fun rename(
+        owner: UUID,
+        from: HomeName,
+        to: HomeName,
+    ): HomeRenameOutcome =
+        withContext(Dispatchers.IO) {
+            try {
+                database.transaction { connection ->
+                    val position = connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            dimension,
+                            x,
+                            y,
+                            z,
+                            yaw,
+                            pitch
+                        FROM
+                            ${MovementSqlSchema.HOMES}
+                        WHERE
+                            namespace = ? AND owner_uuid = ? AND name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, owner.toString())
+                        statement.setString(3, from.value)
+                        statement.executeQuery().use { rs ->
+                            if (rs.next()) rs.readStoredPosition(1) else null
+                        }
+                    } ?: return@transaction HomeRenameOutcome.SourceMissing
+
+                    val destinationExists = connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            1
+                        FROM
+                            ${MovementSqlSchema.HOMES}
+                        WHERE
+                            namespace = ? AND owner_uuid = ? AND name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, owner.toString())
+                        statement.setString(3, to.value)
+                        statement.executeQuery().use { rs -> rs.next() }
+                    }
+                    if (destinationExists) {
+                        return@transaction HomeRenameOutcome.DestinationExists
+                    }
+
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        DELETE FROM
+                            ${MovementSqlSchema.HOMES}
+                        WHERE
+                            namespace = ? AND owner_uuid = ? AND name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, owner.toString())
+                        statement.setString(3, from.value)
+                        statement.executeUpdate()
+                    }
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        INSERT INTO
+                            ${MovementSqlSchema.HOMES} (
+                                namespace,
+                                owner_uuid,
+                                name,
+                                dimension,
+                                x,
+                                y,
+                                z,
+                                yaw,
+                                pitch
+                            )
+                        VALUES (
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        );
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, owner.toString())
+                        statement.setString(3, to.value)
+                        statement.bindPosition(4, position)
+                        statement.executeUpdate()
+                    }
+                    HomeRenameOutcome.Renamed
+                }
+            } catch (exception: SQLException) {
+                throw HomeDataException(
+                    "unable to rename home '${from.value}' to '${to.value}' for $owner",
+                    exception
+                )
+            }
+        }
+
 }

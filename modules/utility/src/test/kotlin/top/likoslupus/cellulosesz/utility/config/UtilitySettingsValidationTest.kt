@@ -52,4 +52,23 @@ class UtilitySettingsValidationTest {
         )
     }
 
+    @Test
+    fun `rejects invalid item editing caps`() {
+        val errors = UtilitySettingsValidation.validate(
+            UtilitySettings(
+                itemEditing = ItemEditingSettings(
+                    maxItemNameLength = 0,
+                    maxLoreLines = 0,
+                    maxLoreLineLength = 0,
+                    clearConfirmationSeconds = 0,
+                )
+            )
+        ).map { it.path }.toSet()
+
+        assertTrue("utility.itemEditing.maxItemNameLength" in errors)
+        assertTrue("utility.itemEditing.maxLoreLines" in errors)
+        assertTrue("utility.itemEditing.maxLoreLineLength" in errors)
+        assertTrue("utility.itemEditing.clearConfirmationSeconds" in errors)
+    }
+
 }

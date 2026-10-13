@@ -31,6 +31,7 @@ dependencies {
     implementation(project(":modules:communication"))
     implementation(project(":modules:administration"))
     implementation(project(":modules:utility"))
+    implementation(project(":modules:player"))
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)

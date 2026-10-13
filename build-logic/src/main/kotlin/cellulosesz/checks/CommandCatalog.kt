@@ -11,6 +11,7 @@ private val COMMAND_MODULES = listOf(
     "communication" to "modules/communication",
     "administration" to "modules/administration",
     "utility" to "modules/utility",
+    "player" to "modules/player",
     "application" to "modules/application",
 )
 
@@ -20,6 +21,7 @@ private val CATEGORY_MODULE = mapOf(
     "communication" to "communication",
     "administration" to "administration",
     "utility" to "utility",
+    "player" to "player",
     "core" to "application",
 )
 
@@ -147,13 +149,12 @@ fun replaceCommandCatalog(existing: String, table: String): String {
     if (start < 0 || end < 0 || end < start) {
         throw GradleException("README.md is missing the command catalog markers")
     }
-    return """
-    ${existing.substring(0, start + COMMAND_CATALOG_START_MARKER.length)}
-
-    $table
-
-    ${existing.substring(end)}
-    """.trimIndent()
+    return "${
+        existing.substring(
+            0,
+            start + COMMAND_CATALOG_START_MARKER.length
+        )
+    }\n\n$table\n\n${existing.substring(end)}"
 }
 
 /**
@@ -205,7 +206,9 @@ fun commandCatalogViolations(root: File): List<String> {
     }
 
     COMMAND_MODULES.forEach { (module, base) ->
-        val helpRoot = root.resolve(base).resolve("src/main/resources/cellulosesz/help")
+        val helpRoot = root
+                .resolve(base)
+                .resolve("src/main/resources/cellulosesz/help")
         val idsByLang = mutableMapOf<String, Set<String>>()
         listOf("en_us", "zh_cn").forEach { lang ->
             val dir = helpRoot.resolve(lang)

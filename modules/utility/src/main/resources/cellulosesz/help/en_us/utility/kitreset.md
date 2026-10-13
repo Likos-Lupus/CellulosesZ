@@ -1,22 +1,26 @@
 # /kitreset
 
-Reset kit claims so a kit can be claimed again.
+Reset kit claims.
 
 ## Parameters
 
 - `name`: the kit name.
-- `player`: optional; reset for that player only, otherwise yourself.
+- `player`: optional; reset that player's claim instead of your own.
 
-## Example
+## Behavior
 
-`/kitreset starter`
-`/kitreset starter Alice`
+Clears the recorded claim so a once-only or cooldown kit can be claimed again. Moderator command.
+
+## Examples
+
+- `/kitreset starter`
+- `/kitreset starter Alice`
 
 ## Failures
 
-- The kit does not exist.
-- The named player is unknown.
+- The kit doesn't exist.
+- The named player is unknown to this server.
 
-## Related
+## Related commands
 
 - `/kit`, `/createkit`

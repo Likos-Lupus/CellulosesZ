@@ -18,6 +18,7 @@ class StorageMigrationTest {
 
         const val TABLE = "cz_test_items"
         override val id: String get() = "test"
+
         override fun tables(): List<SqlTable> =
             listOf(
                 SqlTable(
@@ -33,6 +34,53 @@ class StorageMigrationTest {
 
         override fun indexes(): List<SqlIndex> =
             emptyList()
+
+    }
+
+    /** An allowlisted table added since the last successful endpoint: present on the target, absent on the source. */
+    private object NewTableSchema : SqlSchemaContributor {
+
+        const val TABLE = "cz_warp_metadata"
+        override val id: String get() = "new"
+
+        override fun tables(): List<SqlTable> =
+            listOf(
+                SqlTable(
+                    TABLE,
+                    listOf(
+                        SqlColumn("namespace", SqlColumnType.NAME),
+                        SqlColumn("id", SqlColumnType.NAME),
+                    ),
+                    listOf("namespace", "id"),
+                )
+            )
+
+        override fun indexes(): List<SqlIndex> =
+            emptyList()
+
+    }
+
+    /** A required table absent from the source must never be skipped. */
+    private object MissingRequiredSchema : SqlSchemaContributor {
+
+        const val TABLE = "cz_test_required"
+        override val id: String get() = "missing"
+
+        override fun tables(): List<SqlTable> =
+            listOf(
+                SqlTable(
+                    TABLE,
+                    listOf(
+                        SqlColumn("namespace", SqlColumnType.NAME),
+                        SqlColumn("id", SqlColumnType.NAME),
+                    ),
+                    listOf("namespace", "id"),
+                )
+            )
+
+        override fun indexes(): List<SqlIndex> =
+            emptyList()
+
     }
 
     private fun descriptor(type: DatabaseType, path: String): ResolvedDatabaseDescriptor =
@@ -212,6 +260,94 @@ class StorageMigrationTest {
     @Test
     fun `journal dialect is available for every backend`() {
         DatabaseType.entries.forEach { type -> SqlDialects.of(type) }
+    }
+
+    @Test
+    fun `an allowlisted table absent from the source is tolerated`() {
+        val sourceDescriptor = descriptor(DatabaseType.SQLITE, "source3.db")
+        HikariDatabaseRuntime.create(sourceDescriptor).use { source ->
+            // Only TestSchema exists in the old source; NewTableSchema is a newly added table.
+            SchemaInitializer.initializeBlocking(source, listOf(TestSchema))
+            source.transaction { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${TestSchema.TABLE} (
+                        namespace,
+                        id,
+                        payload
+                    )
+                    VALUES (
+                        'default',
+                        'a',
+                        'b'
+                    );
+                    """.trimIndent()
+                ).use { it.executeUpdate() }
+            }
+        }
+
+        val targetDescriptor = descriptor(DatabaseType.H2, "target3")
+        HikariDatabaseRuntime.create(targetDescriptor).use { target ->
+            SchemaInitializer.initializeBlocking(
+                target,
+                listOf(MigrationJournalSchema, TestSchema, NewTableSchema)
+            )
+
+            val result = StorageMigrator.migrateBlocking(
+                source = sourceDescriptor,
+                target = target,
+                contributors = listOf(TestSchema, NewTableSchema),
+                sourceNamespace = "default",
+                targetNamespace = "default",
+            )
+
+            assertEquals(
+                StorageMigrationResult.Completed(2, 1),
+                result
+            )
+        }
+    }
+
+    @Test
+    fun `a non-allowlisted table absent from the source fails`() {
+        val sourceDescriptor = descriptor(DatabaseType.SQLITE, "source4.db")
+        HikariDatabaseRuntime.create(sourceDescriptor).use { source ->
+            SchemaInitializer.initializeBlocking(source, listOf(TestSchema))
+            source.transaction { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${TestSchema.TABLE} (
+                        namespace,
+                        id,
+                        payload
+                    )
+                    VALUES (
+                        'default',
+                        'a',
+                        'b'
+                    );
+                    """.trimIndent()
+                ).use { it.executeUpdate() }
+            }
+        }
+
+        val targetDescriptor = descriptor(DatabaseType.H2, "target4")
+        HikariDatabaseRuntime.create(targetDescriptor).use { target ->
+            SchemaInitializer.initializeBlocking(
+                target,
+                listOf(MigrationJournalSchema, TestSchema, MissingRequiredSchema)
+            )
+
+            assertThrows(StorageException::class.java) {
+                StorageMigrator.migrateBlocking(
+                    source = sourceDescriptor,
+                    target = target,
+                    contributors = listOf(TestSchema, MissingRequiredSchema),
+                    sourceNamespace = "default",
+                    targetNamespace = "default",
+                )
+            }
+        }
     }
 
 }

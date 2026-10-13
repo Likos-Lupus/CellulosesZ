@@ -1,5 +1,8 @@
 package top.likoslupus.cellulosesz.communication
 
+import top.likoslupus.cellulosesz.communication.action.ActionMessageService
+import top.likoslupus.cellulosesz.communication.action.MeOverrideState
+import top.likoslupus.cellulosesz.communication.action.command.ActionMessageCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
@@ -13,6 +16,10 @@ import top.likoslupus.cellulosesz.communication.messaging.MinecraftMessagingBack
 import top.likoslupus.cellulosesz.communication.messaging.PrivateMessageService
 import top.likoslupus.cellulosesz.communication.messaging.ReplyState
 import top.likoslupus.cellulosesz.communication.messaging.command.PrivateMessageCommands
+import top.likoslupus.cellulosesz.communication.page.ServerPageRepository
+import top.likoslupus.cellulosesz.communication.page.ServerPageResult
+import top.likoslupus.cellulosesz.communication.page.ServerPageService
+import top.likoslupus.cellulosesz.communication.page.command.ServerPageCommands
 import top.likoslupus.cellulosesz.communication.preferences.JdbcMessagingPreferencesRepository
 import top.likoslupus.cellulosesz.communication.preferences.MessagingPreferencesService
 import top.likoslupus.cellulosesz.communication.preferences.command.MessagingPreferenceCommands
@@ -26,11 +33,16 @@ import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
+import top.likoslupus.cellulosesz.core.text.adventure.InformationOutput
+import top.likoslupus.cellulosesz.core.text.document.AdventureDocumentRenderer
+import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
+import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.persistence.KeyedMutex
+import java.nio.file.Path
 import java.time.Clock
 import java.util.*
 import kotlin.time.Duration.Companion.seconds
@@ -51,6 +63,8 @@ public class CommunicationFeature internal constructor(
     private val mail: MailService,
     private val helpOp: HelpOpService,
     private val announcements: AnnouncementService,
+    private val serverPages: ServerPageService,
+    private val actionMessages: ActionMessageService,
     private val replyState: ReplyState,
     private val holder: IntegrationHolder,
     private val kernel: RuntimeKernel,
@@ -59,6 +73,8 @@ public class CommunicationFeature internal constructor(
     private val messages: LocalizedMessages,
     private val adventure: AdventureRuntime,
     private val presentation: TextPresentation,
+    private val languages: LanguageResolver,
+    private val documentTheme: () -> DocumentTheme,
 ) {
 
     public fun commands(integration: CommunicationIntegration): List<CommandDefinition> {
@@ -93,6 +109,20 @@ public class CommunicationFeature internal constructor(
             messages,
             adventure,
             presentation
+        ) + ServerPageCommands.commands(
+            serverPages,
+            languages,
+            documentTheme,
+            kernel,
+            messages,
+            adventure,
+            presentation
+        ) + ActionMessageCommands.commands(
+            actionMessages,
+            kernel,
+            messages,
+            adventure,
+            presentation
         )
     }
 
@@ -100,11 +130,21 @@ public class CommunicationFeature internal constructor(
         // All state is per-player and lazily loaded; there is nothing to scan at startup.
     }
 
+    /**
+     * Whether vanilla `/me` should be cancelled so the DSL `/me` owns the literal. Must be set by
+     * the composition root before the server builds its command dispatcher; the mixin reads the
+     * snapshot while vanilla registers its commands.
+     */
+    public fun applyVanillaMeOverride(enabled: Boolean) {
+        MeOverrideState.set(enabled)
+    }
+
     public fun onPlayerJoined(playerId: UUID) {
         preferences.beginLoad(playerId)
         kernel.launch {
             preferences.load(playerId)
             notifyUnreadMail(playerId)
+            showMotdOnJoin(playerId)
         }
     }
 
@@ -115,6 +155,25 @@ public class CommunicationFeature internal constructor(
 
     public fun onServerStopping() {
         preferences.shutdown()
+    }
+
+    private suspend fun showMotdOnJoin(playerId: UUID) {
+        val pages = settings().serverPages
+        if (!pages.enabled || !pages.showMotdOnJoin) {
+            return
+        }
+
+        when (val result = serverPages.load("motd", languages.effective(playerId))) {
+            is ServerPageResult.Found -> {
+                val lines = AdventureDocumentRenderer(documentTheme()).render(result.document)
+                InformationOutput(adventure, kernel).deliver(
+                    CommandFeedbackTarget.Player(playerId),
+                    lines,
+                )
+            }
+
+            else -> Unit
+        }
     }
 
     private suspend fun notifyUnreadMail(playerId: UUID) {
@@ -155,6 +214,9 @@ public fun createCommunicationFeature(
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
     presentation: TextPresentation,
+    configDirectory: Path,
+    languages: LanguageResolver,
+    documentTheme: () -> DocumentTheme,
 ): CommunicationFeature {
     val holder = IntegrationHolder()
     val runner = kernel.serverThreadRunner()
@@ -203,6 +265,18 @@ public fun createCommunicationFeature(
         presentation = presentation,
         settings = { settings().announcements },
     )
+    val serverPages = ServerPageService(
+        repository = ServerPageRepository(configDirectory) { settings().serverPages },
+        settings = { settings().serverPages },
+    )
+    val actionMessages = ActionMessageService(
+        runner = runner,
+        directory = directory,
+        presentation = presentation,
+        recipients = preferences,
+        integration = { holder.value },
+        settings = { settings().actionMessage },
+    )
 
     return CommunicationFeature(
         privateMessages = privateMessages,
@@ -210,6 +284,8 @@ public fun createCommunicationFeature(
         mail = mail,
         helpOp = helpOp,
         announcements = announcements,
+        serverPages = serverPages,
+        actionMessages = actionMessages,
         replyState = replyState,
         holder = holder,
         kernel = kernel,
@@ -218,5 +294,7 @@ public fun createCommunicationFeature(
         messages = messages,
         adventure = adventure,
         presentation = presentation,
+        languages = languages,
+        documentTheme = documentTheme,
     )
 }

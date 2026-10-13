@@ -6,14 +6,18 @@ Delete a kit.
 
 - `name`: the kit name.
 
-## Example
+## Behavior
 
-`/delkit starter`
+Removes the kit and its stored contents. This can't be undone. Moderator command.
+
+## Examples
+
+- `/delkit starter`
 
 ## Failures
 
-- The kit does not exist.
+- The kit doesn't exist.
 
-## Related
+## Related commands
 
 - `/createkit`, `/updatekit`

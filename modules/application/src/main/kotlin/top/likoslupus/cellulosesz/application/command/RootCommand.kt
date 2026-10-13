@@ -51,6 +51,7 @@ internal object RootCommand {
         catalog: TranslationCatalog,
         modVersion: String,
         loaderName: String,
+        onReloadApplied: () -> Unit = {},
     ): CommandDefinition =
         command(
             name = ROOT_LITERAL,
@@ -84,7 +85,8 @@ internal object RootCommand {
                         config,
                         kernel,
                         messages,
-                        adventure
+                        adventure,
+                        onReloadApplied
                     )
                 }
             }
@@ -393,20 +395,24 @@ internal object RootCommand {
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
+        onReloadApplied: () -> Unit,
     ): Int {
         val playerId = source.player?.uuid
         val target = source.feedbackTarget()
         val job = kernel.launch {
             when (val result = config.reload()) {
-                is ConfigReloadResult.Success -> kernel.message(
-                    target,
-                    adventure,
-                    messages.renderFor(
-                        playerId,
-                        MessageKey("core.reload.succeeded"),
-                        listOf(MessageArgument(result.generation.toString())),
-                    ),
-                )
+                is ConfigReloadResult.Success -> {
+                    onReloadApplied()
+                    kernel.message(
+                        target,
+                        adventure,
+                        messages.renderFor(
+                            playerId,
+                            MessageKey("core.reload.succeeded"),
+                            listOf(MessageArgument(result.generation.toString())),
+                        ),
+                    )
+                }
 
                 is ConfigReloadResult.Failure -> kernel.message(
                     target,

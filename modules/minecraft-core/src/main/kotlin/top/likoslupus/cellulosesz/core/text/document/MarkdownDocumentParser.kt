@@ -50,10 +50,10 @@ public object MarkdownDocumentParser {
                 out += MarkdownBlock.CodeBlock(codeLines(node.literal))
 
             is BulletList ->
-                listItems(node, depth, ordered = false, out = out)
+                out += listBlock(node, depth, ordered = false)
 
             is OrderedList ->
-                listItems(node, depth, ordered = true, out = out)
+                out += listBlock(node, depth, ordered = true)
 
             is BlockQuote -> {
                 val kind = calloutKind(node)
@@ -85,45 +85,69 @@ public object MarkdownDocumentParser {
         }
     }
 
-    private fun listItems(
+    private fun listBlock(
+        list: Node,
+        depth: Int,
+        ordered: Boolean
+    ): MarkdownBlock.ListBlock {
+        val entries = mutableListOf<MarkdownBlock.ListEntry>()
+        val first = if (ordered && list is OrderedList) list.markerStartNumber else 1
+        collectEntries(list, depth, ordered, firstNumber = first, out = entries)
+        return MarkdownBlock.ListBlock(ordered, entries)
+    }
+
+    private fun collectEntries(
         list: Node,
         depth: Int,
         ordered: Boolean,
-        out: MutableList<MarkdownBlock>
+        firstNumber: Int,
+        out: MutableList<MarkdownBlock.ListEntry>
     ) {
-        var index = 1
+        var index = firstNumber
         var item = list.firstChild
         while (item != null) {
             val next = item.next
             if (item is ListItem) {
-                var first = true
+                var lead: List<MarkdownSpan>? = null
                 var sub = item.firstChild
                 while (sub != null) {
-                    val subNext = sub.next
-                    when (sub) {
-                        is Paragraph -> when {
-                            first -> {
-                                out += when {
-                                    ordered -> MarkdownBlock.OrderedItem(depth, index, spans(sub))
-                                    else -> MarkdownBlock.BulletItem(depth, spans(sub))
-                                }
-                                first = false
-                            }
+                    if (sub is Paragraph && lead == null) {
+                        lead = spans(sub)
+                    }
+                    sub = sub.next
+                }
+                out += MarkdownBlock.ListEntry(
+                    depth = depth,
+                    number = if (ordered) index else null,
+                    spans = lead ?: emptyList(),
+                )
+                index++
 
-                            else -> out += MarkdownBlock.Paragraph(spans(sub))
-                        }
-
+                var nested = item.firstChild
+                while (nested != null) {
+                    when (nested) {
                         is BulletList ->
-                            listItems(sub, depth + 1, ordered = false, out = out)
+                            collectEntries(
+                                nested,
+                                depth + 1,
+                                ordered = false,
+                                firstNumber = 1,
+                                out = out
+                            )
 
                         is OrderedList ->
-                            listItems(sub, depth + 1, ordered = true, out = out)
+                            collectEntries(
+                                nested,
+                                depth + 1,
+                                ordered = true,
+                                firstNumber = nested.markerStartNumber,
+                                out = out,
+                            )
 
-                        else -> appendBlock(sub, depth + 1, out)
+                        else -> Unit
                     }
-                    sub = subNext
+                    nested = nested.next
                 }
-                index++
             }
             item = next
         }

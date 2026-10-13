@@ -70,7 +70,7 @@ class LocalizedMessagesTest {
         assertEquals(3, children.size)
 
         val label = children[0] as TextComponent
-        assertEquals("Current language: ", label.content())
+        assertEquals("Language: ", label.content())
         assertEquals(theme.palette.body, label.color())
 
         val value = children[1] as TextComponent
@@ -86,7 +86,7 @@ class LocalizedMessagesTest {
             listOf(MessageArgument("[[oops]] {1}")),
         )
 
-        val argument = rendered.children()[1] as TextComponent
+        val argument = rendered.children()[0] as TextComponent
         assertEquals("[[oops]] {1}", argument.content())
     }
 
@@ -103,7 +103,7 @@ class LocalizedMessagesTest {
             )
 
             assertEquals(
-                "语言已切换为 ",
+                "已切换为 ",
                 (rendered.children()[0] as TextComponent).content()
             )
         }
@@ -119,7 +119,7 @@ class LocalizedMessagesTest {
         )
 
         assertEquals(
-            "语言已切换为 ",
+            "已切换为 ",
             (rendered.children()[0] as TextComponent).content()
         )
     }
@@ -135,7 +135,7 @@ class LocalizedMessagesTest {
         )
 
         assertEquals(
-            "语言已切换为 ",
+            "已切换为 ",
             (rendered.children()[0] as TextComponent).content()
         )
     }

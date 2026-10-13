@@ -7,5 +7,6 @@ import kotlinx.serialization.Serializable
 public data class UtilitySettings(
     public val kits: KitSettings = KitSettings(),
     public val items: ItemUtilitySettings = ItemUtilitySettings(),
+    public val itemEditing: ItemEditingSettings = ItemEditingSettings(),
     public val workstations: WorkstationSettings = WorkstationSettings(),
 )

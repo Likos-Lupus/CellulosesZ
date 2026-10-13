@@ -100,6 +100,64 @@ public object MessagingSettingsValidation {
                     )
                 )
             }
+
+            val pages = settings.serverPages
+            if (pages.maxPageBytes <= 0) {
+                add(
+                    ValidationError(
+                        "messaging.serverPages.maxPageBytes",
+                        "must be > 0",
+                    )
+                )
+            }
+            if (pages.maxPages <= 0) {
+                add(
+                    ValidationError(
+                        "messaging.serverPages.maxPages",
+                        "must be > 0",
+                    )
+                )
+            }
+            val root = pages.rootDirectory.trim()
+            if (root.isEmpty()) {
+                add(
+                    ValidationError(
+                        "messaging.serverPages.rootDirectory",
+                        "must not be blank",
+                    )
+                )
+            }
+            if (root.startsWith("/")
+                || root.startsWith("\\")
+                || root.contains("..")
+                || root.contains(':')
+                || root.contains('\\')
+            ) {
+                add(
+                    ValidationError(
+                        "messaging.serverPages.rootDirectory",
+                        "must be a relative directory without '..'",
+                    )
+                )
+            }
+
+            val action = settings.actionMessage
+            if (action.maximumLength <= 0) {
+                add(
+                    ValidationError(
+                        "messaging.actionMessage.maximumLength",
+                        "must be > 0",
+                    )
+                )
+            }
+            if (action.messagesPerMinute <= 0) {
+                add(
+                    ValidationError(
+                        "messaging.actionMessage.messagesPerMinute",
+                        "must be > 0",
+                    )
+                )
+            }
         }
 
 }

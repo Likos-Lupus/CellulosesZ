@@ -65,6 +65,7 @@ internal object HomeCommands {
                 }
             }
         },
+
         command(
             name = "home",
             category = CommandCategory.MOVEMENT,
@@ -100,6 +101,7 @@ internal object HomeCommands {
                 }
             }
         },
+
         command(
             name = "delhome",
             category = CommandCategory.MOVEMENT,
@@ -120,6 +122,7 @@ internal object HomeCommands {
                 }
             }
         },
+
         command(
             name = "homes",
             category = CommandCategory.MOVEMENT,
@@ -135,6 +138,30 @@ internal object HomeCommands {
                     adventure,
                     presentation,
                 )
+            }
+        },
+
+        command(
+            name = "renamehome",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.RENAME_HOME,
+            documentation = "movement/renamehome",
+        ) {
+            argument("old", word()) { old ->
+                argument("new", word()) { new ->
+                    executesPlayer {
+                        renameHome(
+                            context,
+                            get(old),
+                            get(new),
+                            service,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
             }
         },
     )
@@ -267,6 +294,48 @@ internal object HomeCommands {
             val notice = MovementMessages.homeDelete(
                 rawName,
                 service.delete(playerId, rawName)
+            )
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice)
+            )
+        }
+    }
+
+    private fun renameHome(
+        context: CommandContext<CommandSourceStack>,
+        oldName: String,
+        newName: String,
+        service: HomeService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val playerId = source.player?.uuid
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.renaming_home")
+        ) { target ->
+            val notice = MovementMessages.homeRename(
+                oldName,
+                newName,
+                service.rename(playerId, oldName, newName),
             )
             kernel.sendNotices(
                 target,

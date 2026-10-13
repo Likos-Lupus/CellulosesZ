@@ -2,10 +2,19 @@
 
 Open a portable loom.
 
-## Example
+## Behavior
 
-`/loom`
+Opens the vanilla loom menu.
 
-## Related
+## Examples
+
+- `/loom`
+
+## Limits
+
+Portable workstations are disabled by default and can be limited to an allowed set; if this one
+isn't allowed, the command reports that and opens nothing.
+
+## Related commands
 
 - `/workbench`

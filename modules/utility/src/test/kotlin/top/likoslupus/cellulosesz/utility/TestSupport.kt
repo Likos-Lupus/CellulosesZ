@@ -178,6 +178,12 @@ internal class FakeItemUtilityBackend : ItemUtilityBackend {
     var repairResult: RepairBackendResult = RepairBackendResult.NothingToRepair
     var moreResult: MoreBackendResult = MoreBackendResult.NothingToFill
     var condenseResult: CondenseBackendResult = CondenseBackendResult.NothingToCondense
+    var itemNameResult: ItemNameBackendResult = ItemNameBackendResult.NoHeldItem
+    var itemLoreResult: ItemLoreBackendResult = ItemLoreBackendResult.NoHeldItem
+    var hatResult: HatBackendResult = HatBackendResult.NoHeldItem
+    var clearResult: ClearInventoryBackendResult = ClearInventoryBackendResult.Cleared(0)
+    var snapshotResult: InventorySnapshotResult =
+        InventorySnapshotResult.Snapshot(InventorySnapshot(ClearScope.MAIN, 0, emptyList()))
 
     override fun repair(
         playerId: UUID,
@@ -191,5 +197,24 @@ internal class FakeItemUtilityBackend : ItemUtilityBackend {
 
     override fun condense(playerId: UUID): CondenseBackendResult =
         condenseResult
+
+    override fun setItemName(playerId: UUID, name: String?): ItemNameBackendResult =
+        itemNameResult
+
+    override fun setItemLore(playerId: UUID, lines: List<String>): ItemLoreBackendResult =
+        itemLoreResult
+
+    override fun wearHeldItem(playerId: UUID, allowAnyItem: Boolean): HatBackendResult =
+        hatResult
+
+    override fun snapshotInventory(
+        playerId: UUID,
+        scope: ClearScope,
+    ): InventorySnapshotResult = snapshotResult
+
+    override fun clearInventory(
+        playerId: UUID,
+        scope: ClearScope,
+    ): ClearInventoryBackendResult = clearResult
 
 }

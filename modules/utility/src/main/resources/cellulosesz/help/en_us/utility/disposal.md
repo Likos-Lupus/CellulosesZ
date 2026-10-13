@@ -1,11 +1,20 @@
 # /disposal
 
-Open a temporary disposal inventory. Items placed in it are destroyed when it closes.
+Open a temporary disposal inventory.
 
-## Example
+## Behavior
 
-`/disposal`
+Items placed in the disposal inventory are destroyed when the menu closes. They don't return to your
+inventory and can't be recovered.
 
-## Related
+## Examples
+
+- `/disposal`
+
+## Limits
+
+Closing the menu destroys everything inside. This is irreversible.
+
+## Related commands
 
 - `/enderchest`

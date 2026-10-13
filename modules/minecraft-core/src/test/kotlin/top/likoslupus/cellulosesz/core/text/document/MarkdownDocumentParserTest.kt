@@ -10,7 +10,7 @@ class MarkdownDocumentParserTest {
     @Test
     fun `parses headings, paragraphs and inline emphasis`() {
         val doc = MarkdownDocumentParser.parse(
-            """
+            /* language=Markdown */ """
             # /home
 
             Teleport to a **saved** home with `name`.
@@ -29,21 +29,39 @@ class MarkdownDocumentParserTest {
     }
 
     @Test
-    fun `parses bullet lists whose code spans contain angle brackets`() {
+    fun `groups a bullet list into a single block`() {
         val doc = MarkdownDocumentParser.parse(
-            """
+            /* language=Markdown */ """
             - `/tp <target>` teleports you.
             - `/tp <from> <to>` moves a player.
             """.trimIndent()
         )
-        assertEquals(2, doc.blocks.size)
-        assertTrue(doc.blocks.all { it is MarkdownBlock.BulletItem })
+        val list = doc.blocks.single() as MarkdownBlock.ListBlock
+        assertEquals(false, list.ordered)
+        assertEquals(2, list.entries.size)
+        assertTrue(list.entries.all { it.depth == 0 })
+        assertTrue(list.entries.all { it.number == null })
+    }
+
+    @Test
+    fun `preserves ordered list numbering and nesting depth`() {
+        val doc = MarkdownDocumentParser.parse(
+            /* language=Markdown */ """
+            3. third
+            4. fourth
+               - nested
+            """.trimIndent()
+        )
+        val list = doc.blocks.single() as MarkdownBlock.ListBlock
+        assertTrue(list.ordered)
+        assertEquals(listOf(3, 4, null), list.entries.map { it.number })
+        assertEquals(listOf(0, 0, 1), list.entries.map { it.depth })
     }
 
     @Test
     fun `parses code blocks, quotes and dividers`() {
         val doc = MarkdownDocumentParser.parse(
-            """
+            /* language=Markdown */ """
             ## Example
 
             ```
@@ -62,7 +80,7 @@ class MarkdownDocumentParserTest {
 
     @Test
     fun `parses links`() {
-        val doc = MarkdownDocumentParser.parse("[docs](https://example.com)")
+        val doc = MarkdownDocumentParser.parse(/* language=Markdown */ "[docs](https://example.com)")
         val paragraph = doc.blocks.single() as MarkdownBlock.Paragraph
         val link = paragraph.spans.filterIsInstance<MarkdownSpan.Link>().single()
         assertEquals("docs", link.label)
@@ -72,14 +90,14 @@ class MarkdownDocumentParserTest {
     @Test
     fun `rejects raw html`() {
         assertThrows<MarkdownDocumentException> {
-            MarkdownDocumentParser.parse("<div>nope</div>")
+            MarkdownDocumentParser.parse(/* language=Markdown */ "<div>nope</div>")
         }
     }
 
     @Test
     fun `rejects images`() {
         assertThrows<MarkdownDocumentException> {
-            MarkdownDocumentParser.parse("![alt](https://example.com/a.png)")
+            MarkdownDocumentParser.parse(/* language=Markdown */ "![alt](https://example.com/a.png)")
         }
     }
 

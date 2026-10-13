@@ -16,9 +16,8 @@ import top.likoslupus.cellulosesz.core.text.adventure.replyError
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.renderFor
 import top.likoslupus.cellulosesz.core.text.model.Notice
-import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
-import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
-import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.core.text.presentation.*
+import top.likoslupus.cellulosesz.movement.RequestReachabilityPort
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
@@ -29,8 +28,10 @@ internal object TeleportRequestCommands {
 
     fun commands(
         service: TeleportRequestService,
+        tpAuto: TpAutoService,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
+        reachability: RequestReachabilityPort,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -49,6 +50,10 @@ internal object TeleportRequestCommands {
                         get(player),
                         TeleportRequestType.TO_TARGET,
                         service,
+                        tpAuto,
+                        teleports,
+                        teleportSettings,
+                        kernel,
                         messages,
                         adventure,
                         presentation,
@@ -70,11 +75,33 @@ internal object TeleportRequestCommands {
                         get(player),
                         TeleportRequestType.BRING_TARGET,
                         service,
+                        tpAuto,
+                        teleports,
+                        teleportSettings,
+                        kernel,
                         messages,
                         adventure,
                         presentation,
                     )
                 }
+            }
+        },
+
+        command(
+            name = "tpaall",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TPA_ALL,
+            documentation = "movement/tpaall",
+        ) {
+            executesPlayer {
+                tpaAll(
+                    context,
+                    service,
+                    reachability,
+                    messages,
+                    adventure,
+                    presentation,
+                )
             }
         },
 
@@ -160,6 +187,103 @@ internal object TeleportRequestCommands {
                 )
             }
         },
+
+        command(
+            name = "tpauto",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TPAUTO,
+            documentation = "movement/tpauto",
+        ) {
+            executesPlayer {
+                status(
+                    context,
+                    tpAuto,
+                    adventure,
+                    presentation,
+                )
+            }
+            literal("off") {
+                executesPlayer {
+                    setMode(
+                        context,
+                        TpAutoMode.OFF,
+                        tpAuto,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("trusted") {
+                executesPlayer {
+                    setMode(
+                        context,
+                        TpAutoMode.TRUSTED,
+                        tpAuto,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("all") {
+                executesPlayer {
+                    setMode(
+                        context,
+                        TpAutoMode.ALL,
+                        tpAuto,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("list") {
+                executesPlayer {
+                    list(
+                        context,
+                        tpAuto,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("allow") {
+                argument("player", word()) { player ->
+                    executesPlayer {
+                        changeAllowed(
+                            context,
+                            get(player),
+                            true,
+                            tpAuto,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+            }
+            literal("deny") {
+                argument("player", word()) { player ->
+                    executesPlayer {
+                        changeAllowed(
+                            context,
+                            get(player),
+                            false,
+                            tpAuto,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+            }
+        },
     )
 
     private fun send(
@@ -167,6 +291,10 @@ internal object TeleportRequestCommands {
         targetName: String,
         type: TeleportRequestType,
         service: TeleportRequestService,
+        tpAuto: TpAutoService,
+        teleports: TeleportCoordinator,
+        teleportSettings: () -> TeleportSettings,
+        kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
@@ -200,16 +328,25 @@ internal object TeleportRequestCommands {
                     )
                 )
 
-            TpaSendResult.SenderAlreadyHasRequest ->
+            TpaSendResult.SenderQueueFull ->
                 source.replyError(
                     adventure,
                     messages.renderFor(
                         sender.uuid,
-                        MessageKey("movement.request.already_pending")
+                        MessageKey("movement.request.sender_queue_full")
                     )
                 )
 
-            TpaSendResult.TargetQueueFull ->
+            TpaSendResult.ServerQueueFull ->
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.server_queue_full")
+                    )
+                )
+
+            is TpaSendResult.TargetQueueFull ->
                 source.replyError(
                     adventure,
                     messages.renderFor(
@@ -220,6 +357,24 @@ internal object TeleportRequestCommands {
                 )
 
             is TpaSendResult.Sent -> {
+                if (type == TeleportRequestType.TO_TARGET
+                    && tpAuto.shouldAutoAccept(target.uuid, sender.uuid, type)
+                ) {
+                    val accepted = service.accept(target.uuid, sender.uuid)
+                    if (accepted is TpaAcceptResult.Accepted) {
+                        return launchAccepted(
+                            source,
+                            accepted.request,
+                            auto = true,
+                            teleports,
+                            teleportSettings,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
                 notify(
                     target.uuid,
                     adventure,
@@ -251,6 +406,91 @@ internal object TeleportRequestCommands {
         }
     }
 
+    private fun tpaAll(
+        context: CommandContext<CommandSourceStack>,
+        service: TeleportRequestService,
+        reachability: RequestReachabilityPort,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val sender = source.player
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+
+        val candidates = PlayerResolver.online(source.server).map { it.uuid }
+        val result = service.sendBatch(
+            senderId = sender.uuid,
+            candidates = candidates,
+            type = TeleportRequestType.BRING_TARGET,
+            reachable = { reachability.canReach(sender.uuid, it) },
+        )
+
+        return when (result) {
+            is TpaBatchSendResult.Sent -> {
+                val senderName = sender.name.string
+                result.recipients.forEach { recipientId ->
+                    notify(
+                        recipientId,
+                        adventure,
+                        presentation,
+                        MovementMessages.requestReceived(
+                            TeleportRequestType.BRING_TARGET,
+                            senderName
+                        ),
+                    )
+                }
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    sender.uuid,
+                    MovementMessages.requestBatchSent(result.recipients.size),
+                )
+            }
+
+            TpaBatchSendResult.NoRecipients ->
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.batch_none")
+                    )
+                )
+
+            is TpaBatchSendResult.Cooldown ->
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    sender.uuid,
+                    MovementMessages.requestBatchCooldown(result.remaining),
+                )
+
+            TpaBatchSendResult.SenderQueueFull ->
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.sender_queue_full")
+                    )
+                )
+
+            TpaBatchSendResult.ServerQueueFull ->
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        sender.uuid,
+                        MessageKey("movement.request.server_queue_full")
+                    )
+                )
+        }
+    }
+
     private fun accept(
         context: CommandContext<CommandSourceStack>,
         senderName: String?,
@@ -272,7 +512,9 @@ internal object TeleportRequestCommands {
                 )
             )
 
-        val senderId = senderName?.let { PlayerResolver.onlineByName(source.server, it)?.uuid }
+        val senderId = senderName?.let {
+            PlayerResolver.onlineByName(source.server, it)?.uuid
+        }
         if (senderName != null && senderId == null) {
             return source.replyError(
                 adventure,
@@ -303,54 +545,80 @@ internal object TeleportRequestCommands {
                     )
                 )
 
-            is TpaAcceptResult.Accepted -> {
-                val request = result.request
-                val subjectId = when (request.type) {
-                    TeleportRequestType.TO_TARGET -> request.senderId
-                    TeleportRequestType.BRING_TARGET -> request.targetId
-                }
-                val destinationId = when (subjectId) {
-                    request.senderId -> request.targetId
-                    else -> request.senderId
-                }
-                val subjectName = nameOf(source, subjectId)
-
-                movementLaunch(
+            is TpaAcceptResult.Accepted ->
+                launchAccepted(
                     source,
+                    result.request,
+                    auto = false,
+                    teleports,
+                    teleportSettings,
                     kernel,
                     messages,
                     adventure,
-                    MessageKey("movement.pending.accept_request"),
-                ) { _ ->
-                    val intent = TeleportIntent(
-                        subjectId = subjectId,
-                        destination = TeleportDestination.Player(destinationId),
-                        cause = TeleportCause.REQUEST,
-                        policy = teleportPolicyFor(
-                            TeleportCause.REQUEST,
-                            teleportSettings()
-                        ),
-                    )
-                    val notices = when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success -> listOf(MovementMessages.requestAccepted())
-                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
-                    }
-                    kernel.sendNotices(
-                        CommandFeedbackTarget.Player(subjectId),
-                        adventure,
-                        presentation,
-                        subjectId,
-                        notices,
-                    )
-                    kernel.sendNotices(
-                        CommandFeedbackTarget.Player(destinationId),
-                        adventure,
-                        presentation,
-                        destinationId,
-                        listOf(MovementMessages.requestAcceptedNotify(subjectName)),
-                    )
-                }
+                    presentation,
+                )
+        }
+    }
+
+    private fun launchAccepted(
+        source: CommandSourceStack,
+        request: TeleportRequest,
+        auto: Boolean,
+        teleports: TeleportCoordinator,
+        teleportSettings: () -> TeleportSettings,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val subjectId = when (request.type) {
+            TeleportRequestType.TO_TARGET -> request.senderId
+            TeleportRequestType.BRING_TARGET -> request.targetId
+        }
+        val destinationId = when (subjectId) {
+            request.senderId -> request.targetId
+            else -> request.senderId
+        }
+        val subjectName = nameOf(source, subjectId)
+
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.accept_request"),
+        ) { _ ->
+            val intent = TeleportIntent(
+                subjectId = subjectId,
+                destination = TeleportDestination.Player(destinationId),
+                cause = TeleportCause.REQUEST,
+                policy = teleportPolicyFor(
+                    TeleportCause.REQUEST,
+                    teleportSettings()
+                ),
+            )
+            val notices = when (val outcome = teleports.execute(intent)) {
+                is TeleportOutcome.Success -> listOf(MovementMessages.requestAccepted())
+                else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
             }
+            kernel.sendNotices(
+                CommandFeedbackTarget.Player(subjectId),
+                adventure,
+                presentation,
+                subjectId,
+                notices,
+            )
+            val accepterNotice = when {
+                auto -> MovementMessages.tpAutoAutoAccepted(subjectName)
+                else -> MovementMessages.requestAcceptedNotify(subjectName)
+            }
+            kernel.sendNotices(
+                CommandFeedbackTarget.Player(destinationId),
+                adventure,
+                presentation,
+                destinationId,
+                listOf(accepterNotice),
+            )
         }
     }
 
@@ -371,7 +639,9 @@ internal object TeleportRequestCommands {
                     MessageKey("core.error.player_required")
                 )
             )
-        val senderId = senderName?.let { PlayerResolver.onlineByName(source.server, it)?.uuid }
+        val senderId = senderName?.let {
+            PlayerResolver.onlineByName(source.server, it)?.uuid
+        }
         if (senderName != null && senderId == null) {
             return source.replyError(
                 adventure,
@@ -436,27 +706,168 @@ internal object TeleportRequestCommands {
                 )
             )
 
-        val request = service.cancel(sender.uuid)
-            ?: return source.replyError(
+        val cancelled = service.cancel(sender.uuid)
+        if (cancelled.isEmpty()) {
+            return source.replyError(
                 adventure,
                 messages.renderFor(
                     sender.uuid,
                     MessageKey("movement.request.cancel_none")
                 )
             )
+        }
 
-        notify(
-            request.targetId,
-            adventure,
-            presentation,
-            MovementMessages.requestCancelledNotify(sender.name.string),
-        )
+        cancelled.forEach { request ->
+            notify(
+                request.targetId,
+                adventure,
+                presentation,
+                MovementMessages.requestCancelledNotify(sender.name.string),
+            )
+        }
         return source.replyNotice(
             adventure,
             presentation,
             sender.uuid,
             MovementMessages.requestCancelled()
         )
+    }
+
+    private fun status(
+        context: CommandContext<CommandSourceStack>,
+        tpAuto: TpAutoService,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val player = source.player
+            ?: return 0
+        return source.replyNotices(
+            adventure,
+            presentation,
+            player.uuid,
+            listOf(
+                MovementMessages.tpAutoStatus(tpAuto.mode(player.uuid)),
+                MovementMessages.tpAutoHelp(),
+            ),
+        )
+    }
+
+    private fun setMode(
+        context: CommandContext<CommandSourceStack>,
+        mode: TpAutoMode,
+        tpAuto: TpAutoService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val player = source.player
+            ?: return 0
+        val playerId = player.uuid
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.updating_auto"),
+        ) { target ->
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(
+                    MovementMessages.tpAutoToggle(
+                        tpAuto.setMode(playerId, mode)
+                    )
+                ),
+            )
+        }
+    }
+
+    private fun list(
+        context: CommandContext<CommandSourceStack>,
+        tpAuto: TpAutoService,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val player = source.player
+            ?: return 0
+        val names = tpAuto.allowedBy(player.uuid)
+                .map {
+                    PlayerResolver.onlineById(source.server, it)?.name?.string
+                        ?: it.toString()
+                }
+        return source.replyPage(
+            adventure,
+            presentation,
+            player.uuid,
+            MovementMessages.tpAutoList(names),
+        )
+    }
+
+    private fun changeAllowed(
+        context: CommandContext<CommandSourceStack>,
+        targetName: String,
+        add: Boolean,
+        tpAuto: TpAutoService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val player = source.player
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+        val target = PlayerResolver.onlineByName(source.server, targetName)
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    player.uuid,
+                    MessageKey("movement.teleport.player_not_online"),
+                    targetName
+                ),
+            )
+        val playerId = player.uuid
+        val targetId = target.uuid
+        val resolvedName = target.name.string
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.updating_auto"),
+        ) { feedback ->
+            val notice = when {
+                add ->
+                    MovementMessages.tpAutoAllow(
+                        resolvedName,
+                        tpAuto.allow(playerId, targetId),
+                    )
+
+                else ->
+                    MovementMessages.tpAutoDisallow(
+                        resolvedName,
+                        tpAuto.disallow(playerId, targetId),
+                    )
+            }
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice),
+            )
+        }
     }
 
     private fun notify(

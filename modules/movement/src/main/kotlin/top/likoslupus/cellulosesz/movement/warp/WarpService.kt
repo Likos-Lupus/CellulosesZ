@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.movement.warp
 
 import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
+import java.time.Instant
 
 internal sealed interface SetWarpResult {
 
@@ -20,6 +21,16 @@ internal sealed interface WarpLookupResult {
 
 }
 
+internal sealed interface WarpInfoResult {
+
+    data class Found(val warp: Warp, val metadata: WarpMetadata?) : WarpInfoResult
+
+    data object InvalidName : WarpInfoResult
+
+    data object NotFound : WarpInfoResult
+
+}
+
 internal sealed interface DeleteWarpResult {
 
     data object Deleted : DeleteWarpResult
@@ -30,13 +41,21 @@ internal sealed interface DeleteWarpResult {
 
 }
 
-/** Owns global warp storage and naming policy only; it never moves a player. */
+/** Owns global warp storage, its sidecar metadata and naming policy only; it never moves a player. */
 internal class WarpService(private val repository: WarpRepository) {
 
-    suspend fun set(rawName: String, position: StoredPosition): SetWarpResult {
+    suspend fun set(
+        rawName: String,
+        position: StoredPosition,
+        actor: String,
+        now: Instant,
+    ): SetWarpResult {
         val name = WarpName.parse(rawName)
             ?: return SetWarpResult.InvalidName
-        repository.put(Warp(name, position))
+        repository.put(
+            Warp(name, position),
+            WarpMetadata(actor, now, now)
+        )
         return SetWarpResult.Success
     }
 
@@ -46,6 +65,17 @@ internal class WarpService(private val repository: WarpRepository) {
         val warp = repository.get(name)
             ?: return WarpLookupResult.NotFound
         return WarpLookupResult.Found(warp)
+    }
+
+    suspend fun info(rawName: String): WarpInfoResult {
+        val name = WarpName.parse(rawName)
+            ?: return WarpInfoResult.InvalidName
+        val warp = repository.get(name)
+            ?: return WarpInfoResult.NotFound
+        return WarpInfoResult.Found(
+            warp,
+            repository.metadata(name)
+        )
     }
 
     suspend fun delete(rawName: String): DeleteWarpResult {
@@ -58,6 +88,7 @@ internal class WarpService(private val repository: WarpRepository) {
         }
     }
 
-    suspend fun list(): List<Warp> = repository.list()
+    suspend fun list(): List<Warp> =
+        repository.list()
 
 }

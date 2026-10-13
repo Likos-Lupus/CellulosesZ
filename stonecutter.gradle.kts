@@ -2,6 +2,7 @@ plugins {
     id("dev.kikugie.stonecutter")
     id("command-catalog")
     id("translations")
+    id("help-copy")
     id("architecture")
     id("module-dependencies")
     id("artifact-inspection")

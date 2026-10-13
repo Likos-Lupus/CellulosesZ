@@ -17,9 +17,19 @@ internal class SafeDestinationResolver {
         settings: TeleportSafetySettings,
         probe: TeleportProbe,
     ): SafetyResult {
-        if (mode == SafetyMode.ALLOW_UNSAFE || !settings.enabled) {
+        if (mode == SafetyMode.ALLOW_UNSAFE) {
             return SafetyResult.Safe(requested)
         }
+        if (!settings.enabled)
+            return when (mode) {
+                SafetyMode.REQUIRE_SAFE if !isSafe(
+                    requested,
+                    settings,
+                    probe
+                ) -> SafetyResult.Unsafe
+
+                else -> SafetyResult.Safe(requested)
+            }
         if (isSafe(requested, settings, probe)) {
             return SafetyResult.Safe(requested)
         }

@@ -1,28 +1,28 @@
 # /tp
 
-Teleport yourself to a player, or one player to another.
+Teleport yourself to a player, or move one player to another.
 
 ## Behavior
 
 - `/tp <target>` teleports you to `target`.
-- `/tp <from> <to>` teleports `from` to `to` (requires the `tp` permission node; typically a
-  moderator action).
+- `/tp <from> <to>` moves `from` to `to` and needs the `tp` permission; servers usually reserve it
+  for staff.
 
 ## Parameters
 
-- `first`: the moving player when two names are given, otherwise your target.
+- `first`: the player to move when two names are given, otherwise your destination.
 - `second`: optional destination player when moving someone else.
 
 ## Example
 
-`/tp Notch`
-`/tp Alice Bob`
+- `/tp Notch`
+- `/tp Alice Bob`
 
 ## Failures
 
 - A named player is not online.
 - You are already at your own position.
-- Missing permission for the two-player form.
+- The destination is unsafe or outside the world border.
 
 ## Related
 

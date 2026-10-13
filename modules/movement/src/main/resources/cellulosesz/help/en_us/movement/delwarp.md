@@ -2,13 +2,17 @@
 
 Delete a server warp.
 
+## Behavior
+
+Requires moderator permission.
+
 ## Parameters
 
 - `name`: the warp to delete.
 
 ## Example
 
-`/delwarp market`
+- `/delwarp market`
 
 ## Failures
 

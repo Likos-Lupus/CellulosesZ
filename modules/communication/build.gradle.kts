@@ -31,6 +31,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     compileOnly(libs.jspecify)
+    compileOnly(libs.sponge.mixin)
     testCompileOnly(libs.jspecify)
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)

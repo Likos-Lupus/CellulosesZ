@@ -4,8 +4,10 @@ Request to teleport to another player.
 
 ## Behavior
 
-Sends a teleport request. The target must accept it with `/tpaccept` before the move happens. You
-may only have one outgoing request; use `/tpcancel` to drop it.
+Sends a teleport request. The target accepts with `/tpaccept` or denies with `/tpdeny`; the move
+only happens after an accept. You can keep several outgoing requests at once, up to the server limit
+(16 by default), and asking the same target again refreshes that request. Requests expire after 60
+seconds (default). Use `/tpaall` to ask every online player.
 
 ## Parameters
 
@@ -13,13 +15,14 @@ may only have one outgoing request; use `/tpcancel` to drop it.
 
 ## Example
 
-`/tpa Alice`
+- `/tpa Alice`
 
 ## Failures
 
 - The target is not online.
-- You already have a pending request.
-- The target has too many pending requests.
+- You already have too many outgoing requests (16 by default).
+- The target has too many pending requests (5 by default).
+- The server has too many pending requests.
 
 ## Related
 

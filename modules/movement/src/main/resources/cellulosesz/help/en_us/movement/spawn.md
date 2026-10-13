@@ -4,17 +4,18 @@ Teleport to the server spawn.
 
 ## Behavior
 
-Uses the configured spawn when one is set, otherwise the vanilla world spawn. Runs through the
-normal teleport pipeline.
+Uses the configured server spawn when one is set, otherwise the vanilla world spawn. Runs through
+the normal teleport pipeline.
 
 ## Example
 
-`/spawn`
+- `/spawn`
 
 ## Failures
 
-- A teleport restriction is active.
+- The target dimension is unavailable.
 - The destination is unsafe.
+- The teleport is on cooldown (when one is configured).
 
 ## Related
 

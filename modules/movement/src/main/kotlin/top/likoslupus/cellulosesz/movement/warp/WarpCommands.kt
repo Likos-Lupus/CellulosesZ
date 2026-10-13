@@ -6,19 +6,24 @@ import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.VanillaFallbackPermissionBridge
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.adventure.replyError
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.sendDetail
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.core.text.presentation.sendPage
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
+import java.time.Instant
 
 internal object WarpCommands {
 
@@ -31,6 +36,7 @@ internal object WarpCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService = PermissionService(VanillaFallbackPermissionBridge),
     ): List<CommandDefinition> = listOf(
         command(
             name = "warp",
@@ -107,6 +113,28 @@ internal object WarpCommands {
                         context,
                         get(name),
                         service,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+        },
+
+        command(
+            name = "warpinfo",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.WARP_INFO,
+            documentation = "movement/warpinfo",
+        ) {
+            argument("name", word()) { name ->
+                executesPlayer {
+                    warpInfo(
+                        context,
+                        get(name),
+                        service,
+                        permissions,
                         kernel,
                         messages,
                         adventure,
@@ -226,6 +254,7 @@ internal object WarpCommands {
                     MessageKey("core.error.player_required")
                 )
             )
+        val actor = source.player?.name?.string ?: "console"
 
         return movementLaunch(
             source,
@@ -236,7 +265,15 @@ internal object WarpCommands {
         ) { target ->
             val notice = when (val position = backend.position(playerId)) {
                 null -> MovementMessages.playerOffline()
-                else -> MovementMessages.warpSet(name, service.set(name, position))
+                else -> MovementMessages.warpSet(
+                    name,
+                    service.set(
+                        name,
+                        position,
+                        actor,
+                        Instant.now()
+                    ),
+                )
             }
             kernel.sendNotices(
                 target,
@@ -245,6 +282,80 @@ internal object WarpCommands {
                 playerId,
                 listOf(notice)
             )
+        }
+    }
+
+    private fun warpInfo(
+        context: CommandContext<CommandSourceStack>,
+        name: String,
+        service: WarpService,
+        permissions: PermissionService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        val playerId = source.player?.uuid
+            ?: return source.replyError(
+                adventure,
+                messages.renderFor(
+                    null,
+                    MessageKey("core.error.player_required")
+                )
+            )
+        val showCoordinates = source.requiresPermission(
+            permissions,
+            CommandPermissions.WARP_INFO_COORDINATES,
+        )
+
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.loading_warp_info")
+        ) { target ->
+            when (val result = service.info(name)) {
+                is WarpInfoResult.Found ->
+                    kernel.sendDetail(
+                        target,
+                        adventure,
+                        presentation,
+                        playerId,
+                        MovementMessages.warpInfo(
+                            result,
+                            Instant.now(),
+                            showCoordinates,
+                        ),
+                    )
+
+                WarpInfoResult.InvalidName ->
+                    kernel.sendNotices(
+                        target,
+                        adventure,
+                        presentation,
+                        playerId,
+                        listOfNotNull(
+                            MovementMessages.warpLookupError(
+                                WarpLookupResult.InvalidName
+                            )
+                        ),
+                    )
+
+                WarpInfoResult.NotFound ->
+                    kernel.sendNotices(
+                        target,
+                        adventure,
+                        presentation,
+                        playerId,
+                        listOfNotNull(
+                            MovementMessages.warpLookupError(
+                                WarpLookupResult.NotFound
+                            )
+                        ),
+                    )
+            }
         }
     }
 

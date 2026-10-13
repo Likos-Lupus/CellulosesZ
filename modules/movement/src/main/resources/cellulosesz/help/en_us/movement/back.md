@@ -4,12 +4,12 @@ Return to your previous location.
 
 ## Behavior
 
-Teleports you to the location recorded before your last teleport. Uses the normal teleport pipeline
-with its delay, cooldown and safety checks.
+Teleports you to the position recorded before your last successful teleport. Recording happens only
+while history is enabled (enabled by default). The move uses the normal teleport pipeline.
 
 ## Example
 
-`/back`
+- `/back`
 
 ## Failures
 

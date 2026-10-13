@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.StorageException
 import java.sql.Connection
+import java.sql.ResultSet
 import java.sql.SQLException
 import java.time.Instant
 import java.util.*
@@ -25,6 +26,24 @@ public class JdbcPlayerIdentityRepository(
             database.read { connection -> readAll(connection) }
         } catch (exception: SQLException) {
             throw StorageException("unable to load player identity index", exception)
+        }
+
+    override suspend fun findById(id: UUID): PersistedPlayerIdentity? =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection -> readById(connection, id) }
+            } catch (exception: SQLException) {
+                throw StorageException("unable to read player identity for $id", exception)
+            }
+        }
+
+    override suspend fun findCandidatesByName(name: String): List<PersistedPlayerIdentity> =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection -> readCandidatesByName(connection, name) }
+            } catch (exception: SQLException) {
+                throw StorageException("unable to search player identities by name", exception)
+            }
         }
 
     override suspend fun observe(
@@ -176,24 +195,79 @@ public class JdbcPlayerIdentityRepository(
             statement.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) {
-                        val id = try {
-                            UUID.fromString(rs.getString(1))
-                        } catch (_: IllegalArgumentException) {
-                            throw StorageException("identity index contains an invalid player uuid")
-                        }
-
-                        add(
-                            PersistedPlayerIdentity(
-                                id = id,
-                                name = rs.getString(2),
-                                firstSeen = Instant.ofEpochMilli(rs.getLong(3)),
-                                lastSeen = Instant.ofEpochMilli(rs.getLong(4)),
-                            )
-                        )
+                        add(map(rs))
                     }
                 }
             }
         }
+
+    private fun readById(connection: Connection, id: UUID): PersistedPlayerIdentity? =
+        connection.prepareStatement(
+            /* language=SQL */ """
+            SELECT
+                player_uuid,
+                current_name,
+                first_seen_ms,
+                last_seen_ms
+            FROM
+                ${IdentitySqlSchema.PLAYERS}
+            WHERE
+                namespace = ? AND player_uuid = ?;
+            """.trimIndent()
+        ).use { statement ->
+            statement.setString(1, namespace)
+            statement.setString(2, id.toString())
+            statement.executeQuery().use { rs ->
+                when {
+                    rs.next() -> map(rs)
+                    else -> null
+                }
+            }
+        }
+
+    private fun readCandidatesByName(
+        connection: Connection,
+        name: String,
+    ): List<PersistedPlayerIdentity> =
+        connection.prepareStatement(
+            /* language=SQL */ """
+            SELECT
+                player_uuid,
+                observed_name,
+                first_seen_ms,
+                last_seen_ms
+            FROM
+                ${IdentitySqlSchema.PLAYER_NAMES}
+            WHERE
+                namespace = ? AND normalized_name = ?
+            ORDER BY
+                last_seen_ms DESC;
+            """.trimIndent()
+        ).use { statement ->
+            statement.setString(1, namespace)
+            statement.setString(2, normalize(name))
+            statement.executeQuery().use { rs ->
+                buildList {
+                    while (rs.next()) {
+                        add(map(rs))
+                    }
+                }
+            }
+        }
+
+    private fun map(rs: ResultSet): PersistedPlayerIdentity {
+        val id = try {
+            UUID.fromString(rs.getString(1))
+        } catch (_: IllegalArgumentException) {
+            throw StorageException("identity index contains an invalid player uuid")
+        }
+        return PersistedPlayerIdentity(
+            id = id,
+            name = rs.getString(2),
+            firstSeen = Instant.ofEpochMilli(rs.getLong(3)),
+            lastSeen = Instant.ofEpochMilli(rs.getLong(4)),
+        )
+    }
 
     private fun normalize(name: String): String =
         name.lowercase(Locale.ROOT)

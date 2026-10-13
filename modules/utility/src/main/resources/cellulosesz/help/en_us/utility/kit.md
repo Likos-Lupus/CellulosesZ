@@ -8,20 +8,21 @@ Claim a kit.
 
 ## Behavior
 
-Once-only and cooldown kits are tracked durably per player; the claim is reserved before items are
-delivered, so a crash never duplicates a kit. If the inventory cannot hold the kit, the configured
-overflow policy applies (reject or drop). Magically your inventory is checked before delivery.
+Delivers the kit into your inventory. Once-only and cooldown kits record the claim for that player
+before items are delivered, so a crash can't duplicate a kit. If your inventory can't hold the kit,
+the server's overflow policy applies: it either refuses the whole claim (`REJECT`, the default) or
+drops what doesn't fit.
 
-## Example
+## Examples
 
-`/kit starter`
+- `/kit starter`
 
 ## Failures
 
-- The kit does not exist.
-- You already claimed a once-only kit, or the cooldown is still running.
-- Your inventory is full (reject policy).
+- The kit doesn't exist.
+- You already claimed a once-only kit, or its cooldown is still running.
+- Your inventory is full and the overflow policy is `REJECT`.
 
-## Related
+## Related commands
 
 - `/kits`, `/showkit`, `/createkit`

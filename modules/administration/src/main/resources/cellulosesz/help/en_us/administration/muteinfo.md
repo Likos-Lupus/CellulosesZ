@@ -1,6 +1,11 @@
 # /muteinfo
 
-Show the active mute for a player.
+Show a player's active mute.
+
+## Behavior
+
+Displays the target's name, state, reason, who issued the mute, and how much time remains (or that
+it is permanent). It works for offline players whose account is known.
 
 ## Parameters
 
@@ -8,12 +13,12 @@ Show the active mute for a player.
 
 ## Example
 
-`/muteinfo Alice`
+- `/muteinfo Alice`
 
 ## Failures
 
 - The player is not muted.
 
-## Related
+## Related commands
 
 - `/mute`, `/tempmute`, `/unmute`

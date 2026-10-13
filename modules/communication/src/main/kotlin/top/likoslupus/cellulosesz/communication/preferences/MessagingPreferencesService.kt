@@ -95,6 +95,12 @@ internal class MessagingPreferencesService(
             else -> settings().defaultReplyMode
         }
 
+    override fun ignores(ignorerId: UUID, targetId: UUID): Boolean =
+        when (val state = online[ignorerId]) {
+            is PreferenceState.Ready -> targetId in state.value
+            else -> false
+        }
+
     /** Server-thread confined snapshot used by command feedback. */
     fun current(playerId: UUID): MessagingPreferences? =
         (online[playerId] as? PreferenceState.Ready)?.value

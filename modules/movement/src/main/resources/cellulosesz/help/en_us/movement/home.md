@@ -4,8 +4,9 @@ Teleport to a saved home.
 
 ## Behavior
 
-With no name, uses your default home. With a name, looks up that home. The move goes through the
-normal teleport pipeline (delay, cooldown and safety checks from configuration apply).
+With no name, uses your default home (`home` by default). With a name, looks up that home. The move
+runs through the normal teleport pipeline, so safety checks and any configured delay and cooldown
+apply.
 
 ## Parameters
 
@@ -13,15 +14,15 @@ normal teleport pipeline (delay, cooldown and safety checks from configuration a
 
 ## Example
 
-`/home`
-`/home base`
+- `/home`
+- `/home base`
 
 ## Failures
 
 - The home does not exist.
 - The target dimension is unavailable.
-- A teleport restriction is active.
 - The destination is unsafe.
+- The teleport is on cooldown (when one is configured).
 
 ## Related
 

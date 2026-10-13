@@ -21,6 +21,8 @@ internal sealed interface TeleportOutcome {
 
     data object AlreadyPending : TeleportOutcome
 
+    data object Confined : TeleportOutcome
+
     data class Cancelled(val reason: TeleportCancellation) : TeleportOutcome
 
     data object PassengerConflict : TeleportOutcome

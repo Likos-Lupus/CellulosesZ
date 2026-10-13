@@ -34,6 +34,18 @@ internal sealed interface DeleteHomeResult {
 
 }
 
+internal sealed interface RenameHomeResult {
+
+    data object Renamed : RenameHomeResult
+
+    data object InvalidName : RenameHomeResult
+
+    data object SourceNotFound : RenameHomeResult
+
+    data object DestinationExists : RenameHomeResult
+
+}
+
 /** Owns home storage and naming policy only; it never moves a player. */
 internal class HomeService(
     private val repository: HomeRepository,
@@ -74,14 +86,30 @@ internal class HomeService(
         val name = HomeName.parse(rawName)
             ?: return DeleteHomeResult.InvalidName
 
-        return if (repository.remove(playerId, name)) {
-            DeleteHomeResult.Deleted
-        } else {
-            DeleteHomeResult.NotFound
+        return when {
+            repository.remove(playerId, name) -> DeleteHomeResult.Deleted
+            else -> DeleteHomeResult.NotFound
         }
     }
 
     suspend fun list(playerId: UUID): List<Home> =
         repository.list(playerId)
+
+    suspend fun rename(
+        playerId: UUID,
+        rawFrom: String,
+        rawTo: String,
+    ): RenameHomeResult {
+        val from = HomeName.parse(rawFrom)
+            ?: return RenameHomeResult.InvalidName
+        val to = HomeName.parse(rawTo)
+            ?: return RenameHomeResult.InvalidName
+
+        return when (repository.rename(playerId, from, to)) {
+            HomeRenameOutcome.Renamed -> RenameHomeResult.Renamed
+            HomeRenameOutcome.SourceMissing -> RenameHomeResult.SourceNotFound
+            HomeRenameOutcome.DestinationExists -> RenameHomeResult.DestinationExists
+        }
+    }
 
 }

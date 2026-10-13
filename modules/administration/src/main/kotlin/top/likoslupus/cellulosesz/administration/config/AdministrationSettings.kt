@@ -6,4 +6,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 public data class AdministrationSettings(
     public val moderation: ModerationSettings = ModerationSettings(),
+    public val jail: JailSettings = JailSettings(),
+    public val playerAdjustments: PlayerAdjustmentSettings = PlayerAdjustmentSettings(),
 )

@@ -8,7 +8,7 @@
 
 ## 示例
 
-`/delhome base`
+- `/delhome base`
 
 ## 失败情形
 

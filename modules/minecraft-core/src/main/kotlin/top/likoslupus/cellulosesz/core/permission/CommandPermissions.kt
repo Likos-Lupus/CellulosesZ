@@ -74,6 +74,10 @@ public object CommandPermissions {
         "homes",
         "List homes"
     )
+    public val RENAME_HOME: PermissionSpec = playerNode(
+        "renamehome",
+        "Rename a home"
+    )
     public val WARP: PermissionSpec = playerNode(
         "warp",
         "Use a warp"
@@ -89,6 +93,14 @@ public object CommandPermissions {
     public val DEL_WARP: PermissionSpec = moderatorNode(
         "delwarp",
         "Delete a warp"
+    )
+    public val WARP_INFO: PermissionSpec = playerNode(
+        "warpinfo",
+        "View warp details"
+    )
+    public val WARP_INFO_COORDINATES: PermissionSpec = moderatorNode(
+        "warpinfo.coordinates",
+        "View exact warp coordinates"
     )
     public val SPAWN: PermissionSpec = playerNode(
         "spawn",
@@ -118,6 +130,26 @@ public object CommandPermissions {
         "tppos",
         "Teleport to coordinates"
     )
+    public val TPR: PermissionSpec = playerNode(
+        "tpr",
+        "Teleport to a random safe location"
+    )
+    public val SET_TPR: PermissionSpec = moderatorNode(
+        "settpr",
+        "Define a random teleport region"
+    )
+    public val TOP: PermissionSpec = playerNode(
+        "top",
+        "Teleport to the surface"
+    )
+    public val BOTTOM: PermissionSpec = playerNode(
+        "bottom",
+        "Teleport to the bottom of the world"
+    )
+    public val JUMP: PermissionSpec = playerNode(
+        "jump",
+        "Teleport to the block you are looking at"
+    )
     public val TPA: PermissionSpec = playerNode(
         "tpa",
         "Request a teleport"
@@ -137,6 +169,14 @@ public object CommandPermissions {
     public val TP_CANCEL: PermissionSpec = playerNode(
         "tpcancel",
         "Cancel a teleport request"
+    )
+    public val TPA_ALL: PermissionSpec = playerNode(
+        "tpaall",
+        "Request a teleport for every online player"
+    )
+    public val TPAUTO: PermissionSpec = playerNode(
+        "tpauto",
+        "Manage automatic teleport-request acceptance"
     )
     public val MSG: PermissionSpec = playerNode(
         "msg",
@@ -214,6 +254,83 @@ public object CommandPermissions {
         "smithingtable",
         "Open a smithing table"
     )
+    public val GET_POS: PermissionSpec = playerNode(
+        "getpos",
+        "View your position"
+    )
+    public val DEPTH: PermissionSpec = playerNode(
+        "depth",
+        "View your depth"
+    )
+    public val HAT: PermissionSpec = playerNode(
+        "hat",
+        "Wear the held item as a hat"
+    )
+    public val ITEM_NAME: PermissionSpec = playerNode(
+        "itemname",
+        "Rename the held item"
+    )
+    public val ITEM_LORE: PermissionSpec = playerNode(
+        "itemlore",
+        "Edit the held item's lore"
+    )
+    public val CLEAR_INVENTORY: PermissionSpec = playerNode(
+        "clearinventory",
+        "Clear your inventory"
+    )
+    public val CLEAR_INVENTORY_OTHERS: PermissionSpec = moderatorNode(
+        "clearinventory.others",
+        "Clear another player's inventory"
+    )
+
+    public val SEEN: PermissionSpec = playerNode(
+        "seen",
+        "View a player's last seen time"
+    )
+    public val PLAY_TIME: PermissionSpec = playerNode(
+        "playtime",
+        "View your play time"
+    )
+    public val WHOIS: PermissionSpec = playerNode(
+        "whois",
+        "View player information"
+    )
+    public val AFK: PermissionSpec = playerNode(
+        "afk",
+        "Toggle AFK"
+    )
+    public val PING: PermissionSpec = playerNode(
+        "ping",
+        "View your latency"
+    )
+    public val PING_OTHERS: PermissionSpec = moderatorNode(
+        "ping.others",
+        "View another player's latency"
+    )
+    public val NEAR: PermissionSpec = playerNode(
+        "near",
+        "List nearby players"
+    )
+    public val NEAR_BYPASS_RADIUS: PermissionSpec = moderatorNode(
+        "near.bypass_radius",
+        "Exceed the configured /near radius"
+    )
+    public val NICK: PermissionSpec = playerNode(
+        "nick",
+        "Set or clear your nickname"
+    )
+    public val REALNAME: PermissionSpec = playerNode(
+        "realname",
+        "Resolve a nickname to a player name"
+    )
+    public val NICK_OTHERS: PermissionSpec = moderatorNode(
+        "nick.others",
+        "Set or clear another player's nickname"
+    )
+    public val PLAY_TIME_OTHERS: PermissionSpec = moderatorNode(
+        "playtime.others",
+        "View another player's play time"
+    )
 
     public val HEAL: PermissionSpec = moderatorNode(
         "heal",
@@ -279,6 +396,34 @@ public object CommandPermissions {
         "muteinfo",
         "Inspect a mute"
     )
+    public val SET_JAIL: PermissionSpec = moderatorNode(
+        "setjail",
+        "Create a jail"
+    )
+    public val JAIL: PermissionSpec = moderatorNode(
+        "jail",
+        "Jail a player"
+    )
+    public val UNJAIL: PermissionSpec = moderatorNode(
+        "unjail",
+        "Release a player from jail"
+    )
+    public val TOGGLE_JAIL: PermissionSpec = moderatorNode(
+        "togglejail",
+        "Toggle a player's jail state"
+    )
+    public val DEL_JAIL: PermissionSpec = moderatorNode(
+        "deljail",
+        "Delete a jail"
+    )
+    public val JAILS: PermissionSpec = moderatorNode(
+        "jails",
+        "List jails"
+    )
+    public val JAILED_PLAYERS: PermissionSpec = moderatorNode(
+        "jailedplayers",
+        "List jailed players"
+    )
     public val KILL: PermissionSpec = moderatorNode(
         "kill",
         "Kill a player"
@@ -290,6 +435,34 @@ public object CommandPermissions {
     public val SUDO: PermissionSpec = moderatorNode(
         "sudo",
         "Run a command as another player"
+    )
+    public val EXP: PermissionSpec = playerNode(
+        "exp",
+        "View your experience"
+    )
+    public val EXP_GET: PermissionSpec = moderatorNode(
+        "exp.get",
+        "View another player's experience"
+    )
+    public val EXP_GIVE: PermissionSpec = moderatorNode(
+        "exp.give",
+        "Give experience points"
+    )
+    public val EXP_TAKE: PermissionSpec = moderatorNode(
+        "exp.take",
+        "Remove experience points"
+    )
+    public val EXP_SET: PermissionSpec = moderatorNode(
+        "exp.set",
+        "Set experience points"
+    )
+    public val SPEED: PermissionSpec = playerNode(
+        "speed",
+        "Set your speed multiplier"
+    )
+    public val SPEED_OTHERS: PermissionSpec = moderatorNode(
+        "speed.others",
+        "Set another player's speed multiplier"
     )
     public val SOCIAL_SPY: PermissionSpec = moderatorNode(
         "socialspy",
@@ -306,6 +479,26 @@ public object CommandPermissions {
     public val BROADCAST_WORLD: PermissionSpec = moderatorNode(
         "broadcastworld",
         "Broadcast to a world"
+    )
+    public val MOTD: PermissionSpec = playerNode(
+        "motd",
+        "View the message of the day"
+    )
+    public val RULES: PermissionSpec = playerNode(
+        "rules",
+        "View the server rules"
+    )
+    public val INFO: PermissionSpec = playerNode(
+        "info",
+        "View the server info page"
+    )
+    public val CUSTOMTEXT: PermissionSpec = playerNode(
+        "customtext",
+        "View a custom server page"
+    )
+    public val ME: PermissionSpec = playerNode(
+        "me",
+        "Send an action message"
     )
     public val REPAIR: PermissionSpec = moderatorNode(
         "repair",
@@ -347,10 +540,13 @@ public object CommandPermissions {
         HOME,
         DEL_HOME,
         HOMES,
+        RENAME_HOME,
         WARP,
         WARPS,
         SET_WARP,
         DEL_WARP,
+        WARP_INFO,
+        WARP_INFO_COORDINATES,
         SPAWN,
         SET_SPAWN,
         DEL_SPAWN,
@@ -358,11 +554,18 @@ public object CommandPermissions {
         TP,
         TP_HERE,
         TP_POS,
+        TPR,
+        SET_TPR,
+        TOP,
+        BOTTOM,
+        JUMP,
         TPA,
         TPA_HERE,
         TP_ACCEPT,
         TP_DENY,
         TP_CANCEL,
+        TPA_ALL,
+        TPAUTO,
         MSG,
         REPLY,
         IGNORE,
@@ -382,6 +585,25 @@ public object CommandPermissions {
         LOOM,
         CARTOGRAPHY_TABLE,
         SMITHING_TABLE,
+        GET_POS,
+        DEPTH,
+        HAT,
+        ITEM_NAME,
+        ITEM_LORE,
+        CLEAR_INVENTORY,
+        CLEAR_INVENTORY_OTHERS,
+        SEEN,
+        PLAY_TIME,
+        WHOIS,
+        AFK,
+        PING,
+        PING_OTHERS,
+        NEAR,
+        NEAR_BYPASS_RADIUS,
+        NICK,
+        REALNAME,
+        NICK_OTHERS,
+        PLAY_TIME_OTHERS,
         HEAL,
         FEED,
         FLY,
@@ -398,13 +620,32 @@ public object CommandPermissions {
         TEMP_MUTE,
         UNMUTE,
         MUTE_INFO,
+        SET_JAIL,
+        JAIL,
+        UNJAIL,
+        TOGGLE_JAIL,
+        DEL_JAIL,
+        JAILS,
+        JAILED_PLAYERS,
         KILL,
         GAMEMODE,
         SUDO,
+        EXP,
+        EXP_GET,
+        EXP_GIVE,
+        EXP_TAKE,
+        EXP_SET,
+        SPEED,
+        SPEED_OTHERS,
         SOCIAL_SPY,
         VANISH,
         BROADCAST,
         BROADCAST_WORLD,
+        MOTD,
+        RULES,
+        INFO,
+        CUSTOMTEXT,
+        ME,
         REPAIR,
         MORE,
         INVSEE,

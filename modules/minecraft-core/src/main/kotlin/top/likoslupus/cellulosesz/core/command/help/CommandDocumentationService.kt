@@ -8,14 +8,12 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.registry.CommandUsage
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.text.MessageKey
-import top.likoslupus.cellulosesz.core.text.document.AdventureDocumentRenderer
-import top.likoslupus.cellulosesz.core.text.document.DocumentLoadResult
-import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
-import top.likoslupus.cellulosesz.core.text.document.MarkdownDocumentLoader
+import top.likoslupus.cellulosesz.core.text.document.*
 import top.likoslupus.cellulosesz.core.text.i18n.BundledTranslations
 import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.renderFor
+import top.likoslupus.cellulosesz.core.text.theme.toLayoutStyle
 import java.util.*
 
 /**
@@ -46,7 +44,7 @@ public class CommandDocumentationService(
         val document = when (val result = loadDocument(resolution.documentation, playerId)) {
             is DocumentLoadResult.Found -> result.document
 
-            DocumentLoadResult.Missing ->return listOf(
+            DocumentLoadResult.Missing -> return listOf(
                 messages.renderFor(
                     playerId,
                     MessageKey("help.document.missing"),
@@ -63,20 +61,39 @@ public class CommandDocumentationService(
                 return listOf(
                     messages.renderFor(
                         playerId,
-                        MessageKey("help.document.missing"),
-                        resolution.definition.name,
+                        MessageKey("help.document.invalid")
                     )
                 )
             }
         }
 
+        val blocks = document.blocks
+        val title = blocks.getOrNull(0) as? MarkdownBlock.Heading
+        val summary = blocks.getOrNull(1) as? MarkdownBlock.Paragraph
+        val head = when {
+            title != null && summary != null -> listOf(title, summary)
+            title != null -> listOf(title)
+            else -> emptyList()
+        }
+        val rest = blocks.drop(head.size)
+
+        val renderer = AdventureDocumentRenderer(theme)
+        val spacing = theme.density.toLayoutStyle().sectionSpacing
         val out = mutableListOf<AdventureComponent>()
+        if (head.isNotEmpty()) {
+            out += renderer.render(MarkdownDocument(head))
+            if (spacing) {
+                out += AdventureComponent.empty()
+            }
+        }
         out += messages.renderFor(playerId, MessageKey("help.usage"))
                 .decorate(TextDecoration.BOLD)
         CommandUsage.patterns(resolution.definition, source, permissions)
                 .forEach { out += AdventureComponent.text(it, theme.body) }
-        out += AdventureComponent.empty()
-        out += AdventureDocumentRenderer(theme).render(document)
+        if (spacing) {
+            out += AdventureComponent.empty()
+        }
+        out += renderer.render(MarkdownDocument(rest))
         return out
     }
 

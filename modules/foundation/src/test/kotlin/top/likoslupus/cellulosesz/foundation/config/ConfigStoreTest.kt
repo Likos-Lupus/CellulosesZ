@@ -47,7 +47,7 @@ class ConfigStoreTest {
     @Test
     fun `initial load reads an existing file`() {
         val file = directory.resolve("config.toml")
-        Files.writeString(file, "value = 4\n")
+        Files.writeString(file, /* language=toml */ "value = 4\n")
         val store = store(file)
 
         val result = store.initialLoadBlocking()
@@ -75,11 +75,11 @@ class ConfigStoreTest {
     fun `reload swaps snapshot and increments generation`() =
         runBlocking {
             val file = directory.resolve("config.toml")
-            Files.writeString(file, "value = 4\n")
+            Files.writeString(file, /* language=toml */ "value = 4\n")
             val store = store(file)
             val first = store.initialLoadBlocking() as ConfigReloadResult.Success
 
-            Files.writeString(file, "value = 7\n")
+            Files.writeString(file, /* language=toml */ "value = 7\n")
             val second = store.reload() as ConfigReloadResult.Success
 
             assertEquals(7, store.current.value)
@@ -90,11 +90,11 @@ class ConfigStoreTest {
     fun `failed reload keeps previous snapshot and generation`() =
         runBlocking {
             val file = directory.resolve("config.toml")
-            Files.writeString(file, "value = 5\n")
+            Files.writeString(file, /* language=toml */ "value = 5\n")
             val store = store(file)
             val loaded = store.initialLoadBlocking() as ConfigReloadResult.Success
 
-            Files.writeString(file, "value = -3\n")
+            Files.writeString(file, /* language=toml */ "value = -3\n")
             val failure = store.reload()
 
             assertInstanceOf(
@@ -109,7 +109,7 @@ class ConfigStoreTest {
     fun `rejected transition keeps previous snapshot`() =
         runBlocking {
             val file = directory.resolve("config.toml")
-            Files.writeString(file, "value = 1\n")
+            Files.writeString(file, /* language=toml */ "value = 1\n")
             val store = store(file) { _, candidate ->
                 if (candidate.value == 2) listOf(
                     ValidationError(
@@ -120,7 +120,7 @@ class ConfigStoreTest {
             }
             store.initialLoadBlocking()
 
-            Files.writeString(file, "value = 2\n")
+            Files.writeString(file, /* language=toml */ "value = 2\n")
             val failure = store.reload()
 
             assertInstanceOf(
@@ -133,7 +133,7 @@ class ConfigStoreTest {
     @Test
     fun `unknown keys are rejected`() {
         val file = directory.resolve("config.toml")
-        Files.writeString(file, "value = 1\nunknown = 2\n")
+        Files.writeString(file, /* language=toml */ "value = 1\nunknown = 2\n")
         val result = store(file).initialLoadBlocking()
         assertInstanceOf(
             ConfigReloadResult.Failure::class.java,

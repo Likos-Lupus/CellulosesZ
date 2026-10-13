@@ -11,7 +11,9 @@
   "license": "GPL-3.0",
   "environment": "*",
   "mixins": [
-    "cellulosesz.mixins.json"
+    "cellulosesz.administration.mixins.json",
+    "cellulosesz.player.mixins.json",
+    "cellulosesz.communication.mixins.json"
   ],
   "entrypoints": {
     "main": [

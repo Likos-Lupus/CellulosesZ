@@ -37,11 +37,26 @@ fun artifactViolations(root: File): List<String> {
         "top/likoslupus/cellulosesz/application/bootstrap/CellulosesZ.class",
         "top/likoslupus/cellulosesz/movement/home/HomeService.class",
         "top/likoslupus/cellulosesz/utility/kit/JdbcKitRepository.class",
+        "top/likoslupus/cellulosesz/player/PlayerFeature.class",
         "top/likoslupus/cellulosesz/foundation/database/HikariDatabaseRuntime.class",
+        "top/likoslupus/cellulosesz/administration/mixin/ServerPlayerVisibilityMixin.class",
+        "top/likoslupus/cellulosesz/administration/mixin/CommandsRestrictionMixin.class",
+        "top/likoslupus/cellulosesz/player/mixin/PlayerDisplayNameMixin.class",
+        "top/likoslupus/cellulosesz/communication/mixin/EmoteCommandsMixin.class",
     )
     requiredFlattened.forEach { entry ->
         if (entry !in fabricEntries) violations += "fabric jar is missing flattened class $entry"
         if (entry !in neoEntries) violations += "neoforge jar is missing flattened class $entry"
+    }
+
+    val requiredMixinConfigs = listOf(
+        "cellulosesz.administration.mixins.json",
+        "cellulosesz.player.mixins.json",
+        "cellulosesz.communication.mixins.json",
+    )
+    requiredMixinConfigs.forEach { entry ->
+        if (entry !in fabricEntries) violations += "fabric jar is missing mixin config $entry"
+        if (entry !in neoEntries) violations += "neoforge jar is missing mixin config $entry"
     }
 
     if ("fabric.mod.json" !in fabricEntries) {
@@ -103,6 +118,18 @@ fun artifactViolations(root: File): List<String> {
         "cellulosesz/help/zh_cn/core/cellulosesz.md",
         "cellulosesz/help/en_us/movement/home.md",
         "cellulosesz/help/zh_cn/movement/home.md",
+        "cellulosesz/help/en_us/player/seen.md",
+        "cellulosesz/help/zh_cn/player/seen.md",
+        "cellulosesz/help/en_us/player/playtime.md",
+        "cellulosesz/help/zh_cn/player/playtime.md",
+        "cellulosesz/help/en_us/player/whois.md",
+        "cellulosesz/help/zh_cn/player/whois.md",
+        "cellulosesz/help/en_us/player/afk.md",
+        "cellulosesz/help/zh_cn/player/afk.md",
+        "cellulosesz/help/en_us/player/ping.md",
+        "cellulosesz/help/zh_cn/player/ping.md",
+        "cellulosesz/help/en_us/player/near.md",
+        "cellulosesz/help/zh_cn/player/near.md",
         "cellulosesz/i18n/core/messages_en_us.properties",
         "cellulosesz/i18n/core/messages_zh_cn.properties",
         "cellulosesz/i18n/movement/messages_en_us.properties",
@@ -113,9 +140,15 @@ fun artifactViolations(root: File): List<String> {
         "cellulosesz/i18n/administration/messages_zh_cn.properties",
         "cellulosesz/i18n/utility/messages_en_us.properties",
         "cellulosesz/i18n/utility/messages_zh_cn.properties",
+        "cellulosesz/i18n/player/messages_en_us.properties",
+        "cellulosesz/i18n/player/messages_zh_cn.properties",
     ).forEach { entry ->
-        if (entry !in fabricEntries) violations += "fabric jar is missing resource $entry"
-        if (entry !in neoEntries) violations += "neoforge jar is missing resource $entry"
+        if (entry !in fabricEntries) {
+            violations += "fabric jar is missing resource $entry"
+        }
+        if (entry !in neoEntries) {
+            violations += "neoforge jar is missing resource $entry"
+        }
     }
 
     (fabricEntries + neoEntries)

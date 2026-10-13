@@ -1,22 +1,29 @@
 # /updatekit
 
-Replace a kit's contents with your current inventory.
+Replace a kit's contents.
 
 ## Parameters
 
 - `name`: the kit name.
-- `once` / `cooldown <duration>`: optional; change the reuse policy.
+- `once`: optional; set one claim per player.
+- `cooldown <duration>`: optional; set a cooldown.
 
-## Example
+## Behavior
 
-`/updatekit starter`
-`/updatekit vip cooldown 12h`
+Replaces the kit's items with your current inventory. Without a reuse option the existing reuse rule
+is kept. Moderator command.
+
+## Examples
+
+- `/updatekit starter`
+- `/updatekit vip cooldown 12h`
 
 ## Failures
 
-- The kit does not exist.
-- The duration is invalid.
+- The kit doesn't exist.
+- Your inventory is empty, or the kit has more items than the limit (default 64).
+- The cooldown isn't valid or exceeds the server limit.
 
-## Related
+## Related commands
 
 - `/createkit`, `/delkit`

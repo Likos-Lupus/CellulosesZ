@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.core.text.TextSettings
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettings
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
+import top.likoslupus.cellulosesz.player.config.PlayerSettings
 import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 
 /**
@@ -24,6 +25,7 @@ public data class CellulosesConfig(
     public val messaging: MessagingSettings = MessagingSettings(),
     public val administration: AdministrationSettings = AdministrationSettings(),
     public val utility: UtilitySettings = UtilitySettings(),
+    public val players: PlayerSettings = PlayerSettings(),
 )
 
 @Serializable

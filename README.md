@@ -106,63 +106,92 @@ needed there. This mod adds **no client UI**.
 | Command               | Access    | Documentation                  |
 |:----------------------|:----------|:-------------------------------|
 | `/back`               | Player    | `movement/back`                |
+| `/bottom`             | Player    | `movement/bottom`              |
 | `/delhome`            | Player    | `movement/delhome`             |
 | `/delspawn`           | Moderator | `movement/delspawn`            |
 | `/delwarp`            | Moderator | `movement/delwarp`             |
 | `/home`               | Player    | `movement/home`                |
 | `/homes`              | Player    | `movement/homes`               |
+| `/jump`               | Player    | `movement/jump`                |
+| `/renamehome`         | Player    | `movement/renamehome`          |
 | `/sethome`            | Player    | `movement/sethome`             |
 | `/setspawn`           | Moderator | `movement/setspawn`            |
+| `/settpr`             | Moderator | `movement/settpr`              |
 | `/setwarp`            | Moderator | `movement/setwarp`             |
 | `/spawn`              | Player    | `movement/spawn`               |
+| `/top`                | Player    | `movement/top`                 |
 | `/tp`                 | Player    | `movement/tp`                  |
 | `/tpa`                | Player    | `movement/tpa`                 |
+| `/tpaall`             | Player    | `movement/tpaall`              |
 | `/tpaccept`           | Player    | `movement/tpaccept`            |
 | `/tpahere`            | Player    | `movement/tpahere`             |
+| `/tpauto`             | Player    | `movement/tpauto`              |
 | `/tpcancel`           | Player    | `movement/tpcancel`            |
 | `/tpdeny`             | Player    | `movement/tpdeny`              |
 | `/tphere`             | Moderator | `movement/tphere`              |
 | `/tppos`              | Moderator | `movement/tppos`               |
+| `/tpr`                | Player    | `movement/tpr`                 |
 | `/warp`               | Player    | `movement/warp`                |
+| `/warpinfo`           | Player    | `movement/warpinfo`            |
 | `/warps`              | Player    | `movement/warps`               |
 | `/broadcast`          | Moderator | `communication/broadcast`      |
 | `/broadcastworld`     | Moderator | `communication/broadcastworld` |
+| `/customtext`         | Player    | `communication/customtext`     |
 | `/helpop`             | Player    | `communication/helpop`         |
 | `/ignore`             | Player    | `communication/ignore`         |
+| `/info`               | Player    | `communication/info`           |
 | `/mail`               | Player    | `communication/mail`           |
+| `/me` (alias `/czme`) | Player    | `communication/me`             |
+| `/motd`               | Player    | `communication/motd`           |
 | `/msg`                | Player    | `communication/msg`            |
 | `/msgtoggle`          | Player    | `communication/msgtoggle`      |
 | `/reply` (alias `/r`) | Player    | `communication/reply`          |
+| `/rules`              | Player    | `communication/rules`          |
 | `/ban`                | Moderator | `administration/ban`           |
 | `/banip`              | Moderator | `administration/banip`         |
+| `/deljail`            | Moderator | `administration/deljail`       |
+| `/exp`                | Player    | `administration/exp`           |
 | `/feed`               | Moderator | `administration/feed`          |
 | `/fly`                | Moderator | `administration/fly`           |
 | `/gamemode`           | Moderator | `administration/gamemode`      |
 | `/god`                | Moderator | `administration/god`           |
 | `/heal`               | Moderator | `administration/heal`          |
+| `/jail`               | Moderator | `administration/jail`          |
+| `/jailedplayers`      | Moderator | `administration/jailedplayers` |
+| `/jails`              | Moderator | `administration/jails`         |
 | `/kick`               | Moderator | `administration/kick`          |
 | `/kickall`            | Moderator | `administration/kickall`       |
 | `/kill`               | Moderator | `administration/kill`          |
 | `/mute`               | Moderator | `administration/mute`          |
 | `/muteinfo`           | Moderator | `administration/muteinfo`      |
+| `/setjail`            | Moderator | `administration/setjail`       |
 | `/socialspy`          | Moderator | `administration/socialspy`     |
+| `/speed`              | Player    | `administration/speed`         |
 | `/sudo`               | Moderator | `administration/sudo`          |
 | `/tempban`            | Moderator | `administration/tempban`       |
 | `/tempbanip`          | Moderator | `administration/tempbanip`     |
 | `/tempmute`           | Moderator | `administration/tempmute`      |
+| `/togglejail`         | Moderator | `administration/togglejail`    |
 | `/unban`              | Moderator | `administration/unban`         |
 | `/unbanip`            | Moderator | `administration/unbanip`       |
+| `/unjail`             | Moderator | `administration/unjail`        |
 | `/unmute`             | Moderator | `administration/unmute`        |
 | `/vanish`             | Moderator | `administration/vanish`        |
 | `/anvil`              | Player    | `utility/anvil`                |
 | `/cartographytable`   | Player    | `utility/cartographytable`     |
+| `/clearinventory`     | Player    | `utility/clearinventory`       |
 | `/condense`           | Player    | `utility/condense`             |
 | `/createkit`          | Moderator | `utility/createkit`            |
 | `/delkit`             | Moderator | `utility/delkit`               |
+| `/depth`              | Player    | `utility/depth`                |
 | `/disposal`           | Player    | `utility/disposal`             |
 | `/enderchest`         | Player    | `utility/enderchest`           |
+| `/getpos`             | Player    | `utility/getpos`               |
 | `/grindstone`         | Player    | `utility/grindstone`           |
+| `/hat`                | Player    | `utility/hat`                  |
 | `/invsee`             | Moderator | `utility/invsee`               |
+| `/itemlore`           | Player    | `utility/itemlore`             |
+| `/itemname`           | Player    | `utility/itemname`             |
 | `/kit`                | Player    | `utility/kit`                  |
 | `/kitreset`           | Moderator | `utility/kitreset`             |
 | `/kits`               | Player    | `utility/kits`                 |
@@ -174,6 +203,14 @@ needed there. This mod adds **no client UI**.
 | `/stonecutter`        | Player    | `utility/stonecutter`          |
 | `/updatekit`          | Moderator | `utility/updatekit`            |
 | `/workbench`          | Player    | `utility/workbench`            |
+| `/afk`                | Player    | `player/afk`                   |
+| `/near`               | Player    | `player/near`                  |
+| `/nick`               | Player    | `player/nick`                  |
+| `/ping`               | Player    | `player/ping`                  |
+| `/playtime`           | Player    | `player/playtime`              |
+| `/realname`           | Player    | `player/realname`              |
+| `/seen`               | Player    | `player/seen`                  |
+| `/whois`              | Player    | `player/whois`                 |
 | `/cellulosesz`        | Player    | `core/cellulosesz`             |
 
 <!-- END COMMAND CATALOG -->
@@ -185,9 +222,11 @@ for moderator commands), so installing no permission manager changes nothing. On
 are served through `fabric-permissions-api` (LuckPerms-compatible); on NeoForge through the NeoForge
 `PermissionAPI`.
 
-The catalog above and the per-command documentation are generated from the command declarations.
-Every command has an `en_us` and `zh_cn` Markdown document; `/help <command>` shows it in full while
-plain `/help` and every non-CellulosesZ query keep vanilla behaviour.
+The command catalog above (names, aliases, usage) is generated from the command declarations. The
+per-command help prose is hand-written under each module's `cellulosesz/help` resources and kept
+honest by a coverage check, not generated. Every command has an `en_us` and `zh_cn` document;
+`/help <command>` shows it in full while plain `/help` and every non-CellulosesZ query keep vanilla
+behaviour.
 
 ## Configuration and storage
 

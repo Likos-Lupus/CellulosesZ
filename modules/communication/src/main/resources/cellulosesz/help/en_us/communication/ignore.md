@@ -1,24 +1,31 @@
 # /ignore
 
-Manage the players whose messages you do not want to receive.
+Manage the list of players whose private messages you don't want to receive.
 
-## Parameters
+## Behavior
 
-- `add <player>`: stop receiving that player's private messages.
-- `remove <player>`: start receiving them again.
-- With no argument, lists the players you ignore.
+Ignoring someone blocks their private messages to you. The list is stored per player and keeps its
+value after a restart. You can't ignore yourself, and the name must belong to a known player. The
+default list size is 128; the server can change it.
+
+## Subcommands
+
+- `/ignore`: list the players you ignore.
+- `/ignore add <player>`: stop receiving that player's private messages.
+- `/ignore remove <player>`: receive them again.
 
 ## Example
 
-`/ignore`
-`/ignore add Alice`
-`/ignore remove Alice`
+- `/ignore`
+- `/ignore add Alice`
+- `/ignore remove Alice`
 
 ## Failures
 
-- The name is not known to the server.
+- No record exists for the name.
 - You tried to ignore yourself.
+- Your ignore list is full.
 
-## Related
+## Related commands
 
 - `/msg`, `/msgtoggle`

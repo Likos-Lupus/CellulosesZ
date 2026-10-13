@@ -19,6 +19,8 @@ internal enum class ModerationAuditAction {
     MUTE,
     TEMP_MUTE,
     UNMUTE,
+    JAIL,
+    UNJAIL,
     KILL,
     GAMEMODE,
     SUDO,
@@ -26,6 +28,7 @@ internal enum class ModerationAuditAction {
     SOCIAL_SPY_DISABLE,
     VANISH_ENABLE,
     VANISH_DISABLE,
+    CLEAR_INVENTORY,
 
 }
 

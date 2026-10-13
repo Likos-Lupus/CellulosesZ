@@ -2,27 +2,30 @@
 
 Ban an IP address.
 
+## Behavior
+
+Uses the vanilla IP ban list. The target is either an IP address or an online player, in which case
+that player's current address is used. Bans are enforced on join and recorded in the audit log.
+Vanilla enforces IPv4 fully; IPv6 coverage depends on the server software, so check the address
+before using it.
+
 ## Parameters
 
-- `target`: an IP literal or an online player name (whose address is used).
-- `reason`: optional reason.
+- `target`: an IP address, or an online player whose address is used.
+- `reason`: optional reason, written by you.
 
 ## Example
 
-`/banip 203.0.113.7`
-`/banip Alice`
-
-## Behavior
-
-Uses the vanilla IP ban list. Vanilla itself only enforces IPv4 fully; see the administration ADR
-for details.
+- `/banip 203.0.113.7`
+- `/banip Alice`
 
 ## Failures
 
-- The address cannot be parsed.
-- The targeted online player is protected.
+- The address can't be parsed.
+- The address belongs to a protected player.
+- The address is already banned.
 - Missing permission.
 
-## Related
+## Related commands
 
 - `/tempbanip`, `/unbanip`, `/ban`

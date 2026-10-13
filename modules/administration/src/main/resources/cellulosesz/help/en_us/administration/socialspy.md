@@ -1,20 +1,23 @@
 # /socialspy
 
-Toggle seeing other players' private messages.
-
-## Parameters
-
-- `on` / `off`: optional; with no argument, toggles.
-
-## Example
-
-`/socialspy`
-`/socialspy on`
+Toggle private-message monitoring.
 
 ## Behavior
 
-Session-only; the state is not persisted.
+While monitoring is on, you see a copy of private messages between other players; your own
+conversations are excluded. The setting is per player and only lasts for the current session: it
+turns off again when you reconnect or the server stops. Toggling is recorded in the audit log.
 
-## Related
+## Parameters
+
+- `on` / `off`: optional; with no argument, the current state is flipped.
+
+## Example
+
+- `/socialspy`
+- `/socialspy on`
+- `/socialspy off`
+
+## Related commands
 
 - `/vanish`

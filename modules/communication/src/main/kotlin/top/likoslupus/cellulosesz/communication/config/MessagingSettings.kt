@@ -10,4 +10,6 @@ public data class MessagingSettings(
     public val mail: MailSettings = MailSettings(),
     public val helpOp: HelpOpSettings = HelpOpSettings(),
     public val announcements: AnnouncementSettings = AnnouncementSettings(),
+    public val serverPages: ServerPageSettings = ServerPageSettings(),
+    public val actionMessage: ActionMessageSettings = ActionMessageSettings(),
 )

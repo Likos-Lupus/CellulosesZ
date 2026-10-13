@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
+import java.util.*
 import kotlin.time.Duration
 
 /**
@@ -18,6 +19,7 @@ internal class TeleportCoordinator(
     private val cooldowns: TeleportCooldowns,
     private val history: TeleportHistoryService,
     private val historyEnabled: () -> Boolean,
+    private val confinement: (UUID) -> Boolean = { false },
 ) {
 
     private val logger = LoggerFactory.getLogger(TeleportCoordinator::class.java)
@@ -28,6 +30,12 @@ internal class TeleportCoordinator(
 
         if (intent.subjectId in pending) {
             return TeleportOutcome.AlreadyPending
+        }
+
+        // Administrative and jail transfers bypass the confinement gate so a jailed player can be
+        // moved in and released; every player-instigated move is denied while confined.
+        if (!intent.cause.bypassesConfinementGate && confinement(intent.subjectId)) {
+            return TeleportOutcome.Confined
         }
 
         cooldowns.remaining(intent.subjectId, intent.policy.cooldown)?.let {

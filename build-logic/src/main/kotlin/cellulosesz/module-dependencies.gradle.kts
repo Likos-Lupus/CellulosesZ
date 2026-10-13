@@ -6,6 +6,7 @@ val dependencyAllowlist: Map<String, Set<String>> = mapOf(
     ":modules:communication" to setOf(":modules:foundation", ":modules:minecraft-core"),
     ":modules:administration" to setOf(":modules:foundation", ":modules:minecraft-core"),
     ":modules:utility" to setOf(":modules:foundation", ":modules:minecraft-core"),
+    ":modules:player" to setOf(":modules:foundation", ":modules:minecraft-core"),
     ":modules:application" to setOf(
         ":modules:foundation",
         ":modules:minecraft-core",
@@ -13,6 +14,7 @@ val dependencyAllowlist: Map<String, Set<String>> = mapOf(
         ":modules:communication",
         ":modules:administration",
         ":modules:utility",
+        ":modules:player",
     ),
 )
 

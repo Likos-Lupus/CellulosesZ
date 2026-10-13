@@ -2,8 +2,10 @@
   "required": true,
   "minVersion": "0.8",
   "package": "top.likoslupus.cellulosesz.administration.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "CommandsRestrictionMixin",
+    "PlayerListRespawnMixin",
     "ServerPlayerVisibilityMixin"
   ],
   "injectors": {

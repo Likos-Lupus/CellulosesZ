@@ -8,6 +8,8 @@ import com.mojang.brigadier.context.CommandContext
 import net.minecraft.commands.CommandBuildContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.arguments.DimensionArgument
+import net.minecraft.commands.arguments.MessageArgument
+import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 
 /**
@@ -69,6 +71,19 @@ public fun double(
     CommandArgument(
         { DoubleArgumentType.doubleArg(min, max) },
         DoubleArgumentType::getDouble
+    )
+
+/**
+ * A vanilla message argument resolving to a chat [Component]. The Brigadier node is the real
+ * `MessageArgument`, whose generic value is its internal `Message` record rather than a component;
+ * the typed value is therefore resolved through `MessageArgument.getMessage`. The factory cast only
+ * aligns the DSL accessor type, the argument node still carries the genuine `MessageArgument`.
+ */
+@Suppress("UNCHECKED_CAST")
+public fun message(): CommandArgument<Component> =
+    CommandArgument(
+        { MessageArgument.message() as ArgumentType<Component> },
+        { context, name -> MessageArgument.getMessage(context, name) },
     )
 
 /** A vanilla dimension argument resolving to the dimension identifier. */

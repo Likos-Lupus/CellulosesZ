@@ -42,21 +42,21 @@ public class AdventureDocumentRenderer(
             is MarkdownBlock.Paragraph ->
                 out += line(block.spans, theme.body)
 
-            is MarkdownBlock.BulletItem -> {
-                val prefix = Component.text(
-                    "${"  ".repeat(block.depth)}• ",
-                    theme.heading
-                )
-                out += prefix.append(line(block.spans, theme.body))
-            }
+            is MarkdownBlock.ListBlock ->
+                block.entries.forEach { entry ->
+                    val prefix = when {
+                        block.ordered -> Component.text(
+                            "${"  ".repeat(entry.depth)}${entry.number ?: 1}. ",
+                            theme.heading
+                        )
 
-            is MarkdownBlock.OrderedItem -> {
-                val prefix = Component.text(
-                    "${"  ".repeat(block.depth)}${block.number}. ",
-                    theme.heading
-                )
-                out += prefix.append(line(block.spans, theme.body))
-            }
+                        else -> Component.text(
+                            "${"  ".repeat(entry.depth)}• ",
+                            theme.heading
+                        )
+                    }
+                    out += prefix.append(line(entry.spans, theme.body))
+                }
 
             is MarkdownBlock.CodeBlock ->
                 block.lines.forEach {

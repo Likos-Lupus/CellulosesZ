@@ -14,14 +14,17 @@ import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 import top.likoslupus.cellulosesz.utility.inspection.InspectionCommands
 import top.likoslupus.cellulosesz.utility.inspection.InspectionService
 import top.likoslupus.cellulosesz.utility.inspection.MinecraftInspectionBackend
+import top.likoslupus.cellulosesz.utility.item.AdministrativeActionAuditPort
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityCommands
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityService
 import top.likoslupus.cellulosesz.utility.item.MinecraftItemUtilityBackend
 import top.likoslupus.cellulosesz.utility.kit.*
+import top.likoslupus.cellulosesz.utility.position.PositionCommands
 import top.likoslupus.cellulosesz.utility.workstation.MinecraftWorkstationBackend
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationCommands
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationService
 import java.time.Clock
+import java.util.*
 
 /**
  * Public surface of the utility bounded context. Internals stay `internal`.
@@ -36,6 +39,7 @@ public class UtilityFeature internal constructor(
     private val messages: LocalizedMessages,
     private val adventure: AdventureRuntime,
     private val presentation: TextPresentation,
+    private val audit: AdministrativeActionAuditPort,
 ) {
 
     public fun commands(): List<CommandDefinition> =
@@ -51,7 +55,9 @@ public class UtilityFeature internal constructor(
             known,
             messages,
             adventure,
-            presentation
+            presentation,
+            audit,
+            kernel,
         ) + WorkstationCommands.commands(
             workstations,
             messages,
@@ -63,6 +69,9 @@ public class UtilityFeature internal constructor(
             messages,
             adventure,
             presentation
+        ) + PositionCommands.commands(
+            adventure,
+            presentation
         )
 
     public fun onServerStarting() {
@@ -72,6 +81,12 @@ public class UtilityFeature internal constructor(
 
     public fun onServerStopping() {
         kits.shutdown()
+        items.clearConfirmations()
+    }
+
+    /** Drops any pending `/clearinventory` confirmation for a leaving player. */
+    public fun onPlayerQuit(playerId: UUID) {
+        items.forgetInventoryClear(playerId)
     }
 
 }
@@ -85,6 +100,7 @@ public fun createUtilityFeature(
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
     presentation: TextPresentation,
+    audit: AdministrativeActionAuditPort = AdministrativeActionAuditPort { _, _, _, _ -> },
 ): UtilityFeature {
     val runner = kernel.serverThreadRunner()
     val codec = KitItemCodec {
@@ -107,6 +123,7 @@ public fun createUtilityFeature(
         backend = MinecraftItemUtilityBackend(kernel),
         known = known,
         settings = { settings().items },
+        editing = { settings().itemEditing },
     )
     val workstations = WorkstationService(
         backend = MinecraftWorkstationBackend(kernel),
@@ -126,5 +143,6 @@ public fun createUtilityFeature(
         messages = messages,
         adventure = adventure,
         presentation = presentation,
+        audit = audit,
     )
 }

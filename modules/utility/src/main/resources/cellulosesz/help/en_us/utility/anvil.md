@@ -2,10 +2,19 @@
 
 Open a portable anvil.
 
-## Example
+## Behavior
 
-`/anvil`
+Opens the vanilla anvil menu. Repair and enchantment costs are unchanged.
 
-## Related
+## Examples
+
+- `/anvil`
+
+## Limits
+
+Portable workstations are disabled by default and can be limited to an allowed set; if `/anvil`
+isn't allowed, the command reports that and opens nothing.
+
+## Related commands
 
 - `/workbench`, `/grindstone`

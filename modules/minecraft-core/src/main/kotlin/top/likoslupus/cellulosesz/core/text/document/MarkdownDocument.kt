@@ -26,16 +26,16 @@ public sealed interface MarkdownBlock {
         public val spans: List<MarkdownSpan>,
     ) : MarkdownBlock
 
-    public data class BulletItem(
-        public val depth: Int,
-        public val spans: List<MarkdownSpan>,
+    public data class ListBlock(
+        public val ordered: Boolean,
+        public val entries: List<ListEntry>,
     ) : MarkdownBlock
 
-    public data class OrderedItem(
+    public data class ListEntry(
         public val depth: Int,
-        public val number: Int,
+        public val number: Int?,
         public val spans: List<MarkdownSpan>,
-    ) : MarkdownBlock
+    )
 
     public data class CodeBlock(
         public val lines: List<String>,

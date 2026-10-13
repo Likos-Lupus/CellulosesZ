@@ -2,13 +2,17 @@
 
 Cancel your outgoing teleport request.
 
+## Behavior
+
+The request is dropped and the target is told it was canceled.
+
 ## Example
 
-`/tpcancel`
+- `/tpcancel`
 
 ## Failures
 
-- You have no pending outgoing request.
+- You have no outgoing request.
 
 ## Related
 

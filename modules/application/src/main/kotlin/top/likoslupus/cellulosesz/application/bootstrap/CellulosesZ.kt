@@ -15,6 +15,7 @@ import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigDefaults
 import top.likoslupus.cellulosesz.application.config.ConfigValidation
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
+import top.likoslupus.cellulosesz.application.port.MovementJailTransferPort
 import top.likoslupus.cellulosesz.communication.*
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
@@ -45,9 +46,13 @@ import top.likoslupus.cellulosesz.foundation.database.schema.SqlSchemaContributo
 import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import top.likoslupus.cellulosesz.movement.createMovementFeature
+import top.likoslupus.cellulosesz.player.PlayerFeature
+import top.likoslupus.cellulosesz.player.PlayerSqlSchema
+import top.likoslupus.cellulosesz.player.createPlayerFeature
 import top.likoslupus.cellulosesz.utility.UtilityFeature
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import top.likoslupus.cellulosesz.utility.createUtilityFeature
+import top.likoslupus.cellulosesz.utility.item.AdministrativeActionAuditPort
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -67,6 +72,7 @@ public object CellulosesZ {
         CommunicationSqlSchema,
         AdministrationSqlSchema,
         UtilitySqlSchema,
+        PlayerSqlSchema,
     )
 
     public fun initialize(platform: PlatformServices) {
@@ -81,7 +87,8 @@ public object CellulosesZ {
         val kernel = RuntimeKernel()
         val permissions = PermissionService(platform.permissionBridge)
 
-        val configPath = configPath()
+        val configDirectory = configDirectory()
+        val configPath = configDirectory.resolve("cellulosesz.toml")
         ConfigDefaults.writeIfMissing(configPath)
         val config = ConfigStore(
             path = configPath,
@@ -114,6 +121,7 @@ public object CellulosesZ {
                 TranslationSource("communication", CommunicationFeature::class.java),
                 TranslationSource("administration", AdministrationFeature::class.java),
                 TranslationSource("utility", UtilityFeature::class.java),
+                TranslationSource("player", PlayerFeature::class.java),
             )
         )
         val languageRepository = JdbcPlayerLanguagePreferenceRepository(database, namespace)
@@ -122,19 +130,20 @@ public object CellulosesZ {
             config.current.localization
         }
         val presentationTheme = { TextThemeResolver.resolve(config.current.text) }
-        val messages = LocalizedMessages(catalog, languageResolver, presentationTheme)
-        val presentation = createTextPresentation(messages, languageResolver, presentationTheme)
+        val messages = LocalizedMessages(
+            catalog,
+            languageResolver,
+            presentationTheme
+        )
+        val presentation = createTextPresentation(
+            messages,
+            languageResolver,
+            presentationTheme
+        )
         val adventure = AdventureRuntime()
 
-        val movement = createMovementFeature(
-            kernel = kernel,
-            database = database,
-            namespace = namespace,
-            settings = { config.current.movement },
-            messages = messages,
-            adventure = adventure,
-            presentation = presentation,
-        )
+        lateinit var movement: MovementFeature
+        val jailTransferPort = MovementJailTransferPort { movement }
         val administration = createAdministrationFeature(
             kernel = kernel,
             database = database,
@@ -142,9 +151,24 @@ public object CellulosesZ {
             permissions = permissions,
             settings = { config.current.administration },
             known = known,
+            jailTransfer = { jailTransferPort },
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+        )
+        movement = createMovementFeature(
+            kernel = kernel,
+            database = database,
+            namespace = namespace,
+            settings = { config.current.movement },
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
+            confinement = { administration.isConfined(it) },
+            requestReachability = { senderId, targetId ->
+                administration.canBeSeenBy(senderId, targetId)
+            },
+            permissions = permissions,
         )
         val communication = createCommunicationFeature(
             kernel = kernel,
@@ -156,6 +180,9 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+            configDirectory = configDirectory,
+            languages = languageResolver,
+            documentTheme = { DocumentTheme.from(presentationTheme()) },
         )
         val utility = createUtilityFeature(
             kernel = kernel,
@@ -166,6 +193,21 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+            audit = AdministrativeActionAuditPort { actorId, targetId, targetName, cleared ->
+                administration.recordInventoryClear(actorId, targetId, targetName, cleared)
+            },
+        )
+        val playerFeature = createPlayerFeature(
+            kernel = kernel,
+            database = database,
+            namespace = namespace,
+            settings = { config.current.players },
+            known = known,
+            identities = identityRepository,
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
+            permissions = permissions,
         )
 
         val integration = CommunicationIntegration(
@@ -204,12 +246,14 @@ public object CellulosesZ {
                         catalog = catalog,
                         modVersion = modVersion(),
                         loaderName = platform.loaderName,
+                        onReloadApplied = { playerFeature.applyNicknameDisplay() },
                     )
                 )
                 addAll(movement.commands())
                 addAll(communication.commands(integration))
                 addAll(administration.commands())
                 addAll(utility.commands())
+                addAll(playerFeature.commands())
             }
         )
         val helpResolver = CommandHelpResolver(commandRegistry.definitions, permissions)
@@ -220,6 +264,7 @@ public object CellulosesZ {
                     ClasspathCommandDocumentSource(communication::class.java),
                     ClasspathCommandDocumentSource(administration::class.java),
                     ClasspathCommandDocumentSource(utility::class.java),
+                    ClasspathCommandDocumentSource(PlayerFeature::class.java),
                     ClasspathCommandDocumentSource(CellulosesZ::class.java),
                 )
             ),
@@ -227,9 +272,18 @@ public object CellulosesZ {
             languages = languageResolver,
             permissions = permissions,
         )
-        val helpOverlay = SelectiveVanillaHelpOverlay(helpResolver, documentation, adventure) {
+        val helpOverlay = SelectiveVanillaHelpOverlay(
+            helpResolver,
+            documentation,
+            adventure
+        ) {
             DocumentTheme.from(presentationTheme())
         }
+        // The `/me` override is a mixin decision taken while vanilla builds its dispatcher, so the
+        // snapshot is published here at mod init, well before the server constructs its commands.
+        communication.applyVanillaMeOverride(
+            config.current.messaging.actionMessage.overrideVanillaMe
+        )
 
         CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
             commandRegistry.register(dispatcher, buildContext, permissions)
@@ -255,9 +309,11 @@ public object CellulosesZ {
 
             languagePreferences.hydrate(languageRepository.loadAllBlocking())
 
+            movement.onServerStarting()
             administration.onServerStarting()
             communication.onServerStarting()
             utility.onServerStarting()
+            playerFeature.onServerStarting()
             health.transition(ApplicationHealth.State.LOADING_STATE)
         }
         LifecycleEvent.SERVER_STARTED.register {
@@ -270,6 +326,7 @@ public object CellulosesZ {
             communication.onServerStopping()
             administration.onServerStopping()
             utility.onServerStopping()
+            playerFeature.onServerStopping()
             database.close()
             kernel.onServerStopping()
             health.transition(ApplicationHealth.State.STOPPED)
@@ -282,6 +339,8 @@ public object CellulosesZ {
         TickEvent.PLAYER_POST.register { player ->
             if (player is ServerPlayer) {
                 movement.onPlayerTick(player)
+                administration.onPlayerTick(player)
+                playerFeature.onPlayerTick(player)
             }
         }
         EntityEvent.LIVING_HURT.register { entity, _, _ ->
@@ -294,6 +353,7 @@ public object CellulosesZ {
         PlayerEvent.PLAYER_JOIN.register { player ->
             administration.onPlayerJoined(player)
             communication.onPlayerJoined(player.uuid)
+            playerFeature.onPlayerJoined(player)
             val identity = KnownPlayerIdentity(player.uuid, player.gameProfile.name)
             known.record(identity)
             kernel.launch {
@@ -310,8 +370,13 @@ public object CellulosesZ {
             if (player != null
                 && administration.isMuted(player.uuid)
             ) {
-                presentation.renderFor(player.uuid, administration.mutedChatNotice()).forEach {
-                    adventure.audience(CommandFeedbackTarget.Player(player.uuid)).sendMessage(it)
+                presentation.renderFor(
+                    player.uuid,
+                    administration.mutedChatNotice()
+                ).forEach {
+                    adventure.audience(
+                        CommandFeedbackTarget.Player(player.uuid)
+                    ).sendMessage(it)
                 }
                 EventResult.interruptFalse()
             } else {
@@ -319,10 +384,12 @@ public object CellulosesZ {
             }
         }
 
-        PlayerEvent.PLAYER_QUIT.register {
-            administration.onPlayerQuit(it.uuid)
-            communication.onPlayerQuit(it.uuid)
-            val affected = movement.onPlayerQuit(it.uuid)
+        PlayerEvent.PLAYER_QUIT.register { player ->
+            administration.onPlayerQuit(player.uuid)
+            communication.onPlayerQuit(player.uuid)
+            utility.onPlayerQuit(player.uuid)
+            playerFeature.onPlayerQuit(player)
+            val affected = movement.onPlayerQuit(player.uuid)
             if (kernel.state == KernelState.RUNNING) {
                 affected.forEach { senderId ->
                     presentation.renderFor(senderId, movement.requestTargetOfflineNotice())
@@ -335,10 +402,9 @@ public object CellulosesZ {
         }
     }
 
-    private fun configPath(): Path =
+    private fun configDirectory(): Path =
         Platform.getConfigFolder()
                 .resolve("cellulosesz")
-                .resolve("cellulosesz.toml")
 
     private fun modVersion(): String =
         runCatching { Platform.getMod("cellulosesz").version }

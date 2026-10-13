@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import top.likoslupus.cellulosesz.movement.bindPosition
 import top.likoslupus.cellulosesz.movement.readStoredPosition
 import java.sql.SQLException
+import java.time.Instant
 
 internal class JdbcWarpRepository(
     private val database: DatabaseRuntime,
@@ -19,21 +20,21 @@ internal class JdbcWarpRepository(
                 database.read { connection ->
                     connection.prepareStatement(
                         /* language=SQL */ """
-                    SELECT
-                        name,
-                        dimension,
-                        x,
-                        y,
-                        z,
-                        yaw,
-                        pitch
-                    FROM
-                        ${MovementSqlSchema.WARPS}
-                    WHERE
-                        namespace = ?
-                    ORDER BY
-                        name
-                    """.trimIndent()
+                        SELECT
+                            name,
+                            dimension,
+                            x,
+                            y,
+                            z,
+                            yaw,
+                            pitch
+                        FROM
+                            ${MovementSqlSchema.WARPS}
+                        WHERE
+                            namespace = ?
+                        ORDER BY
+                            name
+                        """.trimIndent()
                     ).use { statement ->
                         statement.setString(1, namespace)
                         statement.executeQuery().use { rs ->
@@ -86,10 +87,68 @@ internal class JdbcWarpRepository(
             }
         }
 
-    override suspend fun put(warp: Warp) =
+    override suspend fun metadata(name: WarpName): WarpMetadata? =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            created_by,
+                            created_at,
+                            updated_at_ms
+                        FROM
+                            ${MovementSqlSchema.WARP_METADATA}
+                        WHERE
+                            namespace = ? AND warp_name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, name.value)
+                        statement.executeQuery().use { rs ->
+                            when {
+                                rs.next() -> WarpMetadata(
+                                    createdBy = rs.getString(1),
+                                    createdAt = Instant.ofEpochMilli(rs.getLong(2)),
+                                    updatedAt = (rs.getObject(3) as? Number)
+                                            ?.let { Instant.ofEpochMilli(it.toLong()) },
+                                )
+
+                                else -> null
+                            }
+                        }
+                    }
+                }
+            } catch (exception: SQLException) {
+                throw WarpDataException("unable to read warp metadata '${name.value}'", exception)
+            }
+        }
+
+    override suspend fun put(warp: Warp, metadata: WarpMetadata) =
         withContext(Dispatchers.IO) {
             try {
                 database.transaction { connection ->
+                    val existing = connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            created_by,
+                            created_at
+                        FROM
+                            ${MovementSqlSchema.WARP_METADATA}
+                        WHERE
+                            namespace = ? AND warp_name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, warp.name.value)
+                        statement.executeQuery().use { rs ->
+                            if (rs.next()) rs.getString(1) to rs.getLong(2) else null
+                        }
+                    }
+                    val createdBy = existing?.first ?: metadata.createdBy
+                    val createdAt = existing?.second ?: metadata.createdAt.toEpochMilli()
+                    val updatedAt = metadata.updatedAt?.toEpochMilli() ?: createdAt
+
                     connection.prepareStatement(
                         /* language=SQL */ """
                         DELETE FROM
@@ -124,6 +183,39 @@ internal class JdbcWarpRepository(
                         statement.bindPosition(3, warp.position)
                         statement.executeUpdate()
                     }
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        DELETE FROM
+                            ${MovementSqlSchema.WARP_METADATA}
+                        WHERE
+                            namespace = ? AND warp_name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, warp.name.value)
+                        statement.executeUpdate()
+                    }
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        INSERT INTO ${MovementSqlSchema.WARP_METADATA} (
+                            namespace,
+                            warp_name,
+                            created_by,
+                            created_at,
+                            updated_at_ms
+                        )
+                        VALUES (
+                            ?, ?, ?, ?, ?
+                        );
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, warp.name.value)
+                        statement.setString(3, createdBy)
+                        statement.setLong(4, createdAt)
+                        statement.setLong(5, updatedAt)
+                        statement.executeUpdate()
+                    }
                     Unit
                 }
             } catch (exception: SQLException) {
@@ -135,7 +227,7 @@ internal class JdbcWarpRepository(
         withContext(Dispatchers.IO) {
             try {
                 database.transaction { connection ->
-                    connection.prepareStatement(
+                    val removed = connection.prepareStatement(
                         /* language=SQL */ """
                         DELETE FROM
                             ${MovementSqlSchema.WARPS}
@@ -147,6 +239,19 @@ internal class JdbcWarpRepository(
                         statement.setString(2, name.value)
                         statement.executeUpdate() > 0
                     }
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        DELETE FROM
+                            ${MovementSqlSchema.WARP_METADATA}
+                        WHERE
+                            namespace = ? AND warp_name = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, name.value)
+                        statement.executeUpdate()
+                    }
+                    removed
                 }
             } catch (exception: SQLException) {
                 throw WarpDataException("unable to remove warp '${name.value}'", exception)

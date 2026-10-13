@@ -22,6 +22,7 @@ val internalModules = listOf(
     ":modules:communication",
     ":modules:administration",
     ":modules:utility",
+    ":modules:player",
     ":modules:application",
 )
 

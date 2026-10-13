@@ -1,12 +1,12 @@
 package top.likoslupus.cellulosesz.movement.warp
 
-internal interface WarpRepository {
+internal interface WarpRepository : WarpMetadataRepository {
 
     suspend fun list(): List<Warp>
 
     suspend fun get(name: WarpName): Warp?
 
-    suspend fun put(warp: Warp)
+    suspend fun put(warp: Warp, metadata: WarpMetadata)
 
     suspend fun remove(name: WarpName): Boolean
 

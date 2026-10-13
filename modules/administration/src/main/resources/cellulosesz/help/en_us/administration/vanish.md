@@ -2,19 +2,22 @@
 
 Toggle hiding yourself from other players.
 
+## Behavior
+
+While vanished, you are removed from the player list and other players' view, but other vanished
+players can still see you. Vanish is self-only and session-only: it turns off again when you
+reconnect or the server stops. Toggling is recorded in the audit log.
+
 ## Parameters
 
-- `on` / `off`: optional; with no argument, toggles.
+- `on` / `off`: optional; with no argument, the current state is flipped.
 
 ## Example
 
-`/vanish`
+- `/vanish`
+- `/vanish on`
+- `/vanish off`
 
-## Behavior
-
-Self-only, session-only. Vanished players are hidden from the tab list and from other players' view,
-but remain visible to other vanished players. It is cleared on disconnect and on server stop.
-
-## Related
+## Related commands
 
 - `/socialspy`

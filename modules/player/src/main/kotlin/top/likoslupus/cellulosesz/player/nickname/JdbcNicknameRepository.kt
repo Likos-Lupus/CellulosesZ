@@ -1,0 +1,170 @@
+package top.likoslupus.cellulosesz.player.nickname
+
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.player.PlayerDataException
+import top.likoslupus.cellulosesz.player.PlayerSqlSchema
+import java.sql.ResultSet
+import java.sql.SQLException
+import java.time.Instant
+import java.util.*
+
+/** JDBC nicknames in `cz_player_nicknames`. A row that fails to map is reported, never overwritten. */
+internal class JdbcNicknameRepository(
+    private val database: DatabaseRuntime,
+    private val namespace: String,
+) : NicknameRepository {
+
+    override suspend fun find(playerId: UUID): StoredNickname? =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            player_uuid,
+                            nickname_display,
+                            normalized_nickname,
+                            updated_at_ms
+                        FROM
+                            ${PlayerSqlSchema.NICKNAMES}
+                        WHERE
+                            namespace = ? AND player_uuid = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, playerId.toString())
+                        statement.executeQuery().use { rs ->
+                            if (rs.next()) map(rs) else null
+                        }
+                    }
+                }
+            } catch (exception: SQLException) {
+                throw PlayerDataException("unable to read nickname for $playerId", exception)
+            }
+        }
+
+    override suspend fun findByNormalized(normalized: String): StoredNickname? =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        SELECT
+                            player_uuid,
+                            nickname_display,
+                            normalized_nickname,
+                            updated_at_ms
+                        FROM
+                            ${PlayerSqlSchema.NICKNAMES}
+                        WHERE
+                            namespace = ? AND normalized_nickname = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, normalized)
+                        statement.executeQuery().use { rs ->
+                            if (rs.next()) map(rs) else null
+                        }
+                    }
+                }
+            } catch (exception: SQLException) {
+                throw PlayerDataException("unable to read nickname '$normalized'", exception)
+            }
+        }
+
+    override suspend fun save(record: StoredNickname) =
+        withContext(Dispatchers.IO) {
+            try {
+                database.transaction { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        DELETE FROM
+                            ${PlayerSqlSchema.NICKNAMES}
+                        WHERE
+                            namespace = ? AND player_uuid = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, record.playerId.toString())
+                        statement.executeUpdate()
+                    }
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        INSERT INTO ${PlayerSqlSchema.NICKNAMES} (
+                            namespace,
+                            player_uuid,
+                            nickname_display,
+                            normalized_nickname,
+                            updated_at_ms,
+                            updated_by_uuid
+                        )
+                        VALUES (
+                            ?, ?, ?, ?, ?, ?
+                        );
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, record.playerId.toString())
+                        statement.setString(3, record.display)
+                        statement.setString(4, record.normalized)
+                        statement.setLong(5, record.updatedAt.toEpochMilli())
+                        statement.setString(6, record.updatedBy?.toString())
+                        statement.executeUpdate()
+                    }
+                    Unit
+                }
+            } catch (exception: SQLException) {
+                throw PlayerDataException(
+                    "unable to write nickname for ${record.playerId}",
+                    exception
+                )
+            }
+        }
+
+    override suspend fun delete(playerId: UUID): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                database.transaction { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        DELETE FROM
+                            ${PlayerSqlSchema.NICKNAMES}
+                        WHERE
+                            namespace = ? AND player_uuid = ?;
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setString(1, namespace)
+                        statement.setString(2, playerId.toString())
+                        statement.executeUpdate() > 0
+                    }
+                }
+            } catch (exception: SQLException) {
+                throw PlayerDataException("unable to delete nickname for $playerId", exception)
+            }
+        }
+
+    private fun map(rs: ResultSet): StoredNickname {
+        val playerId = parseUuid(rs.getString(1))
+        val display = rs.getString(2)
+        val normalized = rs.getString(3)
+        if (display.isBlank() || normalized.isBlank()) {
+            throw PlayerDataException("nickname row for $playerId is empty")
+        }
+        return StoredNickname(
+            playerId = playerId,
+            display = display,
+            normalized = normalized,
+            updatedAt = Instant.ofEpochMilli(rs.getLong(4)),
+        )
+    }
+
+    private fun parseUuid(raw: String): UUID =
+        try {
+            UUID.fromString(raw)
+        } catch (_: IllegalArgumentException) {
+            throw PlayerDataException("nickname row has an invalid player_uuid")
+        }
+
+}

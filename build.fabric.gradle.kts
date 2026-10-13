@@ -15,8 +15,6 @@ group = modGroup
 version = "${libs.versions.mod.get()}+$minecraftVersion"
 base.archivesName.set(modId)
 
-// Fixed compile-time architecture modules that are flattened into the distribution jar. These are
-// NOT loader cells and NOT separately shipped artifacts.
 val internalModules = listOf(
     ":modules:foundation",
     ":modules:minecraft-core",
@@ -24,6 +22,7 @@ val internalModules = listOf(
     ":modules:communication",
     ":modules:administration",
     ":modules:utility",
+    ":modules:player",
     ":modules:application",
 )
 
@@ -137,8 +136,6 @@ tasks.named<Jar>("jar") {
     from(rootProject.file("LICENSE.txt")) {
         rename { "${it}_$modId" }
     }
-    // Flatten internal module outputs into the distribution jar. External mods (Fabric API,
-    // Architectury, FLK) are NOT included.
     internalModules.forEach { path ->
         from(project(path).the<SourceSetContainer>()["main"].output)
     }

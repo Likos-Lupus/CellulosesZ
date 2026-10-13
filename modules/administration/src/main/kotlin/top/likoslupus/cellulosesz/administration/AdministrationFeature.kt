@@ -3,7 +3,11 @@ package top.likoslupus.cellulosesz.administration
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
+import top.likoslupus.cellulosesz.administration.jail.*
+import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
+import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
+import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditAction
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditService
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanCommands
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanService
@@ -20,7 +24,7 @@ import top.likoslupus.cellulosesz.administration.moderation.protection.TargetPro
 import top.likoslupus.cellulosesz.administration.operator.MinecraftPlayerControlBackend
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlCommands
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlService
-import top.likoslupus.cellulosesz.administration.playerstate.PlayerStateCommands
+import top.likoslupus.cellulosesz.administration.playerstate.*
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyCommands
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
@@ -30,6 +34,7 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
+import top.likoslupus.cellulosesz.core.player.WorldPosition
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -54,14 +59,17 @@ public class AdministrationFeature internal constructor(
     private val control: PlayerControlService,
     private val spies: SocialSpyService,
     private val vanish: VanishService,
+    private val jail: JailService,
+    private val adjustments: PlayerAdjustmentService,
     private val known: MinecraftKnownPlayerResolver,
     private val notifier: ModerationNotifier,
+    private val audit: ModerationAuditService,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
     private val messages: LocalizedMessages,
     private val adventure: AdventureRuntime,
     private val presentation: TextPresentation,
-) {
+) : ConfinementQuery {
 
     public fun commands(): List<CommandDefinition> {
         val moderation = { settings().moderation }
@@ -119,6 +127,24 @@ public class AdministrationFeature internal constructor(
             messages,
             adventure,
             presentation
+        ) + ExperienceCommands.commands(
+            adjustments,
+            known,
+            adventure,
+            presentation
+        ) + SpeedCommands.commands(
+            adjustments,
+            known,
+            adventure,
+            presentation
+        ) + JailCommands.commands(
+            jail,
+            notifier,
+            { settings().moderation },
+            kernel,
+            messages,
+            adventure,
+            presentation
         )
     }
 
@@ -128,6 +154,7 @@ public class AdministrationFeature internal constructor(
 
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
     public fun onServerStarting() {
+        RestrictCommandsState.set(settings().jail.restrictCommands)
         kernel.launch {
             kernel.onServerThread {
                 val server = kernel.requireServer()
@@ -146,6 +173,7 @@ public class AdministrationFeature internal constructor(
             }
 
             mutes.load()
+            jail.load()
 
             kernel.onServerThread {
                 mutes.activeMutes().forEach { mute ->
@@ -162,7 +190,9 @@ public class AdministrationFeature internal constructor(
 
     public fun onServerStopping() {
         mutes.shutdown()
+        jail.shutdown()
         vanish.clearAll()
+        adjustments.restoreAllSpeeds()
     }
 
     /** Records every joined player so offline moderation can resolve them later. */
@@ -173,16 +203,47 @@ public class AdministrationFeature internal constructor(
                 player.gameProfile.name
             )
         )
+        jail.onPlayerJoined(player.uuid)
     }
 
     public fun onPlayerQuit(playerId: UUID) {
         spies.clear(playerId)
         vanish.clear(playerId)
+        adjustments.restoreSpeed(playerId)
     }
 
     /** Server-thread confined mute gate used by communication and the chat gate. */
     public fun isMuted(playerId: UUID): Boolean =
         mutes.isMuted(playerId)
+
+    /** Server-thread confined confinement query consumed by movement's teleport path. */
+    override fun isConfined(playerId: UUID): Boolean =
+        jail.isConfined(playerId)
+
+    /**
+     * Server-thread confinement tick. Re-anchors jailed players that left the allowed radius and
+     * drives release-pending players out. Throttled to `confinementCheckIntervalTicks`, except for a
+     * player that just respawned, who is re-checked on the next tick. It never consults
+     * `[administration.jail].enabled`, so existing sentences keep being enforced when the capability
+     * is disabled.
+     */
+    public fun onPlayerTick(player: ServerPlayer) {
+        val config = settings().jail
+        val server = kernel.requireServer()
+        val respawned = JailRespawnState.consume(player.uuid)
+        val interval = config.confinementCheckIntervalTicks
+        if (!respawned && (interval <= 0 || server.tickCount % interval != 0)) {
+            return
+        }
+
+        jail.onObservation(
+            playerId = player.uuid,
+            dimension = player.level().dimension().identifier().toString(),
+            x = player.x,
+            y = player.y,
+            z = player.z,
+        )
+    }
 
     /**
      * Server-thread confined visibility check used by communication reachability. Vanished players
@@ -190,6 +251,27 @@ public class AdministrationFeature internal constructor(
      */
     public fun canBeSeenBy(viewerId: UUID, targetId: UUID): Boolean =
         !vanish.isVanished(targetId) || vanish.isVanished(viewerId)
+
+    /**
+     * Best-effort audit for an administrative utility action that mutates another player (for
+     * example clearing their inventory). Given as primitives so utility never imports
+     * administration. The game action already happened, so a failed write is only logged.
+     */
+    public suspend fun recordInventoryClear(
+        actorId: UUID,
+        targetId: UUID,
+        targetName: String,
+        cleared: Boolean,
+    ): Boolean =
+        audit.record(
+            actor = ModerationActor.Player(
+                id = actorId,
+                name = known.onlineById(actorId)?.name ?: actorId.toString(),
+            ),
+            action = ModerationAuditAction.CLEAR_INVENTORY,
+            target = PlayerIdentity(targetId, targetName),
+            reason = if (cleared) "cleared" else "failed",
+        )
 
     /**
      * Called by the composition root after a private message is delivered. Given as primitives so
@@ -236,6 +318,7 @@ public fun createAdministrationFeature(
     permissions: PermissionService,
     settings: () -> AdministrationSettings,
     known: MinecraftKnownPlayerResolver,
+    jailTransfer: () -> JailTransferPort,
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
     presentation: TextPresentation,
@@ -282,6 +365,34 @@ public fun createAdministrationFeature(
     )
     val spies = SocialSpyService(kernel, audit)
     val vanish = VanishService(kernel, audit)
+    val adjustments = PlayerAdjustmentService(
+        backend = MinecraftPlayerAdjustmentBackend(kernel),
+        known = known,
+        settings = { settings().playerAdjustments },
+    )
+    val jail = JailService(
+        runtime = KernelJailRuntime(kernel),
+        locations = JdbcJailLocationRepository(database, namespace),
+        sentences = JdbcJailSentenceRepository(database, namespace),
+        accountResolver = accountResolver,
+        protection = protection,
+        audit = audit,
+        transfer = jailTransfer,
+        positions = JailPlayerPositionSource { playerId ->
+            kernel.requireServer().playerList.getPlayer(playerId)?.let { player ->
+                WorldPosition(
+                    dimension = player.level().dimension().identifier().toString(),
+                    x = player.x,
+                    y = player.y,
+                    z = player.z,
+                    yaw = player.yRot,
+                    pitch = player.xRot,
+                )
+            }
+        },
+        settings = { settings().jail },
+        clock = clock,
+    )
 
     return AdministrationFeature(
         kick = kick,
@@ -290,8 +401,11 @@ public fun createAdministrationFeature(
         control = control,
         spies = spies,
         vanish = vanish,
+        jail = jail,
+        adjustments = adjustments,
         known = known,
         notifier = notifier,
+        audit = audit,
         settings = settings,
         kernel = kernel,
         messages = messages,

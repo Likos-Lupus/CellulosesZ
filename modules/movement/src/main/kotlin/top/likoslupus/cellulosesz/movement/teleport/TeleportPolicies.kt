@@ -17,7 +17,10 @@ internal fun teleportPolicyFor(cause: TeleportCause, settings: TeleportSettings)
         TeleportCause.SPAWN,
         TeleportCause.BACK,
         TeleportCause.REQUEST,
-        TeleportCause.DIRECT -> TeleportPolicy(
+        TeleportCause.DIRECT,
+        TeleportCause.TOP,
+        TeleportCause.BOTTOM,
+        TeleportCause.JUMP -> TeleportPolicy(
             safetyMode = SafetyMode.FIND_NEAREST_SAFE,
             safety = settings.safety,
             delay = delay,
@@ -39,6 +42,20 @@ internal fun teleportPolicyFor(cause: TeleportCause, settings: TeleportSettings)
             movementTolerance = settings.movementTolerance,
             dismountPassengers = settings.dismountPassengers,
             recordHistory = true,
+        )
+
+        TeleportCause.JAIL_CONFINEMENT,
+        TeleportCause.JAIL_CORRECTION,
+        TeleportCause.JAIL_RELEASE -> TeleportPolicy(
+            safetyMode = SafetyMode.REQUIRE_SAFE,
+            safety = settings.safety,
+            delay = Duration.ZERO,
+            cooldown = Duration.ZERO,
+            cancelOnMove = false,
+            cancelOnDamage = false,
+            movementTolerance = settings.movementTolerance,
+            dismountPassengers = settings.dismountPassengers,
+            recordHistory = false,
         )
 
         TeleportCause.RANDOM -> TeleportPolicy(

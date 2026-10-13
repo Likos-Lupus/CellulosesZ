@@ -3,11 +3,12 @@ package top.likoslupus.cellulosesz.utility.format
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
 import top.likoslupus.cellulosesz.utility.inspection.InspectionOpenResult
-import top.likoslupus.cellulosesz.utility.item.CondenseResult
-import top.likoslupus.cellulosesz.utility.item.MoreResult
-import top.likoslupus.cellulosesz.utility.item.RepairResult
+import top.likoslupus.cellulosesz.utility.item.*
 import top.likoslupus.cellulosesz.utility.kit.*
+import top.likoslupus.cellulosesz.utility.position.DepthReading
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationResult
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.toKotlinDuration
 
 /**
@@ -253,6 +254,202 @@ internal object UtilityMessages {
             }
         )
 
+    fun itemName(result: ItemNameResult): Notice =
+        notice(
+            when (result) {
+                is ItemNameResult.Set ->
+                    return success(
+                        MessageKey("utility.item.name.set"),
+                        literal(result.displayName)
+                    )
+
+                is ItemNameResult.Cleared ->
+                    return success(MessageKey("utility.item.name.cleared"))
+
+                is ItemNameResult.TooLong ->
+                    return notice(
+                        MessageKey("utility.item.name.too_long"),
+                        count(result.limit)
+                    )
+
+                ItemNameResult.TargetOffline -> MessageKey("utility.item.target_offline")
+                ItemNameResult.NoHeldItem -> MessageKey("utility.item.no_item")
+            }
+        )
+
+    fun itemLore(result: ItemLoreResult): Notice =
+        notice(
+            when (result) {
+                is ItemLoreResult.Set ->
+                    return success(
+                        MessageKey("utility.item.lore.set"),
+                        count(result.lines)
+                    )
+
+                is ItemLoreResult.Cleared ->
+                    return success(MessageKey("utility.item.lore.cleared"))
+
+                is ItemLoreResult.TooManyLines ->
+                    return notice(
+                        MessageKey("utility.item.lore.too_many"),
+                        count(result.limit)
+                    )
+
+                is ItemLoreResult.LineTooLong ->
+                    return notice(
+                        MessageKey("utility.item.lore.line_too_long"),
+                        count(result.limit)
+                    )
+
+                ItemLoreResult.TargetOffline -> MessageKey("utility.item.target_offline")
+                ItemLoreResult.NoHeldItem -> MessageKey("utility.item.no_item")
+            }
+        )
+
+    fun hat(result: HatResult): Notice =
+        notice(
+            when (result) {
+                is HatResult.Worn ->
+                    return success(
+                        MessageKey("utility.item.hat.worn"),
+                        literal(result.itemName)
+                    )
+
+                HatResult.NotAllowed -> MessageKey("utility.item.hat.not_allowed")
+                HatResult.TargetOffline -> MessageKey("utility.item.target_offline")
+                HatResult.NoHeldItem -> MessageKey("utility.item.no_item")
+            }
+        )
+
+    fun clearRequest(result: ClearRequestResult): Notice =
+        notice(
+            when (result) {
+                is ClearRequestResult.Issued -> when (val target = result.targetName) {
+                    null -> return info(
+                        MessageKey("utility.item.clear.request"),
+                        literal(result.code),
+                        count(result.stacks),
+                        elapsed(seconds(result.seconds)),
+                    )
+
+                    else -> return info(
+                        MessageKey("utility.item.clear.request_other"),
+                        identifier(target),
+                        count(result.stacks),
+                        literal(result.code),
+                        elapsed(seconds(result.seconds)),
+                    )
+                }
+
+                ClearRequestResult.TargetOffline -> MessageKey("utility.item.target_offline")
+            }
+        )
+
+    fun clearInventory(result: ClearInventoryResult): Notice =
+        notice(
+            when (result) {
+                is ClearInventoryResult.Cleared -> when (val target = result.targetName) {
+                    null -> return success(
+                        MessageKey("utility.item.clear.done"),
+                        count(result.stacks),
+                    )
+
+                    else -> return success(
+                        MessageKey("utility.item.clear.done_other"),
+                        count(result.stacks),
+                        identifier(target),
+                    )
+                }
+
+                ClearInventoryResult.InvalidCode -> MessageKey("utility.item.clear.invalid")
+                ClearInventoryResult.TargetOffline -> MessageKey("utility.item.target_offline")
+                ClearInventoryResult.InventoryChanged -> MessageKey("utility.item.clear.changed")
+            }
+        )
+
+    fun clearTargetNotice(scope: ClearScope): Notice =
+        info(
+            when (scope) {
+                ClearScope.MAIN -> MessageKey("utility.item.clear.target_notice.main")
+                ClearScope.ALL -> MessageKey("utility.item.clear.target_notice.all")
+            }
+        )
+
+    fun clearTargetDone(stacks: Int): Notice =
+        info(
+            MessageKey("utility.item.clear.target_done"),
+            count(stacks)
+        )
+
+    fun position(
+        dimension: String,
+        x: Int,
+        y: Int,
+        z: Int,
+    ): DetailView =
+        DetailView(
+            title = LocalizedText(MessageKey("utility.getpos.title")),
+            fields = listOf(
+                field(
+                    MessageKey("utility.getpos.field.position"),
+                    LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(
+                            position(
+                                x,
+                                y,
+                                z,
+                                dimension
+                            )
+                        ),
+                    ),
+                )
+            ),
+        )
+
+    fun depth(reading: DepthReading): DetailView {
+        val depthValue = when {
+            reading.belowAnchor > 0 ->
+                LocalizedText(
+                    MessageKey("utility.depth.below"),
+                    listOf(
+                        count(reading.belowAnchor),
+                        count(reading.anchor),
+                    ),
+                )
+
+            reading.aboveAnchor > 0 ->
+                LocalizedText(
+                    MessageKey("utility.depth.above"),
+                    listOf(
+                        count(reading.aboveAnchor),
+                        count(reading.anchor),
+                    ),
+                )
+
+            else -> LocalizedText(
+                MessageKey("utility.depth.at"),
+                listOf(count(reading.anchor))
+            )
+        }
+        return DetailView(
+            title = LocalizedText(MessageKey("utility.depth.title")),
+            fields = listOf(
+                field(MessageKey("utility.depth.field.depth"), depthValue),
+                field(
+                    MessageKey("utility.depth.field.range"),
+                    LocalizedText(
+                        MessageKey("utility.depth.range"),
+                        listOf(
+                            count(reading.minY),
+                            count(reading.maxY),
+                        ),
+                    ),
+                ),
+            ),
+        )
+    }
+
     fun workstation(result: WorkstationResult): Notice =
         notice(
             when (result) {
@@ -393,7 +590,26 @@ internal object UtilityMessages {
     private fun count(value: Long): TextArgument =
         TextArgument.Count(value)
 
-    private fun elapsed(value: kotlin.time.Duration): TextArgument =
+    private fun elapsed(value: Duration): TextArgument =
         TextArgument.Elapsed(value)
+
+    private fun seconds(value: Int): Duration =
+        value.coerceAtLeast(0).seconds
+
+    private fun position(
+        x: Int,
+        y: Int,
+        z: Int,
+        dimension: String,
+    ): TextArgument =
+        TextArgument.Position(
+            x = x,
+            y = y,
+            z = z,
+            dimension = dimension,
+        )
+
+    private fun field(label: MessageKey, value: LocalizedText): DetailField =
+        DetailField(LocalizedText(label), value)
 
 }

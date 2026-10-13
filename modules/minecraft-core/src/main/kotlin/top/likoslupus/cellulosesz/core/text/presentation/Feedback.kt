@@ -123,6 +123,23 @@ public suspend fun RuntimeKernel.sendPage(
     )
 }
 
+/** Delivers a detail view to a captured target on the server thread. */
+public suspend fun RuntimeKernel.sendDetail(
+    target: CommandFeedbackTarget,
+    adventure: AdventureRuntime,
+    presentation: TextPresentation,
+    playerId: UUID?,
+    detail: DetailView,
+) {
+    InformationOutput(
+        adventure,
+        this
+    ).deliver(
+        target,
+        presentation.renderFor(playerId, detail)
+    )
+}
+
 private fun effectiveChannel(requested: DisplayChannel, notices: List<Notice>): DisplayChannel =
     when {
         notices.any {

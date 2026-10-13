@@ -9,4 +9,6 @@ public data class MovementSettings(
     public val requests: TeleportRequestSettings = TeleportRequestSettings(),
     public val homes: HomeSettings = HomeSettings(),
     public val history: HistorySettings = HistorySettings(),
+    public val randomTeleport: RandomTeleportSettings = RandomTeleportSettings(),
+    public val terrain: TerrainSettings = TerrainSettings(),
 )

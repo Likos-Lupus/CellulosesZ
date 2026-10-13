@@ -5,14 +5,25 @@ Minecraft version.
 
 ## Subcommands
 
-- `status`: show CellulosesZ health and storage status (moderator).
-- `reload`: reload the configuration (moderator).
-- `language [list|server|<language>]`: view or change your language.
+- `/cellulosesz status`: show CellulosesZ health and storage status (moderator).
+- `/cellulosesz reload`: reload the configuration (moderator).
+- `/cellulosesz language [list|server|<language>]`: view or change your language.
+
+## Behavior
+
+`status` shows the current storage backend, its address, the permission backend and the number of
+stored player records. `reload` re-reads `cellulosesz.toml`; it cannot switch the active database,
+so moving to a different backend needs a server restart.
 
 ## Notes
 
-`reload` re-reads the TOML file transactionally; a change to the active database connection settings
-is rejected and requires a server restart.
+A reload that fails validation keeps the previous configuration in use. `status` and `reload` need
+moderator permission.
+
+## Example
+
+- `/cellulosesz`
+- `/cellulosesz status`
 
 ## Related
 

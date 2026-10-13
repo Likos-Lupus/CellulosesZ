@@ -9,6 +9,7 @@ public enum class CommandCategory {
     COMMUNICATION,
     ADMINISTRATION,
     UTILITY,
+    PLAYER,
     ROOT,
 
 }

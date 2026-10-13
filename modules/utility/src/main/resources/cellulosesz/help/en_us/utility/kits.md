@@ -2,10 +2,15 @@
 
 List the available kits.
 
-## Example
+## Behavior
 
-`/kits`
+Shows every kit with its reuse rule (unlimited, once per player, or a cooldown) and whether you can
+claim it now.
 
-## Related
+## Examples
+
+- `/kits`
+
+## Related commands
 
 - `/kit`, `/showkit`

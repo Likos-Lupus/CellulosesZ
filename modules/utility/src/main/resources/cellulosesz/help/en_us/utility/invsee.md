@@ -1,24 +1,25 @@
 # /invsee
 
-View a player's inventory (read-only).
+View a player's inventory.
 
 ## Parameters
 
-- `player`: the player to inspect.
-
-## Example
-
-`/invsee Alice`
+- `player`: the online player to inspect.
 
 ## Behavior
 
-The view is a snapshot and cannot be modified. Moderator command.
+Opens a read-only snapshot of that player's inventory. You can't take, move, or change items, and
+shift-click transfers are disabled. Moderator command.
+
+## Examples
+
+- `/invsee Alice`
 
 ## Failures
 
-- The player is not online.
+- The player isn't online.
 - Missing permission.
 
-## Related
+## Related commands
 
 - `/enderchest`, `/disposal`

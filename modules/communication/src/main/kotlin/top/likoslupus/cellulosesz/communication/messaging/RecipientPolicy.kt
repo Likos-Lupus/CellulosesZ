@@ -24,4 +24,10 @@ internal interface RecipientPolicy {
 
     fun replyMode(playerId: UUID): ReplyMode
 
+    /**
+     * Whether [ignorerId] has [targetId] on their ignore list. Used by broadcast-style features
+     * (`/me`) so a sender's own ignore list hides their action lines. Permissive by default.
+     */
+    fun ignores(ignorerId: UUID, targetId: UUID): Boolean = false
+
 }

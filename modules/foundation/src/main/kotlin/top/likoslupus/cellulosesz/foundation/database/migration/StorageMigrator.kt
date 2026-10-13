@@ -32,6 +32,21 @@ public object StorageMigrator {
 
     private const val BATCH = 500
 
+    /**
+     * Tables added after the endpoint format settled: absent on an older source only means "zero
+     * rows". Any other absent table is treated as a broken source, never silently skipped.
+     */
+    private val OPTIONAL_TABLES: Set<String> = setOf(
+        "cz_random_teleport_regions",
+        "cz_warp_metadata",
+        "cz_tpauto_preferences",
+        "cz_tpauto_allowed",
+        "cz_jail_locations",
+        "cz_jail_sentences",
+        "cz_player_sessions",
+        "cz_player_nicknames",
+    )
+
     public fun migrateBlocking(
         source: ResolvedDatabaseDescriptor,
         target: DatabaseRuntime,
@@ -62,6 +77,18 @@ public object StorageMigrator {
             target.transaction { targetConnection ->
                 it.read { sourceConnection ->
                     tables.forEach { table ->
+                        // A table that does not exist in the old source is wholly absent: there is
+                        // nothing to copy. Only the explicit allowlist of tables introduced after the
+                        // last endpoint format may be treated as zero rows; any other absent table is
+                        // a broken source and stays fatal.
+                        if (!sourceTableExists(sourceConnection, table.name)) {
+                            if (!isOptionalTable(table.name)) {
+                                throw StorageException(
+                                    "source is missing required table ${table.name}; refusing to skip it"
+                                )
+                            }
+                            return@forEach
+                        }
                         val sourceCount = countRows(
                             sourceConnection,
                             dialect,
@@ -297,5 +324,28 @@ public object StorageMigrator {
 
     private fun namespaceColumnOrNull(table: SqlTable): String? =
         table.columns.firstOrNull { it.name == "namespace" }?.name
+
+    /** Whether an absent source table may be treated as zero rows instead of a broken source. */
+    private fun isOptionalTable(tableName: String): Boolean =
+        OPTIONAL_TABLES.any { it.equals(tableName, ignoreCase = true) }
+
+    /**
+     * Proves whether a table exists on the source connection. Table names are matched
+     * case-insensitively because every supported vendor folds unquoted identifiers differently.
+     */
+    private fun sourceTableExists(connection: Connection, tableName: String): Boolean =
+        connection.metaData.getTables(
+            null,
+            null,
+            null,
+            null
+        ).use { rs ->
+            while (rs.next()) {
+                if (rs.getString("TABLE_NAME").equals(tableName, ignoreCase = true)) {
+                    return true
+                }
+            }
+            false
+        }
 
 }

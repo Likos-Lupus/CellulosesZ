@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettingsValidation
 import top.likoslupus.cellulosesz.foundation.database.ResolvedDatabaseDescriptor
 import top.likoslupus.cellulosesz.movement.config.MovementSettingsValidation
+import top.likoslupus.cellulosesz.player.config.PlayerSettingsValidation
 import top.likoslupus.cellulosesz.utility.config.UtilitySettingsValidation
 import java.nio.file.Path
 
@@ -24,6 +25,7 @@ internal object ConfigValidation {
             addAll(MessagingSettingsValidation.validate(config.messaging))
             addAll(AdministrationSettingsValidation.validate(config.administration))
             addAll(UtilitySettingsValidation.validate(config.utility))
+            addAll(PlayerSettingsValidation.validate(config.players))
         }
 
     /**

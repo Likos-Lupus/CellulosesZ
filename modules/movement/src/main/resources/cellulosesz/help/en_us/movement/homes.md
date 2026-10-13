@@ -4,11 +4,11 @@ List the homes you have saved.
 
 ## Behavior
 
-Prints the names of all of your homes in one message.
+Shows every home name you have saved, one page at a time.
 
 ## Example
 
-`/homes`
+- `/homes`
 
 ## Related
 

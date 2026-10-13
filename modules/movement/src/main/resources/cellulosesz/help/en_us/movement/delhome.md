@@ -4,16 +4,16 @@ Delete one of your saved homes.
 
 ## Parameters
 
-- `name`: required home name to delete.
+- `name`: the home name to delete; required.
 
 ## Example
 
-`/delhome base`
+- `/delhome base`
 
 ## Failures
 
 - The name is invalid.
-- No such home is saved.
+- No home with that name is saved.
 
 ## Related
 

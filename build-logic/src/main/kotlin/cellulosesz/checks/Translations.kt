@@ -8,6 +8,7 @@ private val TRANSLATION_MODULES = listOf(
     "communication" to "communication",
     "administration" to "administration",
     "utility" to "utility",
+    "player" to "player",
 )
 
 private val PLACEHOLDER = Regex("\\{(\\d+)}")

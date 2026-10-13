@@ -115,18 +115,24 @@ class TeleportRequestServiceTest {
     }
 
     @Test
-    fun `cancel removes the senders outbound request`() {
+    fun `cancel removes every outbound request of the sender`() {
         service.send(
             sender,
             target,
             TeleportRequestType.TO_TARGET
         )
-
-        assertEquals(
-            target,
-            service.cancel(sender)?.targetId
+        service.send(
+            sender,
+            other,
+            TeleportRequestType.TO_TARGET
         )
-        assertNull(service.cancel(sender))
+
+        val cancelled = service.cancel(sender)
+        assertEquals(
+            setOf(target, other),
+            cancelled.map { it.targetId }.toSet()
+        )
+        assertTrue(service.cancel(sender).isEmpty())
     }
 
     @Test
@@ -160,7 +166,7 @@ class TeleportRequestServiceTest {
         val affected = service.clearPlayer(sender)
 
         assertEquals(listOf(other), affected)
-        assertNull(service.cancel(sender))
+        assertTrue(service.cancel(sender).isEmpty())
     }
 
     @Test
@@ -191,7 +197,38 @@ class TeleportRequestServiceTest {
     }
 
     @Test
-    fun `sender cannot silently replace an outbound request to another target`() {
+    fun `sender may hold outbound requests to multiple targets`() {
+        assertInstanceOf(
+            TpaSendResult.Sent::class.java,
+            service.send(
+                sender,
+                target,
+                TeleportRequestType.TO_TARGET
+            )
+        )
+
+        assertInstanceOf(
+            TpaSendResult.Sent::class.java,
+            service.send(
+                sender,
+                other,
+                TeleportRequestType.TO_TARGET
+            )
+        )
+
+        assertInstanceOf(
+            TpaAcceptResult.Accepted::class.java,
+            service.accept(target, sender)
+        )
+        assertInstanceOf(
+            TpaAcceptResult.Accepted::class.java,
+            service.accept(other, sender)
+        )
+    }
+
+    @Test
+    fun `per-sender outbound cap is enforced`() {
+        settings = settings.copy(maxOutgoingPerPlayer = 1)
         service.send(
             sender,
             target,
@@ -199,10 +236,29 @@ class TeleportRequestServiceTest {
         )
 
         assertEquals(
-            TpaSendResult.SenderAlreadyHasRequest,
+            TpaSendResult.SenderQueueFull,
             service.send(
                 sender,
                 other,
+                TeleportRequestType.TO_TARGET
+            )
+        )
+    }
+
+    @Test
+    fun `server-wide request cap is enforced`() {
+        settings = settings.copy(maxRequestsServerWide = 1)
+        service.send(
+            sender,
+            target,
+            TeleportRequestType.TO_TARGET
+        )
+
+        assertEquals(
+            TpaSendResult.ServerQueueFull,
+            service.send(
+                other,
+                target,
                 TeleportRequestType.TO_TARGET
             )
         )
@@ -218,7 +274,7 @@ class TeleportRequestServiceTest {
         )
 
         assertEquals(
-            TpaSendResult.TargetQueueFull,
+            TpaSendResult.TargetQueueFull(target),
             service.send(
                 other,
                 target,
@@ -243,6 +299,78 @@ class TeleportRequestServiceTest {
             TeleportRequestType.BRING_TARGET,
             accepted.request.type
         )
+    }
+
+    @Test
+    fun `batch filters self and unreachable candidates and honors the batch cap`() {
+        settings = settings.copy(maxBatchRecipients = 2)
+        val reachable = listOf(other, target)
+        val unreachable = UUID.randomUUID()
+
+        val result = assertInstanceOf(
+            TpaBatchSendResult.Sent::class.java,
+            service.sendBatch(
+                sender,
+                listOf(sender, other, unreachable, target),
+                TeleportRequestType.BRING_TARGET,
+            ) { it in reachable },
+        )
+        assertEquals(listOf(other, target), result.recipients)
+    }
+
+    @Test
+    fun `batch reports no recipients when every candidate is filtered out`() {
+        assertEquals(
+            TpaBatchSendResult.NoRecipients,
+            service.sendBatch(
+                sender,
+                listOf(sender),
+                TeleportRequestType.BRING_TARGET,
+            ) { true },
+        )
+    }
+
+    @Test
+    fun `batch cooldown blocks a second batch until it elapses`() {
+        service.sendBatch(
+            sender,
+            listOf(target),
+            TeleportRequestType.BRING_TARGET,
+        ) { true }
+
+        assertInstanceOf(
+            TpaBatchSendResult.Cooldown::class.java,
+            service.sendBatch(
+                sender,
+                listOf(other),
+                TeleportRequestType.BRING_TARGET,
+            ) { true },
+        )
+
+        timeSource += 121.seconds
+        assertInstanceOf(
+            TpaBatchSendResult.Sent::class.java,
+            service.sendBatch(
+                sender,
+                listOf(other),
+                TeleportRequestType.BRING_TARGET,
+            ) { true },
+        )
+    }
+
+    @Test
+    fun `batch stops at the per-sender outbound cap`() {
+        settings = settings.copy(maxOutgoingPerPlayer = 1)
+
+        val result = assertInstanceOf(
+            TpaBatchSendResult.Sent::class.java,
+            service.sendBatch(
+                sender,
+                listOf(target, other),
+                TeleportRequestType.BRING_TARGET,
+            ) { true },
+        )
+        assertEquals(listOf(target), result.recipients)
     }
 
 }

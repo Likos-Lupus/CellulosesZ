@@ -37,6 +37,40 @@ public object UtilitySettingsValidation {
                     )
                 }
             }
+
+            val editing = settings.itemEditing
+            if (editing.maxItemNameLength !in 1..256) {
+                add(
+                    ValidationError(
+                        "utility.itemEditing.maxItemNameLength",
+                        "must be in 1..256",
+                    )
+                )
+            }
+            if (editing.maxLoreLines !in 1..100) {
+                add(
+                    ValidationError(
+                        "utility.itemEditing.maxLoreLines",
+                        "must be in 1..100",
+                    )
+                )
+            }
+            if (editing.maxLoreLineLength !in 1..256) {
+                add(
+                    ValidationError(
+                        "utility.itemEditing.maxLoreLineLength",
+                        "must be in 1..256",
+                    )
+                )
+            }
+            if (editing.clearConfirmationSeconds !in 1..300) {
+                add(
+                    ValidationError(
+                        "utility.itemEditing.clearConfirmationSeconds",
+                        "must be in 1..300",
+                    )
+                )
+            }
         }
 
 }

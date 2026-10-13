@@ -1,6 +1,12 @@
 # /helpop
 
-Send a request to the staff.
+Send a request to the online staff.
+
+## Behavior
+
+The request is delivered to every online staff member and recorded in the server log, so it is kept
+even when no one is online to read it. It is rate limited: the default is 6 requests per minute.
+This channel stays available while you are muted.
 
 ## Parameters
 
@@ -8,12 +14,14 @@ Send a request to the staff.
 
 ## Example
 
-`/helpop someone is griefing spawn`
+- `/helpop someone is griefing spawn`
 
-## Behavior
+## Failures
 
-The request is logged and delivered to available staff. It is rate limited.
+- The request is empty or too long.
+- You're sending requests too quickly.
+- Staff help requests are disabled.
 
-## Related
+## Related commands
 
-- `/msg`
+- `/msg`, `/mail`
