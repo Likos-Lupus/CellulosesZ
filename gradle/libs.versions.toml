@@ -4,7 +4,7 @@ mod = "0.1.0-SNAPSHOT"
 java = "25"
 minecraft = "26.1.2"
 
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 coroutines = "1.11.0"
 serialization = "1.11.0"
 
