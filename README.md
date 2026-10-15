@@ -46,7 +46,8 @@ with the legacy CellulosesZ or with EssentialsX.
   `/cellulosesz language` and a per-player preference; semantic presentation (notices, lists,
   details, whole help documents) rendered per recipient from a token-based theme. CellulosesZ
   language controls CellulosesZ-owned text only, not the player's Minecraft client language.
-- **Admin root** — `/cellulosesz status`, `/cellulosesz reload`.
+- **Admin root** — `/cellulosesz status`, `/cellulosesz reload`, `/cellulosesz commands`
+  (read-only command-route diagnostics: conflicts and effective routes).
 
 ## Design highlights
 
@@ -303,6 +304,8 @@ The two distribution cells are `:26.1.2-fabric` and `:26.1.2-neoforge`:
 
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the architecture contract and module boundaries.
 - [`docs/adr/`](docs/adr/) — architecture decision records.
+- [`docs/api/public-api-v0.md`](docs/api/public-api-v0.md) — the experimental public API (read-only,
+  `0.x`; Fabric publishes the provider, NeoForge discovery is pending a spike).
 
 ## Acknowledgements
 

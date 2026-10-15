@@ -1,9 +1,12 @@
 package top.likoslupus.cellulosesz.movement.teleport
 
 import kotlinx.coroutines.runBlocking
-import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertInstanceOf
+import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import top.likoslupus.cellulosesz.movement.CommittedTeleport
+import top.likoslupus.cellulosesz.movement.TeleportCommittedObserver
+import top.likoslupus.cellulosesz.movement.TeleportOrigin
+import top.likoslupus.cellulosesz.movement.TeleportVetoReason
 import top.likoslupus.cellulosesz.movement.config.TeleportSafetySettings
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
@@ -22,12 +25,17 @@ class TeleportCoordinatorTest {
     private val backend = FakeBackend()
     private val historyRepository = FakeHistoryRepository()
     private val timeSource = TestTimeSource()
-    private val coordinator = TeleportCoordinator(
+    private val coordinator = newCoordinator()
+
+    private fun newCoordinator(
+        observer: TeleportCommittedObserver = TeleportCommittedObserver.None,
+    ) = TeleportCoordinator(
         backend = backend,
         pending = PendingTeleportService(),
         cooldowns = TeleportCooldowns(timeSource),
         history = TeleportHistoryService(historyRepository),
         historyEnabled = { true },
+        observer = observer,
     )
 
     private fun policy(
@@ -164,6 +172,129 @@ class TeleportCoordinatorTest {
             assertEquals(TeleportOutcome.PlayerOffline, outcome)
         }
 
+    @Test
+    fun `a platform rejection never records history or consumes the cooldown`(): Unit =
+        runBlocking {
+            backend.positions[subject] = position()
+            backend.moveResult = BackendMoveResult.RejectedByPlatform
+            val intent = TeleportIntent(
+                subject,
+                TeleportDestination.Fixed(position(y = 70.0)),
+                TeleportCause.HOME,
+                policy(cooldown = 10.seconds),
+            )
+
+            assertEquals(TeleportOutcome.RejectedByPlatform, coordinator.execute(intent))
+            assertNull(historyRepository.entries[subject])
+
+            // A rejection must not have consumed the cooldown: the next real move still succeeds.
+            backend.moveResult = BackendMoveResult.Success(position(y = 70.0))
+            assertInstanceOf(
+                TeleportOutcome.Success::class.java,
+                coordinator.execute(intent),
+            )
+        }
+
+    @Test
+    fun `the receipt reflects the actual applied position, not the request`(): Unit =
+        runBlocking {
+            backend.positions[subject] = position()
+            val requested = position(y = 70.0)
+            val applied = StoredPosition(
+                dimension = "minecraft:overworld",
+                x = 9.0,
+                y = 71.0,
+                z = 9.0,
+                yaw = 45f,
+                pitch = 10f,
+            )
+            backend.moveResult = BackendMoveResult.Success(applied)
+
+            val outcome = coordinator.execute(
+                TeleportIntent(
+                    subject,
+                    TeleportDestination.Fixed(requested),
+                    TeleportCause.HOME,
+                    policy(),
+                )
+            )
+
+            val success = assertInstanceOf(
+                TeleportOutcome.Success::class.java,
+                outcome
+            )
+            assertEquals(applied, success.receipt.destination)
+        }
+
+    @Test
+    fun `a hook rejection never records history or consumes the cooldown`(): Unit =
+        runBlocking {
+            backend.positions[subject] = position()
+            backend.moveResult = BackendMoveResult.RejectedByHook(TeleportVetoReason.REGION_DENIED)
+            val intent = TeleportIntent(
+                subject,
+                TeleportDestination.Fixed(position(y = 70.0)),
+                TeleportCause.HOME,
+                policy(cooldown = 10.seconds),
+            )
+
+            assertEquals(
+                TeleportOutcome.RejectedByHook(TeleportVetoReason.REGION_DENIED),
+                coordinator.execute(intent),
+            )
+            assertNull(historyRepository.entries[subject])
+
+            backend.moveResult = BackendMoveResult.Success(position(y = 70.0))
+            assertInstanceOf(
+                TeleportOutcome.Success::class.java,
+                coordinator.execute(intent),
+            )
+        }
+
+    @Test
+    fun `a committed success notifies the observer once with the actual destination`(): Unit =
+        runBlocking {
+            backend.positions[subject] = position()
+            backend.moveResult = BackendMoveResult.Success(position(y = 70.0))
+            val events = mutableListOf<CommittedTeleport>()
+
+            newCoordinator { events += it }.execute(
+                TeleportIntent(
+                    subject,
+                    TeleportDestination.Fixed(position(y = 70.0)),
+                    TeleportCause.HOME,
+                    policy(),
+                )
+            )
+
+            assertEquals(1, events.size)
+            assertEquals(subject, events.single().subjectId)
+            assertEquals(TeleportOrigin.HOME, events.single().origin)
+            assertEquals(70.0, events.single().to.y)
+        }
+
+    @Test
+    fun `an observer failure does not reverse a committed success`(): Unit =
+        runBlocking {
+            backend.positions[subject] = position()
+            backend.moveResult = BackendMoveResult.Success(position(y = 70.0))
+
+            val outcome = newCoordinator { error("observer boom") }.execute(
+                TeleportIntent(
+                    subject,
+                    TeleportDestination.Fixed(position(y = 70.0)),
+                    TeleportCause.HOME,
+                    policy(),
+                )
+            )
+
+            assertInstanceOf(
+                TeleportOutcome.Success::class.java,
+                outcome
+            )
+            assertEquals(position(), historyRepository.entries[subject])
+        }
+
     private class FakeBackend : TeleportBackend {
 
         val positions = mutableMapOf<UUID, StoredPosition>()
@@ -186,6 +317,7 @@ class TeleportCoordinatorTest {
             playerId: UUID,
             destination: StoredPosition,
             policy: TeleportPolicy,
+            cause: TeleportCause,
         ): BackendMoveResult {
             lastDestination = destination
             return moveResult

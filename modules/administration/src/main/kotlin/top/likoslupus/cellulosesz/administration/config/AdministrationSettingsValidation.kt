@@ -15,8 +15,11 @@ public object AdministrationSettingsValidation {
     private const val MAX_JAILS: Int = 256
     private const val MAX_JAIL_RADIUS: Double = 256.0
     private const val MAX_CONFINEMENT_INTERVAL_TICKS: Int = 1200
+    private const val MAX_JAIL_ALLOWED_COMMANDS: Int = 64
     private const val MAX_EXPERIENCE_ADJUSTMENT: Int = 100_000_000
     private const val MAX_SPEED_MULTIPLIER: Double = 10.0
+
+    private val JAIL_COMMAND_ENTRY: Regex = Regex("[a-z0-9_:-]+")
 
     public fun validate(settings: AdministrationSettings): List<ValidationError> =
         buildList {
@@ -136,6 +139,24 @@ public object AdministrationSettingsValidation {
                         "must be between 1 and $MAX_CONFINEMENT_INTERVAL_TICKS",
                     )
                 )
+            }
+            if (jail.allowedCommands.size > MAX_JAIL_ALLOWED_COMMANDS) {
+                add(
+                    ValidationError(
+                        "administration.jail.allowedCommands",
+                        "must have at most $MAX_JAIL_ALLOWED_COMMANDS entries",
+                    )
+                )
+            }
+            jail.allowedCommands.forEach { entry ->
+                if (!JAIL_COMMAND_ENTRY.matches(entry)) {
+                    add(
+                        ValidationError(
+                            "administration.jail.allowedCommands",
+                            "entry '$entry' must match [a-z0-9_:-]+ (no blanks, spaces or wildcards)",
+                        )
+                    )
+                }
             }
 
             val adjustments = settings.playerAdjustments

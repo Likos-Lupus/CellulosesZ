@@ -1,5 +1,6 @@
 // Project-dependency allowlist. Any other feature -> feature edge fails the build.
 val dependencyAllowlist: Map<String, Set<String>> = mapOf(
+    ":modules:api" to emptySet(),
     ":modules:foundation" to emptySet(),
     ":modules:minecraft-core" to setOf(":modules:foundation"),
     ":modules:movement" to setOf(":modules:foundation", ":modules:minecraft-core"),
@@ -8,6 +9,7 @@ val dependencyAllowlist: Map<String, Set<String>> = mapOf(
     ":modules:utility" to setOf(":modules:foundation", ":modules:minecraft-core"),
     ":modules:player" to setOf(":modules:foundation", ":modules:minecraft-core"),
     ":modules:application" to setOf(
+        ":modules:api",
         ":modules:foundation",
         ":modules:minecraft-core",
         ":modules:movement",

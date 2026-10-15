@@ -15,4 +15,5 @@ public data class JailSettings(
     public val returnOnRelease: Boolean = true,
     public val confinementCheckIntervalTicks: Int = 20,
     public val restrictCommands: Boolean = false,
+    public val allowedCommands: List<String> = listOf("helpop"),
 )

@@ -1,0 +1,127 @@
+public final class top/likoslupus/cellulosesz/api/ApiAvailability : java/lang/Enum {
+	public static final field NOT_READY Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public static final field READY Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public static final field STOPPED Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public static final field STOPPING Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public static fun values ()[Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+}
+
+public final class top/likoslupus/cellulosesz/api/ApiPosition {
+	public fun <init> (Ljava/lang/String;DDDFF)V
+	public final fun getDimension ()Ljava/lang/String;
+	public final fun getPitch ()F
+	public final fun getX ()D
+	public final fun getY ()D
+	public final fun getYaw ()F
+	public final fun getZ ()D
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/ApiQuery {
+}
+
+public final class top/likoslupus/cellulosesz/api/ApiQuery$Available : top/likoslupus/cellulosesz/api/ApiQuery {
+	public fun <init> (Ljava/lang/Object;)V
+	public final fun component1 ()Ljava/lang/Object;
+	public final fun copy (Ljava/lang/Object;)Ltop/likoslupus/cellulosesz/api/ApiQuery$Available;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/ApiQuery$Available;Ljava/lang/Object;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/ApiQuery$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()Ljava/lang/Object;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/ApiQuery$NotReady : top/likoslupus/cellulosesz/api/ApiQuery {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/ApiQuery$NotReady;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/ApiQuery$Stopping : top/likoslupus/cellulosesz/api/ApiQuery {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/ApiQuery$Stopping;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/ApiReadyListener {
+	public abstract fun onReady (Ltop/likoslupus/cellulosesz/api/CellulosesZApi;)V
+}
+
+public final class top/likoslupus/cellulosesz/api/ApiVersion {
+	public fun <init> (II)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun copy (II)Ltop/likoslupus/cellulosesz/api/ApiVersion;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/ApiVersion;IIILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/ApiVersion;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMajor ()I
+	public final fun getMinor ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/CellulosesZApi {
+	public abstract fun getPlayers ()Ltop/likoslupus/cellulosesz/api/PlayerLookup;
+	public abstract fun getTeleports ()Ltop/likoslupus/cellulosesz/api/TeleportEvents;
+	public abstract fun getVersion ()Ltop/likoslupus/cellulosesz/api/ApiVersion;
+	public abstract fun getVisibility ()Ltop/likoslupus/cellulosesz/api/VisibilityLookup;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/CellulosesZApiProvider {
+	public abstract fun availability ()Ltop/likoslupus/cellulosesz/api/ApiAvailability;
+	public abstract fun whenReady (Ltop/likoslupus/cellulosesz/api/ApiReadyListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+}
+
+public final class top/likoslupus/cellulosesz/api/PlayerIdentity {
+	public fun <init> (Ljava/util/UUID;Ljava/lang/String;)V
+	public final fun getLastKnownName ()Ljava/lang/String;
+	public final fun getUuid ()Ljava/util/UUID;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/PlayerLookup {
+	public abstract fun findById (Ljava/util/UUID;)Ltop/likoslupus/cellulosesz/api/ApiQuery;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/Subscription : java/lang/AutoCloseable {
+	public abstract fun close ()V
+}
+
+public final class top/likoslupus/cellulosesz/api/TeleportCommitted {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;Ltop/likoslupus/cellulosesz/api/ApiPosition;Ltop/likoslupus/cellulosesz/api/ApiPosition;)V
+	public final fun getFrom ()Ltop/likoslupus/cellulosesz/api/ApiPosition;
+	public final fun getKind ()Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public final fun getSubjectId ()Ljava/util/UUID;
+	public final fun getTo ()Ltop/likoslupus/cellulosesz/api/ApiPosition;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/TeleportEvents {
+	public abstract fun subscribe (Ltop/likoslupus/cellulosesz/api/TeleportListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/TeleportListener {
+	public abstract fun onCommitted (Ltop/likoslupus/cellulosesz/api/TeleportCommitted;)V
+}
+
+public final class top/likoslupus/cellulosesz/api/TeleportOriginKind : java/lang/Enum {
+	public static final field ADMIN Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field DIRECT Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field HOME Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field JAIL Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field OTHER Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field RANDOM Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field REQUEST Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field SPAWN Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field TERRAIN Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static final field WARP Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+	public static fun values ()[Ltop/likoslupus/cellulosesz/api/TeleportOriginKind;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/VisibilityLookup {
+	public abstract fun canSee (Ljava/util/UUID;Ljava/util/UUID;)Ltop/likoslupus/cellulosesz/api/ApiQuery;
+}
+

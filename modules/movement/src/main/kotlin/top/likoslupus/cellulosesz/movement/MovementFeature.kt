@@ -230,12 +230,20 @@ public fun createMovementFeature(
     presentation: TextPresentation,
     confinement: TeleportConfinementCheck = TeleportConfinementCheck { false },
     requestReachability: RequestReachabilityPort = RequestReachabilityPort { _, _ -> true },
+    teleportPreflight: TeleportPreflight = TeleportPreflight.AllowAll,
+    teleportObserver: TeleportCommittedObserver = TeleportCommittedObserver.None,
     permissions: PermissionService = PermissionService(VanillaFallbackPermissionBridge),
 ): MovementFeature {
-    val backend = MinecraftTeleportBackend(kernel, SafeDestinationResolver())
+    val backend = MinecraftTeleportBackend(
+        kernel,
+        SafeDestinationResolver(),
+        teleportPreflight
+    )
     val pending = PendingTeleportService()
     val cooldowns = TeleportCooldowns()
-    val history = TeleportHistoryService(JdbcTeleportHistoryRepository(database, namespace))
+    val history = TeleportHistoryService(
+        JdbcTeleportHistoryRepository(database, namespace)
+    )
     val teleports = TeleportCoordinator(
         backend = backend,
         pending = pending,
@@ -243,6 +251,7 @@ public fun createMovementFeature(
         history = history,
         historyEnabled = { settings().history.enabled },
         confinement = confinement::isConfined,
+        observer = teleportObserver,
     )
 
     val terrainFinder = TerrainDestinationFinder()
@@ -321,6 +330,12 @@ private fun TeleportOutcome.toTransferResult(): MovementTransferResult =
 
         TeleportOutcome.PassengerConflict ->
             MovementTransferResult.Failed("movement.teleport.error.passenger")
+
+        TeleportOutcome.RejectedByPlatform ->
+            MovementTransferResult.Failed("movement.teleport.error.rejected")
+
+        is TeleportOutcome.RejectedByHook ->
+            MovementTransferResult.Failed("movement.teleport.error.rejected")
 
         TeleportOutcome.RuntimeStopping ->
             MovementTransferResult.Failed("core.error.runtime_stopping")

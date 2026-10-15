@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CellulosesZ compatibility report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "minecraftVersion",
+    "loader",
+    "javaVersion",
+    "status",
+    "assertions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "sourceRevision": {
+      "type": "string"
+    },
+    "minecraftVersion": {
+      "type": "string"
+    },
+    "loader": {
+      "type": "string",
+      "enum": [
+        "fabric",
+        "neoforge"
+      ]
+    },
+    "loaderVersion": {
+      "type": "string"
+    },
+    "javaVersion": {
+      "type": "string"
+    },
+    "kotlinGradlePluginVersion": {
+      "type": "string"
+    },
+    "celluloseszVersion": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "L1-structural",
+        "L1-live",
+        "L2"
+      ]
+    },
+    "scenarioId": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "PASS",
+        "FAIL",
+        "NOT_AVAILABLE",
+        "SKIPPED_WITH_REASON"
+      ]
+    },
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "passed"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

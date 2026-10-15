@@ -25,64 +25,74 @@ internal object MovementMessages {
 
     /** Maps a teleport outcome to its failure notice, or null for success and silent cancellations. */
     fun teleportOutcome(outcome: TeleportOutcome): Notice? =
-        when (outcome) {
-            is TeleportOutcome.Success ->
-                null
+        notice(
+            when (outcome) {
+                is TeleportOutcome.Success ->
+                    return null
 
-            TeleportOutcome.PlayerOffline ->
-                notice(MessageKey("movement.teleport.error.player_offline"))
+                TeleportOutcome.PlayerOffline ->
+                    MessageKey("movement.teleport.error.player_offline")
 
-            TeleportOutcome.TargetOffline ->
-                notice(MessageKey("movement.teleport.error.target_offline"))
+                TeleportOutcome.TargetOffline ->
+                    MessageKey("movement.teleport.error.target_offline")
 
-            is TeleportOutcome.UnknownDimension ->
-                notice(
-                    MessageKey("movement.teleport.error.unknown_dimension"),
-                    identifier(outcome.dimension)
-                )
+                is TeleportOutcome.UnknownDimension ->
+                    return notice(
+                        MessageKey("movement.teleport.error.unknown_dimension"),
+                        identifier(outcome.dimension)
+                    )
 
-            TeleportOutcome.OutsideWorldBorder ->
-                notice(MessageKey("movement.teleport.error.outside_border"))
+                TeleportOutcome.OutsideWorldBorder ->
+                    MessageKey("movement.teleport.error.outside_border")
 
-            TeleportOutcome.UnsafeDestination ->
-                notice(MessageKey("movement.teleport.error.unsafe"))
+                TeleportOutcome.UnsafeDestination ->
+                    MessageKey("movement.teleport.error.unsafe")
 
-            is TeleportOutcome.Cooldown ->
-                notice(
-                    MessageKey("movement.teleport.error.cooldown"),
-                    elapsed(outcome.remaining)
-                )
+                is TeleportOutcome.Cooldown ->
+                    return notice(
+                        MessageKey("movement.teleport.error.cooldown"),
+                        elapsed(outcome.remaining)
+                    )
 
-            TeleportOutcome.AlreadyPending ->
-                notice(MessageKey("movement.teleport.error.already_pending"))
+                TeleportOutcome.AlreadyPending ->
+                    MessageKey("movement.teleport.error.already_pending")
 
-            TeleportOutcome.Confined ->
-                notice(MessageKey("movement.teleport.error.confined"))
+                TeleportOutcome.Confined ->
+                    MessageKey("movement.teleport.error.confined")
 
-            is TeleportOutcome.Cancelled ->
-                cancellation(outcome.reason)
+                is TeleportOutcome.Cancelled ->
+                    return cancellation(outcome.reason)
 
-            TeleportOutcome.PassengerConflict ->
-                notice(MessageKey("movement.teleport.error.passenger"))
+                TeleportOutcome.PassengerConflict ->
+                    MessageKey("movement.teleport.error.passenger")
 
-            TeleportOutcome.RuntimeStopping ->
-                notice(MessageKey("core.error.runtime_stopping"))
-        }
+                TeleportOutcome.RejectedByPlatform ->
+                    MessageKey("movement.teleport.error.rejected")
+
+                is TeleportOutcome.RejectedByHook ->
+                    MessageKey("movement.teleport.error.rejected")
+
+                TeleportOutcome.RuntimeStopping ->
+                    MessageKey("core.error.runtime_stopping")
+            }
+        )
 
     private fun cancellation(reason: TeleportCancellation): Notice? =
-        when (reason) {
-            TeleportCancellation.MOVED ->
-                notice(MessageKey("movement.teleport.cancelled.moved"))
+        notice(
+            when (reason) {
+                TeleportCancellation.MOVED ->
+                    MessageKey("movement.teleport.cancelled.moved")
 
-            TeleportCancellation.DAMAGED ->
-                notice(MessageKey("movement.teleport.cancelled.damaged"))
+                TeleportCancellation.DAMAGED ->
+                    MessageKey("movement.teleport.cancelled.damaged")
 
-            TeleportCancellation.DIMENSION_CHANGED ->
-                notice(MessageKey("movement.teleport.cancelled.dimension"))
+                TeleportCancellation.DIMENSION_CHANGED ->
+                    MessageKey("movement.teleport.cancelled.dimension")
 
-            TeleportCancellation.DISCONNECTED,
-            TeleportCancellation.SERVER_STOPPING -> null
-        }
+                TeleportCancellation.DISCONNECTED,
+                TeleportCancellation.SERVER_STOPPING -> return null
+            }
+        )
 
     fun playerOffline(): Notice =
         notice(MessageKey("movement.teleport.error.player_offline"))
@@ -97,7 +107,10 @@ internal object MovementMessages {
         notice(MessageKey("movement.teleport.no_previous"))
 
     fun teleportToHome(home: Home): Notice =
-        success(MessageKey("movement.home.teleported"), identifier(home.name.value))
+        success(
+            MessageKey("movement.home.teleported"),
+            identifier(home.name.value)
+        )
 
     fun homeSet(result: SetHomeResult): Notice =
         when (result) {
@@ -156,12 +169,18 @@ internal object MovementMessages {
         )
 
     fun teleportToWarp(warp: Warp): Notice =
-        success(MessageKey("movement.warp.teleported"), identifier(warp.name.value))
+        success(
+            MessageKey("movement.warp.teleported"),
+            identifier(warp.name.value)
+        )
 
     fun warpSet(name: String, result: SetWarpResult): Notice =
         when (result) {
             SetWarpResult.Success ->
-                success(MessageKey("movement.warp.created"), identifier(name))
+                success(
+                    MessageKey("movement.warp.created"),
+                    identifier(name)
+                )
 
             SetWarpResult.InvalidName ->
                 notice(MessageKey("movement.warp.invalid_name"))
@@ -236,13 +255,19 @@ internal object MovementMessages {
         notice(MessageKey("movement.request.server_queue_full"))
 
     fun requestBatchSent(count: Int): Notice =
-        success(MessageKey("movement.request.batch_sent"), count(count.toLong()))
+        success(
+            MessageKey("movement.request.batch_sent"),
+            count(count.toLong())
+        )
 
     fun requestBatchNone(): Notice =
         notice(MessageKey("movement.request.batch_none"))
 
     fun requestBatchCooldown(remaining: Duration): Notice =
-        notice(MessageKey("movement.request.batch_cooldown"), elapsed(remaining))
+        notice(
+            MessageKey("movement.request.batch_cooldown"),
+            elapsed(remaining)
+        )
 
     fun requestTargetQueueFull(target: String): Notice =
         notice(
@@ -299,13 +324,19 @@ internal object MovementMessages {
         success(MessageKey("movement.request.accepted"))
 
     fun requestAcceptedNotify(subject: String): Notice =
-        info(MessageKey("movement.request.accepted_notify"), playerName(subject))
+        info(
+            MessageKey("movement.request.accepted_notify"),
+            playerName(subject)
+        )
 
     fun requestDenied(): Notice =
         success(MessageKey("movement.request.denied"))
 
     fun requestDeniedNotify(target: String): Notice =
-        notice(MessageKey("movement.request.denied_notify"), playerName(target))
+        notice(
+            MessageKey("movement.request.denied_notify"),
+            playerName(target)
+        )
 
     fun requestCancelNone(): Notice =
         notice(MessageKey("movement.request.cancel_none"))
@@ -314,7 +345,10 @@ internal object MovementMessages {
         success(MessageKey("movement.request.cancelled"))
 
     fun requestCancelledNotify(sender: String): Notice =
-        info(MessageKey("movement.request.cancelled_notify"), playerName(sender))
+        info(
+            MessageKey("movement.request.cancelled_notify"),
+            playerName(sender)
+        )
 
     fun requestTargetOffline(): Notice =
         notice(MessageKey("movement.request.target_offline"))
@@ -344,10 +378,16 @@ internal object MovementMessages {
     fun tpAutoAllow(target: String, result: TpAutoAllowResult): Notice =
         when (result) {
             TpAutoAllowResult.Added ->
-                success(MessageKey("movement.tpauto.added"), playerName(target))
+                success(
+                    MessageKey("movement.tpauto.added"),
+                    playerName(target)
+                )
 
             TpAutoAllowResult.AlreadyAllowed ->
-                notice(MessageKey("movement.tpauto.already_allowed"), playerName(target))
+                notice(
+                    MessageKey("movement.tpauto.already_allowed"),
+                    playerName(target)
+                )
 
             TpAutoAllowResult.Self ->
                 notice(MessageKey("movement.tpauto.self"))
@@ -362,23 +402,37 @@ internal object MovementMessages {
     fun tpAutoDisallow(target: String, result: TpAutoDisallowResult): Notice =
         when (result) {
             TpAutoDisallowResult.Removed ->
-                success(MessageKey("movement.tpauto.removed"), playerName(target))
+                success(
+                    MessageKey("movement.tpauto.removed"),
+                    playerName(target)
+                )
 
             TpAutoDisallowResult.NotAllowed ->
-                notice(MessageKey("movement.tpauto.not_allowed"), playerName(target))
+                notice(
+                    MessageKey("movement.tpauto.not_allowed"),
+                    playerName(target)
+                )
 
             TpAutoDisallowResult.StorageUnavailable ->
                 notice(MessageKey("movement.tpauto.storage_unavailable"))
         }
 
     fun tpAutoAutoAccepted(sender: String): Notice =
-        info(MessageKey("movement.tpauto.auto_accepted"), playerName(sender))
+        info(
+            MessageKey("movement.tpauto.auto_accepted"),
+            playerName(sender)
+        )
 
     fun tpAutoList(names: List<String>): ListPage =
         ListPage(
             title = LocalizedText(MessageKey("movement.tpauto.list_title")),
             rows = names.map { name ->
-                ListRow(main = LocalizedText(MessageKey("core.value"), listOf(playerName(name))))
+                ListRow(
+                    main = LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(playerName(name))
+                    )
+                )
             },
             emptyText = LocalizedText(MessageKey("movement.tpauto.list_empty")),
         )
@@ -502,16 +556,28 @@ internal object MovementMessages {
                 notice(MessageKey("movement.random.not_configured"))
 
             is RandomTeleportResult.UnknownRegion ->
-                notice(MessageKey("movement.random.unknown_region"), identifier(result.name))
+                notice(
+                    MessageKey("movement.random.unknown_region"),
+                    identifier(result.name)
+                )
 
             is RandomTeleportResult.WrongDimension ->
-                notice(MessageKey("movement.random.wrong_dimension"), identifier(result.name))
+                notice(
+                    MessageKey("movement.random.wrong_dimension"),
+                    identifier(result.name)
+                )
 
             is RandomTeleportResult.RegionDisabled ->
-                notice(MessageKey("movement.random.region_disabled"), identifier(result.name))
+                notice(
+                    MessageKey("movement.random.region_disabled"),
+                    identifier(result.name)
+                )
 
             is RandomTeleportResult.NoValidArea ->
-                notice(MessageKey("movement.random.no_area"), identifier(result.name))
+                notice(
+                    MessageKey("movement.random.no_area"),
+                    identifier(result.name)
+                )
 
             RandomTeleportResult.RegionChanged ->
                 notice(MessageKey("movement.random.region_changed"))
@@ -535,7 +601,10 @@ internal object MovementMessages {
     fun randomRegionSet(name: String, result: SetRegionResult): Notice =
         when (result) {
             SetRegionResult.Saved ->
-                success(MessageKey("movement.random.region_set"), identifier(name))
+                success(
+                    MessageKey("movement.random.region_set"),
+                    identifier(name)
+                )
 
             SetRegionResult.InvalidName ->
                 notice(MessageKey("movement.random.region_invalid_name"))
@@ -544,10 +613,16 @@ internal object MovementMessages {
                 notice(MessageKey("movement.random.region_invalid_radius"))
 
             SetRegionResult.NotFound ->
-                notice(MessageKey("movement.random.region_not_found"), identifier(name))
+                notice(
+                    MessageKey("movement.random.region_not_found"),
+                    identifier(name)
+                )
 
             SetRegionResult.WrongDimension ->
-                notice(MessageKey("movement.random.region_wrong_dimension"), identifier(name))
+                notice(
+                    MessageKey("movement.random.region_wrong_dimension"),
+                    identifier(name)
+                )
 
             SetRegionResult.LimitReached ->
                 notice(MessageKey("movement.random.region_limit"))
@@ -556,7 +631,10 @@ internal object MovementMessages {
     fun randomRegionRemoved(name: String, result: DeleteRegionResult): Notice =
         when (result) {
             DeleteRegionResult.Deleted ->
-                success(MessageKey("movement.random.region_removed"), identifier(name))
+                success(
+                    MessageKey("movement.random.region_removed"),
+                    identifier(name)
+                )
 
             DeleteRegionResult.InvalidName ->
                 notice(MessageKey("movement.random.region_invalid_name"))

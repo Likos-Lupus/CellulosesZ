@@ -6,6 +6,8 @@ import net.neoforged.neoforge.server.permission.PermissionAPI
 import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent
 import net.neoforged.neoforge.server.permission.nodes.PermissionNode
 import net.neoforged.neoforge.server.permission.nodes.PermissionTypes
+import org.slf4j.LoggerFactory
+import top.likoslupus.cellulosesz.api.CellulosesZApiProvider
 import top.likoslupus.cellulosesz.application.bootstrap.PlatformServices
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionBridge
@@ -72,5 +74,24 @@ class NeoForgePlatformServices : PlatformServices {
         get() = "neoforge"
 
     override val permissionBridge: PermissionBridge = NeoForgePermissionBridge(nodes)
+
+    /**
+     * NeoForge API discovery is not yet verified for this target. The contract is complete and Fabric
+     * publishes through ObjectShare, but the NeoForge extension/discovery path must first be spiked
+     * against the exact 26.1.x NeoForge API (see docs/adr/0016). Until then the provider is not
+     * exposed, so NeoForge consumers must not treat the API as available.
+     */
+    override fun publishApi(provider: CellulosesZApiProvider) {
+        LOGGER.warn(
+            "CellulosesZ public API v0 is not exposed on NeoForge yet: the loader-native discovery " +
+                    "path is pending a target-version spike (see docs/adr/0016). Fabric publishes normally."
+        )
+    }
+
+    private companion object {
+
+        private val LOGGER = LoggerFactory.getLogger(NeoForgePlatformServices::class.java)
+
+    }
 
 }

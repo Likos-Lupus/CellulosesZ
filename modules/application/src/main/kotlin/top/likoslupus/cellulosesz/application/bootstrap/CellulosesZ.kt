@@ -9,6 +9,10 @@ import net.minecraft.world.level.storage.LevelResource
 import top.likoslupus.cellulosesz.administration.AdministrationFeature
 import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.administration.createAdministrationFeature
+import top.likoslupus.cellulosesz.api.ApiVersion
+import top.likoslupus.cellulosesz.api.PlayerIdentity
+import top.likoslupus.cellulosesz.application.api.*
+import top.likoslupus.cellulosesz.application.command.CommandRegistrationDiagnostics
 import top.likoslupus.cellulosesz.application.command.RootCommand
 import top.likoslupus.cellulosesz.application.command.help.SelectiveVanillaHelpOverlay
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
@@ -17,10 +21,12 @@ import top.likoslupus.cellulosesz.application.config.ConfigValidation
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
 import top.likoslupus.cellulosesz.application.port.MovementJailTransferPort
 import top.likoslupus.cellulosesz.communication.*
+import top.likoslupus.cellulosesz.communication.config.MeRouteMode
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
 import top.likoslupus.cellulosesz.core.command.help.CommandHelpResolver
 import top.likoslupus.cellulosesz.core.command.registry.CommandRegistry
+import top.likoslupus.cellulosesz.core.command.registry.CommandRoutingPolicy
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
@@ -45,6 +51,7 @@ import top.likoslupus.cellulosesz.foundation.database.DeferredDatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlSchemaContributor
 import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
+import top.likoslupus.cellulosesz.movement.TeleportCommittedObserver
 import top.likoslupus.cellulosesz.movement.createMovementFeature
 import top.likoslupus.cellulosesz.player.PlayerFeature
 import top.likoslupus.cellulosesz.player.PlayerSqlSchema
@@ -52,7 +59,6 @@ import top.likoslupus.cellulosesz.player.createPlayerFeature
 import top.likoslupus.cellulosesz.utility.UtilityFeature
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import top.likoslupus.cellulosesz.utility.createUtilityFeature
-import top.likoslupus.cellulosesz.utility.item.AdministrativeActionAuditPort
 import java.nio.file.Path
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -62,6 +68,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the bounded-context facades; it contains no domain logic.
  */
 public object CellulosesZ {
+
+    /** DSL canonical name of the `/me` action-message definition (see ActionMessageCommands). */
+    private const val ME_COMMAND_LITERAL: String = "me"
 
     private val initialized = AtomicBoolean(false)
 
@@ -94,7 +103,7 @@ public object CellulosesZ {
             path = configPath,
             codec = TomlConfigCodec(CellulosesConfig.serializer()),
             validate = ConfigValidation::validate,
-            validateTransition = ConfigValidation.databaseTransition { dataRoot(kernel) },
+            validateTransition = ConfigValidation.rootTransition { dataRoot(kernel) },
             ioDispatcher = Dispatchers.IO,
         )
         when (val initial = config.initialLoadBlocking()) {
@@ -156,6 +165,28 @@ public object CellulosesZ {
             adventure = adventure,
             presentation = presentation,
         )
+        val apiProvider = ApplicationApiProvider()
+        val apiTeleports = ApiTeleportEvents()
+        val api = ApplicationApi(
+            version = ApiVersion(0, 1),
+            players = ApiPlayerLookup(
+                availability = { apiProvider.availability() },
+                resolve = { id ->
+                    known.knownById(id)?.let {
+                        PlayerIdentity(it.id, it.name)
+                    }
+                },
+            ),
+            visibility = ApiVisibilityLookup(
+                availability = { apiProvider.availability() },
+                canSeeDelegate = { viewerId, targetId ->
+                    administration.canBeSeenBy(viewerId, targetId)
+                },
+            ),
+            teleports = apiTeleports,
+        )
+        apiProvider.attach(api)
+        platform.publishApi(apiProvider)
         movement = createMovementFeature(
             kernel = kernel,
             database = database,
@@ -167,6 +198,9 @@ public object CellulosesZ {
             confinement = { administration.isConfined(it) },
             requestReachability = { senderId, targetId ->
                 administration.canBeSeenBy(senderId, targetId)
+            },
+            teleportObserver = TeleportCommittedObserver {
+                apiTeleports.dispatch(it.toApiEvent())
             },
             permissions = permissions,
         )
@@ -193,8 +227,13 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
-            audit = AdministrativeActionAuditPort { actorId, targetId, targetName, cleared ->
-                administration.recordInventoryClear(actorId, targetId, targetName, cleared)
+            audit = { actorId, targetId, targetName, cleared ->
+                administration.recordInventoryClear(
+                    actorId,
+                    targetId,
+                    targetName,
+                    cleared
+                )
             },
         )
         val playerFeature = createPlayerFeature(
@@ -213,7 +252,9 @@ public object CellulosesZ {
         val integration = CommunicationIntegration(
             senderGate = {
                 when {
-                    administration.isMuted(it) -> SendGateResult.Denied(SenderRestriction.MUTED)
+                    administration.isMuted(it) ->
+                        SendGateResult.Denied(SenderRestriction.MUTED)
+
                     else -> SendGateResult.Allowed
                 }
             },
@@ -231,6 +272,7 @@ public object CellulosesZ {
             },
         )
 
+        val diagnostics = CommandRegistrationDiagnostics()
         val commandRegistry = CommandRegistry(
             buildList {
                 add(
@@ -246,7 +288,13 @@ public object CellulosesZ {
                         catalog = catalog,
                         modVersion = modVersion(),
                         loaderName = platform.loaderName,
-                        onReloadApplied = { playerFeature.applyNicknameDisplay() },
+                        diagnostics = diagnostics,
+                        onReloadApplied = {
+                            kernel.onServerThread {
+                                playerFeature.applyNicknameDisplay()
+                                administration.applyJailCommandRestrictions()
+                            }
+                        },
                     )
                 )
                 addAll(movement.commands())
@@ -256,7 +304,11 @@ public object CellulosesZ {
                 addAll(playerFeature.commands())
             }
         )
-        val helpResolver = CommandHelpResolver(commandRegistry.definitions, permissions)
+        val helpResolver = CommandHelpResolver(
+            definitions = commandRegistry.definitions,
+            permissions = permissions,
+            effectiveRoutes = diagnostics.effectiveRoutes,
+        )
         val documentation = CommandDocumentationService(
             loader = MarkdownDocumentLoader(
                 listOf(
@@ -281,13 +333,32 @@ public object CellulosesZ {
         }
         // The `/me` override is a mixin decision taken while vanilla builds its dispatcher, so the
         // snapshot is published here at mod init, well before the server constructs its commands.
-        communication.applyVanillaMeOverride(
-            config.current.messaging.actionMessage.overrideVanillaMe
+        // The routing policy is a startup binding too: `commands` and `/me` ownership cannot reload.
+        val meMode = communication.meRouteMode()
+        val routingPolicy = CommandRoutingPolicy(
+            shortNamesEnabled = config.current.commands.shortNamesEnabled,
+            aliasesEnabled = config.current.commands.aliasesEnabled,
+            suppressedCanonicals = if (meMode == MeRouteMode.REPLACE_VANILLA) {
+                emptySet()
+            } else {
+                setOf(ME_COMMAND_LITERAL)
+            },
         )
+        val helpOverlayEnabled = config.current.commands.vanillaHelpOverlayEnabled
+        communication.applyVanillaMeOverride(meMode)
 
         CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
-            commandRegistry.register(dispatcher, buildContext, permissions)
-            helpOverlay.install(dispatcher)
+            val report = commandRegistry.register(
+                dispatcher,
+                buildContext,
+                permissions,
+                routingPolicy
+            )
+            diagnostics.publish(report)
+            health.recordCommands(report)
+            if (helpOverlayEnabled) {
+                helpOverlay.install(dispatcher)
+            }
         }
 
         LifecycleEvent.SERVER_STARTING.register { server ->
@@ -319,9 +390,11 @@ public object CellulosesZ {
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
             health.transition(ApplicationHealth.State.READY)
+            apiProvider.markReady()
         }
         LifecycleEvent.SERVER_STOPPING.register {
             health.transition(ApplicationHealth.State.STOPPING)
+            apiProvider.markStopping()
             movement.onServerStopping()
             communication.onServerStopping()
             administration.onServerStopping()
@@ -334,6 +407,8 @@ public object CellulosesZ {
         LifecycleEvent.SERVER_STOPPED.register {
             adventure.stop()
             kernel.onServerStopped()
+            apiProvider.markStopped()
+            apiTeleports.clear()
         }
 
         TickEvent.PLAYER_POST.register { player ->

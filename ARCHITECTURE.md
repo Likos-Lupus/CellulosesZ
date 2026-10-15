@@ -10,8 +10,8 @@ CellulosesZ is a **coarse-grained modular monolith**:
 
 - One repository, one product.
 - Two distributable artifacts: Fabric and NeoForge.
-- Seven fixed compile-time modules that establish Kotlin `internal` boundaries and a forbidden-edge
-  dependency graph.
+- Eight fixed compile-time modules that establish Kotlin `internal` boundaries and a forbidden-edge
+  dependency graph (seven internal modules plus one public-API contract module).
 - Two Stonecutter cells that exist only to produce the loader-specific distributions.
 - One explicit composition root. No runtime module graph, no service locator, no scanning.
 
@@ -33,6 +33,7 @@ movement   communication  administration  utility   (minecraft-core, foundation)
 
 | Module           | Responsibility                                                                                                                                                                                                                                                                                                                                                                                            | May depend on                                                                        |
 |------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
+| `api`            | Public API v0 contract (`top.likoslupus.cellulosesz.api`): lifecycle provider, player/visibility reads, and confirmed-teleport observation. Plain Kotlin/JVM, no Minecraft/Loader/database/feature dependency.                                                                                                                                                                                            | –                                                                                    |
 | `foundation`     | Plain Kotlin/JVM: `AtomicFile`, `KeyedMutex`, `StorageJson`, generic `ConfigStore<T>`. Knows nothing about Minecraft.                                                                                                                                                                                                                                                                                     | –                                                                                    |
 | `minecraft-core` | `RuntimeKernel`, `MinecraftServerDispatcher`, `PlayerResolver`, `Messages`, command feedback helpers, and the command declaration DSL (`command(...)` → immutable `CommandDefinition` → Brigadier) plus the Markdown help pipeline.                                                                                                                                                                       | foundation                                                                           |
 | `movement`       | teleport/home/warp/spawn/request (`/tpa`, `/tpahere`). Owns the teleport pipeline: `TeleportCoordinator`, `MinecraftTeleportBackend`, safety, pending/cooldown/history.                                                                                                                                                                                                                                   | foundation, minecraft-core                                                           |
@@ -45,6 +46,14 @@ movement   communication  administration  utility   (minecraft-core, foundation)
 No feature module may depend on another feature module. `minecraft-core` and `foundation` never
 depend on features. Loader APIs (`net.fabricmc.*`, `net.neoforged.*`, `net.minecraft.*` in
 `foundation`) are forbidden inside `modules/**` and enforced by `verifyArchitecture`.
+
+## Public API
+
+`modules/api` is the only module meant for third parties. `application` depends on it and wires the
+adapters; no feature module depends on it. It is pure Kotlin/JVM (Kotlin stdlib only) so its
+bytecode is independent of Minecraft and the loader. See `docs/adr/0016-public-api-v0.md` and
+`docs/api/public-api-v0.md`. The distribution flattens its classes exactly once (verified by
+`inspectArtifacts`/`compatSmokeBothLoaders`).
 
 ## Boundaries and visibility
 

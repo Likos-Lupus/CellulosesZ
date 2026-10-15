@@ -47,3 +47,15 @@ out in the release notes rather than presented as a no-op refactor.
 See `docs/analysis/vanilla-help-26.1.2.md`. `/help`, `/help give`, `/help time` and `/help unknown`
 must remain byte-for-byte Vanilla; only queries that resolve to a CellulosesZ-owned executable path
 use the Markdown documentation.
+
+## Command ownership (post route-planning freeze)
+
+The command surface is now routed through `CommandRoutePlanner` + `CommandRegistry` (ADR 0014). This
+is a **user-visible behavioural change**, not a refactor: a short canonical name or alias that
+vanilla or another mod already registered is skipped rather than merged into, and the namespaced
+fallback
+`/cellulosesz:<command>` becomes the stable entry point. In particular `/tp`, `/kill` and
+`/gamemode`
+share a root literal with Vanilla and are vanilla-owned unless free; migrate scripts and command
+blocks to `/cellulosesz:tp` etc.
+

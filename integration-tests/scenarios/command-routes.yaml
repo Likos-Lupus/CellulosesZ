@@ -1,0 +1,63 @@
+# Live-server scenarios. Each entry maps to one report in the shape of expected/compat-report.schema.json.
+# status values: PASS | FAIL | NOT_AVAILABLE | SKIPPED_WITH_REASON
+scenarios:
+  - id: S-01
+    name: default startup and shutdown
+    level: L1-live
+    fixtures: [ ]
+    assert:
+      - server_ready
+      - cellulosesz_health_ready
+      - server_stopped_cleanly
+
+  - id: S-02
+    name: short canonical taken before CellulosesZ
+    level: L1-live
+    fixtures: [ command-before ]
+    assert:
+      - cellulosesz_namespaced_home_executable
+      - external_home_executor_unchanged
+      - no_unexpected_merge
+
+  - id: S-03
+    name: alias taken before CellulosesZ
+    level: L1-live
+    fixtures: [ command-before ]
+    assert:
+      - cellulosesz_canonical_installed
+      - alias_skipped_already_present
+
+  - id: S-06
+    name: me mode matrix
+    level: L1-live
+    fixtures: [ command-before ]
+    assert:
+      - replace_mode_owns_me_or_falls_back
+      - preserve_mode_never_registers_me
+      - czme_and_namespaced_me_available
+
+  - id: S-07
+    name: help overlay opt-in and coexistence
+    level: L1-live
+    fixtures: [ ]
+    assert:
+      - vanilla_no_argument_help_unchanged
+      - cellulosesz_query_resolves
+      - external_query_delegates_to_vanilla
+
+  - id: S-08
+    name: static config reload is rejected
+    level: L1-live
+    fixtures: [ ]
+    assert:
+      - reload_rejected_restart_required
+      - previous_snapshot_retained
+
+  - id: S-10
+    name: third-party teleport veto records nothing
+    level: L2
+    fixtures: [ teleport-veto ]
+    assert:
+      - no_success_history
+      - no_success_cooldown
+      - no_success_notice

@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.core.command.dsl
 
 import com.mojang.brigadier.Command
-import com.mojang.brigadier.CommandDispatcher
 import com.mojang.brigadier.builder.ArgumentBuilder
 import com.mojang.brigadier.suggestion.SuggestionProvider
 import com.mojang.brigadier.tree.LiteralCommandNode
@@ -12,56 +11,42 @@ import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import java.util.function.Predicate
 
-/** The Brigadier node(s) registered for one definition (canonical name plus aliases). */
-public class RegisteredCommand internal constructor(
-    public val definition: CommandDefinition,
-    public val roots: List<LiteralCommandNode<CommandSourceStack>>,
-)
-
 /**
- * Compiles an immutable [CommandDefinition] into the real Mojang Brigadier tree and registers it
- * into the current dispatcher. Aliases are compiled as equivalent trees from the same declaration;
- * no Brigadier redirect is used.
+ * Compiles an immutable [CommandDefinition] into a single real Mojang Brigadier root node for one
+ * literal. It never touches a dispatcher: the registry decides whether the literal is free, installs
+ * the node and verifies identity afterwards. Aliases/canonical/namespaced forms are each built as
+ * their own independent tree from the same declaration; no Brigadier redirect is used and no two
+ * routes share a mutable node instance.
  */
 public object BrigadierCompiler {
 
-    public fun register(
-        dispatcher: CommandDispatcher<CommandSourceStack>,
+    public fun buildRoot(
         definition: CommandDefinition,
+        literal: String,
         permissions: PermissionService,
         buildContext: CommandBuildContext,
-    ): RegisteredCommand {
-        val roots = mutableListOf<LiteralCommandNode<CommandSourceStack>>()
-        val names = buildList {
-            add(definition.name)
-            addAll(definition.aliases.sorted())
+    ): LiteralCommandNode<CommandSourceStack> {
+        val builder = Commands.literal(literal)
+        if (definition.sourceAccess != SourceAccess.ANY) {
+            builder.requires(accessRequirement(definition.sourceAccess))
         }
-
-        names.forEach { name ->
-            val builder = Commands.literal(name)
-            if (definition.sourceAccess != SourceAccess.ANY) {
-                builder.requires(accessRequirement(definition.sourceAccess))
-            }
-            builder.requires(permissionRequirement(definition.permission, permissions))
-            definition.root.execution?.let {
-                builder.executes(
-                    executor(
-                        it,
-                        emptyList()
-                    )
+        builder.requires(permissionRequirement(definition.permission, permissions))
+        definition.root.execution?.let {
+            builder.executes(
+                executor(
+                    it,
+                    emptyList()
                 )
-            }
-            appendChildren(
-                builder,
-                definition.root.children,
-                permissions,
-                buildContext,
-                emptyList()
             )
-            roots += dispatcher.register(builder)
         }
-
-        return RegisteredCommand(definition, roots)
+        appendChildren(
+            builder,
+            definition.root.children,
+            permissions,
+            buildContext,
+            emptyList()
+        )
+        return builder.build()
     }
 
     private fun appendChildren(

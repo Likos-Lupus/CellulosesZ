@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.application.config
 
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettingsValidation
 import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidation
+import top.likoslupus.cellulosesz.communication.config.meRouteMode
 import top.likoslupus.cellulosesz.core.text.TextSettingsValidation
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
@@ -36,10 +37,9 @@ internal object ConfigValidation {
         previous: ResolvedDatabaseDescriptor,
         candidate: ResolvedDatabaseDescriptor,
     ): List<ValidationError> =
-        if (previous.signature == candidate.signature) {
-            emptyList()
-        } else {
-            listOf(
+        when (previous.signature) {
+            candidate.signature -> emptyList()
+            else -> listOf(
                 ValidationError(
                     "database",
                     "active database connection settings changed; restart the server to apply",
@@ -65,6 +65,49 @@ internal object ConfigValidation {
                     storageRoot()
                 ),
             )
+        }
+
+    /**
+     * A reload may not change a registration-time binding: the command routing settings and the
+     * effective `/me` ownership mode are decided while the dispatcher is built and cannot be
+     * hot-swapped. This compares the *effective* mode, not raw booleans, so disabling the action
+     * service while `overrideVanillaMe` is already false stays allowed.
+     */
+    fun validateCommandTransition(
+        previous: CellulosesConfig,
+        candidate: CellulosesConfig,
+    ): List<ValidationError> =
+        buildList {
+            if (previous.commands != candidate.commands) {
+                add(
+                    ValidationError(
+                        "commands",
+                        "command registration settings changed; restart the server to apply",
+                    )
+                )
+            }
+            if (meRouteMode(previous.messaging.actionMessage) !=
+                meRouteMode(candidate.messaging.actionMessage)
+            ) {
+                add(
+                    ValidationError(
+                        "messaging.actionMessage",
+                        "vanilla /me ownership changed; restart the server to apply",
+                    )
+                )
+            }
+        }
+
+    /**
+     * The full reload transition validator: the existing database check plus the command-binding
+     * check. Both must pass for a reload to publish.
+     */
+    fun rootTransition(
+        storageRoot: () -> Path,
+    ): (CellulosesConfig, CellulosesConfig) -> List<ValidationError> =
+        { previous, candidate ->
+            databaseTransition(storageRoot)(previous, candidate) +
+                    validateCommandTransition(previous, candidate)
         }
 
 }

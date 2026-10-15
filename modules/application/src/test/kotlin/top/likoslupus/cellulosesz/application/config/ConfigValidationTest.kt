@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.application.config
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import top.likoslupus.cellulosesz.communication.config.ActionMessageSettings
 import top.likoslupus.cellulosesz.communication.config.MailSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.core.text.TextColorOverrides
@@ -226,6 +227,73 @@ class ConfigValidationTest {
         )
 
         assertTrue(errors.isEmpty())
+    }
+
+    @Test
+    fun `changing command registration settings requires a restart`() {
+        val errors = ConfigValidation.validateCommandTransition(
+            previous = CellulosesConfig(),
+            candidate = CellulosesConfig(
+                commands = CommandRoutingSettings(shortNamesEnabled = false)
+            ),
+        )
+
+        assertEquals("commands", errors.single().path)
+    }
+
+    @Test
+    fun `changing the effective me ownership requires a restart`() {
+        val errors = ConfigValidation.validateCommandTransition(
+            previous = CellulosesConfig(),
+            candidate = CellulosesConfig(
+                messaging = MessagingSettings(
+                    actionMessage = ActionMessageSettings(overrideVanillaMe = false)
+                )
+            ),
+        )
+
+        assertEquals("messaging.actionMessage", errors.single().path)
+    }
+
+    @Test
+    fun `disabling the action service without changing me ownership stays reloadable`() {
+        val errors = ConfigValidation.validateCommandTransition(
+            previous = CellulosesConfig(
+                messaging = MessagingSettings(
+                    actionMessage = ActionMessageSettings(
+                        enabled = true,
+                        overrideVanillaMe = false,
+                    )
+                )
+            ),
+            candidate = CellulosesConfig(
+                messaging = MessagingSettings(
+                    actionMessage = ActionMessageSettings(
+                        enabled = false,
+                        overrideVanillaMe = false,
+                    )
+                )
+            ),
+        )
+
+        assertTrue(errors.isEmpty())
+    }
+
+    @Test
+    fun `the combined transition validator keeps the database check`() {
+        val root = Path.of("/tmp/cz")
+        val validator = ConfigValidation.rootTransition { root }
+
+        val errors = validator(
+            CellulosesConfig(),
+            CellulosesConfig(
+                database = DatabaseSettings(sqlite = SqliteSettings(path = "other.db")),
+                commands = CommandRoutingSettings(aliasesEnabled = false),
+            ),
+        )
+
+        assertTrue(errors.any { it.path == "database" })
+        assertTrue(errors.any { it.path == "commands" })
     }
 
 }

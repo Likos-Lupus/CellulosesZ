@@ -5,8 +5,19 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.dsl.CommandNodeSpec
 import top.likoslupus.cellulosesz.core.command.dsl.LiteralNodeSpec
+import top.likoslupus.cellulosesz.core.command.registry.CommandRouteName
 import top.likoslupus.cellulosesz.core.permission.PermissionService
-import top.likoslupus.cellulosesz.core.permission.PermissionSpec
+
+/**
+ * A read-only view of the literals CellulosesZ actually installed in the current dispatcher
+ * generation. The composition root backs it with the latest registration report, so help ownership
+ * is decided from effective routes rather than from the declaration table.
+ */
+public fun interface EffectiveCommandRoutes {
+
+    public fun installedLiterals(): Set<String>
+
+}
 
 /** The outcome of resolving a Vanilla `/help <query>` string against the CellulosesZ command set. */
 public sealed interface HelpResolution {
@@ -25,17 +36,22 @@ public sealed interface HelpResolution {
  * Resolves a `/help` query to a CellulosesZ definition. Only literal sub-paths are resolved; a query
  * token that is not a literal child stops the walk (it is never interpreted as a game argument).
  *
+ * The first token must be a route CellulosesZ currently owns ([effectiveRoutes]); a declared but
+ * skipped name resolves to `null`, so `/help <skipped>` keeps the vanilla/external document.
+ *
  * The most specific documentation id along the resolved path wins (node id, else nearest ancestor,
  * else the root id), and permission is checked along the whole root -> leaf chain.
  */
 public class CommandHelpResolver(
     definitions: List<CommandDefinition>,
     private val permissions: PermissionService,
+    private val effectiveRoutes: EffectiveCommandRoutes,
 ) {
 
     private val byName: Map<String, CommandDefinition> = buildMap {
         definitions.forEach {
             put(it.name, it)
+            put(CommandRouteName.namespaced(it.name), it)
             it.aliases.forEach { alias -> put(alias, it) }
         }
     }
@@ -51,7 +67,12 @@ public class CommandHelpResolver(
             return null
         }
 
-        val definition = byName[tokens.first()] ?: return null
+        val first = tokens.first()
+        if (first !in effectiveRoutes.installedLiterals()) {
+            return null
+        }
+
+        val definition = byName[first] ?: return null
 
         val subPath = mutableListOf<String>()
         val required = mutableListOf(definition.permission)

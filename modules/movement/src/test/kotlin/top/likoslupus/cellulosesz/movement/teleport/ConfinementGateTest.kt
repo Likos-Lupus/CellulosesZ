@@ -107,7 +107,8 @@ class ConfinementGateTest {
         var moveResult: BackendMoveResult = BackendMoveResult.PlayerOffline
         var moveCalled: Boolean = false
 
-        override suspend fun position(playerId: UUID): StoredPosition? = positions[playerId]
+        override suspend fun position(playerId: UUID): StoredPosition? =
+            positions[playerId]
 
         override suspend fun vanillaSpawnPosition(): StoredPosition =
             StoredPosition(
@@ -123,6 +124,7 @@ class ConfinementGateTest {
             playerId: UUID,
             destination: StoredPosition,
             policy: TeleportPolicy,
+            cause: TeleportCause,
         ): BackendMoveResult {
             moveCalled = true
             return moveResult

@@ -30,6 +30,7 @@ dependencyResolutionManagement {
 }
 
 include(
+    ":modules:api",
     ":modules:foundation",
     ":modules:minecraft-core",
     ":modules:movement",

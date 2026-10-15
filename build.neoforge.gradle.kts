@@ -16,6 +16,7 @@ version = "${libs.versions.mod.get()}+$minecraftVersion"
 base.archivesName.set(modId)
 
 val internalModules = listOf(
+    ":modules:api",
     ":modules:foundation",
     ":modules:minecraft-core",
     ":modules:movement",

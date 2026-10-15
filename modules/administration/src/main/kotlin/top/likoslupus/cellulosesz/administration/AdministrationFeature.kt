@@ -152,9 +152,18 @@ public class AdministrationFeature internal constructor(
     public fun mutedChatNotice(): Notice =
         AdministrationMessages.mutedChat()
 
+    /**
+     * Re-publishes the jail command-restriction snapshot from config. The composition root calls
+     * this after a reload; [onServerStarting] also seeds it, so it is never stale for a running
+     * server. Must be called on the server thread.
+     */
+    public fun applyJailCommandRestrictions() {
+        RestrictCommandsState.set(JailCommandAccessPolicy.snapshotFrom(settings().jail))
+    }
+
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
     public fun onServerStarting() {
-        RestrictCommandsState.set(settings().jail.restrictCommands)
+        RestrictCommandsState.set(JailCommandAccessPolicy.snapshotFrom(settings().jail))
         kernel.launch {
             kernel.onServerThread {
                 val server = kernel.requireServer()
@@ -378,7 +387,7 @@ public fun createAdministrationFeature(
         protection = protection,
         audit = audit,
         transfer = jailTransfer,
-        positions = JailPlayerPositionSource { playerId ->
+        positions = { playerId ->
             kernel.requireServer().playerList.getPlayer(playerId)?.let { player ->
                 WorldPosition(
                     dimension = player.level().dimension().identifier().toString(),

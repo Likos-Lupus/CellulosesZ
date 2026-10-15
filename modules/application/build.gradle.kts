@@ -25,6 +25,7 @@ dependencies {
     minecraft("com.mojang:minecraft:$minecraftVersion")
 
     implementation(libs.architectury.common)
+    implementation(project(":modules:api"))
     implementation(project(":modules:foundation"))
     implementation(project(":modules:minecraft-core"))
     implementation(project(":modules:movement"))

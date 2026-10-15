@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
+import top.likoslupus.cellulosesz.core.command.registry.CommandRouteStatus
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageArgument
@@ -51,7 +52,8 @@ internal object RootCommand {
         catalog: TranslationCatalog,
         modVersion: String,
         loaderName: String,
-        onReloadApplied: () -> Unit = {},
+        diagnostics: CommandRegistrationDiagnostics,
+        onReloadApplied: suspend () -> Unit = {},
     ): CommandDefinition =
         command(
             name = ROOT_LITERAL,
@@ -88,6 +90,52 @@ internal object RootCommand {
                         adventure,
                         onReloadApplied
                     )
+                }
+            }
+            literal(
+                name = "commands",
+                permission = CommandPermissions.ROOT_COMMANDS,
+                documentation = "core/commands",
+            ) {
+                executes {
+                    showCommandSummary(
+                        source,
+                        diagnostics,
+                        messages,
+                        adventure
+                    )
+                }
+                literal("conflicts") {
+                    executes {
+                        showCommandConflicts(
+                            source,
+                            diagnostics,
+                            messages,
+                            adventure
+                        )
+                    }
+                }
+                literal("routes") {
+                    executes {
+                        showCommandRoutes(
+                            source,
+                            null,
+                            diagnostics,
+                            messages,
+                            adventure
+                        )
+                    }
+                    argument("name", word()) { name ->
+                        executes {
+                            showCommandRoutes(
+                                source,
+                                get(name),
+                                diagnostics,
+                                messages,
+                                adventure
+                            )
+                        }
+                    }
                 }
             }
             literal(
@@ -389,13 +437,149 @@ internal object RootCommand {
             else -> 1
         }
 
+    private fun showCommandSummary(
+        source: CommandSourceStack,
+        diagnostics: CommandRegistrationDiagnostics,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val report = diagnostics.snapshot()
+            ?: return source.reply(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.commands.not_ready"))
+            )
+        source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.commands.routes_title"),
+                listOf(MessageArgument(report.generation.toString()))
+            ),
+        )
+        return source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.commands.summary"),
+                listOf(
+                    MessageArgument(report.installedCount.toString()),
+                    MessageArgument(report.skippedCount.toString()),
+                )
+            ),
+        )
+    }
+
+    private fun showCommandConflicts(
+        source: CommandSourceStack,
+        diagnostics: CommandRegistrationDiagnostics,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val report = diagnostics.snapshot()
+            ?: return source.reply(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.commands.not_ready"))
+            )
+        source.reply(
+            adventure,
+            messages.renderFor(playerId, MessageKey("core.commands.conflicts_title"))
+        )
+        if (report.conflicts.isEmpty()) {
+            return source.reply(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.commands.conflicts_none"))
+            )
+        }
+        report.conflicts.forEach { conflict ->
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.conflict"),
+                    listOf(
+                        MessageArgument(conflict.literal),
+                        MessageArgument(conflict.kind.name.lowercase()),
+                        MessageArgument(conflict.status.name.lowercase()),
+                        MessageArgument(conflict.fallback ?: "-"),
+                    ),
+                ),
+            )
+        }
+        return report.conflicts.size
+    }
+
+    private fun showCommandRoutes(
+        source: CommandSourceStack,
+        filter: String?,
+        diagnostics: CommandRegistrationDiagnostics,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val report = diagnostics.snapshot()
+            ?: return source.reply(
+                adventure,
+                messages.renderFor(playerId, MessageKey("core.commands.not_ready"))
+            )
+        val routes = report.results
+                .filter { it.status == CommandRouteStatus.INSTALLED }
+                .filter { filter == null || it.commandName == filter || it.literal == filter }
+
+        if (filter == null) {
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.routes_title"),
+                    listOf(MessageArgument(report.generation.toString()))
+                ),
+            )
+        } else {
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.routes_filtered"),
+                    listOf(MessageArgument(filter))
+                ),
+            )
+        }
+
+        if (routes.isEmpty()) {
+            return source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.routes_none"),
+                    listOf(MessageArgument(filter ?: "*"))
+                ),
+            )
+        }
+        routes.forEach { route ->
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.route"),
+                    listOf(
+                        MessageArgument(route.literal),
+                        MessageArgument(route.kind.name.lowercase()),
+                    ),
+                ),
+            )
+        }
+        return routes.size
+    }
+
     private fun reload(
         source: CommandSourceStack,
         config: ConfigStore<CellulosesConfig>,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
-        onReloadApplied: () -> Unit,
+        onReloadApplied: suspend () -> Unit,
     ): Int {
         val playerId = source.player?.uuid
         val target = source.feedbackTarget()

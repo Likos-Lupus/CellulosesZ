@@ -3,6 +3,8 @@ package top.likoslupus.cellulosesz.movement.teleport
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
+import top.likoslupus.cellulosesz.movement.CommittedTeleport
+import top.likoslupus.cellulosesz.movement.TeleportCommittedObserver
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
@@ -11,7 +13,8 @@ import kotlin.time.Duration
 
 /**
  * The one path every CellulosesZ-initiated player move goes through. It owns the fixed transaction:
- * preflight, optional delay, late destination resolution, commit, history, cooldown, result.
+ * preflight, optional delay, late destination resolution, commit, history, cooldown, result, and the
+ * post-commit observation of a confirmed success.
  */
 internal class TeleportCoordinator(
     private val backend: TeleportBackend,
@@ -20,6 +23,7 @@ internal class TeleportCoordinator(
     private val history: TeleportHistoryService,
     private val historyEnabled: () -> Boolean,
     private val confinement: (UUID) -> Boolean = { false },
+    private val observer: TeleportCommittedObserver = TeleportCommittedObserver.None,
 ) {
 
     private val logger = LoggerFactory.getLogger(TeleportCoordinator::class.java)
@@ -34,16 +38,25 @@ internal class TeleportCoordinator(
 
         // Administrative and jail transfers bypass the confinement gate so a jailed player can be
         // moved in and released; every player-instigated move is denied while confined.
-        if (!intent.cause.bypassesConfinementGate && confinement(intent.subjectId)) {
+        if (!intent.cause.bypassesConfinementGate
+            && confinement(intent.subjectId)
+        ) {
             return TeleportOutcome.Confined
         }
 
-        cooldowns.remaining(intent.subjectId, intent.policy.cooldown)?.let {
+        cooldowns.remaining(
+            intent.subjectId,
+            intent.policy.cooldown
+        )?.let {
             return TeleportOutcome.Cooldown(it)
         }
 
         if (intent.policy.delay > Duration.ZERO) {
-            val signal = pending.register(intent.subjectId, origin, intent.policy)
+            val signal = pending.register(
+                intent.subjectId,
+                origin,
+                intent.policy
+            )
             val cancellation = try {
                 withTimeoutOrNull(intent.policy.delay) { signal.await() }
             } finally {
@@ -60,19 +73,22 @@ internal class TeleportCoordinator(
                 target.position
 
             is TeleportDestination.Player ->
-                backend.position(target.playerId) ?: return TeleportOutcome.TargetOffline
+                backend.position(target.playerId)
+                    ?: return TeleportOutcome.TargetOffline
         }
 
         return when (
             val result = backend.move(
                 intent.subjectId,
                 destination,
-                intent.policy
+                intent.policy,
+                intent.cause,
             )
         ) {
             is BackendMoveResult.Success -> {
                 recordHistory(intent, origin)
                 cooldowns.recordSuccess(intent.subjectId)
+                observe(intent, origin, result.applied)
                 TeleportOutcome.Success(
                     TeleportReceipt(
                         intent.subjectId,
@@ -97,6 +113,12 @@ internal class TeleportCoordinator(
 
             BackendMoveResult.PassengerConflict ->
                 TeleportOutcome.PassengerConflict
+
+            BackendMoveResult.RejectedByPlatform ->
+                TeleportOutcome.RejectedByPlatform
+
+            is BackendMoveResult.RejectedByHook ->
+                TeleportOutcome.RejectedByHook(result.reason)
         }
     }
 
@@ -113,6 +135,33 @@ internal class TeleportCoordinator(
             // The teleport already happened; a history write failure only costs `/back`.
             logger.error(
                 "teleport_history_write_failed player={} cause={}",
+                intent.subjectId,
+                intent.cause,
+                exception,
+            )
+        }
+    }
+
+    private fun observe(
+        intent: TeleportIntent,
+        origin: StoredPosition,
+        applied: StoredPosition,
+    ) {
+        try {
+            observer.onCommitted(
+                CommittedTeleport(
+                    subjectId = intent.subjectId,
+                    origin = intent.cause.toOrigin(),
+                    from = origin.toEndpoint(),
+                    to = applied.toEndpoint(),
+                )
+            )
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            // The teleport is already committed; an observer failure never reverses that fact.
+            logger.error(
+                "teleport_observer_failed subject={} cause={}",
                 intent.subjectId,
                 intent.cause,
                 exception,

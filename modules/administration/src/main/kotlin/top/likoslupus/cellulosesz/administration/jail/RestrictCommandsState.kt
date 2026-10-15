@@ -1,19 +1,25 @@
 package top.likoslupus.cellulosesz.administration.jail
 
 /**
- * Process-wide snapshot of whether confined players are limited to the allowed commands, read by
- * [top.likoslupus.cellulosesz.administration.mixin.CommandsRestrictionMixin] and written by
- * [top.likoslupus.cellulosesz.administration.AdministrationFeature] from `[administration.jail]`.
- * A tiny static bridge is required because the mixin has no reference to the composition graph.
+ * Process-wide, single-purpose bridge holding the current [JailRestrictionSnapshot]. It is read by
+ * [top.likoslupus.cellulosesz.administration.mixin.CommandsRestrictionMixin] on the command path and
+ * written only by [top.likoslupus.cellulosesz.administration.AdministrationFeature]. A tiny static
+ * bridge is required because the mixin has no reference to the composition graph; it is a value
+ * holder, never a service locator.
  */
 internal object RestrictCommandsState {
 
-    @Volatile private var enabled: Boolean = false
+    @Volatile
+    private var snapshot: JailRestrictionSnapshot = JailRestrictionSnapshot.NONE
 
-    fun set(value: Boolean) {
-        enabled = value
+    fun set(value: JailRestrictionSnapshot) {
+        snapshot = value
     }
 
-    fun isEnabled(): Boolean = enabled
+    fun current(): JailRestrictionSnapshot = snapshot
+
+    fun clear() {
+        snapshot = JailRestrictionSnapshot.NONE
+    }
 
 }

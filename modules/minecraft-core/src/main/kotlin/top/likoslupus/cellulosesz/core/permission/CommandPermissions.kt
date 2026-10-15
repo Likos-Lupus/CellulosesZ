@@ -50,6 +50,13 @@ public object CommandPermissions {
             "Reload CellulosesZ configuration"
         )
 
+    public val ROOT_COMMANDS: PermissionSpec =
+        PermissionSpec(
+            "cellulosesz.command.cellulosesz.commands",
+            VanillaPermissionFallback.COMMANDS_MODERATOR,
+            "Inspect CellulosesZ command routes"
+        )
+
     /** Internal capability used by moderator notices and staff broadcasts (not a command node). */
     public val MODERATOR: PermissionSpec =
         PermissionSpec(
@@ -535,6 +542,7 @@ public object CommandPermissions {
         ROOT_LANGUAGE,
         ROOT_STATUS,
         ROOT_RELOAD,
+        ROOT_COMMANDS,
         MODERATOR,
         SET_HOME,
         HOME,

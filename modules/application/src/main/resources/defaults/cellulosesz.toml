@@ -120,6 +120,21 @@ density = "comfortable"
 # divider = "#71819A"
 
 # ---------------------------------------------------------------------------
+# Commands. These are registration-time bindings: changing any value needs a
+# restart. The namespaced form /cellulosesz:<command> is always available even
+# when the short names below are disabled or a short name was taken by another mod.
+# ---------------------------------------------------------------------------
+[commands]
+# Register the short canonical command names (for example /home). When a short name
+# is already owned by another mod, CellulosesZ skips it and keeps the namespaced form.
+shortNamesEnabled = true
+# Register the short aliases (for example /r, /czme). Same conflict rule as above.
+aliasesEnabled = true
+# Enhance vanilla `/help <command>` for CellulosesZ commands only. Plain `/help` and
+# every non-CellulosesZ query stay vanilla. Set false to leave `/help` entirely untouched.
+vanillaHelpOverlayEnabled = true
+
+# ---------------------------------------------------------------------------
 # Movement
 # ---------------------------------------------------------------------------
 [movement.teleport]
@@ -237,6 +252,9 @@ allowedRadius = 8.0
 returnOnRelease = true
 confinementCheckIntervalTicks = 20
 restrictCommands = false
+# Commands a confined player may still run when restrictCommands is true. Matched on the first token
+# (leading slash and case ignored); the namespaced form cellulosesz:<entry> is accepted automatically.
+allowedCommands = ["helpop"]
 
 [administration.playerAdjustments]
 # Upper bound for a single /exp give|take|set amount; larger values are clamped.

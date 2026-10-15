@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.movement.teleport
 
+import top.likoslupus.cellulosesz.movement.TeleportVetoReason
 import top.likoslupus.cellulosesz.movement.pending.TeleportCancellation
 
 /** Expected teleport failures are values; only invariants, IO, and storage faults throw. */
@@ -26,6 +27,12 @@ internal sealed interface TeleportOutcome {
     data class Cancelled(val reason: TeleportCancellation) : TeleportOutcome
 
     data object PassengerConflict : TeleportOutcome
+
+    /** The platform refused the move, so nothing was committed. */
+    data object RejectedByPlatform : TeleportOutcome
+
+    /** A final synchronous pre-commit hook vetoed the move. */
+    data class RejectedByHook(val reason: TeleportVetoReason) : TeleportOutcome
 
     data object RuntimeStopping : TeleportOutcome
 

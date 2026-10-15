@@ -26,6 +26,7 @@ public data class CellulosesConfig(
     public val administration: AdministrationSettings = AdministrationSettings(),
     public val utility: UtilitySettings = UtilitySettings(),
     public val players: PlayerSettings = PlayerSettings(),
+    public val commands: CommandRoutingSettings = CommandRoutingSettings(),
 )
 
 @Serializable
