@@ -45,8 +45,9 @@ class TextPresentationTest {
     private val theme = TextThemeResolver.resolve(TextSettings())
     private val messages = LocalizedMessages(
         catalog,
-        resolver
-    ) { theme }
+        resolver,
+        theme = { theme },
+    )
     private val presentation = DefaultTextPresentation(
         messages,
         resolver

@@ -12,6 +12,12 @@ internal sealed interface ModerationActor {
         val id: UUID,
         val name: String,
     ) : ModerationActor
+
+    /** An authorized addon acting through the public API; the id is recorded in the audit trail. */
+    data class Addon(
+        val id: String,
+    ) : ModerationActor
+
 }
 
 /** Snapshots the command source once so services never hold a [CommandSourceStack]. */

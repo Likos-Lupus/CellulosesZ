@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.administration.vanish
 
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket
+import top.likoslupus.cellulosesz.administration.integration.ModerationDomainEvent
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditAction
@@ -21,6 +22,7 @@ internal data class VanishResult(
 internal class VanishService(
     private val kernel: RuntimeKernel,
     private val audit: ModerationAuditService,
+    private val events: (ModerationDomainEvent) -> Unit = {},
 ) {
 
     private val vanished = LinkedHashSet<UUID>()
@@ -56,6 +58,7 @@ internal class VanishService(
             else -> ModerationAuditAction.VANISH_DISABLE
         }
         val recorded = audit.record(actor, action, identity)
+        events(ModerationDomainEvent.VanishStateChanged(identity.id, enable))
         return VanishResult(enable, recorded)
     }
 

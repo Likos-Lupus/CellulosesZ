@@ -2,12 +2,13 @@ package top.likoslupus.cellulosesz.utility
 
 import top.likoslupus.cellulosesz.foundation.database.schema.*
 
-/** Utility tables: the kit catalog, its item payloads, and per-player claims. */
+/** Utility tables: the kit catalog, its item payloads, per-player claims, and system grants. */
 public object UtilitySqlSchema : SqlSchemaContributor {
 
     public const val KITS: String = "cz_kits"
     public const val KIT_ITEMS: String = "cz_kit_items"
     public const val KIT_CLAIMS: String = "cz_kit_claims"
+    public const val KIT_GRANTS: String = "cz_kit_grants"
 
     public override val id: String
         get() = "utility"
@@ -48,6 +49,20 @@ public object UtilitySqlSchema : SqlSchemaContributor {
                 ),
                 primaryKey = listOf("namespace", "player_uuid", "kit_name"),
             ),
+            SqlTable(
+                name = KIT_GRANTS,
+                columns = listOf(
+                    SqlColumn("namespace", SqlColumnType.NAME),
+                    SqlColumn("addon_id", SqlColumnType.RESOURCE),
+                    SqlColumn("grant_id", SqlColumnType.RESOURCE),
+                    SqlColumn("player_uuid", SqlColumnType.UUID),
+                    SqlColumn("kit_name", SqlColumnType.NAME),
+                    SqlColumn("state", SqlColumnType.NAME),
+                    SqlColumn("created_at_ms", SqlColumnType.BIGINT),
+                    SqlColumn("delivered_at_ms", SqlColumnType.BIGINT, nullable = true),
+                ),
+                primaryKey = listOf("namespace", "addon_id", "grant_id", "player_uuid"),
+            ),
         )
 
     public override fun indexes(): List<SqlIndex> =
@@ -61,6 +76,11 @@ public object UtilitySqlSchema : SqlSchemaContributor {
             SqlIndex(
                 name = "cz_kit_claims_player",
                 table = KIT_CLAIMS,
+                columns = listOf("namespace", "player_uuid")
+            ),
+            SqlIndex(
+                name = "cz_kit_grants_player",
+                table = KIT_GRANTS,
                 columns = listOf("namespace", "player_uuid")
             ),
         )

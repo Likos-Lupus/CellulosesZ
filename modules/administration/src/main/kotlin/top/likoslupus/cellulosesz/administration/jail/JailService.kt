@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.administration.jail
 
 import com.mojang.logging.LogUtils
-import kotlinx.coroutines.CancellationException
 import top.likoslupus.cellulosesz.administration.config.JailSettings
+import top.likoslupus.cellulosesz.administration.integration.ModerationDomainEvent
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
 import top.likoslupus.cellulosesz.administration.moderation.ModerationState
@@ -15,10 +15,10 @@ import top.likoslupus.cellulosesz.administration.moderation.protection.Protectio
 import top.likoslupus.cellulosesz.administration.moderation.protection.TargetProtectionPolicy
 import top.likoslupus.cellulosesz.core.player.WorldPosition
 import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
-
 import java.time.Clock
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 /** Outcome of a jail or release request. Expected failures are values. */
 internal sealed interface JailActionOutcome {
@@ -30,11 +30,13 @@ internal sealed interface JailActionOutcome {
         val auditRecorded: Boolean,
         val expiresAt: Instant?,
         val returnRecorded: Boolean,
+        val actionId: String,
     ) : JailActionOutcome
 
     data class ReleaseRequested(
         val target: PlayerIdentity,
         val auditRecorded: Boolean,
+        val actionId: String? = null,
     ) : JailActionOutcome
 
     data object TargetUnknown : JailActionOutcome
@@ -93,6 +95,7 @@ internal class JailService(
     private val positions: JailPlayerPositionSource,
     private val settings: () -> JailSettings,
     private val clock: Clock,
+    private val events: (ModerationDomainEvent) -> Unit = {},
 ) {
 
     private val locationCache = LinkedHashMap<String, JailLocation>()
@@ -344,6 +347,8 @@ internal class JailService(
             expiresAt,
         )
         val transferred = runTransfer(target.id, location, JailTransferKind.CONFINEMENT)
+        val actionId = UUID.randomUUID().toString()
+        events(ModerationDomainEvent.Confined(target.id, actionId))
         return JailActionOutcome.Jailed(
             target,
             jailName,
@@ -351,6 +356,7 @@ internal class JailService(
             recorded,
             expiresAt,
             returnPosition != null,
+            actionId,
         )
     }
 
@@ -401,7 +407,9 @@ internal class JailService(
             ModerationAuditAction.UNJAIL,
             target
         )
-        return JailActionOutcome.ReleaseRequested(target, recorded)
+        val actionId = UUID.randomUUID().toString()
+        events(ModerationDomainEvent.Released(target.id, actionId))
+        return JailActionOutcome.ReleaseRequested(target, recorded, actionId)
     }
 
     /**

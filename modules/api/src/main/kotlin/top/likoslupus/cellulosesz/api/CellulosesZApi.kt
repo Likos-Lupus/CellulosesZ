@@ -1,5 +1,13 @@
 package top.likoslupus.cellulosesz.api
 
+import top.likoslupus.cellulosesz.api.communication.CommunicationApi
+import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
+import top.likoslupus.cellulosesz.api.kit.KitsApi
+import top.likoslupus.cellulosesz.api.moderation.ModerationApi
+import top.likoslupus.cellulosesz.api.movement.MovementApi
+import top.likoslupus.cellulosesz.api.player.PlayersApi
+import top.likoslupus.cellulosesz.api.presentation.PresentationApi
+
 /**
  * The independent public API contract version. It is deliberately separate from the mod runtime
  * version: `major = 0` means experimental, where a documented, versioned break is still possible.
@@ -50,5 +58,19 @@ public interface CellulosesZApi {
     public val visibility: VisibilityLookup
 
     public val teleports: TeleportEvents
+
+    public val player: PlayersApi
+
+    public val movement: MovementApi
+
+    public val communication: CommunicationApi
+
+    public val kits: KitsApi
+
+    public val moderation: ModerationApi
+
+    public val presentation: PresentationApi
+
+    public val extensions: ExtensionsApi
 
 }

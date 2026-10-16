@@ -100,6 +100,7 @@ internal class MinecraftBanBackend(
         when (actor) {
             ModerationActor.Console -> "Server"
             is ModerationActor.Player -> actor.name
+            is ModerationActor.Addon -> "Addon ${actor.id}"
         }
 
     private fun banMessage(

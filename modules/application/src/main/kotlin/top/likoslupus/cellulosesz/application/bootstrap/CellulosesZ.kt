@@ -3,7 +3,6 @@ package top.likoslupus.cellulosesz.application.bootstrap
 import dev.architectury.event.EventResult
 import dev.architectury.event.events.common.*
 import dev.architectury.platform.Platform
-import kotlinx.coroutines.Dispatchers
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.level.storage.LevelResource
 import top.likoslupus.cellulosesz.administration.AdministrationFeature
@@ -11,7 +10,14 @@ import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.api.ApiVersion
 import top.likoslupus.cellulosesz.api.PlayerIdentity
+import top.likoslupus.cellulosesz.api.communication.PrivateMessageDelivered
+import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
+import top.likoslupus.cellulosesz.api.movement.*
 import top.likoslupus.cellulosesz.application.api.*
+import top.likoslupus.cellulosesz.application.api.extension.AddonMessageOverlay
+import top.likoslupus.cellulosesz.application.api.extension.ApplicationExtensionHub
+import top.likoslupus.cellulosesz.application.api.extension.ComposedKitEligibility
+import top.likoslupus.cellulosesz.application.api.extension.ComposedTeleportPreflight
 import top.likoslupus.cellulosesz.application.command.CommandRegistrationDiagnostics
 import top.likoslupus.cellulosesz.application.command.RootCommand
 import top.likoslupus.cellulosesz.application.command.help.SelectiveVanillaHelpOverlay
@@ -49,17 +55,25 @@ import top.likoslupus.cellulosesz.foundation.database.DeferredDatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlSchemaContributor
 import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
-import top.likoslupus.cellulosesz.movement.TeleportCommittedObserver
 import top.likoslupus.cellulosesz.movement.createMovementFeature
+import top.likoslupus.cellulosesz.movement.integration.MovementDomainObserver
+import top.likoslupus.cellulosesz.movement.integration.MovementHomeChangeKind
+import top.likoslupus.cellulosesz.movement.integration.MovementRequestState
+import top.likoslupus.cellulosesz.movement.integration.MovementWarpChangeKind
 import top.likoslupus.cellulosesz.player.PlayerFeature
 import top.likoslupus.cellulosesz.player.PlayerSqlSchema
 import top.likoslupus.cellulosesz.player.createPlayerFeature
+import top.likoslupus.cellulosesz.player.integration.PlayerAfkCause
+import top.likoslupus.cellulosesz.player.integration.PlayerDomainObserver
 import top.likoslupus.cellulosesz.utility.UtilityFeature
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import top.likoslupus.cellulosesz.utility.createUtilityFeature
 import java.nio.file.Path
 import java.time.Instant
+import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.Dispatchers
 
 /**
  * The only composition root. It explicitly wires config, runtime, storage, shared identity lookup and
@@ -134,10 +148,12 @@ public object CellulosesZ {
             config.current.localization
         }
         val presentationTheme = { TextThemeResolver.resolve(config.current.text) }
+        val addonText = AddonMessageOverlay()
         val messages = LocalizedMessages(
             catalog,
             languageResolver,
-            presentationTheme
+            presentationTheme,
+            addonText,
         )
         val presentation = createTextPresentation(
             messages,
@@ -160,28 +176,15 @@ public object CellulosesZ {
             adventure = adventure,
             presentation = presentation,
         )
-        val apiProvider = ApplicationApiProvider()
-
-        // One API view per server session. A fresh session is opened in SERVER_STARTING so an old
-        // view can never be revived by a later session in the same JVM.
-        fun openApiSession() {
-            val session = apiProvider.beginSession()
-            apiProvider.attach(
-                ApplicationApi(
-                    version = ApiVersion(0, 1),
-                    players = ApiPlayerLookup(session.lease) { id ->
-                        known.knownById(id)?.let {
-                            PlayerIdentity(it.id, it.name)
-                        }
-                    },
-                    visibility = ApiVisibilityLookup(session.lease) { viewerId, targetId ->
-                        administration.canBeSeenBy(viewerId, targetId)
-                    },
-                    teleports = session.teleports,
-                )
-            )
-        }
+        val apiDispatcher = ApiRequestDispatcher(kernel)
+        val extensions = ApplicationExtensionHub(ApiAuthorization { config.current.api }, addonText)
+        val apiProvider = ApplicationApiProvider(extensions)
+        apiProvider.openRegistrationWindow()
+        val sessionEvents = AtomicReference<ApiSessionEvents?>(null)
         platform.publishApi(apiProvider)
+        val extensionsApi: ExtensionsApi = object : ExtensionsApi {
+            override fun registeredAddons(): List<String> = extensions.registeredAddonIds()
+        }
         movement = createMovementFeature(
             kernel = kernel,
             database = database,
@@ -194,8 +197,11 @@ public object CellulosesZ {
             requestReachability = { senderId, targetId ->
                 administration.canBeSeenBy(senderId, targetId)
             },
-            teleportObserver = TeleportCommittedObserver {
-                apiProvider.dispatchTeleport(it.toApiEvent())
+            teleportPreflight = ComposedTeleportPreflight(extensions),
+            teleportObserver = { committed ->
+                val event = committed.toApiEvent()
+                apiProvider.dispatchTeleport(event)
+                sessionEvents.get()?.movement?.dispatchTeleportCommitted(event)
             },
             permissions = permissions,
         )
@@ -230,6 +236,7 @@ public object CellulosesZ {
                     cleared
                 )
             },
+            kitEligibility = ComposedKitEligibility(extensions),
         )
         val playerFeature = createPlayerFeature(
             kernel = kernel,
@@ -244,6 +251,128 @@ public object CellulosesZ {
             permissions = permissions,
         )
 
+        // Domain facts are forwarded to the current session's public listeners (if any). The holder is
+        // swapped per session, so an old session's listeners never receive a new session's events.
+        playerFeature.domainObserver = object : PlayerDomainObserver {
+            override fun onAfkChanged(
+                playerId: UUID,
+                afk: Boolean,
+                cause: PlayerAfkCause
+            ) {
+                sessionEvents.get()?.player?.dispatchAfkChanged(playerId, afk, cause)
+            }
+
+            override fun onNicknameChanged(
+                playerId: UUID,
+                previous: String?,
+                current: String?
+            ) {
+                sessionEvents.get()?.player?.dispatchNicknameChanged(playerId, previous, current)
+            }
+
+            override fun onPresenceChanged(
+                playerId: UUID,
+                online: Boolean
+            ) {
+                sessionEvents.get()?.player?.dispatchPresenceChanged(playerId, online)
+            }
+        }
+        movement.domainObserver = object : MovementDomainObserver {
+            override fun onHomeChanged(
+                ownerId: UUID,
+                name: String,
+                kind: MovementHomeChangeKind
+            ) {
+                sessionEvents.get()?.movement?.dispatchHomeChanged(
+                    HomeChanged(ownerId, name, kind.toApiKind(), Instant.now())
+                )
+            }
+
+            override fun onWarpChanged(
+                name: String,
+                kind: MovementWarpChangeKind
+            ) {
+                sessionEvents.get()?.movement?.dispatchWarpChanged(
+                    WarpChanged(name, kind.toApiKind(), Instant.now())
+                )
+            }
+
+            override fun onSpawnChanged(configured: Boolean) {
+                sessionEvents.get()?.movement?.dispatchSpawnChanged(
+                    SpawnChanged(configured, Instant.now())
+                )
+            }
+
+            override fun onTeleportRequestChanged(
+                senderId: UUID,
+                targetId: UUID,
+                state: MovementRequestState,
+            ) {
+                sessionEvents.get()?.movement?.dispatchTeleportRequestChanged(
+                    TeleportRequestChanged(senderId, targetId, state.toApiState())
+                )
+            }
+        }
+        administration.integration.observe { event ->
+            sessionEvents.get()?.moderation?.dispatch(event)
+        }
+
+        // One API view per server session. A fresh session is opened in SERVER_STARTING so an old
+        // view can never be revived by a later session in the same JVM.
+        fun openApiSession() {
+            val session = apiProvider.beginSession()
+            val playerApi = PlayerApiAdapter(playerFeature.integration, apiDispatcher)
+            val movementApi = MovementApiAdapter(movement.integration, apiDispatcher)
+            val communicationApi = CommunicationApiAdapter(communication.integration, apiDispatcher)
+            val kitApi = KitApiAdapter(utility.integration, apiDispatcher)
+            val moderationApi = ModerationApiAdapter(administration.integration, apiDispatcher)
+            val presentationApi = PresentationApiAdapter(
+                lease = session.lease,
+                languages = languageResolver,
+                presentation = presentation,
+                adventure = adventure,
+                kernel = kernel,
+                dispatcher = apiDispatcher,
+                isOnline = playerFeature.integration::online,
+                registerHelp = extensions::registerHelpDocument,
+                resolveAddonText = { key, language -> addonText.resolve(key, language) },
+            )
+            val kitCatalog = utility.integration.observeCatalogChanges { event ->
+                kitApi.dispatchCatalogChanged(event)
+            }
+            sessionEvents.set(
+                ApiSessionEvents(
+                    player = playerApi,
+                    movement = movementApi,
+                    communication = communicationApi,
+                    kit = kitApi,
+                    moderation = moderationApi,
+                    kitCatalog = { kitCatalog.close() },
+                )
+            )
+            apiProvider.attach(
+                ApplicationApi(
+                    version = ApiVersion(0, 1),
+                    players = ApiPlayerLookup(session.lease) { id ->
+                        known.knownById(id)?.let {
+                            PlayerIdentity(it.id, it.name)
+                        }
+                    },
+                    visibility = ApiVisibilityLookup(session.lease) { viewerId, targetId ->
+                        administration.canBeSeenBy(viewerId, targetId)
+                    },
+                    teleports = session.teleports,
+                    player = playerApi,
+                    movement = movementApi,
+                    communication = communicationApi,
+                    kits = kitApi,
+                    moderation = moderationApi,
+                    presentation = presentationApi,
+                    extensions = extensionsApi,
+                )
+            )
+        }
+
         val integration = CommunicationIntegration(
             senderGate = {
                 when {
@@ -256,13 +385,16 @@ public object CellulosesZ {
             targetReachability = { senderId, targetId ->
                 administration.canBeSeenBy(senderId, targetId)
             },
-            observer = {
+            observer = { message ->
                 administration.observePrivateMessage(
-                    senderId = it.senderId,
-                    senderName = it.senderName,
-                    targetId = it.targetId,
-                    targetName = it.targetName,
-                    text = it.text,
+                    senderId = message.senderId,
+                    senderName = message.senderName,
+                    targetId = message.targetId,
+                    targetName = message.targetName,
+                    text = message.text,
+                )
+                sessionEvents.get()?.communication?.eventSink()?.dispatchPrivateMessageDelivered(
+                    PrivateMessageDelivered(message.senderId, message.targetId)
                 )
             },
         )
@@ -400,6 +532,7 @@ public object CellulosesZ {
         LifecycleEvent.SERVER_STOPPING.register {
             health.transition(ApplicationHealth.State.STOPPING)
             apiProvider.markStopping()
+            sessionEvents.getAndSet(null)?.clear()
             movement.onServerStopping()
             communication.onServerStopping()
             administration.onServerStopping()
@@ -495,3 +628,51 @@ public object CellulosesZ {
                 .resolve("cellulosesz")
 
 }
+
+/**
+ * The per-session public API adapters. A fresh instance is built in `openApiSession()` and dropped in
+ * `SERVER_STOPPING`, so no listener or subscription from one session survives into the next.
+ */
+private class ApiSessionEvents(
+    val player: PlayerApiAdapter,
+    val movement: MovementApiAdapter,
+    val communication: CommunicationApiAdapter,
+    val kit: KitApiAdapter,
+    val moderation: ModerationApiAdapter,
+    private val kitCatalog: () -> Unit,
+) {
+
+    fun clear() {
+        player.clear()
+        movement.clear()
+        communication.eventSink().clear()
+        kit.close()
+        moderation.clear()
+        runCatching { kitCatalog() }
+    }
+
+}
+
+private fun MovementHomeChangeKind.toApiKind(): HomeChangeKind =
+    when (this) {
+        MovementHomeChangeKind.CREATED -> HomeChangeKind.CREATED
+        MovementHomeChangeKind.UPDATED -> HomeChangeKind.UPDATED
+        MovementHomeChangeKind.RENAMED -> HomeChangeKind.RENAMED
+        MovementHomeChangeKind.DELETED -> HomeChangeKind.DELETED
+    }
+
+private fun MovementWarpChangeKind.toApiKind(): WarpChangeKind =
+    when (this) {
+        MovementWarpChangeKind.CREATED -> WarpChangeKind.CREATED
+        MovementWarpChangeKind.UPDATED -> WarpChangeKind.UPDATED
+        MovementWarpChangeKind.DELETED -> WarpChangeKind.DELETED
+    }
+
+private fun MovementRequestState.toApiState(): TeleportRequestState =
+    when (this) {
+        MovementRequestState.PENDING -> TeleportRequestState.PENDING
+        MovementRequestState.ACCEPTED -> TeleportRequestState.ACCEPTED
+        MovementRequestState.DENIED -> TeleportRequestState.DENIED
+        MovementRequestState.CANCELLED -> TeleportRequestState.CANCELLED
+        MovementRequestState.EXPIRED -> TeleportRequestState.EXPIRED
+    }

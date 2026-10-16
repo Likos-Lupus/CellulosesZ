@@ -19,15 +19,18 @@ import top.likoslupus.cellulosesz.player.afk.AfkService
 import top.likoslupus.cellulosesz.player.command.*
 import top.likoslupus.cellulosesz.player.config.PlayerSettings
 import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.integration.*
 import top.likoslupus.cellulosesz.player.nearby.NearbyService
-import top.likoslupus.cellulosesz.player.nickname.JdbcNicknameRepository
-import top.likoslupus.cellulosesz.player.nickname.NicknameService
-import top.likoslupus.cellulosesz.player.nickname.NicknameState
+import top.likoslupus.cellulosesz.player.nickname.*
 import top.likoslupus.cellulosesz.player.presence.PlayerPresenceService
+import top.likoslupus.cellulosesz.player.presence.PresenceLookup
 import top.likoslupus.cellulosesz.player.session.JdbcPlayerSessionRepository
 import top.likoslupus.cellulosesz.player.session.PlayerSessionService
 import top.likoslupus.cellulosesz.player.session.SessionCloseKind
 import java.time.Clock
+import java.util.*
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.time.toJavaDuration
 
 /**
  * Public surface of the player bounded context (presence, sessions, nicknames, player queries).
@@ -47,6 +50,90 @@ public class PlayerFeature internal constructor(
     private val settings: () -> PlayerSettings,
     private val clock: Clock,
 ) {
+
+    private val onlineSnapshot = AtomicReference<Set<UUID>>(emptySet())
+    private val afkSnapshot = AtomicReference<Map<UUID, Boolean>>(emptyMap())
+
+    /** Receives committed player-domain facts; set by the composition root. */
+    public var domainObserver: PlayerDomainObserver = PlayerDomainObserver.None
+
+    /** Narrow integration surface for the public API; never exposes the internal services. */
+    public val integration: PlayerIntegrationPort = PlayerIntegration()
+
+    private inner class PlayerIntegration : PlayerIntegrationPort {
+
+        override fun online(playerId: UUID): Boolean =
+            playerId in onlineSnapshot.get()
+
+        override fun afk(playerId: UUID): Boolean? =
+            when (playerId) {
+                !in onlineSnapshot.get() -> null
+                else -> afkSnapshot.get()[playerId] ?: false
+            }
+
+        override suspend fun profile(playerId: UUID): PlayerProfileResult =
+            when (val lookup = presence.lookupById(playerId)) {
+                is PresenceLookup.Found -> PlayerProfileResult.Found(
+                    PlayerProfileSnapshot(
+                        playerId = lookup.presence.id,
+                        lastKnownName = lookup.presence.name,
+                        online = lookup.presence.online,
+                        firstSeen = lookup.presence.firstSeen,
+                        lastSeen = lookup.presence.lastSeen,
+                        playtime = lookup.presence.playtime.toJavaDuration(),
+                    )
+                )
+
+                PresenceLookup.NotFound -> PlayerProfileResult.Unknown
+                PresenceLookup.StorageUnavailable -> PlayerProfileResult.StorageUnavailable
+            }
+
+        override suspend fun nickname(playerId: UUID): NicknameResult =
+            when (val current = nicknames.current(playerId)) {
+                is NicknameCurrent.Set -> NicknameResult.Current(current.display)
+                NicknameCurrent.None -> NicknameResult.Current(null)
+                NicknameCurrent.StorageUnavailable -> NicknameResult.StorageUnavailable
+            }
+
+        override suspend fun changeOwnNickname(
+            actorId: UUID,
+            newName: String?,
+        ): NicknameChangeResult {
+            val previous = (nicknames.current(actorId) as? NicknameCurrent.Set)?.display
+            val result = when (newName) {
+                null -> when (nicknames.clear(actorId)) {
+                    NicknameSetResult.Cleared -> NicknameChangeResult.Changed(null)
+                    NicknameSetResult.Disabled -> NicknameChangeResult.Disabled
+                    NicknameSetResult.StorageUnavailable -> NicknameChangeResult.StorageUnavailable
+                    else -> NicknameChangeResult.InvalidName
+                }
+
+                else -> when (
+                    val set = nicknames.set(
+                        actorId,
+                        newName,
+                        actorId
+                    )
+                ) {
+                    is NicknameSetResult.Set -> NicknameChangeResult.Changed(set.display)
+                    NicknameSetResult.Disabled -> NicknameChangeResult.Disabled
+                    NicknameSetResult.Reserved -> NicknameChangeResult.Reserved
+                    NicknameSetResult.Taken -> NicknameChangeResult.NameTaken
+                    NicknameSetResult.StorageUnavailable -> NicknameChangeResult.StorageUnavailable
+                    else -> NicknameChangeResult.InvalidName
+                }
+            }
+            if (result is NicknameChangeResult.Changed) {
+                domainObserver.onNicknameChanged(
+                    actorId,
+                    previous,
+                    result.name
+                )
+            }
+            return result
+        }
+
+    }
 
     public fun commands(): List<CommandDefinition> =
         SessionCommands.commands(
@@ -93,6 +180,9 @@ public class PlayerFeature internal constructor(
     /** Begins a fresh play session and hydrates the nickname display. Must run on the server thread. */
     public fun onPlayerJoined(player: ServerPlayer) {
         sessions.begin(player.uuid)
+        onlineSnapshot.set(onlineSnapshot.get() + player.uuid)
+        afkSnapshot.set(afkSnapshot.get() + (player.uuid to false))
+        domainObserver.onPresenceChanged(player.uuid, true)
         applyNicknameDisplay()
         kernel.launch { nicknames.loadDisplay(player.uuid) }
     }
@@ -111,6 +201,9 @@ public class PlayerFeature internal constructor(
         sessions.end(player.uuid, SessionCloseKind.NORMAL)
         afk.clear(player.uuid)
         nicknames.clearDisplay(player.uuid)
+        onlineSnapshot.set(onlineSnapshot.get() - player.uuid)
+        afkSnapshot.set(afkSnapshot.get() - player.uuid)
+        domainObserver.onPresenceChanged(player.uuid, false)
     }
 
     /** Server-thread tick hook that drives auto-AFK. */
@@ -123,11 +216,19 @@ public class PlayerFeature internal constructor(
             z = player.z,
             yaw = player.yRot,
             pitch = player.xRot,
-        ) ?: return
-        announce(change)
+        )
+        afkSnapshot.set(afkSnapshot.get() + (player.uuid to afk.isAfk(player.uuid)))
+        if (change != null) {
+            announce(change)
+        }
     }
 
     private fun announce(change: AfkChange) {
+        domainObserver.onAfkChanged(
+            change.playerId,
+            change.afk,
+            PlayerAfkCause.OTHER
+        )
         if (!settings().afk.announceStateChanges) {
             return
         }

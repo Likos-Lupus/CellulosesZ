@@ -28,6 +28,34 @@ internal object ConfigValidation {
             addAll(UtilitySettingsValidation.validate(config.utility))
             addAll(PlayerSettingsValidation.validate(config.players))
             addAll(validateVanillaOverrides(config.commands))
+            addAll(validateApiIntegrations(config.api))
+        }
+
+    /** Addon integration entries must be well-formed: non-blank ids and capability names. */
+    private fun validateApiIntegrations(
+        api: ApiIntegrationSettings,
+    ): List<ValidationError> =
+        buildList {
+            api.addons.forEach { (addonId, settings) ->
+                if (addonId.isBlank()) {
+                    add(
+                        ValidationError(
+                            "api.integrations.addons",
+                            "addon id must not be blank",
+                        )
+                    )
+                }
+                settings.allowedCapabilities.forEach { capability ->
+                    if (capability.isBlank()) {
+                        add(
+                            ValidationError(
+                                "api.integrations.addons.$addonId.allowedCapabilities",
+                                "capability must not be blank",
+                            )
+                        )
+                    }
+                }
+            }
         }
 
     /**

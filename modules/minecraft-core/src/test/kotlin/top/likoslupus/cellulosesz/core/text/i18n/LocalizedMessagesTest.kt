@@ -55,8 +55,9 @@ class LocalizedMessagesTest {
     )
     private val messages = LocalizedMessages(
         catalog,
-        resolver
-    ) { theme }
+        resolver,
+        theme = { theme },
+    )
 
     @Test
     fun `primary and secondary roles receive their colors`() {

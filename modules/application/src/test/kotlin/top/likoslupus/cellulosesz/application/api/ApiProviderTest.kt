@@ -3,6 +3,9 @@ package top.likoslupus.cellulosesz.application.api
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.api.*
+import top.likoslupus.cellulosesz.application.api.extension.AddonMessageOverlay
+import top.likoslupus.cellulosesz.application.api.extension.ApplicationExtensionHub
+import top.likoslupus.cellulosesz.application.config.ApiIntegrationSettings
 import java.util.*
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -13,13 +16,35 @@ import java.util.concurrent.atomic.AtomicInteger
  */
 class ApiProviderTest {
 
-    private fun api(session: ApiSession): ApplicationApi =
-        ApplicationApi(
-            version = ApiVersion(0, 1),
-            players = ApiPlayerLookup(session.lease) { PlayerIdentity(it, "name") },
-            visibility = ApiVisibilityLookup(session.lease) { _, _ -> true },
-            teleports = session.teleports,
+    private fun newHub(): ApplicationExtensionHub =
+        ApplicationExtensionHub(
+            ApiAuthorization {
+                ApiIntegrationSettings()
+            },
+            AddonMessageOverlay(),
         )
+
+    private fun provider(): ApplicationApiProvider =
+        ApplicationApiProvider(newHub())
+
+    private fun api(session: ApiSession): CellulosesZApi =
+        object : CellulosesZApi {
+            override val version: ApiVersion = ApiVersion(0, 1)
+            override val players: PlayerLookup = ApiPlayerLookup(session.lease) {
+                PlayerIdentity(it, "name")
+            }
+            override val visibility: VisibilityLookup = ApiVisibilityLookup(session.lease) { _, _ ->
+                true
+            }
+            override val teleports: TeleportEvents = session.teleports
+            override val player get() = error("unused in ApiProviderTest")
+            override val movement get() = error("unused in ApiProviderTest")
+            override val communication get() = error("unused in ApiProviderTest")
+            override val kits get() = error("unused in ApiProviderTest")
+            override val moderation get() = error("unused in ApiProviderTest")
+            override val presentation get() = error("unused in ApiProviderTest")
+            override val extensions get() = error("unused in ApiProviderTest")
+        }
 
     private fun event(): TeleportCommitted =
         TeleportCommitted(
@@ -39,7 +64,7 @@ class ApiProviderTest {
 
     @Test
     fun `a listener registered before ready is delivered exactly once`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
 
@@ -53,7 +78,7 @@ class ApiProviderTest {
 
     @Test
     fun `registering after ready delivers immediately and once`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
         provider.markReady()
@@ -65,7 +90,7 @@ class ApiProviderTest {
 
     @Test
     fun `cancel before ready prevents delivery and close is idempotent`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
 
@@ -80,7 +105,7 @@ class ApiProviderTest {
 
     @Test
     fun `a listener registered while stopping is never delivered`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
         provider.markStopping()
@@ -93,7 +118,7 @@ class ApiProviderTest {
 
     @Test
     fun `an old session view never revives when a new session is ready`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
 
         val first = provider.beginSession()
         val firstApi = api(first)
@@ -119,7 +144,7 @@ class ApiProviderTest {
 
     @Test
     fun `teleport events are scoped to the ready session`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
         provider.markReady()
@@ -141,7 +166,7 @@ class ApiProviderTest {
 
     @Test
     fun `a throwing listener does not stop the others or the provider`() {
-        val provider = ApplicationApiProvider()
+        val provider = provider()
         val session = provider.beginSession()
         provider.attach(api(session))
 

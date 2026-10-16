@@ -339,3 +339,16 @@ defaultRadius = 100
 maximumRadius = 256
 maximumResults = 20
 hideSpectators = true
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+# System-level capabilities trusted addons may request through the public API.
+# Deny-by-default: an addon receives nothing until it is listed here.
+[api]
+enabled = false
+# Per-addon grants, for example:
+# [api.addons."example_quests"]
+# allowedCapabilities = ["kit.grant", "mail.send.system"]
+# [api.addons."example_admin_bridge"]
+# allowedCapabilities = ["moderation.mute", "moderation.unmute"]

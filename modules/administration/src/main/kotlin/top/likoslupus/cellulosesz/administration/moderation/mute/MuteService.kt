@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.administration.moderation.mute
 
 import com.mojang.logging.LogUtils
-import kotlinx.coroutines.CancellationException
 import top.likoslupus.cellulosesz.administration.config.ModerationSettings
+import top.likoslupus.cellulosesz.administration.integration.ModerationDomainEvent
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
 import top.likoslupus.cellulosesz.administration.moderation.ModerationState
@@ -18,6 +18,7 @@ import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 import java.time.Clock
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 internal sealed interface MuteResult {
 
@@ -25,6 +26,7 @@ internal sealed interface MuteResult {
         val target: PlayerIdentity,
         val expiresAt: Instant?,
         val auditRecorded: Boolean,
+        val actionId: String,
     ) : MuteResult
 
     data object TargetUnknown : MuteResult
@@ -42,6 +44,7 @@ internal sealed interface UnmuteResult {
     data class Unmuted(
         val target: PlayerIdentity,
         val auditRecorded: Boolean,
+        val actionId: String,
     ) : UnmuteResult
 
     data object TargetUnknown : UnmuteResult
@@ -64,6 +67,7 @@ internal class MuteService(
     private val audit: ModerationAuditService,
     private val settings: () -> ModerationSettings,
     private val clock: Clock,
+    private val events: (ModerationDomainEvent) -> Unit = {},
 ) {
 
     private val active = HashMap<UUID, Mute>()
@@ -204,10 +208,19 @@ internal class MuteService(
             reason.value,
             expiresAt
         )
+        val actionId = UUID.randomUUID().toString()
+        events(
+            ModerationDomainEvent.Muted(
+                target.id,
+                expiresAt,
+                actionId
+            )
+        )
         return MuteResult.Applied(
             target,
             expiresAt,
-            recorded
+            recorded,
+            actionId,
         )
     }
 
@@ -250,9 +263,12 @@ internal class MuteService(
             ModerationAuditAction.UNMUTE,
             target
         )
+        val actionId = UUID.randomUUID().toString()
+        events(ModerationDomainEvent.Unmuted(target.id, actionId))
         return UnmuteResult.Unmuted(
             target,
-            recorded
+            recorded,
+            actionId,
         )
     }
 

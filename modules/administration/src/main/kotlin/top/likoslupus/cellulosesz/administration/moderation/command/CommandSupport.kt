@@ -26,6 +26,7 @@ internal val ModerationActor.displayName: String
     get() = when (this) {
         ModerationActor.Console -> "Console"
         is ModerationActor.Player -> name
+        is ModerationActor.Addon -> "Addon $id"
     }
 
 internal fun resolveReason(

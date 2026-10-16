@@ -88,29 +88,36 @@ internal class TeleportRequestService(
 
         val byTarget = outbound[senderId]
         val existing = byTarget?.get(targetId)
-        if (existing != null) {
-            byTarget[targetId] = existing.copy(type = type, createdAt = timeSource.markNow())
-            return TpaSendResult.Refreshed(targetId)
-        }
+        return when {
+            existing != null -> {
+                byTarget[targetId] = existing.copy(
+                    type = type,
+                    createdAt = timeSource.markNow()
+                )
+                TpaSendResult.Refreshed(targetId)
+            }
 
-        if (totalCount() >= settings().maxRequestsServerWide) {
-            return TpaSendResult.ServerQueueFull
-        }
-        if ((byTarget?.size ?: 0) >= settings().maxOutgoingPerPlayer) {
-            return TpaSendResult.SenderQueueFull
-        }
-        if (incomingCount(targetId) >= settings().maxIncomingPerPlayer) {
-            return TpaSendResult.TargetQueueFull(targetId)
-        }
+            totalCount() >= settings().maxRequestsServerWide ->
+                TpaSendResult.ServerQueueFull
 
-        val target = byTarget ?: HashMap<UUID, TeleportRequest>().also { outbound[senderId] = it }
-        target[targetId] = TeleportRequest(
-            senderId,
-            targetId,
-            type,
-            timeSource.markNow()
-        )
-        return TpaSendResult.Sent(targetId)
+            (byTarget?.size ?: 0) >= settings().maxOutgoingPerPlayer ->
+                TpaSendResult.SenderQueueFull
+
+            incomingCount(targetId) >= settings().maxIncomingPerPlayer ->
+                TpaSendResult.TargetQueueFull(targetId)
+
+            else -> {
+                val target = byTarget
+                    ?: HashMap<UUID, TeleportRequest>().also { outbound[senderId] = it }
+                target[targetId] = TeleportRequest(
+                    senderId,
+                    targetId,
+                    type,
+                    timeSource.markNow()
+                )
+                TpaSendResult.Sent(targetId)
+            }
+        }
     }
 
     /**
@@ -144,7 +151,8 @@ internal class TeleportRequestService(
         var blocking: TpaBatchSendResult? = null
         for (targetId in eligible) {
             when (send(senderId, targetId, type)) {
-                is TpaSendResult.Sent, is TpaSendResult.Refreshed ->
+                is TpaSendResult.Sent,
+                is TpaSendResult.Refreshed ->
                     recipients += targetId
 
                 TpaSendResult.SenderQueueFull -> {
@@ -219,6 +227,23 @@ internal class TeleportRequestService(
     }
 
     /**
+     * Drops the single outbound request from [senderId] to [targetId], returning whether it existed.
+     * Used by the public API so cancelling one request does not drop a sender's other requests.
+     */
+    fun cancelOne(senderId: UUID, targetId: UUID): Boolean {
+        purgeExpired()
+        val byTarget = outbound[senderId]
+            ?: return false
+        if (byTarget.remove(targetId) == null) {
+            return false
+        }
+        if (byTarget.isEmpty()) {
+            outbound.remove(senderId)
+        }
+        return true
+    }
+
+    /**
      * Drops requests sent by [playerId] and requests targeting [playerId].
      * Returns the senders whose outbound request was dropped because the target left.
      */
@@ -256,7 +281,7 @@ internal class TeleportRequestService(
         outbound.values.sumOf { it.size }
 
     private fun incomingCount(targetId: UUID): Int =
-        outbound.values.count { requests -> requests.containsKey(targetId) }
+        outbound.values.count { it.containsKey(targetId) }
 
     private fun remainingBatchCooldown(senderId: UUID): Duration? {
         val cooldown = settings().batchCooldownSeconds.seconds

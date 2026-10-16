@@ -14,6 +14,8 @@ import top.likoslupus.cellulosesz.utility.config.UtilitySettings
 import top.likoslupus.cellulosesz.utility.inspection.InspectionCommands
 import top.likoslupus.cellulosesz.utility.inspection.InspectionService
 import top.likoslupus.cellulosesz.utility.inspection.MinecraftInspectionBackend
+import top.likoslupus.cellulosesz.utility.integration.KitIntegrationPort
+import top.likoslupus.cellulosesz.utility.integration.UtilityKitIntegration
 import top.likoslupus.cellulosesz.utility.item.AdministrativeActionAuditPort
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityCommands
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityService
@@ -31,6 +33,7 @@ import java.util.*
  */
 public class UtilityFeature internal constructor(
     private val kits: KitService,
+    private val kitGrants: KitGrantService,
     private val items: ItemUtilityService,
     private val workstations: WorkstationService,
     private val inspection: InspectionService,
@@ -41,6 +44,9 @@ public class UtilityFeature internal constructor(
     private val presentation: TextPresentation,
     private val audit: AdministrativeActionAuditPort,
 ) {
+
+    /** Narrow, Minecraft-free integration surface for the public kit facade. */
+    public val integration: KitIntegrationPort = UtilityKitIntegration(kits, kitGrants)
 
     public fun commands(): List<CommandDefinition> =
         KitCommands.commands(
@@ -101,23 +107,36 @@ public fun createUtilityFeature(
     adventure: AdventureRuntime,
     presentation: TextPresentation,
     audit: AdministrativeActionAuditPort = AdministrativeActionAuditPort { _, _, _, _ -> },
+    kitEligibility: KitClaimEligibility = KitClaimEligibility.AllowAll,
 ): UtilityFeature {
     val runner = kernel.serverThreadRunner()
+    val clock = Clock.systemUTC()
     val codec = KitItemCodec {
         kernel.requireServer()
                 .registryAccess()
                 .createSerializationContext(JsonOps.INSTANCE)
     }
 
+    val kitInventory = MinecraftKitInventoryBackend(kernel)
     val kits = KitService(
         runner = runner,
         definitions = JdbcKitRepository(database, namespace, codec),
         claims = JdbcKitClaimRepository(database, namespace),
-        inventory = MinecraftKitInventoryBackend(kernel),
+        inventory = kitInventory,
         known = known,
         claimLocks = KeyedMutex(),
         settings = { settings().kits },
-        clock = Clock.systemUTC(),
+        clock = clock,
+        eligibility = kitEligibility,
+    )
+    val kitGrants = KitGrantService(
+        runner = runner,
+        kits = kits,
+        grants = JdbcKitGrantRepository(database, namespace),
+        inventory = kitInventory,
+        known = known,
+        settings = { settings().kits },
+        clock = clock,
     )
     val items = ItemUtilityService(
         backend = MinecraftItemUtilityBackend(kernel),
@@ -135,6 +154,7 @@ public fun createUtilityFeature(
 
     return UtilityFeature(
         kits = kits,
+        kitGrants = kitGrants,
         items = items,
         workstations = workstations,
         inspection = inspection,

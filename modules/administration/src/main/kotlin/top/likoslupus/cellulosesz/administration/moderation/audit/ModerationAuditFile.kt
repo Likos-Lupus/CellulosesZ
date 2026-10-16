@@ -57,6 +57,13 @@ internal data class PersistedModerationActor(
                         id = actor.id.toString(),
                         name = actor.name
                     )
+
+                is ModerationActor.Addon ->
+                    PersistedModerationActor(
+                        type = "addon",
+                        id = null,
+                        name = actor.id
+                    )
             }
 
     }

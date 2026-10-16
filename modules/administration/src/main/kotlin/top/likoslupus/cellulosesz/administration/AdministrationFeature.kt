@@ -3,8 +3,11 @@ package top.likoslupus.cellulosesz.administration
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
+import top.likoslupus.cellulosesz.administration.integration.*
 import top.likoslupus.cellulosesz.administration.jail.*
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
+import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
+import top.likoslupus.cellulosesz.administration.moderation.ModerationState
 import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
 import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditAction
@@ -16,9 +19,7 @@ import top.likoslupus.cellulosesz.administration.moderation.ban.MinecraftBanBack
 import top.likoslupus.cellulosesz.administration.moderation.identity.MinecraftAccountResolver
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickCommands
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickService
-import top.likoslupus.cellulosesz.administration.moderation.mute.JdbcMuteRepository
-import top.likoslupus.cellulosesz.administration.moderation.mute.MuteCommands
-import top.likoslupus.cellulosesz.administration.moderation.mute.MuteService
+import top.likoslupus.cellulosesz.administration.moderation.mute.*
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
 import top.likoslupus.cellulosesz.administration.moderation.protection.TargetProtectionPolicy
 import top.likoslupus.cellulosesz.administration.operator.MinecraftPlayerControlBackend
@@ -31,7 +32,10 @@ import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.command.requiresPermission
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.WorldPosition
@@ -46,7 +50,9 @@ import top.likoslupus.cellulosesz.core.text.model.NoticeTone
 import top.likoslupus.cellulosesz.core.text.model.TextArgument
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 import java.time.Clock
+import java.time.Duration
 import java.util.*
 
 /**
@@ -66,10 +72,204 @@ public class AdministrationFeature internal constructor(
     private val audit: ModerationAuditService,
     private val settings: () -> AdministrationSettings,
     private val kernel: RuntimeKernel,
+    private val permissions: PermissionService,
+    private val events: ModerationEventBus,
     private val messages: LocalizedMessages,
     private val adventure: AdventureRuntime,
     private val presentation: TextPresentation,
 ) : ConfinementQuery {
+
+    /** Narrow integration surface for the public API; never exposes the internal services. */
+    public val integration: ModerationIntegrationPort = ModerationIntegration()
+
+    private inner class ModerationIntegration : ModerationIntegrationPort {
+
+        override fun isMuted(viewerId: UUID, subjectId: UUID): Boolean =
+            mutes.isMuted(subjectId)
+
+        override fun observe(observer: ModerationDomainObserver): ModerationEventRegistration =
+            events.subscribe(observer)
+
+        override suspend fun status(
+            viewerId: UUID,
+            subjectId: UUID,
+        ): ModerationIntegrationStatus {
+            if (!authorizeViewer(viewerId, CommandPermissions.MUTE_INFO)) {
+                return ModerationIntegrationStatus.NotAuthorized
+            }
+            val muteState = mutes.state()
+            val jailState = jail.state()
+            if (muteState == ModerationState.STOPPING
+                || jailState == ModerationState.STOPPING
+            ) {
+                return ModerationIntegrationStatus.RuntimeStopping
+            }
+            if (muteState == ModerationState.LOADING
+                || jailState == ModerationState.LOADING
+            ) {
+                return ModerationIntegrationStatus.StorageUnavailable
+            }
+            return kernel.onServerThread {
+                val mute = mutes.activeMute(subjectId)
+                val confined = jail.isConfined(subjectId)
+                val knownTarget = known.onlineById(subjectId) != null ||
+                        known.knownById(subjectId) != null
+
+                when (mute) {
+                    null if !confined && !knownTarget -> ModerationIntegrationStatus.NotFound
+                    else -> ModerationIntegrationStatus.Known(
+                        ModerationStatusSummary(
+                            muted = mute != null,
+                            mutedUntil = mute?.expiresAt,
+                            confined = confined,
+                        )
+                    )
+                }
+            }
+        }
+
+        override suspend fun mute(
+            actor: ModerationIntegrationActor,
+            targetId: UUID,
+            reason: String,
+            duration: Duration?,
+        ): ModerationIntegrationOutcome =
+            when {
+                !authorize(
+                    actor,
+                    when (duration) {
+                        null -> CommandPermissions.MUTE
+                        else -> CommandPermissions.TEMP_MUTE
+                    }
+                ) -> ModerationIntegrationOutcome.NotAuthorized
+
+                duration != null && (duration.isZero || duration.isNegative) ->
+                    ModerationIntegrationOutcome.InvalidDuration
+
+                else -> {
+                    val targetName = resolveName(targetId)
+                        ?: return ModerationIntegrationOutcome.TargetUnknown
+                    val parsed = parseReason(
+                        reason,
+                        settings().moderation.defaultMuteReason
+                    ) ?: return ModerationIntegrationOutcome.InvalidReason
+                    val temporary = duration?.let(::TemporaryDuration)
+                    return mutes.mute(
+                        actor.toDomain(),
+                        targetName,
+                        parsed,
+                        temporary
+                    ).toIntegration()
+                }
+            }
+
+        override suspend fun unmute(
+            actor: ModerationIntegrationActor,
+            targetId: UUID,
+        ): ModerationIntegrationOutcome {
+            if (!authorize(actor, CommandPermissions.UNMUTE)) {
+                return ModerationIntegrationOutcome.NotAuthorized
+            }
+
+            val targetName = resolveName(targetId)
+                ?: return ModerationIntegrationOutcome.TargetUnknown
+            return mutes.unmute(actor.toDomain(), targetName).toIntegration()
+        }
+
+        override suspend fun confine(
+            actor: ModerationIntegrationActor,
+            targetId: UUID,
+            reason: String,
+        ): ModerationIntegrationOutcome {
+            if (!authorize(actor, CommandPermissions.JAIL)) {
+                return ModerationIntegrationOutcome.NotAuthorized
+            }
+
+            val targetName = resolveName(targetId)
+                ?: return ModerationIntegrationOutcome.TargetUnknown
+            val parsed = parseReason(reason, DEFAULT_JAIL_REASON)
+                ?: return ModerationIntegrationOutcome.InvalidReason
+            val jailName = kernel.onServerThread { defaultJailName() }
+                ?: return ModerationIntegrationOutcome.Unavailable
+            return jail.jail(
+                actor.toDomain(),
+                targetName,
+                jailName,
+                null,
+                parsed
+            ).toIntegration()
+        }
+
+        override suspend fun release(
+            actor: ModerationIntegrationActor,
+            targetId: UUID,
+        ): ModerationIntegrationOutcome {
+            if (!authorize(actor, CommandPermissions.UNJAIL)) {
+                return ModerationIntegrationOutcome.NotAuthorized
+            }
+
+            val targetName = resolveName(targetId)
+                ?: return ModerationIntegrationOutcome.TargetUnknown
+            return jail.release(actor.toDomain(), targetName).toIntegration()
+        }
+
+    }
+
+    /**
+     * Authorizes an action actor. A player must be online and hold [spec]; an addon actor is only
+     * ever constructed by the application adapter after it verified the addon's capability, so it is
+     * trusted here (it still gets its own audit actor type).
+     */
+    private suspend fun authorize(
+        actor: ModerationIntegrationActor,
+        spec: PermissionSpec,
+    ): Boolean =
+        when (actor) {
+            is ModerationIntegrationActor.Addon -> true
+            is ModerationIntegrationActor.Player -> authorizeViewer(actor.playerId, spec)
+        }
+
+    private suspend fun authorizeViewer(viewerId: UUID, spec: PermissionSpec): Boolean =
+        kernel.onServerThread {
+            kernel.requireServer().playerList
+                    .getPlayer(viewerId)
+                    ?.createCommandSourceStack()
+                    ?.requiresPermission(permissions, spec)
+                ?: false
+        }
+
+    private suspend fun ModerationIntegrationActor.toDomain(): ModerationActor =
+        when (this) {
+            is ModerationIntegrationActor.Addon -> ModerationActor.Addon(addonId)
+            is ModerationIntegrationActor.Player -> ModerationActor.Player(
+                playerId,
+                kernel.onServerThread {
+                    kernel.requireServer().playerList.getPlayer(playerId)?.gameProfile?.name
+                } ?: playerId.toString(),
+            )
+        }
+
+    private suspend fun resolveName(targetId: UUID): String? =
+        kernel.onServerThread {
+            known.onlineById(targetId)?.name
+                ?: known.knownById(targetId)?.name
+        }
+
+    private fun parseReason(raw: String, default: String): ModerationReason? {
+        val effective = raw.trim().ifEmpty { default }
+        return ModerationReason.parse(
+            effective,
+            settings().moderation.maxReasonLength
+        )
+    }
+
+    private fun defaultJailName(): String? =
+        settings().jail.defaultJail.let {
+            when {
+                it.isNotBlank() -> it
+                else -> jail.locations().firstOrNull()?.name?.value
+            }
+        }
 
     public fun commands(): List<CommandDefinition> {
         val moderation = { settings().moderation }
@@ -320,6 +520,72 @@ public class AdministrationFeature internal constructor(
 
 }
 
+private const val DEFAULT_JAIL_REASON: String = "Jailed by an administrator"
+
+/** Maps the internal mute outcome onto the integration port's result set. */
+private fun MuteResult.toIntegration(): ModerationIntegrationOutcome =
+    when (this) {
+        is MuteResult.Applied ->
+            when {
+                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
+                else -> ModerationIntegrationOutcome.PartiallyApplied
+            }
+
+        MuteResult.AlreadyMuted -> ModerationIntegrationOutcome.AlreadyInState
+        MuteResult.SelfTarget -> ModerationIntegrationOutcome.ProtectedTarget
+        MuteResult.TargetProtected -> ModerationIntegrationOutcome.ProtectedTarget
+        MuteResult.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
+        MuteResult.DurationTooLong -> ModerationIntegrationOutcome.InvalidDuration
+        MuteResult.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
+        MuteResult.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
+    }
+
+/** Maps the internal unmute outcome onto the integration port's result set. */
+private fun UnmuteResult.toIntegration(): ModerationIntegrationOutcome =
+    when (this) {
+        is UnmuteResult.Unmuted ->
+            when {
+                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
+                else -> ModerationIntegrationOutcome.PartiallyApplied
+            }
+
+        UnmuteResult.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
+        UnmuteResult.NotMuted -> ModerationIntegrationOutcome.AlreadyInState
+        UnmuteResult.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
+        UnmuteResult.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
+    }
+
+/** Maps the internal jail outcome onto the integration port's result set. */
+private fun JailActionOutcome.toIntegration(): ModerationIntegrationOutcome =
+    when (this) {
+        is JailActionOutcome.Jailed ->
+            when {
+                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
+                else -> ModerationIntegrationOutcome.PartiallyApplied
+            }
+
+        is JailActionOutcome.ReleaseRequested ->
+            actionId.let {
+                when {
+                    it == null -> ModerationIntegrationOutcome.AlreadyInState
+                    !auditRecorded -> ModerationIntegrationOutcome.PartiallyApplied
+                    else -> ModerationIntegrationOutcome.Applied(it)
+                }
+            }
+
+        JailActionOutcome.AlreadyJailed -> ModerationIntegrationOutcome.AlreadyInState
+        JailActionOutcome.NotJailed -> ModerationIntegrationOutcome.AlreadyInState
+        JailActionOutcome.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
+        JailActionOutcome.SelfTarget -> ModerationIntegrationOutcome.ProtectedTarget
+        JailActionOutcome.TargetProtected -> ModerationIntegrationOutcome.ProtectedTarget
+        JailActionOutcome.InvalidJailName -> ModerationIntegrationOutcome.Unavailable
+        is JailActionOutcome.JailUnknown -> ModerationIntegrationOutcome.Unavailable
+        JailActionOutcome.NoDefaultJail -> ModerationIntegrationOutcome.Unavailable
+        JailActionOutcome.Disabled -> ModerationIntegrationOutcome.Unavailable
+        JailActionOutcome.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
+        JailActionOutcome.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
+    }
+
 public fun createAdministrationFeature(
     kernel: RuntimeKernel,
     database: DatabaseRuntime,
@@ -335,12 +601,18 @@ public fun createAdministrationFeature(
     val clock = Clock.systemUTC()
     val accountResolver = MinecraftAccountResolver(known)
     val protection = TargetProtectionPolicy(kernel) { settings().moderation }
+    val events = ModerationEventBus()
     val audit = ModerationAuditService(
         repository = JdbcModerationAuditRepository(database, namespace),
         settings = { settings().moderation },
         clock = clock,
     )
-    val notifier = ModerationNotifier(kernel, permissions, adventure, presentation)
+    val notifier = ModerationNotifier(
+        kernel,
+        permissions,
+        adventure,
+        presentation
+    )
     val kick = KickService(
         kernel = kernel,
         accountResolver = accountResolver,
@@ -364,6 +636,7 @@ public fun createAdministrationFeature(
         audit = audit,
         settings = { settings().moderation },
         clock = clock,
+        events = events::publish,
     )
     val control = PlayerControlService(
         kernel = kernel,
@@ -373,7 +646,7 @@ public fun createAdministrationFeature(
         audit = audit,
     )
     val spies = SocialSpyService(kernel, audit)
-    val vanish = VanishService(kernel, audit)
+    val vanish = VanishService(kernel, audit, events = events::publish)
     val adjustments = PlayerAdjustmentService(
         backend = MinecraftPlayerAdjustmentBackend(kernel),
         known = known,
@@ -401,6 +674,7 @@ public fun createAdministrationFeature(
         },
         settings = { settings().jail },
         clock = clock,
+        events = events::publish,
     )
 
     return AdministrationFeature(
@@ -417,6 +691,8 @@ public fun createAdministrationFeature(
         audit = audit,
         settings = settings,
         kernel = kernel,
+        permissions = permissions,
+        events = events,
         messages = messages,
         adventure = adventure,
         presentation = presentation,

@@ -15,6 +15,9 @@ import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.home.HomeCommands
 import top.likoslupus.cellulosesz.movement.home.HomeService
 import top.likoslupus.cellulosesz.movement.home.JdbcHomeRepository
+import top.likoslupus.cellulosesz.movement.integration.DefaultMovementIntegration
+import top.likoslupus.cellulosesz.movement.integration.MovementDomainObserver
+import top.likoslupus.cellulosesz.movement.integration.MovementIntegrationPort
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.pending.TeleportCancellation
 import top.likoslupus.cellulosesz.movement.random.*
@@ -64,6 +67,24 @@ public class MovementFeature internal constructor(
     private val presentation: TextPresentation,
     private val permissions: PermissionService,
 ) {
+
+    /** Committed movement facts; the composition root forwards them to public API listeners. */
+    public var domainObserver: MovementDomainObserver = MovementDomainObserver.None
+
+    /** Narrow integration surface exposed to the application's public-API movement adapter. */
+    public val integration: MovementIntegrationPort = DefaultMovementIntegration(
+        teleports = teleports,
+        homes = homes,
+        warps = warps,
+        spawn = spawn,
+        requests = requests,
+        tpAuto = tpAuto,
+        backend = backend,
+        settings = settings,
+        kernel = kernel,
+        permissions = permissions,
+        observer = { domainObserver },
+    )
 
     public fun commands(): List<CommandDefinition> {
         val teleportSettings = { settings().teleport }

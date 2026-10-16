@@ -142,6 +142,79 @@ internal class FakeKitClaimRepository : KitClaimRepository {
 
 }
 
+internal class FakeKitGrantRepository : KitGrantRepository {
+
+    private data class Key(
+        val addonId: String,
+        val grantId: String,
+        val playerId: UUID,
+    )
+
+    private val records = HashMap<Key, KitGrantRecord>()
+
+    var failFind = false
+    var failReserve = false
+    var failFinalize = false
+
+    fun stateOf(
+        addonId: String,
+        grantId: String,
+        playerId: UUID
+    ): KitGrantStatus? =
+        records[Key(addonId, grantId, playerId)]?.state
+
+    override suspend fun find(
+        addonId: String,
+        grantId: String,
+        playerId: UUID,
+    ): KitGrantRecord? {
+        if (failFind) {
+            throw KitGrantDataException("find failed")
+        }
+        return records[Key(addonId, grantId, playerId)]
+    }
+
+    override suspend fun reserve(
+        addonId: String,
+        playerId: UUID,
+        kitName: KitName,
+        grantId: String,
+        at: Instant,
+    ): KitGrantReservation {
+        if (failReserve) {
+            throw KitGrantDataException("reserve failed")
+        }
+        val key = Key(addonId, grantId, playerId)
+        records[key]?.let { return KitGrantReservation.Existing(it.state) }
+        records[key] = KitGrantRecord(
+            addonId = addonId,
+            grantId = grantId,
+            playerId = playerId,
+            kitName = kitName,
+            state = KitGrantStatus.RESERVED,
+            createdAt = at,
+            deliveredAt = null,
+        )
+        return KitGrantReservation.Inserted
+    }
+
+    override suspend fun markDelivered(
+        addonId: String,
+        grantId: String,
+        playerId: UUID,
+        at: Instant,
+    ): Boolean {
+        if (failFinalize) {
+            throw KitGrantDataException("finalize failed")
+        }
+        val key = Key(addonId, grantId, playerId)
+        val existing = records[key] ?: return false
+        records[key] = existing.copy(state = KitGrantStatus.DELIVERED, deliveredAt = at)
+        return true
+    }
+
+}
+
 internal class FakeKitInventoryBackend : KitInventoryBackend {
 
     var captureResult: KitCaptureResult = KitCaptureResult.Captured(emptyList())
@@ -182,15 +255,21 @@ internal class FakeItemUtilityBackend : ItemUtilityBackend {
     var itemLoreResult: ItemLoreBackendResult = ItemLoreBackendResult.NoHeldItem
     var hatResult: HatBackendResult = HatBackendResult.NoHeldItem
     var clearResult: ClearInventoryBackendResult = ClearInventoryBackendResult.Cleared(0)
-    var snapshotResult: InventorySnapshotResult =
-        InventorySnapshotResult.Snapshot(InventorySnapshot(ClearScope.MAIN, 0, emptyList()))
+    var snapshotResult: InventorySnapshotResult = InventorySnapshotResult.Snapshot(
+        InventorySnapshot(
+            ClearScope.MAIN,
+            0,
+            emptyList()
+        )
+    )
 
     override fun repair(
         playerId: UUID,
         scope: RepairScope,
         allowEnchanted: Boolean,
         includeArmor: Boolean,
-    ): RepairBackendResult = repairResult
+    ): RepairBackendResult =
+        repairResult
 
     override fun more(playerId: UUID, amount: Int?): MoreBackendResult =
         moreResult
@@ -210,11 +289,13 @@ internal class FakeItemUtilityBackend : ItemUtilityBackend {
     override fun snapshotInventory(
         playerId: UUID,
         scope: ClearScope,
-    ): InventorySnapshotResult = snapshotResult
+    ): InventorySnapshotResult =
+        snapshotResult
 
     override fun clearInventory(
         playerId: UUID,
         scope: ClearScope,
-    ): ClearInventoryBackendResult = clearResult
+    ): ClearInventoryBackendResult =
+        clearResult
 
 }

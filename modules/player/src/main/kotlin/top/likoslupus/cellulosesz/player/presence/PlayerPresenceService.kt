@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.player.presence
 
-import kotlinx.coroutines.CancellationException
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.identity.PersistedPlayerIdentity
@@ -10,6 +9,7 @@ import top.likoslupus.cellulosesz.player.session.PlayerSessionService
 import java.time.Clock
 import java.util.*
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
 
 /**
  * Resolves seen/playtime/whois queries. The in-memory [KnownPlayerResolver] is the fast path (online
@@ -27,7 +27,8 @@ internal class PlayerPresenceService(
     /** Resolves one player and gathers presence, or reports absence/storage failure. */
     suspend fun lookup(rawName: String): PresenceLookup {
         val resolved = kernel.onServerThread {
-            known.onlineByName(rawName) ?: known.knownByName(rawName)
+            known.onlineByName(rawName)
+                ?: known.knownByName(rawName)
         }
         return try {
             val durable = when (resolved) {
@@ -51,12 +52,33 @@ internal class PlayerPresenceService(
     suspend fun playtime(playerId: UUID): Duration =
         sessions.playtime(playerId, clock.instant())
 
+    /** Resolves one player by UUID for the public API (no name parsing). */
+    suspend fun lookupById(playerId: UUID): PresenceLookup {
+        val knownId = kernel.onServerThread { known.knownById(playerId) }
+        val durable = try {
+            identities.findById(playerId)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            return PresenceLookup.StorageUnavailable
+        }
+        val identity = when {
+            knownId != null -> knownId
+            durable != null -> KnownPlayerIdentity(durable.id, durable.name)
+            else -> return PresenceLookup.NotFound
+        }
+        return PresenceLookup.Found(build(identity, durable))
+    }
+
     private suspend fun build(
         identity: KnownPlayerIdentity,
         durable: PersistedPlayerIdentity?,
     ): PlayerPresence {
         val online = kernel.onServerThread { known.onlineById(identity.id) != null }
-        val playtime = sessions.playtime(identity.id, clock.instant())
+        val playtime = sessions.playtime(
+            identity.id,
+            clock.instant()
+        )
         return PlayerPresence(
             id = identity.id,
             name = identity.name,

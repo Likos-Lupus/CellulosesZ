@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.utility.kit
 
 import com.mojang.logging.LogUtils
-import kotlinx.coroutines.CancellationException
 import net.minecraft.world.item.ItemStack
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
@@ -11,6 +10,8 @@ import top.likoslupus.cellulosesz.utility.config.KitSettings
 import java.time.Clock
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CancellationException
 
 internal sealed interface ClaimKitResult {
 
@@ -30,6 +31,8 @@ internal sealed interface ClaimKitResult {
     data class Cooldown(val remaining: Duration) : ClaimKitResult
     data object AlreadyUsed : ClaimKitResult
     data object DeliveryFailedAfterReservation : ClaimKitResult
+
+    data class Denied(val reasonKey: String) : ClaimKitResult
 
 }
 
@@ -137,11 +140,34 @@ internal class KitService(
     private val claimLocks: KeyedMutex<UUID>,
     private val settings: () -> KitSettings,
     private val clock: Clock,
+    private val eligibility: KitClaimEligibility = KitClaimEligibility.AllowAll,
 ) {
 
     private val catalog = HashMap<KitName, KitDefinition>()
 
+    private val catalogListeners = CopyOnWriteArrayList<KitCatalogListener>()
+
     @Volatile private var state: KitCatalogState = KitCatalogState.Loading
+
+    /** Product policy gate shared by the command path and the integration port. */
+    fun enabled(): Boolean = settings().enabled
+
+    /** Registers a catalog-mutation observer; close the handle to unregister it. */
+    fun observeCatalogChanges(listener: KitCatalogListener): KitCatalogRegistration {
+        catalogListeners += listener
+        return KitCatalogRegistration { catalogListeners.remove(listener) }
+    }
+
+    /** Server-thread-confined catalog resolution, distinguishing missing from not-yet-loaded. */
+    suspend fun lookup(name: KitName): KitLookup =
+        runner.run {
+            when (state) {
+                KitCatalogState.Loading -> KitLookup.Loading
+                is KitCatalogState.Failed -> KitLookup.StorageUnavailable
+                KitCatalogState.Ready -> catalog[name]?.let(KitLookup::Found)
+                    ?: KitLookup.NotFound
+            }
+        }
 
     fun beginLoad() {
         state = KitCatalogState.Loading
@@ -227,6 +253,12 @@ internal class KitService(
                 KitReusePolicy.Always -> Unit
             }
 
+        }
+
+        when (val decision = eligibility.evaluate(playerId, kit.name.value)) {
+            KitEligibilityDecision.Allow -> Unit
+            is KitEligibilityDecision.Deny ->
+                return ClaimKitResult.Denied(decision.reasonKey)
         }
 
         when (
@@ -375,7 +407,10 @@ internal class KitService(
             if (!definitions.create(definition)) {
                 CreateKitResult.AlreadyExists
             } else {
-                runner.run { catalog[name] = definition }
+                runner.run {
+                    catalog[name] = definition
+                    publishCatalogChange(name, KitCatalogChange.CREATED)
+                }
                 CreateKitResult.Created(definition)
             }
         } catch (cancellation: CancellationException) {
@@ -428,7 +463,10 @@ internal class KitService(
             if (!definitions.replace(definition)) {
                 UpdateKitResult.NotFound
             } else {
-                runner.run { catalog[name] = definition }
+                runner.run {
+                    catalog[name] = definition
+                    publishCatalogChange(name, KitCatalogChange.UPDATED)
+                }
                 UpdateKitResult.Updated(definition)
             }
         } catch (cancellation: CancellationException) {
@@ -460,7 +498,10 @@ internal class KitService(
             if (!definitions.remove(name)) {
                 DeleteKitResult.NotFound
             } else {
-                runner.run { catalog.remove(name) }
+                runner.run {
+                    catalog.remove(name)
+                    publishCatalogChange(name, KitCatalogChange.DELETED)
+                }
                 DeleteKitResult.Deleted(name)
             }
         } catch (cancellation: CancellationException) {
@@ -551,6 +592,14 @@ internal class KitService(
         } catch (exception: Exception) {
             LOGGER.error("failed to reset kit {} for {}", name.value, target.id, exception)
             ResetKitResult.StorageUnavailable
+        }
+    }
+
+    private fun publishCatalogChange(name: KitName, change: KitCatalogChange) {
+        val at = clock.instant()
+        catalogListeners.forEach { listener ->
+            runCatching { listener.onChanged(name, change, at) }
+                    .onFailure { LOGGER.warn("kit catalog listener failed", it) }
         }
     }
 

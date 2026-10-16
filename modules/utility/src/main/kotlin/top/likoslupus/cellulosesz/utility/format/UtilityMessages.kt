@@ -80,6 +80,12 @@ internal object UtilityMessages {
 
                 ClaimKitResult.DeliveryFailedAfterReservation ->
                     notice(MessageKey("utility.kit.delivery_failed"))
+
+                is ClaimKitResult.Denied ->
+                    notice(
+                        MessageKey("utility.kit.denied"),
+                        identifier(requestedName)
+                    )
             }
         )
 

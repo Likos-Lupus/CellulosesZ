@@ -24,6 +24,7 @@ public class LocalizedMessages(
     private val catalog: TranslationCatalog,
     private val languages: LanguageResolver,
     private val theme: () -> TextTheme,
+    private val overlay: MessageOverlay = MessageOverlay.Empty,
 ) {
 
     public fun renderFor(
@@ -204,8 +205,11 @@ public class LocalizedMessages(
         )
 
     private fun templateFor(language: LanguageId, key: MessageKey): MessageTemplate? =
-        catalog.template(language, key)
+        overlay.template(language, key)
+            ?: catalog.template(language, key)
+            ?: overlay.template(languages.serverDefault(), key)
             ?: catalog.template(languages.serverDefault(), key)
+            ?: overlay.template(BundledTranslations.baseline, key)
             ?: catalog.template(BundledTranslations.baseline, key)
 
 }

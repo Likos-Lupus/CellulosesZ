@@ -2,6 +2,15 @@ package top.likoslupus.cellulosesz.application.api
 
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.api.*
+import top.likoslupus.cellulosesz.api.communication.CommunicationApi
+import top.likoslupus.cellulosesz.api.extension.ExtensionRegistrationListener
+import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
+import top.likoslupus.cellulosesz.api.kit.KitsApi
+import top.likoslupus.cellulosesz.api.moderation.ModerationApi
+import top.likoslupus.cellulosesz.api.movement.MovementApi
+import top.likoslupus.cellulosesz.api.player.PlayersApi
+import top.likoslupus.cellulosesz.api.presentation.PresentationApi
+import top.likoslupus.cellulosesz.application.api.extension.ApplicationExtensionHub
 import top.likoslupus.cellulosesz.movement.CommittedTeleport
 import top.likoslupus.cellulosesz.movement.TeleportOrigin
 import java.util.*
@@ -14,6 +23,13 @@ internal class ApplicationApi(
     override val players: PlayerLookup,
     override val visibility: VisibilityLookup,
     override val teleports: TeleportEvents,
+    override val player: PlayersApi,
+    override val movement: MovementApi,
+    override val communication: CommunicationApi,
+    override val kits: KitsApi,
+    override val moderation: ModerationApi,
+    override val presentation: PresentationApi,
+    override val extensions: ExtensionsApi,
 ) : CellulosesZApi
 
 /**
@@ -68,7 +84,9 @@ internal class ApiSession(
  * unless it is cancelled first. A view obtained from an earlier session returns [ApiQuery.Stopping]
  * forever once that session is closed; it is never revived by a later session.
  */
-internal class ApplicationApiProvider : CellulosesZApiProvider {
+internal class ApplicationApiProvider(
+    private val extensions: ApplicationExtensionHub,
+) : CellulosesZApiProvider {
 
     private val lock = Any()
     private var state: ApiAvailability = ApiAvailability.NOT_READY
@@ -77,6 +95,8 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
     private var api: CellulosesZApi? = null
     private val pending = LinkedHashMap<Long, PendingListener>()
     private var nextRegistration: Long = 0
+    private var registrationOpen: Boolean = false
+    private val registrationPending = LinkedHashMap<Long, ExtensionRegistrationListener>()
 
     private class PendingListener(
         val id: Long,
@@ -116,29 +136,35 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
         synchronized(lock) {
             val current = session
             val currentApi = api
-            when (state) {
-                ApiAvailability.READY if current != null
+            when {
+                state == ApiAvailability.READY
+                        && current != null
                         && currentApi != null
                         && current.lease.isReady -> {
                     deliverNow = currentApi to listener
                     registration = null
                 }
 
-                ApiAvailability.NOT_READY if current != null -> {
+                else -> {
+                    // No live ready session yet (never started, between sessions, or shutting down):
+                    // bind to the next session's READY so an early registration is not lost. A session
+                    // that is already shutting down is not the target — the next epoch is.
+                    val targetEpoch = if (current != null
+                        && state == ApiAvailability.NOT_READY
+                    ) {
+                        current.epoch
+                    } else {
+                        epoch + 1
+                    }
                     val record = PendingListener(
                         ++nextRegistration,
-                        current.epoch,
+                        targetEpoch,
                         listener,
                         AtomicBoolean(false),
                     )
                     pending[record.id] = record
                     deliverNow = null
                     registration = record
-                }
-
-                else -> {
-                    deliverNow = null
-                    registration = null
                 }
             }
         }
@@ -150,6 +176,50 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
         return when (registration) {
             null -> Subscription { }
             else -> Subscription { cancel(registration.id) }
+        }
+    }
+
+    /**
+     * Opens the startup contribution window. Called once during mod init; contributions registered
+     * before it opens are delivered immediately, and any queued listener is drained outside the lock.
+     */
+    fun openRegistrationWindow() {
+        val queued: List<ExtensionRegistrationListener>
+        synchronized(lock) {
+            if (registrationOpen) {
+                return
+            }
+            registrationOpen = true
+            queued = registrationPending.values.toList()
+            registrationPending.clear()
+        }
+        queued.forEach(::deliverRegistration)
+    }
+
+    override fun whenRegistrationOpen(
+        listener: ExtensionRegistrationListener,
+    ): Subscription {
+        var id: Long? = null
+        var deliverNow = false
+        synchronized(lock) {
+            if (registrationOpen) {
+                deliverNow = true
+            } else {
+                val key = ++nextRegistration
+                registrationPending[key] = listener
+                id = key
+            }
+        }
+        if (deliverNow) {
+            deliverRegistration(listener)
+        }
+
+        return when (val key = id) {
+            null -> Subscription { }
+            else ->
+                Subscription {
+                    synchronized(lock) { registrationPending.remove(key) }
+                }
         }
     }
 
@@ -171,7 +241,9 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
                 }
             }
         }
-        deliveries.forEach { (target, value) -> deliver(target, value) }
+        deliveries.forEach { (target, value) ->
+            deliver(target, value)
+        }
     }
 
     fun markStopping() {
@@ -186,8 +258,11 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
     fun markStopped() {
         synchronized(lock) {
             session?.lease?.close()
+            session = null
+            api = null
             state = ApiAvailability.STOPPED
-            pending.clear()
+            // Future-bound registrations (epoch + 1) survive into the next session; this session's
+            // pending were already dropped in markStopping.
         }
     }
 
@@ -211,6 +286,11 @@ internal class ApplicationApiProvider : CellulosesZApiProvider {
     private fun deliver(listener: ApiReadyListener, value: CellulosesZApi) {
         runCatching { listener.onReady(value) }
                 .onFailure { LOGGER.warn("api_ready_listener_failed", it) }
+    }
+
+    private fun deliverRegistration(listener: ExtensionRegistrationListener) {
+        runCatching { listener.onRegistrationOpen(extensions) }
+                .onFailure { LOGGER.warn("api_registration_listener_failed", it) }
     }
 
     private companion object {
@@ -249,6 +329,7 @@ internal class ApiVisibilityLookup(
             )
 
             SessionPhase.CREATED -> ApiQuery.NotReady
+
             SessionPhase.CLOSED -> ApiQuery.Stopping
         }
 
@@ -269,6 +350,7 @@ internal class ApiTeleportEvents(
         if (lease.phase() == SessionPhase.CLOSED) {
             return Subscription { }
         }
+
         listeners += listener
         return Subscription { listeners.remove(listener) }
     }
@@ -277,6 +359,7 @@ internal class ApiTeleportEvents(
         if (!lease.isReady) {
             return
         }
+
         listeners.forEach { listener ->
             runCatching { listener.onCommitted(event) }
                     .onFailure {

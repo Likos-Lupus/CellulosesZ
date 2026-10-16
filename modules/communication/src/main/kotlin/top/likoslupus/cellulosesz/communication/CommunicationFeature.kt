@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommand
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
+import top.likoslupus.cellulosesz.communication.integration.CommunicationIntegrationPort
+import top.likoslupus.cellulosesz.communication.integration.DefaultCommunicationIntegrationPort
 import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
 import top.likoslupus.cellulosesz.communication.mail.MailRateLimiter
 import top.likoslupus.cellulosesz.communication.mail.MailService
@@ -76,6 +78,20 @@ public class CommunicationFeature internal constructor(
     private val languages: LanguageResolver,
     private val documentTheme: () -> DocumentTheme,
 ) {
+
+    /**
+     * The addon-facing integration seam. It exposes only domain operations; capability
+     * authorization and the public API projection are the application adapter's responsibility.
+     */
+    public val integration: CommunicationIntegrationPort =
+        DefaultCommunicationIntegrationPort(
+            runner = kernel.serverThreadRunner(),
+            known = known,
+            privateMessages = privateMessages,
+            preferences = preferences,
+            mail = mail,
+            announcements = announcements,
+        )
 
     public fun commands(integration: CommunicationIntegration): List<CommandDefinition> {
         holder.value = integration
