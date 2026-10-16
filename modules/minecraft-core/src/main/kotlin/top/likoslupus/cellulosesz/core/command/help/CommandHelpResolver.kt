@@ -6,6 +6,7 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDocumentId
 import top.likoslupus.cellulosesz.core.command.dsl.CommandNodeSpec
 import top.likoslupus.cellulosesz.core.command.dsl.LiteralNodeSpec
 import top.likoslupus.cellulosesz.core.command.registry.CommandRouteName
+import top.likoslupus.cellulosesz.core.command.registry.VanillaCommandCatalog
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 
 /**
@@ -53,6 +54,11 @@ public class CommandHelpResolver(
             put(it.name, it)
             put(CommandRouteName.namespaced(it.name), it)
             it.aliases.forEach { alias -> put(alias, it) }
+            // A protected `cz` fallback (e.g. `/czme`) resolves to the same documentation as the
+            // canonical command; it is not a DSL alias, so it is added from the conflict catalog.
+            VanillaCommandCatalog.forCanonical(it.name)?.let { vanilla ->
+                put(vanilla.fallbackLiteral, it)
+            }
         }
     }
 

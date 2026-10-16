@@ -26,13 +26,12 @@ class CommandRegistryConflictTest {
 
     private val permissions = PermissionService(VanillaFallbackPermissionBridge)
 
-    private val buildContext: CommandBuildContext =
-        CommandBuildContext.simple(
-            HolderLookup.Provider.create(Stream.empty()),
-            FeatureFlagSet.of(),
-        )
+    private val buildContext: CommandBuildContext = CommandBuildContext.simple(
+        HolderLookup.Provider.create(Stream.empty()),
+        FeatureFlagSet.of(),
+    )
 
-    private val pureBuilder = CommandRootBuilder { _, literal, _, _ ->
+    private val pureBuilder = CommandRootBuilder { _, literal, _, _, _ ->
         LiteralArgumentBuilder
                 .literal<CommandSourceStack>(literal)
                 .executes { 1 }.build()

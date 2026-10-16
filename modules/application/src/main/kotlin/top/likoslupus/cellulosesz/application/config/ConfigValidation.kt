@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.application.config
 
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettingsValidation
 import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidation
-import top.likoslupus.cellulosesz.communication.config.meRouteMode
+import top.likoslupus.cellulosesz.core.command.registry.VanillaCommandCatalog
 import top.likoslupus.cellulosesz.core.text.TextSettingsValidation
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
@@ -27,6 +27,37 @@ internal object ConfigValidation {
             addAll(AdministrationSettingsValidation.validate(config.administration))
             addAll(UtilitySettingsValidation.validate(config.utility))
             addAll(PlayerSettingsValidation.validate(config.players))
+            addAll(validateVanillaOverrides(config.commands))
+        }
+
+    /**
+     * The vanilla-override allowlist is validated regardless of the global switch: a target that is
+     * unknown, unverified for this version, or duplicated must fail loudly rather than be silently
+     * ignored (see [VanillaCommandCatalog]).
+     */
+    private fun validateVanillaOverrides(
+        commands: CommandRoutingSettings,
+    ): List<ValidationError> =
+        buildList {
+            val overrides = commands.vanillaOverrides
+            overrides.commands
+                    .groupingBy { it }
+                    .eachCount()
+                    .filterValues { it > 1 }
+                    .keys
+                    .forEach { literal ->
+                        add(
+                            ValidationError(
+                                "commands.vanillaOverrides.commands",
+                                "duplicate vanilla override '$literal'",
+                            )
+                        )
+                    }
+            overrides.commands.forEach { literal ->
+                VanillaCommandCatalog.takeoverProblem(literal)?.let { problem ->
+                    add(ValidationError("commands.vanillaOverrides.commands", problem))
+                }
+            }
         }
 
     /**
@@ -68,10 +99,9 @@ internal object ConfigValidation {
         }
 
     /**
-     * A reload may not change a registration-time binding: the command routing settings and the
-     * effective `/me` ownership mode are decided while the dispatcher is built and cannot be
-     * hot-swapped. This compares the *effective* mode, not raw booleans, so disabling the action
-     * service while `overrideVanillaMe` is already false stays allowed.
+     * A reload may not change a registration-time binding: the command routing settings (including
+     * the vanilla-override allowlist) and whether the action-message `/me` feature is registered at
+     * all are decided while the dispatcher is built and cannot be hot-swapped.
      */
     fun validateCommandTransition(
         previous: CellulosesConfig,
@@ -86,13 +116,12 @@ internal object ConfigValidation {
                     )
                 )
             }
-            if (meRouteMode(previous.messaging.actionMessage) !=
-                meRouteMode(candidate.messaging.actionMessage)
-            ) {
+            if (previous.messaging.actionMessage.enabled != candidate.messaging.actionMessage.enabled) {
                 add(
                     ValidationError(
                         "messaging.actionMessage",
-                        "vanilla /me ownership changed; restart the server to apply",
+                        "enabling or disabling the action-message service changes command " +
+                                "registration; restart the server to apply",
                     )
                 )
             }

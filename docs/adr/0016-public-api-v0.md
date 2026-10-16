@@ -1,6 +1,7 @@
 # ADR 0016 — Public API v0
 
-- **Status**: Accepted (experimental; NeoForge discovery pending a spike)
+- **Status**: Accepted (experimental; NeoForge discovery spiked on 26.1.2.112, live consumer build
+  pending)
 - **Date**: 2026-10-16
 - **Related**: ADR 0002 (modular monolith), ADR 0014 (command route ownership), ADR 0018
   (compatibility hooks)
@@ -41,9 +42,16 @@ with per-listener isolation.
 consumers must depend on `cellulosesz-api` as `compileOnly` and must not bundle it.
 
 **Discovery:** the composition root calls `PlatformServices.publishApi(provider)`. Fabric publishes
-on the loader's `ObjectShare` under `cellulosesz:api-v0`. NeoForge discovery is **not yet verified**
-for this target and is intentionally a warned no-op, so NeoForge is *contract-complete but not
-release-ready*.
+on the loader's `ObjectShare` under `cellulosesz:api-v0`. NeoForge publishes through the FML
+**extension-point** mechanism: `NeoForgePlatformServices` registers a `CellulosesZApiExtension`
+(`net.neoforged.fml.IExtensionPoint`) on the `cellulosesz` `ModContainer`, and a consumer discovers
+it with
+`ModList.get().getModContainerById("cellulosesz").flatMap(c -> c.getCustomExtension(CellulosesZApiExtension.class))`.
+This was verified against NeoForge `26.1.2.112` / FancyModLoader `11.0.15`
+(`ModContainer.registerExtensionPoint` / `getCustomExtension`). The `CellulosesZApiExtension` type
+is a thin, NeoForge-only shim bundled in the NeoForge distribution; it must not be shaded into a
+consumer. The NeoForge path is a real, spiked implementation but a live consumer build (L1) is still
+required before FML discovery is advertised as release-ready.
 
 **ABI:** `kotlin { abiValidation() }` is enabled; the baseline `modules/api/api/api.api` is
 committed and `checkKotlinAbi` runs as part of `:modules:api:check` (hence `checkModules`). CI never

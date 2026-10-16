@@ -142,7 +142,7 @@ needed there. This mod adds **no client UI**.
 | `/ignore`             | Player    | `communication/ignore`         |
 | `/info`               | Player    | `communication/info`           |
 | `/mail`               | Player    | `communication/mail`           |
-| `/me` (alias `/czme`) | Player    | `communication/me`             |
+| `/me`                 | Player    | `communication/me`             |
 | `/motd`               | Player    | `communication/motd`           |
 | `/msg`                | Player    | `communication/msg`            |
 | `/msgtoggle`          | Player    | `communication/msgtoggle`      |

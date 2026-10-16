@@ -21,7 +21,6 @@ public enum class ActionAudience {
 @Serializable
 public data class ActionMessageSettings(
     public val enabled: Boolean = true,
-    public val overrideVanillaMe: Boolean = true,
     public val audience: ActionAudience = ActionAudience.SAME_DIMENSION,
     public val maximumLength: Int = 256,
     public val messagesPerMinute: Int = 8,

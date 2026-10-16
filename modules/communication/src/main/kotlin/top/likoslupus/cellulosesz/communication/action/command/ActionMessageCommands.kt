@@ -20,7 +20,11 @@ import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 /**
  * `/me <action>`: the CellulosesZ entry point for action messages. When the vanilla `/me` node is
  * cancelled by [top.likoslupus.cellulosesz.communication.mixin.EmoteCommandsMixin] this literal is
- * the only `/me`, so it keeps the vanilla `MessageArgument` node shape; `/czme` stays as an alias.
+ * the only `/me`, so it keeps the vanilla `MessageArgument` node shape.
+ *
+ * The protected `/czme` fallback is not declared here: the route planner derives it from the vanilla
+ * conflict catalog, so it survives even when ordinary aliases are disabled. When the action service
+ * is disabled the whole definition is omitted, so neither `/me` nor `/czme` is registered.
  */
 internal object ActionMessageCommands {
 
@@ -30,29 +34,33 @@ internal object ActionMessageCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
-    ): List<CommandDefinition> = listOf(
-        command(
-            name = "me",
-            category = CommandCategory.COMMUNICATION,
-            permission = CommandPermissions.ME,
-            documentation = "communication/me",
-            aliases = setOf("czme"),
-        ) {
-            argument("action", message()) { key ->
-                executes {
-                    emit(
-                        source,
-                        get(key).string,
-                        actions,
-                        kernel,
-                        messages,
-                        adventure,
-                        presentation,
-                    )
-                }
-            }
-        },
-    )
+        enabled: Boolean,
+    ): List<CommandDefinition> =
+        when {
+            !enabled -> emptyList()
+            else -> listOf(
+                command(
+                    name = "me",
+                    category = CommandCategory.COMMUNICATION,
+                    permission = CommandPermissions.ME,
+                    documentation = "communication/me",
+                ) {
+                    argument("action", message()) { key ->
+                        executes {
+                            emit(
+                                source,
+                                get(key).string,
+                                actions,
+                                kernel,
+                                messages,
+                                adventure,
+                                presentation,
+                            )
+                        }
+                    }
+                },
+            )
+        }
 
     private fun emit(
         source: CommandSourceStack,
@@ -75,7 +83,9 @@ internal object ActionMessageCommands {
             MessageKey("communication.pending.action"),
         ) { target ->
             val result = actions.emit(senderId, senderName, dimensionId, rawText)
-            if (result is ActionMessageResult.Delivered && senderId != null) {
+            if (result is ActionMessageResult.Delivered
+                && senderId != null
+            ) {
                 return@communicationLaunch
             }
             kernel.sendNotices(

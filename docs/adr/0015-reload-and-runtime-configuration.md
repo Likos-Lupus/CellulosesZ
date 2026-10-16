@@ -24,9 +24,9 @@ Configuration changes are classified by lifecycle:
 | `STORAGE_CONNECTION`   | active `[database]` endpoint/pool/credentials                                     | Existing restart-required reject                                                         |
 
 1. `ConfigValidation.rootTransition` composes the existing database check with a new
-   `validateCommandTransition`. It compares the *effective* `/me` mode (`meRouteMode`), not raw
-   booleans, so disabling the action service with `overrideVanillaMe` already false stays
-   reloadable.
+   `validateCommandTransition`. It compares the whole `[commands]` block (including the
+   `[commands.vanillaOverrides]` allowlist) and the action-message `enabled` flag, since both decide
+   command registration; any change is rejected as a startup binding.
 2. On a successful reload the composition root runs `applyRuntimeSettings` on the **server thread**
    via `RuntimeKernel.onServerThread`: refresh the nickname display flag and the jail restriction
    snapshot. A failure of either is not possible by construction (both are atomic volatile snapshot

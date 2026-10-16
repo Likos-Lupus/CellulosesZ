@@ -20,4 +20,17 @@ public data class CommandRoutingSettings(
     public val shortNamesEnabled: Boolean = true,
     public val aliasesEnabled: Boolean = true,
     public val vanillaHelpOverlayEnabled: Boolean = true,
+    public val vanillaOverrides: VanillaOverrideSettings = VanillaOverrideSettings(),
+)
+
+/**
+ * Explicit opt-in for taking over vanilla command literals. Disabled by default so a fresh install
+ * always leaves `/me`, `/tp`, ... to vanilla. [commands] is an allowlist of vanilla-conflicting
+ * literals CellulosesZ may take over; only [TakeoverSupport.VERIFIED] targets are accepted (see
+ * [VanillaCommandCatalog]). A change needs a restart and cannot reload.
+ */
+@Serializable
+public data class VanillaOverrideSettings(
+    public val enabled: Boolean = false,
+    public val commands: List<String> = emptyList(),
 )

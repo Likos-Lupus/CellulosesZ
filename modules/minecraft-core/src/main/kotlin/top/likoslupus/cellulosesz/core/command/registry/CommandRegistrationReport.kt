@@ -5,6 +5,13 @@ public enum class CommandRouteKind {
 
     ADMIN_ROOT,
     NAMESPACED,
+
+    /** A protected single-segment fallback for a vanilla conflict, e.g. `/cztp`. */
+    CZ_FALLBACK,
+
+    /** A vanilla-conflicting literal CellulosesZ was allowed to take over, e.g. `/tp`. */
+    VANILLA_OVERRIDE,
+
     CANONICAL,
     ALIAS,
 
@@ -21,6 +28,12 @@ public enum class CommandRouteStatus {
 
     /** A short name or alias was already present; CellulosesZ did not merge into it. */
     SKIPPED_ALREADY_PRESENT,
+
+    /** A `cz` fallback literal was already owned by vanilla/another mod; CellulosesZ did not merge. */
+    FALLBACK_COLLISION,
+
+    /** A configured vanilla takeover could not be confirmed (the literal was already present). */
+    TAKEOVER_NOT_CONFIRMED,
 
     /** A required route was occupied, or the installed node was not the one we built. */
     INSTALL_MISMATCH,
@@ -53,10 +66,12 @@ public class CommandRegistrationReport(
         results.filter { it.status == CommandRouteStatus.INSTALLED }
                 .mapTo(LinkedHashSet()) { it.literal }
 
-    /** Skipped short names/aliases and any required-route mismatch. */
+    /** Skipped short names/aliases, fallback collisions and any required-route mismatch. */
     public val conflicts: List<CommandRouteResult> =
         results.filter {
             it.status == CommandRouteStatus.SKIPPED_ALREADY_PRESENT ||
+                    it.status == CommandRouteStatus.FALLBACK_COLLISION ||
+                    it.status == CommandRouteStatus.TAKEOVER_NOT_CONFIRMED ||
                     it.status == CommandRouteStatus.INSTALL_MISMATCH
         }
 

@@ -13,6 +13,9 @@ import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
 import top.likoslupus.cellulosesz.core.command.registry.CommandRouteStatus
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionBackendStatus
+import top.likoslupus.cellulosesz.core.permission.PermissionInspector
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageArgument
 import top.likoslupus.cellulosesz.core.text.MessageKey
@@ -53,6 +56,8 @@ internal object RootCommand {
         modVersion: String,
         loaderName: String,
         diagnostics: CommandRegistrationDiagnostics,
+        permissions: PermissionService,
+        inspector: PermissionInspector?,
         onReloadApplied: suspend () -> Unit = {},
     ): CommandDefinition =
         command(
@@ -133,6 +138,46 @@ internal object RootCommand {
                                 diagnostics,
                                 messages,
                                 adventure
+                            )
+                        }
+                    }
+                }
+            }
+            literal(
+                name = "permissions",
+                permission = CommandPermissions.ROOT_PERMISSIONS,
+                documentation = "core/permissions",
+            ) {
+                executes {
+                    showPermissionsStatus(
+                        source,
+                        permissions,
+                        inspector,
+                        messages,
+                        adventure,
+                    )
+                }
+                literal("status") {
+                    executes {
+                        showPermissionsStatus(
+                            source,
+                            permissions,
+                            inspector,
+                            messages,
+                            adventure,
+                        )
+                    }
+                }
+                literal("check") {
+                    argument("node", word()) { node ->
+                        executes {
+                            checkPermission(
+                                source,
+                                get(node),
+                                permissions,
+                                inspector,
+                                messages,
+                                adventure,
                             )
                         }
                     }
@@ -571,6 +616,90 @@ internal object RootCommand {
             )
         }
         return routes.size
+    }
+
+    private fun showPermissionsStatus(
+        source: CommandSourceStack,
+        permissions: PermissionService,
+        inspector: PermissionInspector?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.permissions.backend"),
+                listOf(MessageArgument(permissions.bridge.backendName)),
+            ),
+        )
+        val native = when {
+            inspector == null -> MessageKey("core.permissions.native_absent")
+            else -> MessageKey("core.permissions.native_present")
+        }
+        return source.reply(adventure, messages.renderFor(playerId, native))
+    }
+
+    private fun checkPermission(
+        source: CommandSourceStack,
+        rawNode: String,
+        permissions: PermissionService,
+        inspector: PermissionInspector?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val node = rawNode.trim().removePrefix("/")
+        val spec = CommandPermissions.all.firstOrNull { it.node == node }
+            ?: return source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.permissions.unknown"),
+                    listOf(MessageArgument(node)),
+                ),
+            )
+        val effective = permissions.allows(source, spec)
+        source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.permissions.effective"),
+                listOf(
+                    MessageArgument(spec.node),
+                    MessageArgument(effective.toString()),
+                ),
+            ),
+        )
+        val inspection = inspector?.inspect(source, spec) ?: return 1
+        source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.permissions.native_opinion"),
+                listOf(
+                    MessageArgument(inspection.status.name.lowercase()),
+                    MessageArgument(inspection.luckPermsOpinion.name.lowercase()),
+                ),
+            ),
+        )
+        if (inspection.status == PermissionBackendStatus.LUCKPERMS_ACTIVE &&
+            inspection.contextSummary.isNotEmpty()
+        ) {
+            val context = inspection.contextSummary.entries.joinToString(", ") { (key, values) ->
+                "$key=${values.joinToString("|")}"
+            }
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.permissions.context"),
+                    listOf(MessageArgument(context)),
+                ),
+            )
+        }
+        return 1
     }
 
     private fun reload(

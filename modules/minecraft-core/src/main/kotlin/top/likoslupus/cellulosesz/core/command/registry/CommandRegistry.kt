@@ -11,6 +11,7 @@ import top.likoslupus.cellulosesz.core.command.CommandDescriptor
 import top.likoslupus.cellulosesz.core.command.dsl.BrigadierCompiler
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
@@ -24,6 +25,7 @@ internal fun interface CommandRootBuilder {
         literal: String,
         permissions: PermissionService,
         buildContext: CommandBuildContext,
+        additionalPermission: PermissionSpec?,
     ): LiteralCommandNode<CommandSourceStack>
 
 }
@@ -139,6 +141,7 @@ public class CommandRegistry(
             route.literal,
             permissions,
             buildContext,
+            route.additionalPermission,
         )
         dispatcher.root.addChild(node)
 
@@ -173,7 +176,10 @@ public class CommandRegistry(
             CommandRouteKind.NAMESPACED -> null
 
             CommandRouteKind.CANONICAL,
-            CommandRouteKind.ALIAS -> CommandRouteName.namespaced(route.definition.name)
+            CommandRouteKind.ALIAS,
+            CommandRouteKind.CZ_FALLBACK -> CommandRouteName.namespaced(route.definition.name)
+
+            CommandRouteKind.VANILLA_OVERRIDE -> route.takeover?.fallbackLiteral
         }
 
     private companion object {

@@ -60,7 +60,12 @@ loom {
 
 sourceSets["main"].apply {
     java.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/java")))
-    kotlin.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/kotlin")))
+    kotlin.setSrcDirs(
+        listOf(
+            rootProject.file("platform/common/src/main/kotlin"),
+            rootProject.file("platform/fabric/src/main/kotlin"),
+        )
+    )
     resources.setSrcDirs(listOf(rootProject.file("platform/fabric/src/main/resources")))
 }
 
@@ -97,6 +102,11 @@ dependencies {
     // Toml/Hikari/drivers. Nesting (not flattening) keeps SQLite natives and driver service files.
     bundledRuntime.forEach { implementation(it) }
     bundledRuntime.forEach { include(it) { isTransitive = false } }
+
+    // Optional native LuckPerms integration. compileOnly: the API is never bundled or nested; the
+    // adapter class is only loaded when LuckPerms is actually present (see ADR 0020).
+    compileOnly(libs.luckperms.api)
+    compileOnly(libs.checker.qual)
 }
 
 java {

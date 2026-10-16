@@ -70,7 +70,12 @@ loom {
 
 sourceSets["main"].apply {
     java.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/java")))
-    kotlin.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/kotlin")))
+    kotlin.setSrcDirs(
+        listOf(
+            rootProject.file("platform/common/src/main/kotlin"),
+            rootProject.file("platform/neoforge/src/main/kotlin"),
+        )
+    )
     resources.setSrcDirs(listOf(rootProject.file("platform/neoforge/src/main/resources")))
 }
 
@@ -134,6 +139,11 @@ dependencies {
     }
     include(libs.adventure.platform.neoforge) { isTransitive = false }
     compileOnly(libs.adventure.platform.mod.shared)
+
+    // Optional native LuckPerms integration. compileOnly: the API is never bundled or nested; the
+    // adapter class is only loaded when LuckPerms is actually present (see ADR 0020).
+    compileOnly(libs.luckperms.api)
+    compileOnly(libs.checker.qual)
 }
 
 java {

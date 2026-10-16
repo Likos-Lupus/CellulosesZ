@@ -21,12 +21,10 @@ import top.likoslupus.cellulosesz.application.config.ConfigValidation
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
 import top.likoslupus.cellulosesz.application.port.MovementJailTransferPort
 import top.likoslupus.cellulosesz.communication.*
-import top.likoslupus.cellulosesz.communication.config.MeRouteMode
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
 import top.likoslupus.cellulosesz.core.command.help.CommandHelpResolver
-import top.likoslupus.cellulosesz.core.command.registry.CommandRegistry
-import top.likoslupus.cellulosesz.core.command.registry.CommandRoutingPolicy
+import top.likoslupus.cellulosesz.core.command.registry.*
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
@@ -68,9 +66,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * the bounded-context facades; it contains no domain logic.
  */
 public object CellulosesZ {
-
-    /** DSL canonical name of the `/me` action-message definition (see ActionMessageCommands). */
-    private const val ME_COMMAND_LITERAL: String = "me"
 
     private val initialized = AtomicBoolean(false)
 
@@ -166,26 +161,26 @@ public object CellulosesZ {
             presentation = presentation,
         )
         val apiProvider = ApplicationApiProvider()
-        val apiTeleports = ApiTeleportEvents()
-        val api = ApplicationApi(
-            version = ApiVersion(0, 1),
-            players = ApiPlayerLookup(
-                availability = { apiProvider.availability() },
-                resolve = { id ->
-                    known.knownById(id)?.let {
-                        PlayerIdentity(it.id, it.name)
-                    }
-                },
-            ),
-            visibility = ApiVisibilityLookup(
-                availability = { apiProvider.availability() },
-                canSeeDelegate = { viewerId, targetId ->
-                    administration.canBeSeenBy(viewerId, targetId)
-                },
-            ),
-            teleports = apiTeleports,
-        )
-        apiProvider.attach(api)
+
+        // One API view per server session. A fresh session is opened in SERVER_STARTING so an old
+        // view can never be revived by a later session in the same JVM.
+        fun openApiSession() {
+            val session = apiProvider.beginSession()
+            apiProvider.attach(
+                ApplicationApi(
+                    version = ApiVersion(0, 1),
+                    players = ApiPlayerLookup(session.lease) { id ->
+                        known.knownById(id)?.let {
+                            PlayerIdentity(it.id, it.name)
+                        }
+                    },
+                    visibility = ApiVisibilityLookup(session.lease) { viewerId, targetId ->
+                        administration.canBeSeenBy(viewerId, targetId)
+                    },
+                    teleports = session.teleports,
+                )
+            )
+        }
         platform.publishApi(apiProvider)
         movement = createMovementFeature(
             kernel = kernel,
@@ -200,7 +195,7 @@ public object CellulosesZ {
                 administration.canBeSeenBy(senderId, targetId)
             },
             teleportObserver = TeleportCommittedObserver {
-                apiTeleports.dispatch(it.toApiEvent())
+                apiProvider.dispatchTeleport(it.toApiEvent())
             },
             permissions = permissions,
         )
@@ -289,6 +284,8 @@ public object CellulosesZ {
                         modVersion = modVersion(),
                         loaderName = platform.loaderName,
                         diagnostics = diagnostics,
+                        permissions = permissions,
+                        inspector = platform.permissionInspector,
                         onReloadApplied = {
                             kernel.onServerThread {
                                 playerFeature.applyNicknameDisplay()
@@ -333,19 +330,26 @@ public object CellulosesZ {
         }
         // The `/me` override is a mixin decision taken while vanilla builds its dispatcher, so the
         // snapshot is published here at mod init, well before the server constructs its commands.
-        // The routing policy is a startup binding too: `commands` and `/me` ownership cannot reload.
-        val meMode = communication.meRouteMode()
+        // The routing policy is a startup binding too: `commands` and the override allowlist cannot
+        // reload. Whether `/me` is taken over is derived from one place: the effective vanilla route.
+        val routingSettings = config.current.commands
+        val meRoute = effectiveVanillaRoute(
+            VanillaCommandId.ME,
+            featureEnabled = config.current.messaging.actionMessage.enabled,
+            overridesEnabled = routingSettings.vanillaOverrides.enabled,
+            overrides = routingSettings.vanillaOverrides.commands.toSet(),
+        )
         val routingPolicy = CommandRoutingPolicy(
-            shortNamesEnabled = config.current.commands.shortNamesEnabled,
-            aliasesEnabled = config.current.commands.aliasesEnabled,
-            suppressedCanonicals = if (meMode == MeRouteMode.REPLACE_VANILLA) {
-                emptySet()
+            shortNamesEnabled = routingSettings.shortNamesEnabled,
+            aliasesEnabled = routingSettings.aliasesEnabled,
+            vanillaTakeovers = if (meRoute.mode == VanillaRouteMode.TAKE_OVER_VANILLA) {
+                setOf(VanillaCommandId.ME.literal)
             } else {
-                setOf(ME_COMMAND_LITERAL)
+                emptySet()
             },
         )
-        val helpOverlayEnabled = config.current.commands.vanillaHelpOverlayEnabled
-        communication.applyVanillaMeOverride(meMode)
+        val helpOverlayEnabled = routingSettings.vanillaHelpOverlayEnabled
+        communication.applyVanillaMeOverride(meRoute.mode == VanillaRouteMode.TAKE_OVER_VANILLA)
 
         CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
             val report = commandRegistry.register(
@@ -385,6 +389,7 @@ public object CellulosesZ {
             communication.onServerStarting()
             utility.onServerStarting()
             playerFeature.onServerStarting()
+            openApiSession()
             health.transition(ApplicationHealth.State.LOADING_STATE)
         }
         LifecycleEvent.SERVER_STARTED.register {
@@ -408,7 +413,6 @@ public object CellulosesZ {
             adventure.stop()
             kernel.onServerStopped()
             apiProvider.markStopped()
-            apiTeleports.clear()
         }
 
         TickEvent.PLAYER_POST.register { player ->

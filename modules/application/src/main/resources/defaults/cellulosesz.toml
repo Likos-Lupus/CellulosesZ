@@ -128,11 +128,20 @@ density = "comfortable"
 # Register the short canonical command names (for example /home). When a short name
 # is already owned by another mod, CellulosesZ skips it and keeps the namespaced form.
 shortNamesEnabled = true
-# Register the short aliases (for example /r, /czme). Same conflict rule as above.
+# Register the short aliases (for example /r). Same conflict rule as above. Protected `cz`
+# fallbacks such as /czme are NOT gated by this switch.
 aliasesEnabled = true
 # Enhance vanilla `/help <command>` for CellulosesZ commands only. Plain `/help` and
 # every non-CellulosesZ query stay vanilla. Set false to leave `/help` entirely untouched.
 vanillaHelpOverlayEnabled = true
+
+# Take over vanilla command literals. Disabled by default: vanilla keeps /me, /tp, ... and
+# CellulosesZ uses the protected /cz* and /cellulosesz:* entries. When enabled, only commands
+# listed below and verified for this version are taken over; unsupported names are rejected at
+# startup. Requires a restart.
+[commands.vanillaOverrides]
+enabled = false
+commands = []
 
 # ---------------------------------------------------------------------------
 # Movement
@@ -222,11 +231,11 @@ maxPageBytes = 65536
 maxPages = 128
 showMotdOnJoin = false
 
-# /me action messages. `audience` is `same_dimension` or `server`. When `overrideVanillaMe` is true
-# the vanilla /me executor is replaced; /czme is always available as a fallback.
+# /me action messages. `audience` is `same_dimension` or `server`.
+# /czme and /cellulosesz:me are always available as protected fallbacks. To let CellulosesZ take
+# over the vanilla /me literal, enable the override in [commands.vanillaOverrides] below.
 [messaging.actionMessage]
 enabled = true
-overrideVanillaMe = true
 audience = "same_dimension"
 maximumLength = 256
 messagesPerMinute = 8

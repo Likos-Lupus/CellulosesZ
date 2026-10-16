@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.core.command.registry
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
@@ -93,17 +94,68 @@ class CommandRoutePlannerTest {
     }
 
     @Test
-    fun `a suppressed canonical keeps its namespaced and alias routes`() {
-        val me = definition("me", aliases = setOf("czme"))
+    fun `a catalogued vanilla conflict gets a protected cz fallback and no canonical`() {
+        val me = definition("me")
 
         val plan = CommandRoutePlanner.plan(
             listOf(root, me),
-            CommandRoutingPolicy(suppressedCanonicals = setOf("me")),
+            CommandRoutingPolicy(),
         )
 
         assertFalse(plan.any { it.literal == "me" })
         assertTrue(plan.any { it.literal == "cellulosesz:me" })
+        assertTrue(
+            plan.any { it.literal == "czme" && it.kind == CommandRouteKind.CZ_FALLBACK }
+        )
+    }
+
+    @Test
+    fun `an allowed vanilla conflict adds an override route`() {
+        val me = definition("me")
+
+        val plan = CommandRoutePlanner.plan(
+            listOf(root, me),
+            CommandRoutingPolicy(vanillaTakeovers = setOf("me")),
+        )
+
+        assertTrue(
+            plan.any {
+                it.literal == "me"
+                        && it.kind == CommandRouteKind.VANILLA_OVERRIDE
+            }
+        )
         assertTrue(plan.any { it.literal == "czme" })
+        assertTrue(plan.any { it.literal == "cellulosesz:me" })
+    }
+
+    @Test
+    fun `protected cz fallbacks survive disabled short names and aliases`() {
+        val me = definition("me")
+
+        val plan = CommandRoutePlanner.plan(
+            listOf(root, me),
+            CommandRoutingPolicy(
+                shortNamesEnabled = false,
+                aliasesEnabled = false
+            ),
+        )
+
+        assertFalse(plan.any { it.kind == CommandRouteKind.CANONICAL })
+        assertFalse(plan.any { it.kind == CommandRouteKind.ALIAS })
+        assertTrue(plan.any { it.literal == "czme" })
+        assertTrue(plan.any { it.literal == "cellulosesz:me" })
+    }
+
+    @Test
+    fun `a duplicate literal fails the plan instead of merging`() {
+        val me = definition("me", aliases = setOf("czme"))
+
+        assertThrows<IllegalArgumentException> {
+            CommandRoutePlanner.plan(
+                listOf(root, me),
+                CommandRoutingPolicy(),
+            )
+        }
     }
 
     @Test
@@ -128,6 +180,14 @@ class CommandRoutePlannerTest {
         assertEquals(
             CommandRouteStatus.INSTALL_MISMATCH,
             statusForOccupiedRoute(CommandRouteKind.NAMESPACED),
+        )
+        assertEquals(
+            CommandRouteStatus.FALLBACK_COLLISION,
+            statusForOccupiedRoute(CommandRouteKind.CZ_FALLBACK),
+        )
+        assertEquals(
+            CommandRouteStatus.TAKEOVER_NOT_CONFIRMED,
+            statusForOccupiedRoute(CommandRouteKind.VANILLA_OVERRIDE),
         )
         assertEquals(
             CommandRouteStatus.SKIPPED_ALREADY_PRESENT,

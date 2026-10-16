@@ -5,9 +5,7 @@ import top.likoslupus.cellulosesz.communication.action.MeOverrideState
 import top.likoslupus.cellulosesz.communication.action.command.ActionMessageCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
-import top.likoslupus.cellulosesz.communication.config.MeRouteMode
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
-import top.likoslupus.cellulosesz.communication.config.meRouteMode
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
 import top.likoslupus.cellulosesz.communication.mail.MailRateLimiter
@@ -124,7 +122,8 @@ public class CommunicationFeature internal constructor(
             kernel,
             messages,
             adventure,
-            presentation
+            presentation,
+            settings().actionMessage.enabled
         )
     }
 
@@ -133,19 +132,12 @@ public class CommunicationFeature internal constructor(
     }
 
     /**
-     * The startup-bound `/me` ownership mode. Must be read by the composition root before the server
-     * builds its command dispatcher.
+     * Publishes the startup-bound `/me` takeover decision for the mixin, which reads it while vanilla
+     * registers its commands. `true` cancels the vanilla `/me`; `false` never touches it. Call this
+     * from the composition root before the server builds its command dispatcher.
      */
-    public fun meRouteMode(): MeRouteMode =
-        meRouteMode(settings().actionMessage)
-
-    /**
-     * Whether vanilla `/me` should be cancelled so the DSL `/me` owns the literal. Must be set by
-     * the composition root before the server builds its command dispatcher; the mixin reads the
-     * snapshot while vanilla registers its commands. Only [MeRouteMode.REPLACE_VANILLA] cancels it.
-     */
-    public fun applyVanillaMeOverride(mode: MeRouteMode) {
-        MeOverrideState.set(mode == MeRouteMode.REPLACE_VANILLA)
+    public fun applyVanillaMeOverride(takeOver: Boolean) {
+        MeOverrideState.set(takeOver)
     }
 
     public fun onPlayerJoined(playerId: UUID) {

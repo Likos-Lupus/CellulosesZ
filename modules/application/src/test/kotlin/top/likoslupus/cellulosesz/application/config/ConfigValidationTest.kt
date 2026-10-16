@@ -152,7 +152,9 @@ class ConfigValidationTest {
     @Test
     fun `rejects an unsupported default language`() {
         val errors = ConfigValidation.validate(
-            CellulosesConfig(localization = LocalizationSettings(defaultLanguage = "fr_fr"))
+            CellulosesConfig(
+                localization = LocalizationSettings(defaultLanguage = "fr_fr")
+            )
         )
 
         assertTrue(errors.any { it.path == "localization.defaultLanguage" })
@@ -161,7 +163,9 @@ class ConfigValidationTest {
     @Test
     fun `rejects a malformed default language`() {
         val errors = ConfigValidation.validate(
-            CellulosesConfig(localization = LocalizationSettings(defaultLanguage = "english"))
+            CellulosesConfig(
+                localization = LocalizationSettings(defaultLanguage = "english")
+            )
         )
 
         assertTrue(errors.any { it.path == "localization.defaultLanguage" })
@@ -170,7 +174,9 @@ class ConfigValidationTest {
     @Test
     fun `rejects an invalid body color`() {
         val errors = ConfigValidation.validate(
-            CellulosesConfig(text = TextSettings(colors = TextColorOverrides(body = "red")))
+            CellulosesConfig(
+                text = TextSettings(colors = TextColorOverrides(body = "red"))
+            )
         )
 
         assertTrue(errors.any { it.path == "text.colors.body" })
@@ -180,7 +186,9 @@ class ConfigValidationTest {
     fun `rejects an invalid secondary color`() {
         val errors = ConfigValidation.validate(
             CellulosesConfig(
-                text = TextSettings(colors = TextColorOverrides(secondary = "#GGGGGG"))
+                text = TextSettings(
+                    colors = TextColorOverrides(secondary = "#GGGGGG")
+                )
             )
         )
 
@@ -246,8 +254,25 @@ class ConfigValidationTest {
         val errors = ConfigValidation.validateCommandTransition(
             previous = CellulosesConfig(),
             candidate = CellulosesConfig(
+                commands = CommandRoutingSettings(
+                    vanillaOverrides = VanillaOverrideSettings(
+                        enabled = true,
+                        commands = listOf("me"),
+                    )
+                )
+            ),
+        )
+
+        assertEquals("commands", errors.single().path)
+    }
+
+    @Test
+    fun `enabling or disabling the action service requires a restart`() {
+        val errors = ConfigValidation.validateCommandTransition(
+            previous = CellulosesConfig(),
+            candidate = CellulosesConfig(
                 messaging = MessagingSettings(
-                    actionMessage = ActionMessageSettings(overrideVanillaMe = false)
+                    actionMessage = ActionMessageSettings(enabled = false)
                 )
             ),
         )
@@ -256,22 +281,12 @@ class ConfigValidationTest {
     }
 
     @Test
-    fun `disabling the action service without changing me ownership stays reloadable`() {
+    fun `changing only the action message policy stays reloadable`() {
         val errors = ConfigValidation.validateCommandTransition(
-            previous = CellulosesConfig(
-                messaging = MessagingSettings(
-                    actionMessage = ActionMessageSettings(
-                        enabled = true,
-                        overrideVanillaMe = false,
-                    )
-                )
-            ),
+            previous = CellulosesConfig(),
             candidate = CellulosesConfig(
                 messaging = MessagingSettings(
-                    actionMessage = ActionMessageSettings(
-                        enabled = false,
-                        overrideVanillaMe = false,
-                    )
+                    actionMessage = ActionMessageSettings(maximumLength = 512)
                 )
             ),
         )

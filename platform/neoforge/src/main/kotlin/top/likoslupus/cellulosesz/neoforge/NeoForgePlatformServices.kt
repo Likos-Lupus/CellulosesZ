@@ -1,18 +1,18 @@
 package top.likoslupus.cellulosesz.neoforge
 
 import net.minecraft.commands.CommandSourceStack
+import net.neoforged.fml.ModContainer
+import net.neoforged.fml.ModList
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.server.permission.PermissionAPI
 import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent
 import net.neoforged.neoforge.server.permission.nodes.PermissionNode
 import net.neoforged.neoforge.server.permission.nodes.PermissionTypes
-import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.api.CellulosesZApiProvider
 import top.likoslupus.cellulosesz.application.bootstrap.PlatformServices
-import top.likoslupus.cellulosesz.core.permission.CommandPermissions
-import top.likoslupus.cellulosesz.core.permission.PermissionBridge
-import top.likoslupus.cellulosesz.core.permission.PermissionSpec
-import top.likoslupus.cellulosesz.core.permission.vanillaFallback
+import top.likoslupus.cellulosesz.core.permission.*
+import top.likoslupus.cellulosesz.neoforge.api.CellulosesZApiExtension
+import top.likoslupus.cellulosesz.platform.luckperms.LuckPermsPermissionInspector
 
 /**
  * NeoForge permission integration. Every CellulosesZ node is registered with the NeoForge
@@ -22,13 +22,23 @@ import top.likoslupus.cellulosesz.core.permission.vanillaFallback
 internal object NeoForgePermissionNodes {
 
     fun register(): Map<String, PermissionNode<Boolean>> {
+        val duplicates = CommandPermissions.all
+                .groupingBy(PermissionSpec::node)
+                .eachCount()
+                .filterValues { it > 1 }
+                .keys
+        check(duplicates.isEmpty()) {
+            "duplicate CellulosesZ permission nodes declared: ${duplicates.joinToString()}"
+        }
+
         val nodes = CommandPermissions.all.associate { spec ->
-            val path = spec.node
-                    .removePrefix("cellulosesz.")
-                    .replace('.', '/')
+            // Keep the node dot-separated. PermissionNode composes `modId + "." + nodeName`, so the
+            // previous `.replace('.', '/')` produced `cellulosesz.command/tp` — a name no other
+            // backend or Loader (Fabric, LuckPerms) ever sees or can grant.
+            val local = PermissionNodeNames.localName(spec.node)
             val node = PermissionNode(
-                "cellulosesz",
-                path,
+                PermissionNodeNames.MOD_ID,
+                local,
                 PermissionTypes.BOOLEAN,
                 { player, _, _ ->
                     player != null && vanillaFallback(
@@ -37,6 +47,9 @@ internal object NeoForgePermissionNodes {
                     )
                 },
             )
+            check(node.nodeName == spec.node) {
+                "NeoForge permission node mismatch: declared='${spec.node}' actual='${node.nodeName}'"
+            }
             spec.node to node
         }
         NeoForge.EVENT_BUS.addListener(PermissionGatherEvent.Nodes::class.java) {
@@ -66,7 +79,9 @@ internal class NeoForgePermissionBridge(
     }
 }
 
-class NeoForgePlatformServices : PlatformServices {
+class NeoForgePlatformServices(
+    private val container: ModContainer,
+) : PlatformServices {
 
     private val nodes: Map<String, PermissionNode<Boolean>> = NeoForgePermissionNodes.register()
 
@@ -75,23 +90,24 @@ class NeoForgePlatformServices : PlatformServices {
 
     override val permissionBridge: PermissionBridge = NeoForgePermissionBridge(nodes)
 
-    /**
-     * NeoForge API discovery is not yet verified for this target. The contract is complete and Fabric
-     * publishes through ObjectShare, but the NeoForge extension/discovery path must first be spiked
-     * against the exact 26.1.x NeoForge API (see docs/adr/0016). Until then the provider is not
-     * exposed, so NeoForge consumers must not treat the API as available.
-     */
-    override fun publishApi(provider: CellulosesZApiProvider) {
-        LOGGER.warn(
-            "CellulosesZ public API v0 is not exposed on NeoForge yet: the loader-native discovery " +
-                    "path is pending a target-version spike (see docs/adr/0016). Fabric publishes normally."
-        )
+    override val permissionInspector: PermissionInspector? by lazy {
+        when {
+            ModList.get().isLoaded("luckperms") -> LuckPermsPermissionInspector(permissionBridge)
+            else -> null
+        }
     }
 
-    private companion object {
-
-        private val LOGGER = LoggerFactory.getLogger(NeoForgePlatformServices::class.java)
-
+    /**
+     * Publishes the API provider through the FML extension-point mechanism on the `cellulosesz`
+     * `ModContainer`. This is the loader-native, reflection-free discovery path: a consumer looks up
+     * the container by mod id and calls `getCustomExtension(CellulosesZApiExtension.class)`. The same
+     * pure-JVM [CellulosesZApiProvider] is returned on every loader.
+     */
+    override fun publishApi(provider: CellulosesZApiProvider) {
+        container.registerExtensionPoint(
+            CellulosesZApiExtension::class.java,
+            CellulosesZApiExtension { provider },
+        )
     }
 
 }

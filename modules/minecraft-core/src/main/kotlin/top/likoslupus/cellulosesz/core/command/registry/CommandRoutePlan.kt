@@ -1,29 +1,37 @@
 package top.likoslupus.cellulosesz.core.command.registry
 
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 
 /**
  * A single literal path CellulosesZ wants to own. A [CommandDefinition] can produce several routes
- * (its namespaced form, its canonical name and each alias); none of them is registered until the
- * planner has produced the plan and the registry has checked the live dispatcher.
+ * (its namespaced form, a protected `cz` fallback when it collides with vanilla, its canonical name,
+ * an override and each alias); none of them is registered until the planner has produced the plan
+ * and the registry has checked the live dispatcher.
  */
 internal data class CommandRoute(
     val literal: String,
     val kind: CommandRouteKind,
     val definition: CommandDefinition,
+    val additionalPermission: PermissionSpec? = null,
+    val takeover: VanillaCommandId? = null,
 )
 
 /**
  * Immutable, startup-bound routing policy. It is captured once per registration pass and never
  * reads a live configuration snapshot, so a reload never half-applies a command tree.
  *
- * [suppressedCanonicals] removes a canonical short name without touching its namespaced route (used
- * for `/me` in preserve-vanilla mode). [ADMIN_ROOT] and [NAMESPACED] routes are not configurable.
+ * [suppressedCanonicals] removes a canonical short name without touching its namespaced route.
+ * [vanillaTakeovers] lists the canonical names of catalogued vanilla conflicts whose feature is
+ * enabled and which configuration allows CellulosesZ to take over; every catalogued conflict still
+ * receives a protected `cz` fallback regardless of the short-name/alias switches.
+ * [ADMIN_ROOT] and [NAMESPACED] routes are not configurable.
  */
 public data class CommandRoutingPolicy(
     public val shortNamesEnabled: Boolean = true,
     public val aliasesEnabled: Boolean = true,
     public val suppressedCanonicals: Set<String> = emptySet(),
+    public val vanillaTakeovers: Set<String> = emptySet(),
 )
 
 /**
@@ -75,15 +83,26 @@ internal fun CommandRouteKind.requiredRoute(): Boolean =
 
 /** The status recorded when a route literal is already present in the dispatcher. */
 internal fun statusForOccupiedRoute(kind: CommandRouteKind): CommandRouteStatus =
-    when {
-        kind.requiredRoute() -> CommandRouteStatus.INSTALL_MISMATCH
-        else -> CommandRouteStatus.SKIPPED_ALREADY_PRESENT
+    when (kind) {
+        CommandRouteKind.ADMIN_ROOT,
+        CommandRouteKind.NAMESPACED -> CommandRouteStatus.INSTALL_MISMATCH
+
+        CommandRouteKind.CZ_FALLBACK -> CommandRouteStatus.FALLBACK_COLLISION
+
+        CommandRouteKind.VANILLA_OVERRIDE -> CommandRouteStatus.TAKEOVER_NOT_CONFIRMED
+
+        CommandRouteKind.CANONICAL,
+        CommandRouteKind.ALIAS -> CommandRouteStatus.SKIPPED_ALREADY_PRESENT
     }
 
 /**
  * Pure route planning. It has no reference to a dispatcher and no side effects, so the plan can be
  * unit-tested without Minecraft and compared for reproducibility. Order is fixed: admin root, then
- * every definition's namespaced route, then canonical short names, then sorted aliases.
+ * every definition's mandatory namespaced route, then each vanilla conflict's protected `cz`
+ * fallback (and an override when allowed), then ordinary canonical short names, then sorted aliases.
+ *
+ * A duplicate literal is an internal catalog/DSL error and fails the plan rather than letting the
+ * dispatcher resolve two same-named nodes by merge.
  */
 internal object CommandRoutePlanner {
 
@@ -113,9 +132,31 @@ internal object CommandRoutePlanner {
             )
         }
 
+        // Vanilla conflicts: a protected `cz` fallback always, plus an override only when allowed.
+        // The canonical short name is never also planned for these (no two same-named roots).
+        featureDefinitions.forEach { definition ->
+            val vanilla = VanillaCommandCatalog.forCanonical(definition.name) ?: return@forEach
+            routes += CommandRoute(
+                literal = vanilla.fallbackLiteral,
+                kind = CommandRouteKind.CZ_FALLBACK,
+                definition = definition,
+                takeover = vanilla,
+            )
+            if (definition.name in policy.vanillaTakeovers) {
+                routes += CommandRoute(
+                    literal = definition.name,
+                    kind = CommandRouteKind.VANILLA_OVERRIDE,
+                    definition = definition,
+                    additionalPermission = VanillaCommandCatalog.overridePermission(vanilla),
+                    takeover = vanilla,
+                )
+            }
+        }
+
         if (policy.shortNamesEnabled) {
             featureDefinitions
                     .filterNot { it.name in policy.suppressedCanonicals }
+                    .filterNot { VanillaCommandCatalog.forCanonical(it.name) != null }
                     .forEach { definition ->
                         routes += CommandRoute(
                             definition.name,
@@ -139,6 +180,16 @@ internal object CommandRoutePlanner {
                                 }
                     }
                     .forEach(routes::add)
+        }
+
+        val duplicate = routes.groupingBy(CommandRoute::literal)
+                .eachCount()
+                .entries
+                .firstOrNull { it.value > 1 }
+                ?.key
+        require(duplicate == null) {
+            "duplicate command route literal '$duplicate'; a protected fallback, an alias and a " +
+                    "canonical route must never collide inside the plan"
         }
 
         return routes

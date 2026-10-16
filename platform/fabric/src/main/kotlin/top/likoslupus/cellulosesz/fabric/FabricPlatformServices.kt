@@ -6,8 +6,10 @@ import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.api.CellulosesZApiProvider
 import top.likoslupus.cellulosesz.application.bootstrap.PlatformServices
 import top.likoslupus.cellulosesz.core.permission.PermissionBridge
+import top.likoslupus.cellulosesz.core.permission.PermissionInspector
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import top.likoslupus.cellulosesz.core.permission.vanillaFallback
+import top.likoslupus.cellulosesz.platform.luckperms.LuckPermsPermissionInspector
 
 /**
  * Fabric permission integration through the fabric-permissions-api, which transparently supports
@@ -35,6 +37,18 @@ class FabricPlatformServices : PlatformServices {
         get() = "fabric"
 
     override val permissionBridge: PermissionBridge = FabricPermissionBridge()
+
+    /**
+     * A native LuckPerms inspector when LuckPerms is loaded, else null. The inspector class is only
+     * instantiated here (not merely referenced), so a server without LuckPerms never links it.
+     */
+    override val permissionInspector: PermissionInspector? by lazy {
+        if (FabricLoader.getInstance().isModLoaded("luckperms")) {
+            LuckPermsPermissionInspector(permissionBridge)
+        } else {
+            null
+        }
+    }
 
     /**
      * Publishes the provider on the Fabric loader's ObjectShare under a namespaced key. Consumers read

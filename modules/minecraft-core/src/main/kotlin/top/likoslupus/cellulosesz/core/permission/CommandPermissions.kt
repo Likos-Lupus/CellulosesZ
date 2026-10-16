@@ -23,47 +23,47 @@ public object CommandPermissions {
             description
         )
 
-    public val ROOT: PermissionSpec =
-        playerNode(
-            "cellulosesz",
-            "Use the CellulosesZ command"
-        )
+    public val ROOT: PermissionSpec = playerNode(
+        "cellulosesz",
+        "Use the CellulosesZ command"
+    )
 
-    public val ROOT_LANGUAGE: PermissionSpec =
-        PermissionSpec(
-            "cellulosesz.command.cellulosesz.language",
-            VanillaPermissionFallback.ALLOW_ALL,
-            "Change your CellulosesZ language"
-        )
+    public val ROOT_LANGUAGE: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cellulosesz.language",
+        VanillaPermissionFallback.ALLOW_ALL,
+        "Change your CellulosesZ language"
+    )
 
-    public val ROOT_STATUS: PermissionSpec =
-        PermissionSpec(
-            "cellulosesz.command.cellulosesz.status",
-            VanillaPermissionFallback.COMMANDS_MODERATOR,
-            "View CellulosesZ status"
-        )
+    public val ROOT_STATUS: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cellulosesz.status",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "View CellulosesZ status"
+    )
 
-    public val ROOT_RELOAD: PermissionSpec =
-        PermissionSpec(
-            "cellulosesz.command.cellulosesz.reload",
-            VanillaPermissionFallback.COMMANDS_MODERATOR,
-            "Reload CellulosesZ configuration"
-        )
+    public val ROOT_RELOAD: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cellulosesz.reload",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Reload CellulosesZ configuration"
+    )
 
-    public val ROOT_COMMANDS: PermissionSpec =
-        PermissionSpec(
-            "cellulosesz.command.cellulosesz.commands",
-            VanillaPermissionFallback.COMMANDS_MODERATOR,
-            "Inspect CellulosesZ command routes"
-        )
+    public val ROOT_COMMANDS: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cellulosesz.commands",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Inspect CellulosesZ command routes"
+    )
+
+    public val ROOT_PERMISSIONS: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cellulosesz.permissions",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Inspect CellulosesZ permission nodes"
+    )
 
     /** Internal capability used by moderator notices and staff broadcasts (not a command node). */
-    public val MODERATOR: PermissionSpec =
-        PermissionSpec(
-            "cellulosesz.moderation.moderator",
-            VanillaPermissionFallback.COMMANDS_MODERATOR,
-            "CellulosesZ moderator capability"
-        )
+    public val MODERATOR: PermissionSpec = PermissionSpec(
+        "cellulosesz.moderation.moderator",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "CellulosesZ moderator capability"
+    )
 
     public val SET_HOME: PermissionSpec = playerNode(
         "sethome",
@@ -128,6 +128,17 @@ public object CommandPermissions {
     public val TP: PermissionSpec = playerNode(
         "tp",
         "Teleport"
+    )
+
+    /**
+     * The extra gate for using the CellulosesZ implementation through the *vanilla* `/tp` entry
+     * when takeover is enabled. The ordinary `/cztp` and `/cellulosesz:tp` entries keep using [TP]
+     * only, so taking over the vanilla literal never widens an ordinary player's access.
+     */
+    public val TP_VANILLA_OVERRIDE: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.override.tp",
+        VanillaPermissionFallback.COMMANDS_GAMEMASTER,
+        "Use the CellulosesZ implementation through the vanilla /tp entry",
     )
     public val TP_HERE: PermissionSpec = moderatorNode(
         "tphere",
@@ -543,6 +554,7 @@ public object CommandPermissions {
         ROOT_STATUS,
         ROOT_RELOAD,
         ROOT_COMMANDS,
+        ROOT_PERMISSIONS,
         MODERATOR,
         SET_HOME,
         HOME,
@@ -560,6 +572,7 @@ public object CommandPermissions {
         DEL_SPAWN,
         BACK,
         TP,
+        TP_VANILLA_OVERRIDE,
         TP_HERE,
         TP_POS,
         TPR,

@@ -51,7 +51,9 @@ Namespaced literals are validated by a dedicated parser (fixed `cellulosesz:` pr
 - The short semantics of `/tp`, `/kill`, `/gamemode` change: they are vanilla-owned unless free.
   Operators move scripts and command blocks to `/cellulosesz:<command>`; this is a user-visible
   change recorded in the changelog, not a transparent refactor.
-- `/me` ownership is decided by `MeRouteMode`; see ADR 0015.
+- `/me` ownership is derived from one place, the effective vanilla route (see ADR 0015 and the
+  `[commands.vanillaOverrides]` allowlist); the mixin only cancels vanilla registration when the
+  takeover is actually enabled.
 - The stable fallback is `cellulosesz:<name>`. Its reachability under both loaders must be confirmed
   by an integration smoke test (open decision D-01); if a loader rejects the namespaced form, the
   fallback becomes `/cellulosesz <name>`.
