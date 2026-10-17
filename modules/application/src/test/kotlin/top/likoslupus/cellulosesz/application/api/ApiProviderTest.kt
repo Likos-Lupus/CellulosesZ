@@ -37,13 +37,22 @@ class ApiProviderTest {
                 true
             }
             override val teleports: TeleportEvents = session.teleports
-            override val player get() = error("unused in ApiProviderTest")
-            override val movement get() = error("unused in ApiProviderTest")
-            override val communication get() = error("unused in ApiProviderTest")
-            override val kits get() = error("unused in ApiProviderTest")
-            override val moderation get() = error("unused in ApiProviderTest")
-            override val presentation get() = error("unused in ApiProviderTest")
-            override val extensions get() = error("unused in ApiProviderTest")
+            override val player
+                get() = error("unused in ApiProviderTest")
+            override val movement
+                get() = error("unused in ApiProviderTest")
+            override val communication
+                get() = error("unused in ApiProviderTest")
+            override val kits
+                get() = error("unused in ApiProviderTest")
+            override val moderation
+                get() = error("unused in ApiProviderTest")
+            override val economy
+                get() = error("unused in ApiProviderTest")
+            override val presentation
+                get() = error("unused in ApiProviderTest")
+            override val extensions
+                get() = error("unused in ApiProviderTest")
         }
 
     private fun event(): TeleportCommitted =

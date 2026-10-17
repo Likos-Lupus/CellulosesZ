@@ -45,6 +45,23 @@ public object StorageMigrator {
         "cz_jail_sentences",
         "cz_player_sessions",
         "cz_player_nicknames",
+        "cz_economy_accounts",
+        "cz_economy_transactions",
+        "cz_economy_entries",
+    )
+
+    /**
+     * Schema groups that must be present on the source all-or-nothing. A group is a set of tables
+     * introduced together; a legacy source may predate the whole group (all absent = no data), and a
+     * current source has all of them, but a source with only some of a group is treated as broken
+     * rather than silently migrated.
+     */
+    private val OPTIONAL_SCHEMA_GROUPS: List<Set<String>> = listOf(
+        setOf(
+            "cz_economy_accounts",
+            "cz_economy_transactions",
+            "cz_economy_entries",
+        ),
     )
 
     public fun migrateBlocking(
@@ -76,6 +93,7 @@ public object StorageMigrator {
         HikariDatabaseRuntime.create(source).use {
             target.transaction { targetConnection ->
                 it.read { sourceConnection ->
+                    guardOptionalGroups(sourceConnection)
                     tables.forEach { table ->
                         // A table that does not exist in the old source is wholly absent: there is
                         // nothing to copy. Only the explicit allowlist of tables introduced after the
@@ -328,6 +346,22 @@ public object StorageMigrator {
     /** Whether an absent source table may be treated as zero rows instead of a broken source. */
     private fun isOptionalTable(tableName: String): Boolean =
         OPTIONAL_TABLES.any { it.equals(tableName, ignoreCase = true) }
+
+    /**
+     * A partially-present schema group is a broken source: the tables of a group are introduced
+     * together, so some-but-not-all present means data corruption, not a pre-feature legacy source.
+     */
+    private fun guardOptionalGroups(connection: Connection) {
+        OPTIONAL_SCHEMA_GROUPS.forEach { group ->
+            val present = group.filter { sourceTableExists(connection, it) }
+            if (present.isNotEmpty() && present.size != group.size) {
+                throw StorageException(
+                    "source storage has a partially-present schema group: " +
+                            "${present.sorted()}; refusing to migrate a broken source"
+                )
+            }
+        }
+    }
 
     /**
      * Proves whether a table exists on the source connection. Table names are matched

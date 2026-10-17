@@ -5,6 +5,7 @@ import top.likoslupus.cellulosesz.communication.config.MessagingSettingsValidati
 import top.likoslupus.cellulosesz.core.command.registry.VanillaCommandCatalog
 import top.likoslupus.cellulosesz.core.text.TextSettingsValidation
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettingsValidation
+import top.likoslupus.cellulosesz.economy.config.EconomySettingsValidation
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
 import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettingsValidation
@@ -27,6 +28,7 @@ internal object ConfigValidation {
             addAll(AdministrationSettingsValidation.validate(config.administration))
             addAll(UtilitySettingsValidation.validate(config.utility))
             addAll(PlayerSettingsValidation.validate(config.players))
+            addAll(EconomySettingsValidation.validate(config.economy))
             addAll(validateVanillaOverrides(config.commands))
             addAll(validateApiIntegrations(config.api))
         }

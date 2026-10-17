@@ -341,6 +341,28 @@ maximumResults = 20
 hideSpectators = true
 
 # ---------------------------------------------------------------------------
+# Native economy. CellulosesZ is the only wallet owner; there is no Vault,
+# Treasury or EconomyCraft integration. All amounts are quoted exact decimals
+# with at most two fractional digits; a TOML float is rejected on the money path.
+# ---------------------------------------------------------------------------
+[economy]
+# When false, all economy commands report that the feature is disabled and no new
+# transaction is accepted. Existing tables and balances are never deleted.
+enabled = false
+# Display only; changes never rescale existing balances.
+currency-name = "Coins"
+currency-symbol = "$"
+# Applied once, only when an account is first created. Does not re-credit a zero balance.
+starting-balance = "0.00"
+maximum-balance = "1000000000000.00"
+minimum-payment = "0.01"
+maximum-payment = "1000000.00"
+allow-offline-payments = true
+history-page-size = 10
+balance-top-page-size = 10
+show-zero-balances-in-top = false
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 # System-level capabilities trusted addons may request through the public API.
@@ -349,6 +371,12 @@ hideSpectators = true
 enabled = false
 # Per-addon grants, for example:
 # [api.addons."example_quests"]
-# allowedCapabilities = ["kit.grant", "mail.send.system"]
+# allowedCapabilities = ["kit.grant", "mail.send.system", "economy.grant"]
 # [api.addons."example_admin_bridge"]
 # allowedCapabilities = ["moderation.mute", "moderation.unmute"]
+# [api.addons."example_shop"]
+# allowedCapabilities = ["economy.balance.read", "economy.pay.as-player", "economy.take"]
+# --------------------------------------------------------------- economy capabilities:
+# economy.balance.read, economy.ranking.read, economy.history.read, economy.pay.as-player,
+# economy.grant, economy.take, economy.set. An economy write capability is powerful: grant it only
+# to an addon you trust to move funds with a durable, idempotent requestKey.

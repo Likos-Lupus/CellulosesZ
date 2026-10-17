@@ -4,6 +4,7 @@ import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.core.text.TextSettings
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizationSettings
+import top.likoslupus.cellulosesz.economy.config.EconomySettings
 import top.likoslupus.cellulosesz.foundation.database.DatabaseSettings
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
 import top.likoslupus.cellulosesz.player.config.PlayerSettings
@@ -26,6 +27,7 @@ public data class CellulosesConfig(
     public val administration: AdministrationSettings = AdministrationSettings(),
     public val utility: UtilitySettings = UtilitySettings(),
     public val players: PlayerSettings = PlayerSettings(),
+    public val economy: EconomySettings = EconomySettings(),
     public val commands: CommandRoutingSettings = CommandRoutingSettings(),
     public val api: ApiIntegrationSettings = ApiIntegrationSettings(),
 )

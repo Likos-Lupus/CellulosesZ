@@ -252,8 +252,8 @@ TeleportIntent → preflight → optional delay → late destination resolve
 
 ## Build and distribution
 
-- `settings.gradle.kts` includes the seven `modules/*` projects and creates the two Stonecutter
-  cells. Build-tool plugin versions are hoisted into the settings `plugins {}` block (from
+- `settings.gradle.kts` includes the ten `modules/*` projects and creates the two Stonecutter cells.
+  Build-tool plugin versions are hoisted into the settings `plugins {}` block (from
   `gradle.properties`) so the whole build shares one plugin classloader.
 - Verification lives in the `build-logic` included build as convention plugins (`command-catalog`,
   `translations`, `architecture`, `module-dependencies`, `artifact-inspection`), applied by the thin

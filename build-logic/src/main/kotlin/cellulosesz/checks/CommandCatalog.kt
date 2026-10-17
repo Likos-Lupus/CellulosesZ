@@ -12,6 +12,7 @@ private val COMMAND_MODULES = listOf(
     "administration" to "modules/administration",
     "utility" to "modules/utility",
     "player" to "modules/player",
+    "economy" to "modules/economy",
     "application" to "modules/application",
 )
 
@@ -22,6 +23,7 @@ private val CATEGORY_MODULE = mapOf(
     "administration" to "administration",
     "utility" to "utility",
     "player" to "player",
+    "economy" to "economy",
     "core" to "application",
 )
 
@@ -51,11 +53,15 @@ fun commandCatalogTable(root: File): String {
     )
     val accessByConstant = mutableMapOf<String, String>()
     if (permissionsFile.isFile) {
-        Regex("""val\s+(\w+)\s*:\s*PermissionSpec\s*=\s*(playerNode|moderatorNode)\(""")
+        Regex("""val\s+(\w+)\s*:\s*PermissionSpec\s*=\s*(playerNode|moderatorNode|adminNode)\(""")
                 .findAll(permissionsFile.readText())
                 .forEach { match ->
                     accessByConstant[match.groupValues[1]] =
-                        if (match.groupValues[2] == "playerNode") "Player" else "Moderator"
+                        when (match.groupValues[2]) {
+                            "playerNode" -> "Player"
+                            "moderatorNode" -> "Moderator"
+                            else -> "Admin"
+                        }
                 }
     }
 

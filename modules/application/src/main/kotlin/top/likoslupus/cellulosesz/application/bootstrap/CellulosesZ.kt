@@ -11,6 +11,9 @@ import top.likoslupus.cellulosesz.administration.createAdministrationFeature
 import top.likoslupus.cellulosesz.api.ApiVersion
 import top.likoslupus.cellulosesz.api.PlayerIdentity
 import top.likoslupus.cellulosesz.api.communication.PrivateMessageDelivered
+import top.likoslupus.cellulosesz.api.economy.EconomyAccountCreated
+import top.likoslupus.cellulosesz.api.economy.EconomyBalanceChanged
+import top.likoslupus.cellulosesz.api.economy.EconomyTransactionCommitted
 import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
 import top.likoslupus.cellulosesz.api.movement.*
 import top.likoslupus.cellulosesz.application.api.*
@@ -48,6 +51,11 @@ import top.likoslupus.cellulosesz.core.text.i18n.preference.LocalizationSqlSchem
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
 import top.likoslupus.cellulosesz.core.text.presentation.createTextPresentation
 import top.likoslupus.cellulosesz.core.text.theme.TextThemeResolver
+import top.likoslupus.cellulosesz.economy.EconomyFeature
+import top.likoslupus.cellulosesz.economy.EconomySqlSchema
+import top.likoslupus.cellulosesz.economy.createEconomyFeature
+import top.likoslupus.cellulosesz.economy.integration.EconomyCommittedEvent
+import top.likoslupus.cellulosesz.economy.integration.EconomyDomainObserver
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
 import top.likoslupus.cellulosesz.foundation.config.TomlConfigCodec
@@ -91,6 +99,7 @@ public object CellulosesZ {
         AdministrationSqlSchema,
         UtilitySqlSchema,
         PlayerSqlSchema,
+        EconomySqlSchema,
     )
 
     public fun initialize(platform: PlatformServices) {
@@ -140,6 +149,7 @@ public object CellulosesZ {
                 TranslationSource("administration", AdministrationFeature::class.java),
                 TranslationSource("utility", UtilityFeature::class.java),
                 TranslationSource("player", PlayerFeature::class.java),
+                TranslationSource("economy", EconomyFeature::class.java),
             )
         )
         val languageRepository = JdbcPlayerLanguagePreferenceRepository(database, namespace)
@@ -251,6 +261,48 @@ public object CellulosesZ {
             permissions = permissions,
         )
 
+        val economy = createEconomyFeature(
+            kernel = kernel,
+            database = database,
+            namespace = namespace,
+            settings = { config.current.economy },
+            resolver = known,
+            messages = messages,
+            adventure = adventure,
+            presentation = presentation,
+            observer = object : EconomyDomainObserver {
+                override fun onTransactionCommitted(event: EconomyCommittedEvent) {
+                    val sessionEconomy = sessionEvents.get()?.economy ?: return
+                    sessionEconomy.events.dispatchCommitted(
+                        EconomyTransactionCommitted(
+                            transactionId = event.transactionId,
+                            kind = top.likoslupus.cellulosesz.api.economy.EconomyTransactionKind.valueOf(
+                                event.kind.name
+                            ),
+                            currencyId = event.currencyId,
+                            occurredAt = event.occurredAt,
+                            affectedPlayerIds = event.changes.map { it.playerId },
+                        )
+                    )
+                    event.changes.forEach { change ->
+                        sessionEconomy.events.dispatchBalanceChanged(
+                            EconomyBalanceChanged(
+                                change.playerId,
+                                event.transactionId,
+                                event.occurredAt
+                            )
+                        )
+                    }
+                }
+
+                override fun onAccountOpened(playerId: UUID, at: Instant) {
+                    sessionEvents.get()?.economy?.events?.dispatchAccountCreated(
+                        EconomyAccountCreated(playerId, at)
+                    )
+                }
+            },
+        )
+
         // Domain facts are forwarded to the current session's public listeners (if any). The holder is
         // swapped per session, so an old session's listeners never receive a new session's events.
         playerFeature.domainObserver = object : PlayerDomainObserver {
@@ -340,6 +392,13 @@ public object CellulosesZ {
             val kitCatalog = utility.integration.observeCatalogChanges { event ->
                 kitApi.dispatchCatalogChanged(event)
             }
+            val economyApi = EconomyApiAdapter(
+                lease = session.lease,
+                integration = economy.integration,
+                dispatcher = apiDispatcher,
+                hub = extensions,
+                settings = { config.current.economy },
+            )
             sessionEvents.set(
                 ApiSessionEvents(
                     player = playerApi,
@@ -347,6 +406,7 @@ public object CellulosesZ {
                     communication = communicationApi,
                     kit = kitApi,
                     moderation = moderationApi,
+                    economy = economyApi,
                     kitCatalog = { kitCatalog.close() },
                 )
             )
@@ -367,6 +427,7 @@ public object CellulosesZ {
                     communication = communicationApi,
                     kits = kitApi,
                     moderation = moderationApi,
+                    economy = economyApi,
                     presentation = presentationApi,
                     extensions = extensionsApi,
                 )
@@ -431,6 +492,7 @@ public object CellulosesZ {
                 addAll(administration.commands())
                 addAll(utility.commands())
                 addAll(playerFeature.commands())
+                addAll(economy.commands())
             }
         )
         val helpResolver = CommandHelpResolver(
@@ -446,6 +508,7 @@ public object CellulosesZ {
                     ClasspathCommandDocumentSource(administration::class.java),
                     ClasspathCommandDocumentSource(utility::class.java),
                     ClasspathCommandDocumentSource(PlayerFeature::class.java),
+                    ClasspathCommandDocumentSource(EconomyFeature::class.java),
                     ClasspathCommandDocumentSource(CellulosesZ::class.java),
                 )
             ),
@@ -521,6 +584,7 @@ public object CellulosesZ {
             communication.onServerStarting()
             utility.onServerStarting()
             playerFeature.onServerStarting()
+            economy.onServerStarting()
             openApiSession()
             health.transition(ApplicationHealth.State.LOADING_STATE)
         }
@@ -538,6 +602,7 @@ public object CellulosesZ {
             administration.onServerStopping()
             utility.onServerStopping()
             playerFeature.onServerStopping()
+            economy.onServerStopping()
             database.close()
             kernel.onServerStopping()
             health.transition(ApplicationHealth.State.STOPPED)
@@ -639,6 +704,7 @@ private class ApiSessionEvents(
     val communication: CommunicationApiAdapter,
     val kit: KitApiAdapter,
     val moderation: ModerationApiAdapter,
+    val economy: EconomyApiAdapter,
     private val kitCatalog: () -> Unit,
 ) {
 
@@ -648,6 +714,7 @@ private class ApiSessionEvents(
         communication.eventSink().clear()
         kit.close()
         moderation.clear()
+        economy.events.clear()
         runCatching { kitCatalog() }
     }
 

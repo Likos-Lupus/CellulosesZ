@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.application.api
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.api.*
 import top.likoslupus.cellulosesz.api.communication.CommunicationApi
+import top.likoslupus.cellulosesz.api.economy.EconomyApi
 import top.likoslupus.cellulosesz.api.extension.ExtensionRegistrationListener
 import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
 import top.likoslupus.cellulosesz.api.kit.KitsApi
@@ -28,6 +29,7 @@ internal class ApplicationApi(
     override val communication: CommunicationApi,
     override val kits: KitsApi,
     override val moderation: ModerationApi,
+    override val economy: EconomyApi,
     override val presentation: PresentationApi,
     override val extensions: ExtensionsApi,
 ) : CellulosesZApi

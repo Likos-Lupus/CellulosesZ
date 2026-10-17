@@ -64,6 +64,58 @@ internal class ApiRequestDispatcher(
         }
     }
 
+    /**
+     * The money-request mode: a blocking JDBC commit cannot be interrupted by [Job.cancel], so the
+     * task is handed a [MoneyCommitFence] and must call [MoneyCommitFence.tryBeginCommit] immediately
+     * before it touches the ledger. Cancellation then succeeds only while the fence is still
+     * preparing; afterwards it returns false and the caller recovers the outcome by request key. A
+     * cancelled request is never delivered.
+     */
+    fun <T> submitMoney(
+        task: suspend (MoneyCommitFence) -> ApiCallResult<T>,
+        deliver: (ApiCallResult<T>) -> Unit,
+    ): ApiRequestHandle {
+        val fence = MoneyCommitFence()
+        val completed = AtomicBoolean(false)
+        val job: Job? = kernel.launch {
+            val result = try {
+                task(fence)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Throwable) {
+                val id = "api-${diagnostics.incrementAndGet()}"
+                LOGGER.warn(
+                    "api_request_failed diagnostic={} type={}",
+                    id,
+                    failure.javaClass.simpleName,
+                    failure,
+                )
+                ApiCallResult.Failed(id)
+            } finally {
+                fence.finish()
+            }
+            completed.set(true)
+            if (!fence.isCancelled()) {
+                deliverOnServerThread { deliver(result) }
+            }
+        }
+
+        if (job == null) {
+            runCatching { deliver(ApiCallResult.NotReady) }
+            return ApiRequestHandle { false }
+        }
+
+        return ApiRequestHandle {
+            !completed.get() &&
+                    if (fence.cancelBeforeCommit()) {
+                        job.cancel()
+                        true
+                    } else {
+                        false
+                    }
+        }
+    }
+
     private suspend fun deliverOnServerThread(block: () -> Unit) {
         runCatching { kernel.onServerThread { block() } }
                 .onFailure { runCatching { block() } }

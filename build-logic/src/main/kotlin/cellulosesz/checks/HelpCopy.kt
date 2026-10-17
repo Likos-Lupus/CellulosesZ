@@ -9,6 +9,7 @@ private val HELP_MODULES = listOf(
     "administration" to "administration",
     "utility" to "utility",
     "player" to "player",
+    "economy" to "economy",
 )
 
 private val HELP_LANGUAGES = listOf("en_us", "zh_cn")

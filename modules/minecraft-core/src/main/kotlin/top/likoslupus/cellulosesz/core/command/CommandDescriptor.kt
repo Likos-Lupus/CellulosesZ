@@ -10,6 +10,7 @@ public enum class CommandCategory {
     ADMINISTRATION,
     UTILITY,
     PLAYER,
+    ECONOMY,
     ROOT,
 
 }

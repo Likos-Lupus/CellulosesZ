@@ -65,6 +65,7 @@ public final class top/likoslupus/cellulosesz/api/ApiVersion {
 
 public abstract interface class top/likoslupus/cellulosesz/api/CellulosesZApi {
 	public abstract fun getCommunication ()Ltop/likoslupus/cellulosesz/api/communication/CommunicationApi;
+	public abstract fun getEconomy ()Ltop/likoslupus/cellulosesz/api/economy/EconomyApi;
 	public abstract fun getExtensions ()Ltop/likoslupus/cellulosesz/api/extension/ExtensionsApi;
 	public abstract fun getKits ()Ltop/likoslupus/cellulosesz/api/kit/KitsApi;
 	public abstract fun getModeration ()Ltop/likoslupus/cellulosesz/api/moderation/ModerationApi;
@@ -487,6 +488,356 @@ public final class top/likoslupus/cellulosesz/api/communication/SendSystemMailRe
 	public final fun getDeduplicationKey ()Ljava/lang/String;
 	public final fun getTargetId ()Ljava/util/UUID;
 	public final fun getTitle ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/AddonEconomyGrantRequest {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAccess ()Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;
+	public final fun getAmount ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getReasonCode ()Ljava/lang/String;
+	public final fun getReferenceId ()Ljava/lang/String;
+	public final fun getRequestKey ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/AddonEconomySetRequest {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAccess ()Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getReasonCode ()Ljava/lang/String;
+	public final fun getReferenceId ()Ljava/lang/String;
+	public final fun getRequestKey ()Ljava/lang/String;
+	public final fun getTargetBalance ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/AddonEconomyTakeRequest {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAccess ()Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;
+	public final fun getAmount ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getReasonCode ()Ljava/lang/String;
+	public final fun getReferenceId ()Ljava/lang/String;
+	public final fun getRequestKey ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyAccountCreated {
+	public fun <init> (Ljava/util/UUID;Ljava/time/Instant;)V
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getPlayerId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyAccountView {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Z)V
+	public final fun getAccountExists ()Z
+	public final fun getBalance ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPlayerId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyAmount {
+	public fun <init> (Ljava/math/BigDecimal;)V
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDecimal ()Ljava/math/BigDecimal;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyApi {
+	public abstract fun balance (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun balanceTop (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun currency ()Ltop/likoslupus/cellulosesz/api/ApiQuery;
+	public abstract fun getEvents ()Ltop/likoslupus/cellulosesz/api/economy/EconomyEvents;
+	public abstract fun grantByAddon (Ltop/likoslupus/cellulosesz/api/economy/AddonEconomyGrantRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun history (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryQuery;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun setByAddon (Ltop/likoslupus/cellulosesz/api/economy/AddonEconomySetRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun takeByAddon (Ltop/likoslupus/cellulosesz/api/economy/AddonEconomyTakeRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun transferAsPlayer (Ltop/likoslupus/cellulosesz/api/economy/PlayerEconomyTransferRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyBalanceChanged {
+	public fun <init> (Ljava/util/UUID;Ljava/util/UUID;Ljava/time/Instant;)V
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getTransactionId ()Ljava/util/UUID;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Available : top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/EconomyAccountView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAccountView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/economy/EconomyAccountView;)Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Available;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Available;Ltop/likoslupus/cellulosesz/api/economy/EconomyAccountView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getView ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAccountView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$StorageUnavailable : top/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyBalanceOutcome$StorageUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyCurrency {
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/lang/String;)V
+	public final fun getDisplayName ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getScale ()I
+	public final fun getSymbol ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyEvents {
+	public abstract fun onAccountCreated (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+	public abstract fun onBalanceChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+	public abstract fun onTransactionCommitted (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryEntryView {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/time/Instant;)V
+	public final fun getBalanceAfter ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getDelta ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getKind ()Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getTransactionId ()Ljava/util/UUID;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Available : top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome {
+	public fun <init> (Ljava/util/List;III)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()I
+	public final fun copy (Ljava/util/List;III)Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Available;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Available;Ljava/util/List;IIIILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEntries ()Ljava/util/List;
+	public final fun getPage ()I
+	public final fun getPageSize ()I
+	public final fun getTotal ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$StorageUnavailable : top/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryOutcome$StorageUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryQuery {
+	public fun <init> (Ljava/util/UUID;I)V
+	public synthetic fun <init> (Ljava/util/UUID;IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getPage ()I
+	public final fun getPlayerId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyRankingEntryView {
+	public fun <init> (ILjava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;)V
+	public final fun getBalance ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getRank ()I
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Available : top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome {
+	public fun <init> (Ljava/util/List;III)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()I
+	public final fun component3 ()I
+	public final fun component4 ()I
+	public final fun copy (Ljava/util/List;III)Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Available;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Available;Ljava/util/List;IIIILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEntries ()Ljava/util/List;
+	public final fun getPage ()I
+	public final fun getPageSize ()I
+	public final fun getTotal ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$StorageUnavailable : top/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyRankingOutcome$StorageUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionCommitted {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;Ljava/lang/String;Ljava/time/Instant;Ljava/util/List;)V
+	public final fun getAffectedPlayerIds ()Ljava/util/List;
+	public final fun getCurrencyId ()Ljava/lang/String;
+	public final fun getKind ()Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getTransactionId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionEntryView {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;)V
+	public final fun getBalanceAfter ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getDelta ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPlayerId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionKind : java/lang/Enum {
+	public static final field COMPENSATION Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field GRANT Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field OPENING Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field SET Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field SET_NO_CHANGE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field TAKE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static final field TRANSFER Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public static fun values ()[Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$AlreadyCommitted : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionReceiptView;)V
+	public final fun getReceipt ()Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionReceiptView;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$Committed : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionReceiptView;)V
+	public final fun getReceipt ()Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionReceiptView;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$ExceedsBalanceLimit : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$ExceedsBalanceLimit;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$IdempotencyConflict : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$IdempotencyConflict;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$InsufficientFunds : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$InsufficientFunds;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$InvalidAmount : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$InvalidAmount;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$NoChange : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;)V
+	public final fun getBalance ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getTransactionId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$SameAccount : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$SameAccount;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$StorageUnavailable : top/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionOutcome$StorageUnavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionReceiptView {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;Ljava/time/Instant;Ljava/util/List;)V
+	public final fun getEntries ()Ljava/util/List;
+	public final fun getKind ()Ltop/likoslupus/cellulosesz/api/economy/EconomyTransactionKind;
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getTransactionId ()Ljava/util/UUID;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/PlayerEconomyTransferRequest {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun getAccess ()Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;
+	public final fun getAmount ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getPayerId ()Ljava/util/UUID;
+	public final fun getReceiverId ()Ljava/util/UUID;
+	public final fun getReferenceId ()Ljava/lang/String;
+	public final fun getRequestKey ()Ljava/lang/String;
 }
 
 public abstract interface class top/likoslupus/cellulosesz/api/extension/AddonRegistration {

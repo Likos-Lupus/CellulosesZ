@@ -123,6 +123,17 @@ internal class ApplicationExtensionHub(
     fun registeredAddonIds(): List<String> =
         synchronized(lock) { addons.keys.toList() }
 
+    /**
+     * Server-side authorization for a privileged operation: the caller must present the exact
+     * [AddonAccess] instance this hub registered for its id (a self-implemented handle is rejected),
+     * and the live configuration must grant [capability].
+     */
+    fun isAuthorizedAccess(access: AddonAccess, capability: String): Boolean =
+        synchronized(lock) {
+            addons[access.addonId] === access &&
+                    authorization.capabilitiesFor(access.addonId).contains(capability)
+        }
+
     fun teleportPolicies(): List<TeleportPolicyChecker> =
         synchronized(lock) { teleportPolicies.values.map { it.second } }
 

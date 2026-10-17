@@ -38,6 +38,7 @@ include(
     ":modules:administration",
     ":modules:utility",
     ":modules:player",
+    ":modules:economy",
     ":modules:application",
 )
 

@@ -23,6 +23,13 @@ public object CommandPermissions {
             description
         )
 
+    private fun adminNode(name: String, description: String): PermissionSpec =
+        PermissionSpec(
+            PREFIX + name,
+            VanillaPermissionFallback.COMMANDS_ADMIN,
+            description
+        )
+
     public val ROOT: PermissionSpec = playerNode(
         "cellulosesz",
         "Use the CellulosesZ command"
@@ -547,6 +554,58 @@ public object CommandPermissions {
         "Reset kit claims"
     )
 
+    public val BALANCE: PermissionSpec = playerNode(
+        "balance",
+        "View your balance"
+    )
+    public val BALANCE_OTHERS: PermissionSpec = moderatorNode(
+        "balance.others",
+        "View another player's balance"
+    )
+    public val BALANCETOP: PermissionSpec = playerNode(
+        "balancetop",
+        "View the balance ranking"
+    )
+    public val PAY: PermissionSpec = playerNode(
+        "pay",
+        "Pay another player"
+    )
+    public val TRANSACTIONS: PermissionSpec = playerNode(
+        "transactions",
+        "View your transaction history"
+    )
+    public val ECO: PermissionSpec = moderatorNode(
+        "eco",
+        "Use the economy administration command"
+    )
+    public val ECO_GIVE: PermissionSpec = adminNode(
+        "eco.give",
+        "Grant currency to a player"
+    )
+    public val ECO_TAKE: PermissionSpec = adminNode(
+        "eco.take",
+        "Reclaim currency from a player"
+    )
+    public val ECO_SET: PermissionSpec = adminNode(
+        "eco.set",
+        "Set a player's balance"
+    )
+    public val ECO_HISTORY: PermissionSpec = moderatorNode(
+        "eco.history",
+        "Audit a player's transactions"
+    )
+    public val ECO_INFO: PermissionSpec = moderatorNode(
+        "eco.info",
+        "View economy diagnostics"
+    )
+
+    /** The player payment capability reused by integrations that act on a player's behalf. */
+    public val ECONOMY_PAY_CAPABILITY: PermissionSpec = PermissionSpec(
+        "cellulosesz.economy.pay",
+        VanillaPermissionFallback.ALLOW_ALL,
+        "Use the pay capability through integrations"
+    )
+
     /** Every declared node, in declaration order. */
     public val all: List<PermissionSpec> = listOf(
         ROOT,
@@ -674,6 +733,18 @@ public object CommandPermissions {
         UPDATE_KIT,
         DEL_KIT,
         KIT_RESET,
+        BALANCE,
+        BALANCE_OTHERS,
+        BALANCETOP,
+        PAY,
+        TRANSACTIONS,
+        ECO,
+        ECO_GIVE,
+        ECO_TAKE,
+        ECO_SET,
+        ECO_HISTORY,
+        ECO_INFO,
+        ECONOMY_PAY_CAPABILITY,
     )
 
 }

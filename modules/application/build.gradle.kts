@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":modules:administration"))
     implementation(project(":modules:utility"))
     implementation(project(":modules:player"))
+    implementation(project(":modules:economy"))
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)

@@ -1,6 +1,7 @@
 package top.likoslupus.cellulosesz.api
 
 import top.likoslupus.cellulosesz.api.communication.CommunicationApi
+import top.likoslupus.cellulosesz.api.economy.EconomyApi
 import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
 import top.likoslupus.cellulosesz.api.kit.KitsApi
 import top.likoslupus.cellulosesz.api.moderation.ModerationApi
@@ -68,6 +69,8 @@ public interface CellulosesZApi {
     public val kits: KitsApi
 
     public val moderation: ModerationApi
+
+    public val economy: EconomyApi
 
     public val presentation: PresentationApi
 

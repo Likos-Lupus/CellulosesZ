@@ -212,6 +212,11 @@ needed there. This mod adds **no client UI**.
 | `/realname`           | Player    | `player/realname`              |
 | `/seen`               | Player    | `player/seen`                  |
 | `/whois`              | Player    | `player/whois`                 |
+| `/balance`            | Player    | `economy/balance`              |
+| `/balancetop`         | Player    | `economy/balancetop`           |
+| `/eco`                | Moderator | `economy/eco`                  |
+| `/pay`                | Player    | `economy/pay`                  |
+| `/transactions`       | Player    | `economy/transactions`         |
 | `/cellulosesz`        | Player    | `core/cellulosesz`             |
 
 <!-- END COMMAND CATALOG -->
