@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.movement.teleport.history
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import top.likoslupus.cellulosesz.movement.bindPosition
@@ -9,13 +7,15 @@ import top.likoslupus.cellulosesz.movement.readStoredPosition
 import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
 import java.sql.SQLException
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 internal class JdbcTeleportHistoryRepository(
     private val database: DatabaseRuntime,
     private val namespace: String,
 ) : TeleportHistoryRepository {
 
-    override suspend fun read(playerId: UUID): StoredPosition? =
+    override suspend fun read(playerId: UUID, cause: HistoryCause): StoredPosition? =
         withContext(Dispatchers.IO) {
             try {
                 database.read { connection ->
@@ -31,11 +31,12 @@ internal class JdbcTeleportHistoryRepository(
                         FROM
                             ${MovementSqlSchema.TELEPORT_HISTORY}
                         WHERE
-                            namespace = ? AND player_uuid = ?;
+                            namespace = ? AND player_uuid = ? AND cause = ?;
                         """.trimIndent()
                     ).use { statement ->
                         statement.setString(1, namespace)
                         statement.setString(2, playerId.toString())
+                        statement.setString(3, cause.name)
                         statement.executeQuery().use { rs ->
                             if (rs.next()) rs.readStoredPosition(1) else null
                         }
@@ -49,7 +50,11 @@ internal class JdbcTeleportHistoryRepository(
             }
         }
 
-    override suspend fun write(playerId: UUID, position: StoredPosition) =
+    override suspend fun write(
+        playerId: UUID,
+        cause: HistoryCause,
+        position: StoredPosition,
+    ) =
         withContext(Dispatchers.IO) {
             try {
                 database.transaction { connection ->
@@ -58,11 +63,12 @@ internal class JdbcTeleportHistoryRepository(
                         DELETE FROM
                             ${MovementSqlSchema.TELEPORT_HISTORY}
                         WHERE
-                            namespace = ? AND player_uuid = ?;
+                            namespace = ? AND player_uuid = ? AND cause = ?;
                         """.trimIndent()
                     ).use { statement ->
                         statement.setString(1, namespace)
                         statement.setString(2, playerId.toString())
+                        statement.setString(3, cause.name)
                         statement.executeUpdate()
                     }
                     connection.prepareStatement(
@@ -71,6 +77,7 @@ internal class JdbcTeleportHistoryRepository(
                             ${MovementSqlSchema.TELEPORT_HISTORY} (
                                 namespace,
                                 player_uuid,
+                                cause,
                                 dimension,
                                 x,
                                 y,
@@ -79,13 +86,14 @@ internal class JdbcTeleportHistoryRepository(
                                 pitch
                         )
                         VALUES (
-                            ?, ?, ?, ?, ?, ?, ?, ?
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?
                         )
                         """.trimIndent()
                     ).use { statement ->
                         statement.setString(1, namespace)
                         statement.setString(2, playerId.toString())
-                        statement.bindPosition(3, position)
+                        statement.setString(3, cause.name)
+                        statement.bindPosition(4, position)
                         statement.executeUpdate()
                     }
                     Unit

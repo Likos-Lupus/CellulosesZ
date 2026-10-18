@@ -85,6 +85,9 @@ internal object CommunicationMessages {
                 PrivateMessageOutcome.NoReplyTarget ->
                     MessageKey("communication.msg.no_reply_target")
 
+                PrivateMessageOutcome.ReplyDisabled ->
+                    MessageKey("communication.msg.reply_disabled")
+
                 PrivateMessageOutcome.RecipientUnavailable ->
                     MessageKey("communication.msg.recipient_unavailable")
 
@@ -119,6 +122,22 @@ internal object CommunicationMessages {
 
     fun alreadySet(): Notice =
         info(MessageKey("communication.preference.already_set"))
+
+    fun replyStatus(enabled: Boolean): Notice =
+        info(
+            when {
+                enabled -> MessageKey("communication.preference.reply_enabled")
+                else -> MessageKey("communication.preference.reply_disabled")
+            }
+        )
+
+    fun replyUpdated(enabled: Boolean): Notice =
+        success(
+            when {
+                enabled -> MessageKey("communication.preference.reply_updated_on")
+                else -> MessageKey("communication.preference.reply_updated_off")
+            }
+        )
 
     fun ignoreUpdated(name: String): Notice =
         success(

@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.utility.kit
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
@@ -10,6 +9,7 @@ import top.likoslupus.cellulosesz.utility.config.KitSettings
 import java.time.Duration
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.runBlocking
 
 class KitServiceTest {
 
@@ -207,6 +207,43 @@ class KitServiceTest {
                     alice.id,
                     "starter"
                 ) is ClaimKitResult.Delivered
+            )
+        }
+
+    @Test
+    fun `hide claimed once kits filters used kits`() =
+        runBlocking {
+            val service = service(KitSettings(hideClaimedOnce = true))
+            seed(service, reuse = KitReusePolicy.Once)
+            assertTrue(
+                service.claim(
+                    alice.id,
+                    "starter"
+                ) is ClaimKitResult.Delivered
+            )
+
+            val listed = service.list(alice.id)
+            assertTrue(listed is ListKitsResult.Listed)
+            assertTrue((listed as ListKitsResult.Listed).entries.isEmpty())
+        }
+
+    @Test
+    fun `claimed once kits are listed when hiding is off`() =
+        runBlocking {
+            val service = service(KitSettings(hideClaimedOnce = false))
+            seed(service, reuse = KitReusePolicy.Once)
+            assertTrue(
+                service.claim(
+                    alice.id,
+                    "starter"
+                ) is ClaimKitResult.Delivered
+            )
+
+            val listed = service.list(alice.id)
+            assertTrue(listed is ListKitsResult.Listed)
+            assertEquals(
+                1,
+                (listed as ListKitsResult.Listed).entries.size
             )
         }
 

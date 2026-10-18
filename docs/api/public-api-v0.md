@@ -95,6 +95,12 @@ Beyond the read lookups, `CellulosesZApi` exposes `player`, `movement`, `communi
 and every call is authorized server-side against the handle the extension hub registered — a
 self-implemented `AddonAccess` is rejected (ADR 0021).
 
+`player` also carries `preferences`, `movement` carries `worlds`, and `economy` carries `worth`
+(described below). Two additive view fields are available to existing readers:
+`ModerationStatusView.confinedRemaining` reports the remaining jail time (the online-time mode is
+authoritative), and `KitClaimOutcome.Delivered.equippedStacks` /
+`KitGrantOutcome.Delivered.equippedStacks` report how many delivered items were auto-equipped.
+
 Asynchronous calls return an `ApiRequestHandle`; cancelling it before completion drops delivery. For
 a money-moving request, `cancel()` returns `true` only while the request is still preparing; once it
 has entered the database commit region the fence refuses cancellation, so treat a `false` result as
@@ -120,6 +126,43 @@ receipt (`AlreadyCommitted`) instead of moving funds again, and the same key wit
 request is rejected with `IdempotencyConflict`. `EconomyEvents.onTransactionCommitted` /
 `onBalanceChanged` / `onAccountCreated` fire only for committed facts, carry minimal metadata, and
 run on the server thread; a rejected or disabled operation produces no event.
+
+## Player preferences
+
+`player.preferences` reads and writes the per-player toggles that commands expose.
+
+| Call     | Required capability        |
+|----------|----------------------------|
+| `read`   | `player.preferences.read`  |
+| `change` | `player.preferences.write` |
+
+`PlayerPreferencesView` carries teleport-enabled, accepting-pay, pay-confirmation,
+reply-to-last-recipient and clear-inventory-confirmation. `change` is an idempotent set: it returns
+`Changed` only when the stored value actually changed, and only then publishes
+`PlayerEvents.onPreferenceChanged` on the server thread. An unknown player is `UnknownPlayer`, never
+a silent default.
+
+## Worlds and last known location
+
+`movement.worlds` lists the loaded dimensions as `WorldView(id, alias)` and answers
+`canAccess(playerId, worldId)` against the same cross-world rule the teleport coordinator applies.
+Both are ungated reads. `lastKnownLocation(access, playerId)` returns the last persisted position
+and requires `movement.location.read`. `TeleportTarget.World(worldId)` is a destination kind and
+goes through the same coordinator, safety and policy checks as every other travel request.
+
+## Economy worth
+
+`economy.worth` exposes the item buy-back catalogue.
+
+| Call                | Required capability   |
+|---------------------|-----------------------|
+| `unitPrice`, `page` | `economy.worth.read`  |
+| `set`               | `economy.worth.write` |
+
+Prices are exact two-decimal `EconomyAmount` values. `set` is an idempotent price assignment: it
+returns `Unchanged` when the price already matched and publishes `EconomyEvents.onWorthChanged` only
+on a committed change. Selling items is not exposed — it needs the player's inventory, so it stays a
+command-only operation.
 
 ## What v0 deliberately excludes
 

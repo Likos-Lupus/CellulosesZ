@@ -49,6 +49,9 @@ internal class DefaultCommunicationIntegrationPort(
     override fun receivingEnabled(playerId: UUID): Boolean? =
         preferences.current(playerId)?.receivePrivateMessages
 
+    override fun ignoresPlayer(ignorerId: UUID, targetId: UUID): Boolean =
+        preferences.ignores(ignorerId, targetId)
+
     override suspend fun mailSummary(ownerId: UUID): MailSummaryPortOutcome {
         val owner = runner.run {
             known.onlineById(ownerId)
@@ -135,6 +138,7 @@ private fun PrivateMessageOutcome.toPortOutcome(): PrivateMessagePortOutcome =
         is PrivateMessageOutcome.TargetOffline -> PrivateMessagePortOutcome.RecipientUnavailable
         PrivateMessageOutcome.SelfTarget -> PrivateMessagePortOutcome.RecipientUnavailable
         PrivateMessageOutcome.NoReplyTarget -> PrivateMessagePortOutcome.RecipientUnavailable
+        PrivateMessageOutcome.ReplyDisabled -> PrivateMessagePortOutcome.RecipientUnavailable
         PrivateMessageOutcome.RecipientUnavailable -> PrivateMessagePortOutcome.RecipientUnavailable
         PrivateMessageOutcome.RecipientStateLoading -> PrivateMessagePortOutcome.RecipientUnavailable
     }

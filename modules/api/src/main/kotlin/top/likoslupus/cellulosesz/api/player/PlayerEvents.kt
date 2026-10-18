@@ -2,7 +2,8 @@ package top.likoslupus.cellulosesz.api.player
 
 import top.likoslupus.cellulosesz.api.Subscription
 import top.likoslupus.cellulosesz.api.common.ApiEventListener
-import java.util.UUID
+import java.time.Instant
+import java.util.*
 
 /** Why an AFK state changed, mapped from the domain's own transition reason. */
 public enum class AfkChangeCause {
@@ -32,6 +33,14 @@ public class PlayerPresenceChanged(
     public val online: Boolean,
 )
 
+/** One player preference changed at a committed write point. */
+public class PlayerPreferenceChanged(
+    public val playerId: UUID,
+    public val preference: PlayerPreference,
+    public val enabled: Boolean,
+    public val occurredAt: Instant,
+)
+
 /** Fact events published from the domain's own commit points, dispatched on the server thread. */
 public interface PlayerEvents {
 
@@ -45,6 +54,10 @@ public interface PlayerEvents {
 
     public fun onPresenceChanged(
         listener: ApiEventListener<PlayerPresenceChanged>,
+    ): Subscription
+
+    public fun onPreferenceChanged(
+        listener: ApiEventListener<PlayerPreferenceChanged>,
     ): Subscription
 
 }

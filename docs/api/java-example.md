@@ -63,3 +63,23 @@ public void grantQuestReward(
     );
 }
 ```
+
+## Preferences and worth
+
+```java
+api.getPlayer().getPreferences().read(
+        access,
+        playerId,
+        result -> {
+            // ApiCallResult<PlayerPreferencesOutcome>; Available carries the view.
+        }
+);
+
+api.getEconomy().getWorth().unitPrice(
+        access,
+        "minecraft:diamond",
+        result -> {
+            // ApiCallResult<WorthLookupOutcome>; Found / NotFound / NotAuthorized.
+        }
+);
+```

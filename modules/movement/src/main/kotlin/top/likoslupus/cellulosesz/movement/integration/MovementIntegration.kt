@@ -1,12 +1,17 @@
 package top.likoslupus.cellulosesz.movement.integration
 
+import net.minecraft.core.registries.Registries
+import net.minecraft.resources.Identifier
+import net.minecraft.resources.ResourceKey
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.movement.access.MovementAccess
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
 import top.likoslupus.cellulosesz.movement.home.*
+import top.likoslupus.cellulosesz.movement.location.LastLocationService
 import top.likoslupus.cellulosesz.movement.request.*
 import top.likoslupus.cellulosesz.movement.spawn.ClearSpawnResult
 import top.likoslupus.cellulosesz.movement.spawn.SpawnDataException
@@ -28,9 +33,11 @@ internal class DefaultMovementIntegration(
     private val requests: TeleportRequestService,
     private val tpAuto: TpAutoService,
     private val backend: TeleportBackend,
+    private val lastLocations: LastLocationService,
     private val settings: () -> MovementSettings,
     private val kernel: RuntimeKernel,
     private val permissions: PermissionService,
+    private val access: MovementAccess,
     private val observer: () -> MovementDomainObserver,
 ) : MovementIntegrationPort {
 
@@ -134,7 +141,7 @@ internal class DefaultMovementIntegration(
         ) == Verdict.ALLOWED
         return try {
             MovementWarpListResult.Listed(
-                warps.list().map {
+                access.visibleWarps(viewerId, warps.list()).map {
                     it.toMovement(showCoordinates, null)
                 }
             )
@@ -160,12 +167,16 @@ internal class DefaultMovementIntegration(
         return try {
             when (val result = warps.info(name)) {
                 is WarpInfoResult.Found ->
-                    MovementWarpLookupResult.Found(
-                        result.warp.toMovement(
-                            showCoordinates,
-                            result.metadata
+                    if (!access.allowsWarp(viewerId, result.warp.name.value)) {
+                        MovementWarpLookupResult.NotAuthorized
+                    } else {
+                        MovementWarpLookupResult.Found(
+                            result.warp.toMovement(
+                                showCoordinates,
+                                result.metadata
+                            )
                         )
-                    )
+                    }
 
                 WarpInfoResult.InvalidName ->
                     MovementWarpLookupResult.InvalidName
@@ -222,6 +233,12 @@ internal class DefaultMovementIntegration(
             MovementWarpMutationResult.StorageUnavailable
         }
     }
+
+    override suspend fun lastKnownLocation(playerId: UUID): MovementLastLocationResult =
+        when (val cached = lastLocations.lastLocation(playerId)) {
+            null -> MovementLastLocationResult.Unknown
+            else -> MovementLastLocationResult.Found(cached.position.toMovement())
+        }
 
     // -- Spawn ----------------------------------------------------------------
 
@@ -293,6 +310,7 @@ internal class DefaultMovementIntegration(
             is MovementTravelTarget.Warp -> travelToWarp(playerId, target.name)
             MovementTravelTarget.Spawn -> travelToSpawn(playerId)
             is MovementTravelTarget.Player -> travelToPlayer(playerId, target.playerId)
+            is MovementTravelTarget.World -> travelToWorld(playerId, target.worldId)
         }
 
     private suspend fun travelToHome(playerId: UUID, name: String?): MovementTravelResult {
@@ -309,6 +327,9 @@ internal class DefaultMovementIntegration(
             }
         } catch (_: HomeDataException) {
             return MovementTravelResult.OtherFailure
+        }
+        if (!access.allowsHomeInWorld(playerId, destination.dimension)) {
+            return MovementTravelResult.Denied
         }
         return executeFixed(playerId, destination, TeleportCause.HOME)
     }
@@ -329,7 +350,38 @@ internal class DefaultMovementIntegration(
         } catch (_: WarpDataException) {
             return MovementTravelResult.OtherFailure
         }
+        if (!access.allowsWarp(playerId, name)) {
+            return MovementTravelResult.Denied
+        }
         return executeFixed(playerId, destination, TeleportCause.WARP)
+    }
+
+    private suspend fun travelToWorld(playerId: UUID, worldId: String): MovementTravelResult {
+        when (verdict(playerId, CommandPermissions.WORLD)) {
+            Verdict.DENIED -> return MovementTravelResult.Denied
+            Verdict.OFFLINE -> return MovementTravelResult.PlayerOffline
+            Verdict.ALLOWED -> Unit
+        }
+        if (!access.allows(playerId, worldId)) {
+            return MovementTravelResult.Denied
+        }
+        val destination = kernel.onServerThread {
+            val identifier = Identifier.tryParse(worldId)
+                ?: return@onServerThread null
+            val level = kernel.requireServer().getLevel(
+                ResourceKey.create(Registries.DIMENSION, identifier)
+            ) ?: return@onServerThread null
+            val spawn = level.respawnData
+            StoredPosition(
+                dimension = spawn.dimension().identifier().toString(),
+                x = spawn.pos().x + 0.5,
+                y = spawn.pos().y.toDouble(),
+                z = spawn.pos().z + 0.5,
+                yaw = spawn.yaw(),
+                pitch = spawn.pitch(),
+            )
+        } ?: return MovementTravelResult.DestinationNotFound
+        return executeFixed(playerId, destination, TeleportCause.SPAWN)
     }
 
     private suspend fun travelToSpawn(playerId: UUID): MovementTravelResult {
@@ -444,6 +496,9 @@ internal class DefaultMovementIntegration(
                 TpaSendResult.ServerQueueFull,
                 is TpaSendResult.TargetQueueFull ->
                     MovementRequestActionResult.RequestLimit
+
+                is TpaSendResult.TargetDisabled ->
+                    MovementRequestActionResult.TargetUnavailable
             }
         }
     }
@@ -717,6 +772,7 @@ private fun TeleportOutcome.toMovementTravelResult(): MovementTravelResult =
         // A stored dimension that no longer exists is an internal inconsistency, not a resolvable
         // destination miss: fold it into the generic failure.
         is TeleportOutcome.UnknownDimension -> MovementTravelResult.OtherFailure
+        is TeleportOutcome.WorldAccessDenied -> MovementTravelResult.Denied
         TeleportOutcome.OutsideWorldBorder -> MovementTravelResult.OtherFailure
         TeleportOutcome.UnsafeDestination -> MovementTravelResult.UnsafeDestination
         is TeleportOutcome.Cooldown -> MovementTravelResult.Cooldown(remaining)

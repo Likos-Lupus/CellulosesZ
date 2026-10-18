@@ -15,9 +15,13 @@ import java.util.*
  */
 public sealed interface ModerationIntegrationActor {
 
-    public data class Player(public val playerId: UUID) : ModerationIntegrationActor
+    public data class Player(
+        public val playerId: UUID
+    ) : ModerationIntegrationActor
 
-    public data class Addon(public val addonId: String) : ModerationIntegrationActor
+    public data class Addon(
+        public val addonId: String
+    ) : ModerationIntegrationActor
 
 }
 
@@ -26,6 +30,8 @@ public class ModerationStatusSummary(
     public val muted: Boolean,
     public val mutedUntil: Instant?,
     public val confined: Boolean,
+    /** The remaining jail term, or `null` when not confined or the term is untimed. */
+    public val confinedRemaining: Duration? = null,
 )
 
 public sealed interface ModerationIntegrationStatus {
@@ -47,7 +53,9 @@ public sealed interface ModerationIntegrationStatus {
 
 public sealed interface ModerationIntegrationOutcome {
 
-    public data class Applied(public val actionId: String) : ModerationIntegrationOutcome
+    public data class Applied(
+        public val actionId: String
+    ) : ModerationIntegrationOutcome
 
     public data object AlreadyInState : ModerationIntegrationOutcome
 

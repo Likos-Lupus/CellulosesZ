@@ -6,8 +6,14 @@ import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.*
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
+import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
+import top.likoslupus.cellulosesz.core.player.PlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
+import top.likoslupus.cellulosesz.core.preference.PreferenceWriteResult
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -21,7 +27,9 @@ import top.likoslupus.cellulosesz.economy.format.EconomyMessages
 import top.likoslupus.cellulosesz.economy.format.HistoryRow
 import top.likoslupus.cellulosesz.economy.format.TopRow
 import top.likoslupus.cellulosesz.economy.integration.*
+import top.likoslupus.cellulosesz.economy.money.Money
 import top.likoslupus.cellulosesz.economy.money.MoneyParsing
+import top.likoslupus.cellulosesz.economy.payment.*
 import java.math.BigDecimal
 import java.util.*
 
@@ -44,6 +52,10 @@ internal object EconomyCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
+        eligibility: PaymentEligibility,
+        confirmations: PayConfirmationState,
     ): List<CommandDefinition> = listOf(
         command(
             name = "balance",
@@ -140,9 +152,158 @@ internal object EconomyCommands {
                             kernel,
                             messages,
                             adventure,
-                            presentation
+                            presentation,
+                            permissions,
+                            preferences,
+                            eligibility,
+                            confirmations,
                         )
                     }
+                }
+            }
+        },
+
+        command(
+            name = "paytoggle",
+            category = CommandCategory.ECONOMY,
+            permission = CommandPermissions.PAY_TOGGLE,
+            documentation = "economy/paytoggle",
+        ) {
+            executesPlayer {
+                payToggleStatus(
+                    source,
+                    playerId,
+                    null,
+                    preferences,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
+            literal("on") {
+                executesPlayer {
+                    applyPayToggle(
+                        source,
+                        playerId,
+                        null,
+                        true,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("off") {
+                executesPlayer {
+                    applyPayToggle(
+                        source,
+                        playerId,
+                        null,
+                        false,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            argument(
+                "player",
+                word(),
+                permission = CommandPermissions.PAY_TOGGLE_OTHERS,
+            ) { player ->
+                suggests { suggestAll(onlineNames(source)) }
+                executes {
+                    payToggleStatus(
+                        source,
+                        source.player?.uuid,
+                        get(player),
+                        preferences,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+                literal("on") {
+                    executes {
+                        applyPayToggle(
+                            source,
+                            source.player?.uuid,
+                            get(player),
+                            true,
+                            preferences,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+                literal("off") {
+                    executes {
+                        applyPayToggle(
+                            source,
+                            source.player?.uuid,
+                            get(player),
+                            false,
+                            preferences,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "payconfirmtoggle",
+            category = CommandCategory.ECONOMY,
+            permission = CommandPermissions.PAY_CONFIRM_TOGGLE,
+            documentation = "economy/payconfirmtoggle",
+        ) {
+            executesPlayer {
+                context.source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
+                    EconomyMessages.payConfirmStatus(
+                        preferences.isEnabled(playerId, PlayerPreference.PAY_CONFIRMATION)
+                    ),
+                )
+            }
+            literal("on") {
+                executesPlayer {
+                    applyPayConfirmToggle(
+                        source,
+                        playerId,
+                        true,
+                        preferences,
+                        confirmations,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("off") {
+                executesPlayer {
+                    applyPayConfirmToggle(
+                        source,
+                        playerId,
+                        false,
+                        preferences,
+                        confirmations,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
                 }
             }
         },
@@ -508,6 +669,10 @@ internal object EconomyCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
+        eligibility: PaymentEligibility,
+        confirmations: PayConfirmationState,
     ): Int {
         val amount = MoneyParsing.parse(amountText)
             ?: return source.replyError(
@@ -546,6 +711,58 @@ internal object EconomyCommands {
                     receiverName
                 )
             )
+        }
+        when (
+            PayEligibilityGate.decide(
+                receiverAcceptsPay = preferences.isEnabled(
+                    receiver.id,
+                    PlayerPreference.ACCEPTING_PAY,
+                ),
+                payerBypasses = source.requiresPermission(
+                    permissions,
+                    CommandPermissions.PAY_TOGGLE_BYPASS,
+                ),
+                receiverExcluded = settings().pay.excludesIgnoreList
+                        && !eligibility.allows(payerId, receiver.id),
+            )
+        ) {
+            PayEligibilityDecision.ReceiverDisabled -> return source.replyNotice(
+                adventure,
+                presentation,
+                payerId,
+                EconomyMessages.payReceiverDisabled(receiver.name),
+            )
+
+            PayEligibilityDecision.ReceiverBlocked -> return source.replyNotice(
+                adventure,
+                presentation,
+                payerId,
+                EconomyMessages.payBlocked(receiver.name),
+            )
+
+            PayEligibilityDecision.Allowed -> Unit
+        }
+        if (preferences.isEnabled(payerId, PlayerPreference.PAY_CONFIRMATION)) {
+            when (
+                val confirmation = confirmations.request(
+                    payerId,
+                    receiver.id,
+                    amount,
+                    receiver.name,
+                )
+            ) {
+                PayConfirmationDecision.Execute -> Unit
+                is PayConfirmationDecision.Confirm -> return source.replyNotice(
+                    adventure,
+                    presentation,
+                    payerId,
+                    EconomyMessages.payConfirm(
+                        confirmation.receiverName,
+                        confirmation.amount.decimal,
+                        display(settings()),
+                    ),
+                )
+            }
         }
         val payerName = resolver.onlineById(payerId)?.name ?: payerId.toString()
         val receiverTarget = resolver.onlineById(receiver.id)
@@ -616,6 +833,176 @@ internal object EconomyCommands {
             }
         }
     }
+
+    private fun payToggleStatus(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        preferences: PlayerPreferenceService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val target = resolveToggleTarget(
+            source,
+            actorId,
+            targetName,
+            messages,
+            adventure
+        ) ?: return 0
+        return source.replyNotice(
+            adventure,
+            presentation,
+            actorId,
+            EconomyMessages.payToggleStatus(
+                isOther = targetName != null,
+                name = target.name,
+                enabled = preferences.isEnabled(
+                    target.id,
+                    PlayerPreference.ACCEPTING_PAY
+                ),
+            ),
+        )
+    }
+
+    private fun applyPayToggle(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        enabled: Boolean,
+        preferences: PlayerPreferenceService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val target = resolveToggleTarget(
+            source,
+            actorId,
+            targetName,
+            messages,
+            adventure
+        )
+            ?: return 0
+        val targetId = target.id
+        return economyLaunch(
+            source,
+            kernel,
+            messages,
+            adventure
+        ) { feedback ->
+            val notice = when (
+                preferences.set(
+                    targetId,
+                    PlayerPreference.ACCEPTING_PAY,
+                    enabled
+                )
+            ) {
+                PreferenceWriteResult.StorageUnavailable ->
+                    EconomyMessages.preferenceStorageUnavailable()
+
+                else -> EconomyMessages.payToggleUpdated(
+                    isOther = targetName != null,
+                    name = target.name,
+                    enabled = enabled,
+                )
+            }
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                actorId,
+                listOf(notice),
+            )
+        }
+    }
+
+    private fun applyPayConfirmToggle(
+        source: CommandSourceStack,
+        playerId: UUID,
+        enabled: Boolean,
+        preferences: PlayerPreferenceService,
+        confirmations: PayConfirmationState,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int =
+        economyLaunch(
+            source,
+            kernel,
+            messages,
+            adventure
+        ) { feedback ->
+            val result = preferences.set(
+                playerId,
+                PlayerPreference.PAY_CONFIRMATION,
+                enabled,
+            )
+            confirmations.clear(playerId)
+            val notice = when (result) {
+                PreferenceWriteResult.StorageUnavailable ->
+                    EconomyMessages.preferenceStorageUnavailable()
+
+                else -> EconomyMessages.payConfirmUpdated(enabled)
+            }
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice),
+            )
+        }
+
+    /**
+     * Resolves the player a `/paytoggle` action targets. A null [targetName] means the actor
+     * themselves and requires a player source; otherwise the named account must be online. Replies
+     * an error and returns null when resolution fails.
+     */
+    private fun resolveToggleTarget(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): ToggleTarget? {
+        if (targetName == null) {
+            val player = source.player
+                ?: run {
+                    source.replyError(
+                        adventure,
+                        messages.renderFor(
+                            null,
+                            MessageKey("core.error.player_required")
+                        ),
+                    )
+                    return null
+                }
+            return ToggleTarget(player.uuid, player.gameProfile.name)
+        }
+        val resolved = PlayerResolver.onlineByName(source.server, targetName)
+            ?: run {
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        actorId,
+                        MessageKey("economy.pay.error.unknown_player"),
+                        targetName,
+                    ),
+                )
+                return null
+            }
+        return ToggleTarget(resolved.uuid, resolved.name.string)
+    }
+
+    private fun onlineNames(source: CommandSourceStack): List<String> =
+        source.server.playerList.players.map { it.gameProfile.name }
+
+    private data class ToggleTarget(
+        val id: UUID,
+        val name: String,
+    )
 
     private fun history(
         subject: UUID,

@@ -58,4 +58,10 @@ internal interface EconomyRepository {
         includeZero: Boolean
     ): TopPage
 
+    /**
+     * The committed transaction id for `(originId, requestKey)`, or null when no such transaction
+     * exists. Used by sale recovery to tell a landed credit from a missing one without writing.
+     */
+    suspend fun transactionId(originId: String, requestKey: String): UUID?
+
 }

@@ -32,6 +32,7 @@ public object PlayerSqlSchema : SqlSchemaContributor {
                     SqlColumn("player_uuid", SqlColumnType.UUID),
                     SqlColumn("nickname_display", SqlColumnType.RESOURCE),
                     SqlColumn("normalized_nickname", SqlColumnType.RESOURCE),
+                    SqlColumn("owner_name", SqlColumnType.NAME, nullable = true),
                     SqlColumn("updated_at_ms", SqlColumnType.BIGINT),
                     SqlColumn("updated_by_uuid", SqlColumnType.NAME, nullable = true),
                 ),

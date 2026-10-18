@@ -11,4 +11,6 @@ public data class TeleportRequestSettings(
     public val maxBatchRecipients: Int = 16,
     public val batchCooldownSeconds: Long = 120,
     public val maxAutoAllowedPlayers: Int = 128,
+    /** Whether a player accepts incoming teleports until they change it with `/tptoggle`. */
+    public val acceptByDefault: Boolean = true,
 )

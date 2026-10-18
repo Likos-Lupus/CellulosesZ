@@ -19,6 +19,17 @@ public class MovementPosition(
     public val pitch: Float,
 )
 
+/** The most recent known position of a player, or an explicit unknown/storage failure. */
+public sealed interface MovementLastLocationResult {
+
+    public data class Found(public val position: MovementPosition) : MovementLastLocationResult
+
+    public data object Unknown : MovementLastLocationResult
+
+    public data object StorageUnavailable : MovementLastLocationResult
+
+}
+
 /** A named home owned by [ownerId]. */
 public class MovementHome(
     public val ownerId: UUID,
@@ -159,6 +170,8 @@ public sealed interface MovementTravelTarget {
     public data object Spawn : MovementTravelTarget
 
     public data class Player(public val playerId: UUID) : MovementTravelTarget
+
+    public data class World(public val worldId: String) : MovementTravelTarget
 
 }
 
@@ -338,6 +351,9 @@ public interface MovementIntegrationPort {
     public suspend fun createWarp(actorId: UUID, name: String): MovementWarpMutationResult
 
     public suspend fun deleteWarp(actorId: UUID, name: String): MovementWarpMutationResult
+
+    /** The last position persisted for [playerId], used by the public worlds/location surface. */
+    public suspend fun lastKnownLocation(playerId: UUID): MovementLastLocationResult
 
     public suspend fun configuredSpawn(viewerId: UUID): MovementSpawnQueryResult
 

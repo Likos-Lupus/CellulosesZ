@@ -2,6 +2,8 @@ package top.likoslupus.cellulosesz.movement.format
 
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
+import top.likoslupus.cellulosesz.movement.compass.CompassPoint
+import top.likoslupus.cellulosesz.movement.compass.CompassReading
 import top.likoslupus.cellulosesz.movement.home.*
 import top.likoslupus.cellulosesz.movement.pending.TeleportCancellation
 import top.likoslupus.cellulosesz.movement.random.*
@@ -12,6 +14,7 @@ import top.likoslupus.cellulosesz.movement.teleport.TeleportOutcome
 import top.likoslupus.cellulosesz.movement.terrain.TerrainResult
 import top.likoslupus.cellulosesz.movement.terrain.TerrainTarget
 import top.likoslupus.cellulosesz.movement.warp.*
+import top.likoslupus.cellulosesz.movement.world.WorldEntry
 import java.time.Instant
 import kotlin.math.floor
 import kotlin.time.Duration
@@ -39,6 +42,12 @@ internal object MovementMessages {
                 is TeleportOutcome.UnknownDimension ->
                     return notice(
                         MessageKey("movement.teleport.error.unknown_dimension"),
+                        identifier(outcome.dimension)
+                    )
+
+                is TeleportOutcome.WorldAccessDenied ->
+                    return notice(
+                        MessageKey("movement.teleport.error.world_access"),
                         identifier(outcome.dimension)
                     )
 
@@ -352,6 +361,58 @@ internal object MovementMessages {
 
     fun requestTargetOffline(): Notice =
         notice(MessageKey("movement.request.target_offline"))
+
+    fun requestTargetDisabled(target: String): Notice =
+        notice(
+            MessageKey("movement.request.target_disabled"),
+            playerName(target),
+        )
+
+    fun teleportToggleStatus(
+        isOther: Boolean,
+        name: String,
+        enabled: Boolean
+    ): Notice =
+        when {
+            isOther && enabled -> info(
+                MessageKey("movement.tptoggle.status.other.enabled"),
+                playerName(name),
+            )
+
+            isOther -> info(
+                MessageKey("movement.tptoggle.status.other.disabled"),
+                playerName(name),
+            )
+
+            enabled -> info(MessageKey("movement.tptoggle.status.enabled"))
+            else -> info(MessageKey("movement.tptoggle.status.disabled"))
+        }
+
+    fun teleportToggleUpdated(
+        isOther: Boolean,
+        name: String,
+        enabled: Boolean
+    ): Notice =
+        when {
+            isOther && enabled -> success(
+                MessageKey("movement.tptoggle.other.enabled"),
+                playerName(name),
+            )
+
+            isOther -> success(
+                MessageKey("movement.tptoggle.other.disabled"),
+                playerName(name),
+            )
+
+            enabled -> success(MessageKey("movement.tptoggle.enabled"))
+            else -> success(MessageKey("movement.tptoggle.disabled"))
+        }
+
+    fun tpAutoTeleportDisabled(): Notice =
+        notice(MessageKey("movement.tptoggle.tpauto_disabled"))
+
+    fun preferenceStorageUnavailable(): Notice =
+        notice(MessageKey("movement.tptoggle.storage"))
 
     fun tpAutoStatus(mode: TpAutoMode): Notice =
         when (mode) {
@@ -747,6 +808,159 @@ internal object MovementMessages {
 
             TerrainResult.PlayerOffline ->
                 notice(MessageKey("movement.teleport.error.player_offline"))
+        }
+
+    fun currentWorld(alias: String?, dimension: String): DetailView =
+        DetailView(
+            title = LocalizedText(MessageKey("movement.world.current_title")),
+            fields = listOf(
+                DetailField(
+                    label = LocalizedText(MessageKey("movement.world.field.name")),
+                    value = LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(literal(alias ?: dimension)),
+                    ),
+                ),
+                DetailField(
+                    label = LocalizedText(MessageKey("movement.world.field.dimension")),
+                    value = LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(literal(dimension)),
+                    ),
+                ),
+            ),
+        )
+
+    fun worlds(entries: List<WorldEntry>): ListPage =
+        ListPage(
+            title = LocalizedText(MessageKey("movement.world.list_title")),
+            rows = entries.map { entry ->
+                ListRow(
+                    main = LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(literal(entry.alias ?: entry.dimension)),
+                    ),
+                    supporting = entry.alias
+                        ?.let {
+                            LocalizedText(
+                                MessageKey("movement.world.list_dimension"),
+                                listOf(identifier(entry.dimension)),
+                            )
+                        },
+                )
+            },
+            emptyText = LocalizedText(MessageKey("movement.world.list_empty")),
+        )
+
+    fun unknownWorld(name: String): Notice =
+        notice(
+            MessageKey("movement.world.unknown"),
+            literal(name),
+        )
+
+    fun teleportedToWorld(name: String): Notice =
+        success(
+            MessageKey("movement.world.teleported"),
+            identifier(name),
+        )
+
+    fun compass(reading: CompassReading): DetailView =
+        DetailView(
+            title = LocalizedText(MessageKey("movement.compass.title")),
+            fields = listOf(
+                DetailField(
+                    label = LocalizedText(MessageKey("movement.compass.field.direction")),
+                    value = LocalizedText(compassDirection(reading.point)),
+                ),
+                DetailField(
+                    label = LocalizedText(MessageKey("movement.compass.field.bearing")),
+                    value = LocalizedText(
+                        MessageKey("movement.compass.bearing"),
+                        listOf(count(reading.bearingDegrees.toLong())),
+                    ),
+                ),
+            ),
+        )
+
+    fun teleportedToPlayer(name: String): Notice =
+        success(
+            MessageKey("movement.teleport.to_player"),
+            playerName(name),
+        )
+
+    fun teleportedOther(subject: String, destination: String): Notice =
+        success(
+            MessageKey("movement.teleport.other_to_other"),
+            playerName(subject),
+            playerName(destination),
+        )
+
+    fun teleportedHere(name: String): Notice =
+        success(
+            MessageKey("movement.teleport.here"),
+            playerName(name),
+        )
+
+    fun teleportedToYou(name: String): Notice =
+        info(
+            MessageKey("movement.teleport.here_notify"),
+            playerName(name),
+        )
+
+    fun teleportedToOffline(name: String): Notice =
+        success(
+            MessageKey("movement.teleport.offline"),
+            playerName(name),
+        )
+
+    fun noLastLocation(name: String): Notice =
+        notice(
+            MessageKey("movement.teleport.no_last_location"),
+            playerName(name),
+        )
+
+    fun teleportedAll(count: Int, target: String?): Notice =
+        when (target) {
+            null -> success(
+                MessageKey("movement.teleport.all_here"),
+                count(count.toLong()),
+            )
+
+            else -> success(
+                MessageKey("movement.teleport.all"),
+                count(count.toLong()),
+                playerName(target),
+            )
+        }
+
+    fun homeWorldDenied(dimension: String): Notice =
+        notice(
+            MessageKey("movement.home.world_denied"),
+            identifier(dimension),
+        )
+
+    fun homeOverwritePrompt(name: String): Notice =
+        notice(
+            MessageKey("movement.home.overwrite_prompt"),
+            identifier(name),
+        )
+
+    fun warpNotPermitted(name: String): Notice =
+        notice(
+            MessageKey("movement.warp.no_permission"),
+            identifier(name),
+        )
+
+    private fun compassDirection(point: CompassPoint): MessageKey =
+        when (point) {
+            CompassPoint.NORTH -> MessageKey("movement.compass.direction.north")
+            CompassPoint.NORTH_EAST -> MessageKey("movement.compass.direction.north_east")
+            CompassPoint.EAST -> MessageKey("movement.compass.direction.east")
+            CompassPoint.SOUTH_EAST -> MessageKey("movement.compass.direction.south_east")
+            CompassPoint.SOUTH -> MessageKey("movement.compass.direction.south")
+            CompassPoint.SOUTH_WEST -> MessageKey("movement.compass.direction.south_west")
+            CompassPoint.WEST -> MessageKey("movement.compass.direction.west")
+            CompassPoint.NORTH_WEST -> MessageKey("movement.compass.direction.north_west")
         }
 
     private fun notice(key: MessageKey, vararg arguments: TextArgument): Notice =

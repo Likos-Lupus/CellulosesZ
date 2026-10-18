@@ -15,7 +15,9 @@ import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.core.text.presentation.sendPage
+import top.likoslupus.cellulosesz.movement.access.MovementAccess
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
+import top.likoslupus.cellulosesz.movement.config.MovementSettings
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
 import top.likoslupus.cellulosesz.movement.teleport.*
@@ -27,6 +29,9 @@ internal object HomeCommands {
         backend: TeleportBackend,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
+        settings: () -> MovementSettings,
+        access: MovementAccess,
+        confirmations: HomeOverwriteConfirmations,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -44,6 +49,8 @@ internal object HomeCommands {
                     null,
                     service,
                     backend,
+                    settings,
+                    confirmations,
                     kernel,
                     messages,
                     adventure,
@@ -57,6 +64,8 @@ internal object HomeCommands {
                         get(name),
                         service,
                         backend,
+                        settings,
+                        confirmations,
                         kernel,
                         messages,
                         adventure,
@@ -79,6 +88,7 @@ internal object HomeCommands {
                     service,
                     teleports,
                     teleportSettings,
+                    access,
                     kernel,
                     messages,
                     adventure,
@@ -93,6 +103,7 @@ internal object HomeCommands {
                         service,
                         teleports,
                         teleportSettings,
+                        access,
                         kernel,
                         messages,
                         adventure,
@@ -171,6 +182,8 @@ internal object HomeCommands {
         rawName: String?,
         service: HomeService,
         backend: TeleportBackend,
+        settings: () -> MovementSettings,
+        confirmations: HomeOverwriteConfirmations,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -195,7 +208,23 @@ internal object HomeCommands {
         ) { target ->
             val notice = when (val position = backend.position(playerId)) {
                 null -> MovementMessages.playerOffline()
-                else -> MovementMessages.homeSet(service.set(playerId, rawName, position))
+                else -> {
+                    val existing = service.get(playerId, rawName)
+                    if (existing is HomeLookupResult.Found
+                        && settings().homes.confirmHomeOverwrite
+                    ) {
+                        val name = existing.home.name.value
+                        if (confirmations.confirm(playerId, name)) {
+                            MovementMessages.homeSet(service.set(playerId, rawName, position))
+                        } else {
+                            confirmations.remember(playerId, name)
+                            MovementMessages.homeOverwritePrompt(name)
+                        }
+                    } else {
+                        confirmations.clear(playerId)
+                        MovementMessages.homeSet(service.set(playerId, rawName, position))
+                    }
+                }
             }
             kernel.sendNotices(
                 target,
@@ -213,6 +242,7 @@ internal object HomeCommands {
         service: HomeService,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
+        access: MovementAccess,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -237,18 +267,28 @@ internal object HomeCommands {
         ) { target ->
             val notices = when (val result = service.get(playerId, rawName)) {
                 is HomeLookupResult.Found -> {
-                    val intent = TeleportIntent(
-                        subjectId = playerId,
-                        destination = TeleportDestination.Fixed(result.home.position),
-                        cause = TeleportCause.HOME,
-                        policy = teleportPolicyFor(
-                            TeleportCause.HOME,
-                            teleportSettings()
-                        ),
-                    )
-                    when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success -> listOf(MovementMessages.teleportToHome(result.home))
-                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
+                    val dimension = result.home.position.dimension
+                    if (!access.allowsHomeInWorld(playerId, dimension)) {
+                        listOf(MovementMessages.homeWorldDenied(dimension))
+                    } else {
+                        val intent = TeleportIntent(
+                            subjectId = playerId,
+                            destination = TeleportDestination.Fixed(result.home.position),
+                            cause = TeleportCause.HOME,
+                            policy = teleportPolicyFor(
+                                TeleportCause.HOME,
+                                teleportSettings()
+                            ),
+                        )
+                        when (val outcome = teleports.execute(intent)) {
+                            is TeleportOutcome.Success -> listOf(
+                                MovementMessages.teleportToHome(
+                                    result.home
+                                )
+                            )
+
+                            else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
+                        }
                     }
                 }
 

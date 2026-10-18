@@ -31,7 +31,6 @@ internal class KitApiAdapter(
 ) : KitsApi {
 
     private val sinks = KitEventSinks()
-
     override val events: KitEvents = sinks.events
 
     override fun listFor(
@@ -241,7 +240,13 @@ private fun KitAvailabilityResult.toApi(): KitAvailabilityOutcome = when (this) 
 }
 
 private fun KitClaimResult.toApi(): KitClaimOutcome = when (this) {
-    is KitClaimResult.Delivered -> KitClaimOutcome.Delivered(droppedStacks, claimRecordedFully)
+    is KitClaimResult.Delivered ->
+        KitClaimOutcome.Delivered(
+            droppedStacks,
+            claimRecordedFully,
+            equippedStacks
+        )
+
     KitClaimResult.Disabled -> KitClaimOutcome.Disabled
     KitClaimResult.Loading -> KitClaimOutcome.Loading
     KitClaimResult.NotFound -> KitClaimOutcome.NotFound
@@ -257,7 +262,13 @@ private fun KitClaimResult.toApi(): KitClaimOutcome = when (this) {
 
 private fun KitGrantResult.toApi(): ApiCallResult<KitGrantOutcome> = when (this) {
     is KitGrantResult.Delivered ->
-        ApiCallResult.Completed(KitGrantOutcome.Delivered(grantId, droppedStacks))
+        ApiCallResult.Completed(
+            KitGrantOutcome.Delivered(
+                grantId,
+                droppedStacks,
+                equippedStacks
+            )
+        )
 
     KitGrantResult.AlreadyProcessed ->
         ApiCallResult.Completed(KitGrantOutcome.AlreadyProcessed)

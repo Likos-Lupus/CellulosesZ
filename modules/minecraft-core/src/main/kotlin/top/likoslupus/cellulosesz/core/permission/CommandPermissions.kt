@@ -203,6 +203,24 @@ public object CommandPermissions {
         "tpauto",
         "Manage automatic teleport-request acceptance"
     )
+    public val TP_TOGGLE: PermissionSpec = playerNode(
+        "tptoggle",
+        "Toggle accepting teleport requests"
+    )
+
+    /** Toggling another player's teleport setting; a non-command capability. */
+    public val TP_TOGGLE_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.tptoggle.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Toggle another player's teleport setting"
+    )
+
+    /** Teleporting to or moving a player who disabled teleports; a non-command capability. */
+    public val TP_TOGGLE_BYPASS: PermissionSpec = PermissionSpec(
+        "cellulosesz.tptoggle.bypass",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Teleport regardless of a player's teleport setting"
+    )
     public val MSG: PermissionSpec = playerNode(
         "msg",
         "Send a private message"
@@ -218,6 +236,10 @@ public object CommandPermissions {
     public val MSG_TOGGLE: PermissionSpec = playerNode(
         "msgtoggle",
         "Toggle private messages"
+    )
+    public val REPLY_TOGGLE: PermissionSpec = playerNode(
+        "rtoggle",
+        "Toggle replying to the last recipient"
     )
     public val MAIL: PermissionSpec = playerNode(
         "mail",
@@ -306,6 +328,10 @@ public object CommandPermissions {
     public val CLEAR_INVENTORY_OTHERS: PermissionSpec = moderatorNode(
         "clearinventory.others",
         "Clear another player's inventory"
+    )
+    public val CLEAR_INVENTORY_CONFIRM_TOGGLE: PermissionSpec = playerNode(
+        "clearinventoryconfirmtoggle",
+        "Toggle the clear-inventory confirmation"
     )
 
     public val SEEN: PermissionSpec = playerNode(
@@ -570,6 +596,28 @@ public object CommandPermissions {
         "pay",
         "Pay another player"
     )
+    public val PAY_TOGGLE: PermissionSpec = playerNode(
+        "paytoggle",
+        "Toggle accepting payments"
+    )
+
+    /** Toggling another player's payment setting; a non-command capability. */
+    public val PAY_TOGGLE_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.paytoggle.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Toggle another player's payment setting"
+    )
+
+    /** Paying a player who disabled payments; a non-command capability. */
+    public val PAY_TOGGLE_BYPASS: PermissionSpec = PermissionSpec(
+        "cellulosesz.paytoggle.bypass",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Pay a player who has disabled payments"
+    )
+    public val PAY_CONFIRM_TOGGLE: PermissionSpec = playerNode(
+        "payconfirmtoggle",
+        "Toggle payment confirmation"
+    )
     public val TRANSACTIONS: PermissionSpec = playerNode(
         "transactions",
         "View your transaction history"
@@ -607,6 +655,290 @@ public object CommandPermissions {
     )
 
     /** Every declared node, in declaration order. */
+    public val WORLD: PermissionSpec = playerNode("world", "Switch worlds")
+
+    public val TP_O: PermissionSpec = moderatorNode("tpo", "Teleport directly to a player")
+
+    public val TP_O_HERE: PermissionSpec = moderatorNode(
+        "tpohere",
+        "Teleport a player to you directly"
+    )
+
+    public val TP_OFFLINE: PermissionSpec = moderatorNode(
+        "tpoffline",
+        "Teleport to an offline player's last known location"
+    )
+
+    public val TP_ALL: PermissionSpec = adminNode("tpall", "Teleport every player to a target")
+
+    public val COMPASS: PermissionSpec = playerNode("compass", "Show your current bearing")
+
+    public val WORTH: PermissionSpec = playerNode("worth", "Look up an item's worth")
+
+    public val SELL: PermissionSpec = playerNode("sell", "Sell items to the server")
+
+    public val SET_WORTH: PermissionSpec = moderatorNode("setworth", "Set an item's worth")
+
+    public val SELL_BULK: PermissionSpec = PermissionSpec(
+        "cellulosesz.sell.bulk",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Sell an entire inventory in one command"
+    )
+
+    public val GIVE: PermissionSpec = moderatorNode("give", "Give items to players")
+
+    public val ITEM: PermissionSpec = moderatorNode("item", "Give yourself an item")
+
+    public val ITEM_DB: PermissionSpec = playerNode("itemdb", "Look up item ids and aliases")
+
+    public val ENCHANT: PermissionSpec = moderatorNode("enchant", "Enchant the held item")
+
+    public val ENCHANT_UNSAFE: PermissionSpec = PermissionSpec(
+        "cellulosesz.enchant.unsafe",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "Use enchantment levels above the vanilla maximum"
+    )
+
+    public val POTION: PermissionSpec = moderatorNode("potion", "Edit the held potion")
+
+    public val POTION_APPLY: PermissionSpec = PermissionSpec(
+        "cellulosesz.potion.apply",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Apply the effects of the held potion to yourself"
+    )
+
+    public val POTION_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.potion.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Edit another player's potion"
+    )
+
+    public val SKULL: PermissionSpec = moderatorNode("skull", "Create a player head")
+
+    public val SKULL_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.skull.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Create a head for another owner"
+    )
+
+    public val SKULL_SPAWN: PermissionSpec = PermissionSpec(
+        "cellulosesz.skull.spawn",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Spawn a new head item instead of editing the held one"
+    )
+
+    public val UNLIMITED: PermissionSpec = adminNode("unlimited", "Toggle unlimited item use")
+
+    public val UNLIMITED_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.unlimited.others",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "Toggle unlimited item use for another player"
+    )
+
+    public val BOOK: PermissionSpec = playerNode("book", "Edit the book in your hand")
+
+    public val RECIPE: PermissionSpec = playerNode("recipe", "Show an item's crafting recipe")
+
+    public val POWERTOOL: PermissionSpec = playerNode(
+        "powertool",
+        "Bind a command to the held item"
+    )
+
+    public val POWERTOOL_LIST: PermissionSpec = playerNode("powertoollist", "List your powertools")
+
+    public val POWERTOOL_TOGGLE: PermissionSpec = playerNode(
+        "powertooltoggle",
+        "Toggle your powertools on or off"
+    )
+
+    public val ENDER_CHEST_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.enderchest.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Open another player's ender chest"
+    )
+
+    public val INVSEE_EDIT: PermissionSpec = PermissionSpec(
+        "cellulosesz.invsee.edit",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "Edit the inspected inventory"
+    )
+
+    public val INVSEE_EQUIP: PermissionSpec = PermissionSpec(
+        "cellulosesz.invsee.equip",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Inspect a player's equipment"
+    )
+
+    public val SPAWNER: PermissionSpec = moderatorNode("spawner", "Change the looked-at spawner")
+
+    public val SPAWNER_DELAY: PermissionSpec = PermissionSpec(
+        "cellulosesz.spawner.delay",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Set a custom spawner delay"
+    )
+
+    public val SPAWN_MOB: PermissionSpec = moderatorNode("spawnmob", "Spawn mobs")
+
+    public val REMOVE: PermissionSpec = adminNode("remove", "Remove entities in bulk")
+
+    public val TIME: PermissionSpec = moderatorNode("time", "Set a world's time")
+
+    public val WEATHER: PermissionSpec = moderatorNode("weather", "Set a world's weather")
+
+    public val P_TIME: PermissionSpec = playerNode("ptime", "Set your personal time")
+
+    public val P_WEATHER: PermissionSpec = playerNode("pweather", "Set your personal weather")
+
+    public val P_TIME_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.ptime.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Set another player's personal time"
+    )
+
+    public val P_WEATHER_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.pweather.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Set another player's personal weather"
+    )
+
+    public val THUNDER: PermissionSpec = moderatorNode("thunder", "Toggle thunder in a world")
+
+    public val LIGHTNING: PermissionSpec = moderatorNode("lightning", "Strike lightning")
+
+    public val FIREBALL: PermissionSpec = moderatorNode("fireball", "Launch a projectile")
+
+    public val FIREWORK: PermissionSpec = moderatorNode("firework", "Launch a firework")
+
+    public val NUKE: PermissionSpec = adminNode("nuke", "Create a large explosion")
+
+    public val TREE: PermissionSpec = moderatorNode("tree", "Grow a tree")
+
+    public val BIG_TREE: PermissionSpec = moderatorNode("bigtree", "Grow a large tree")
+
+    public val BREAK: PermissionSpec = moderatorNode("break", "Break the looked-at block")
+
+    public val ICE: PermissionSpec = moderatorNode("ice", "Freeze nearby water")
+
+    public val EXT: PermissionSpec = moderatorNode("ext", "Extinguish fire")
+
+    public val BURN: PermissionSpec = moderatorNode("burn", "Set a player on fire")
+
+    public val GC: PermissionSpec = moderatorNode("gc", "Show server resource statistics")
+
+    public val ANTIOCH: PermissionSpec = moderatorNode("antioch", "Spawn primed TNT")
+
+    public val BEEZOOKA: PermissionSpec = moderatorNode("beezooka", "Launch a bee")
+
+    public val KITTY_CANNON: PermissionSpec = moderatorNode("kittycannon", "Launch a cat")
+
+    public val EDIT_SIGN: PermissionSpec = moderatorNode("editsign", "Edit the looked-at sign")
+
+    public val EDIT_SIGN_COLORS: PermissionSpec = PermissionSpec(
+        "cellulosesz.editsign.colors",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "Use colour codes when editing a sign"
+    )
+
+    public val LIST: PermissionSpec = playerNode("list", "List online players")
+
+    public val LIST_HIDDEN: PermissionSpec = PermissionSpec(
+        "cellulosesz.list.hidden",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "See vanished players in the list"
+    )
+
+    public val WHOIS_IP: PermissionSpec = PermissionSpec(
+        "cellulosesz.whois.ip",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "See a player's IP address"
+    )
+
+    public val AFK_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.afk.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Toggle another player's AFK state"
+    )
+
+    public val AFK_BYPASS: PermissionSpec = PermissionSpec(
+        "cellulosesz.afk.bypass",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Never be marked AFK automatically"
+    )
+
+    public val NICK_COLORS: PermissionSpec = PermissionSpec(
+        "cellulosesz.nick.colors",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Use colour codes in your nickname"
+    )
+
+    public val HEAL_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.heal.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Heal another player"
+    )
+
+    public val HEAL_COOLDOWN_BYPASS: PermissionSpec = PermissionSpec(
+        "cellulosesz.heal.cooldown.bypass",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Bypass the heal cooldown"
+    )
+
+    public val GOD_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.god.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Toggle another player's invulnerability"
+    )
+
+    public val FLY_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.fly.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Toggle another player's flight"
+    )
+
+    public val MUTE_UNLIMITED: PermissionSpec = PermissionSpec(
+        "cellulosesz.mute.unlimited",
+        VanillaPermissionFallback.COMMANDS_ADMIN,
+        "Mute beyond the configured maximum duration"
+    )
+
+    public val SILENT_JOIN: PermissionSpec = PermissionSpec(
+        "cellulosesz.silentjoin",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Join and quit without announcing it"
+    )
+
+    public val SILENT_JOIN_VANISH: PermissionSpec = PermissionSpec(
+        "cellulosesz.silentjoin.vanish",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Enter vanish when joining silently"
+    )
+
+    public val PVP_DELAY_EXEMPT: PermissionSpec = PermissionSpec(
+        "cellulosesz.pvpdelay.exempt",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Attack immediately after logging in"
+    )
+
+    public val BACK_ON_DEATH: PermissionSpec = PermissionSpec(
+        "cellulosesz.back.ondeath",
+        VanillaPermissionFallback.ALLOW_ALL,
+        "Use /back to return to your death location"
+    )
+
+    public val COMMAND_COST_EXEMPT: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cost.exempt",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Run commands without paying their configured cost"
+    )
+
+    public val COMMAND_COOLDOWN_EXEMPT: PermissionSpec = PermissionSpec(
+        "cellulosesz.command.cooldown.exempt",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Run commands without their configured cooldown"
+    )
+
+    public val BACKUP: PermissionSpec = adminNode("backup", "Run a server backup")
+
     public val all: List<PermissionSpec> = listOf(
         ROOT,
         ROOT_LANGUAGE,
@@ -646,10 +978,14 @@ public object CommandPermissions {
         TP_CANCEL,
         TPA_ALL,
         TPAUTO,
+        TP_TOGGLE,
+        TP_TOGGLE_OTHERS,
+        TP_TOGGLE_BYPASS,
         MSG,
         REPLY,
         IGNORE,
         MSG_TOGGLE,
+        REPLY_TOGGLE,
         MAIL,
         HELP_OP,
         KIT,
@@ -672,6 +1008,7 @@ public object CommandPermissions {
         ITEM_LORE,
         CLEAR_INVENTORY,
         CLEAR_INVENTORY_OTHERS,
+        CLEAR_INVENTORY_CONFIRM_TOGGLE,
         SEEN,
         PLAY_TIME,
         WHOIS,
@@ -737,6 +1074,10 @@ public object CommandPermissions {
         BALANCE_OTHERS,
         BALANCETOP,
         PAY,
+        PAY_TOGGLE,
+        PAY_TOGGLE_OTHERS,
+        PAY_TOGGLE_BYPASS,
+        PAY_CONFIRM_TOGGLE,
         TRANSACTIONS,
         ECO,
         ECO_GIVE,
@@ -745,6 +1086,82 @@ public object CommandPermissions {
         ECO_HISTORY,
         ECO_INFO,
         ECONOMY_PAY_CAPABILITY,
+        WORLD,
+        TP_O,
+        TP_O_HERE,
+        TP_OFFLINE,
+        TP_ALL,
+        COMPASS,
+        WORTH,
+        SELL,
+        SET_WORTH,
+        SELL_BULK,
+        GIVE,
+        ITEM,
+        ITEM_DB,
+        ENCHANT,
+        ENCHANT_UNSAFE,
+        POTION,
+        POTION_APPLY,
+        POTION_OTHERS,
+        SKULL,
+        SKULL_OTHERS,
+        SKULL_SPAWN,
+        UNLIMITED,
+        UNLIMITED_OTHERS,
+        BOOK,
+        RECIPE,
+        POWERTOOL,
+        POWERTOOL_LIST,
+        POWERTOOL_TOGGLE,
+        ENDER_CHEST_OTHERS,
+        INVSEE_EDIT,
+        INVSEE_EQUIP,
+        SPAWNER,
+        SPAWNER_DELAY,
+        SPAWN_MOB,
+        REMOVE,
+        TIME,
+        WEATHER,
+        P_TIME,
+        P_WEATHER,
+        P_TIME_OTHERS,
+        P_WEATHER_OTHERS,
+        THUNDER,
+        LIGHTNING,
+        FIREBALL,
+        FIREWORK,
+        NUKE,
+        TREE,
+        BIG_TREE,
+        BREAK,
+        ICE,
+        EXT,
+        BURN,
+        GC,
+        ANTIOCH,
+        BEEZOOKA,
+        KITTY_CANNON,
+        EDIT_SIGN,
+        EDIT_SIGN_COLORS,
+        LIST,
+        LIST_HIDDEN,
+        WHOIS_IP,
+        AFK_OTHERS,
+        AFK_BYPASS,
+        NICK_COLORS,
+        HEAL_OTHERS,
+        HEAL_COOLDOWN_BYPASS,
+        GOD_OTHERS,
+        FLY_OTHERS,
+        MUTE_UNLIMITED,
+        SILENT_JOIN,
+        SILENT_JOIN_VANISH,
+        PVP_DELAY_EXEMPT,
+        BACK_ON_DEATH,
+        COMMAND_COST_EXEMPT,
+        COMMAND_COOLDOWN_EXEMPT,
+        BACKUP,
     )
 
 }

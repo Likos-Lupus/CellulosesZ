@@ -10,4 +10,6 @@ public data class ItemEditingSettings(
     public val maxLoreLineLength: Int = 80,
     public val allowAnyItemAsHat: Boolean = false,
     public val clearConfirmationSeconds: Int = 15,
+    /** Whether `/clearinventory` asks for a confirmation code until a player turns it off. */
+    public val confirmClear: Boolean = true,
 )

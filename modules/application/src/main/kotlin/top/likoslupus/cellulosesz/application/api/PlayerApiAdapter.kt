@@ -15,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 internal class PlayerApiAdapter(
     private val port: PlayerIntegrationPort,
     private val dispatcher: ApiRequestDispatcher,
+    preferences: PlayerPreferencesApi,
 ) : PlayersApi {
 
     private val sinks = PlayerEventSinks()
@@ -22,6 +23,8 @@ internal class PlayerApiAdapter(
     override val presence: PlayerPresenceApi = PlayerPresenceAdapter(port, dispatcher)
 
     override val nicknames: PlayerNicknameApi = PlayerNicknameAdapter(port, dispatcher)
+
+    override val preferences: PlayerPreferencesApi = preferences
 
     override val events: PlayerEvents = sinks.events
 
@@ -33,6 +36,9 @@ internal class PlayerApiAdapter(
 
     fun dispatchPresenceChanged(playerId: UUID, online: Boolean) =
         sinks.dispatchPresence(PlayerPresenceChanged(playerId, online))
+
+    fun dispatchPreferenceChanged(event: PlayerPreferenceChanged) =
+        sinks.dispatchPreference(event)
 
     fun clear() = sinks.clear()
 
@@ -145,6 +151,7 @@ private class PlayerEventSinks {
     private val afk = CopyOnWriteArrayList<ApiEventListener<PlayerAfkChanged>>()
     private val nicknames = CopyOnWriteArrayList<ApiEventListener<PlayerNicknameChanged>>()
     private val presence = CopyOnWriteArrayList<ApiEventListener<PlayerPresenceChanged>>()
+    private val preferences = CopyOnWriteArrayList<ApiEventListener<PlayerPreferenceChanged>>()
 
     val events: PlayerEvents = object : PlayerEvents {
 
@@ -161,6 +168,11 @@ private class PlayerEventSinks {
         ): Subscription =
             presence.subscribe(listener)
 
+        override fun onPreferenceChanged(
+            listener: ApiEventListener<PlayerPreferenceChanged>,
+        ): Subscription =
+            preferences.subscribe(listener)
+
     }
 
     fun dispatchAfk(event: PlayerAfkChanged) =
@@ -172,10 +184,14 @@ private class PlayerEventSinks {
     fun dispatchPresence(event: PlayerPresenceChanged) =
         presence.forEach { runCatching { it.onEvent(event) } }
 
+    fun dispatchPreference(event: PlayerPreferenceChanged) =
+        preferences.forEach { runCatching { it.onEvent(event) } }
+
     fun clear() {
         afk.clear()
         nicknames.clear()
         presence.clear()
+        preferences.clear()
     }
 
 }

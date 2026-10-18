@@ -19,6 +19,7 @@ internal sealed interface ClaimKitResult {
         val kit: KitName,
         val droppedStacks: Int,
         val claimRecordedFully: Boolean,
+        val equippedStacks: Int = 0,
     ) : ClaimKitResult
 
     data object Disabled : ClaimKitResult
@@ -286,7 +287,8 @@ internal class KitService(
             inventory.deliver(
                 playerId,
                 kit.items,
-                config.overflowPolicy
+                config.overflowPolicy,
+                config.autoEquip,
             )
         }
 
@@ -309,6 +311,7 @@ internal class KitService(
                     kit = kit.name,
                     droppedStacks = delivery.droppedStacks,
                     claimRecordedFully = recorded,
+                    equippedStacks = delivery.equippedStacks,
                 )
             }
         }
@@ -527,6 +530,7 @@ internal class KitService(
             else -> emptyMap()
         }
         val now = clock.instant()
+        val config = settings()
 
         val entries = snapshot.second.values
                 .sortedBy { it.name.value }
@@ -540,6 +544,11 @@ internal class KitService(
                             now
                         ),
                     )
+                }
+                .filter { entry ->
+                    !config.hideClaimedOnce
+                            || entry.reuse != KitReusePolicy.Once
+                            || entry.availability != KitAvailability.Used
                 }
         return ListKitsResult.Listed(entries)
     }

@@ -394,6 +394,39 @@ internal class ItemUtilityService(
         confirmations.forget(playerId)
     }
 
+    /**
+     * Clears the actor's own inventory without the confirmation round-trip. The snapshot guard is
+     * not used here: with confirmation off there is no preview to compare against.
+     */
+    fun clearInventoryNow(actorId: UUID, scope: ClearScope): ClearInventoryResult {
+        val identity = known.onlineById(actorId)
+            ?: return ClearInventoryResult.TargetOffline
+        return when (val result = backend.clearInventory(actorId, scope)) {
+            is ClearInventoryBackendResult.Cleared ->
+                ClearInventoryResult.Cleared(identity.name, result.stacks, null)
+
+            ClearInventoryBackendResult.TargetOffline ->
+                ClearInventoryResult.TargetOffline
+        }
+    }
+
+    /** Clears another player's inventory without the confirmation round-trip. */
+    fun clearInventoryForNow(targetName: String, scope: ClearScope): ClearInventoryResult {
+        val target = known.onlineByName(targetName)
+            ?: return ClearInventoryResult.TargetOffline
+        return when (val result = backend.clearInventory(target.id, scope)) {
+            is ClearInventoryBackendResult.Cleared ->
+                ClearInventoryResult.Cleared(
+                    target.name,
+                    result.stacks,
+                    target.name
+                )
+
+            ClearInventoryBackendResult.TargetOffline ->
+                ClearInventoryResult.TargetOffline
+        }
+    }
+
     fun clearConfirmations() {
         confirmations.clear()
     }

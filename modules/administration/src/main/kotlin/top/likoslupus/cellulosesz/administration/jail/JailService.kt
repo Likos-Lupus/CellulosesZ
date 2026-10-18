@@ -29,6 +29,7 @@ internal sealed interface JailActionOutcome {
         val transferred: Boolean,
         val auditRecorded: Boolean,
         val expiresAt: Instant?,
+        val remainingSeconds: Long?,
         val returnRecorded: Boolean,
         val actionId: String,
     ) : JailActionOutcome
@@ -101,6 +102,7 @@ internal class JailService(
     private val locationCache = LinkedHashMap<String, JailLocation>()
     private val sentenceCache = HashMap<UUID, JailSentence>()
     private val inFlight = HashSet<UUID>()
+    private val onlineTicks = HashMap<UUID, Int>()
 
     @Volatile private var state: ModerationState = ModerationState.LOADING
 
@@ -305,7 +307,16 @@ internal class JailService(
         }
 
         val now = clock.instant()
-        val expiresAt = duration?.let { now.plusSeconds(it.seconds) }
+        val durationSeconds = duration?.seconds
+        val mode = JailSentenceMath.modeFor(durationSeconds, settings().jailOnlineTime)
+        val expiresAt = when (mode) {
+            JailSentenceMode.WALL_CLOCK -> now.plusSeconds(durationSeconds!!)
+            else -> null
+        }
+        val remainingSeconds = when (mode) {
+            JailSentenceMode.ONLINE -> durationSeconds
+            else -> null
+        }
         val returnPosition = runtime.onServerThread { positions.position(target.id) }
 
         val sentence = JailSentence(
@@ -316,7 +327,9 @@ internal class JailService(
             actor = PersistedModerationActor.of(actor),
             reason = reason.value,
             issuedAt = now,
+            mode = mode,
             expiresAt = expiresAt,
+            remainingSeconds = remainingSeconds,
             returnPosition = returnPosition,
             releaseRequestedAt = null,
         )
@@ -355,6 +368,7 @@ internal class JailService(
             transferred,
             recorded,
             expiresAt,
+            remainingSeconds,
             returnPosition != null,
             actionId,
         )
@@ -469,6 +483,59 @@ internal class JailService(
         state = ModerationState.STOPPING
         JailState.clear()
         JailRespawnState.clear()
+        onlineTicks.clear()
+    }
+
+    /**
+     * Server-thread online-time tick for a single player. Decrements the remaining seconds of an
+     * ONLINE sentence once per second; when it reaches zero the sentence is driven into release.
+     * Remaining time is flushed to storage every five seconds and on quit.
+     */
+    fun onOnlineTick(playerId: UUID) {
+        val sentence = sentenceCache[playerId] ?: return
+        if (sentence.mode != JailSentenceMode.ONLINE || sentence.status != JailStatus.ACTIVE) {
+            return
+        }
+        val remaining = sentence.remainingSeconds ?: return
+        val ticks = (onlineTicks[playerId] ?: 0) + 1
+        if (ticks < TICKS_PER_SECOND) {
+            onlineTicks[playerId] = ticks
+            return
+        }
+        onlineTicks[playerId] = 0
+        val updated = JailSentenceMath.decrement(remaining, 1L)
+        if (updated <= 0L) {
+            sentenceCache[playerId] = sentence.copy(remainingSeconds = 0L)
+            scheduleExpiryRelease(playerId)
+            return
+        }
+        sentenceCache[playerId] = sentence.copy(remainingSeconds = updated)
+        if (updated % REMAINING_FLUSH_SECONDS == 0L) {
+            persistRemaining(playerId, updated)
+        }
+    }
+
+    /** Persists the remaining online seconds of a player's sentence and stops tracking them. */
+    fun onPlayerQuit(playerId: UUID) {
+        onlineTicks.remove(playerId)
+        val sentence = sentenceCache[playerId] ?: return
+        if (sentence.mode != JailSentenceMode.ONLINE) {
+            return
+        }
+        val remaining = sentence.remainingSeconds ?: return
+        persistRemaining(playerId, remaining)
+    }
+
+    private fun persistRemaining(playerId: UUID, remainingSeconds: Long) {
+        runtime.launch {
+            try {
+                sentences.updateRemaining(playerId, remainingSeconds)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (exception: Exception) {
+                LOGGER.warn("failed to persist remaining jail time for {}", playerId, exception)
+            }
+        }
     }
 
     /** Republishes the confined-id snapshot read by the command-restriction mixin. Server thread. */
@@ -645,6 +712,9 @@ internal class JailService(
     private companion object {
 
         private val LOGGER = LogUtils.getLogger()
+
+        private const val TICKS_PER_SECOND: Int = 20
+        private const val REMAINING_FLUSH_SECONDS: Long = 5L
 
     }
 

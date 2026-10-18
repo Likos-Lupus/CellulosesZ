@@ -18,6 +18,7 @@ internal sealed interface PrivateMessageOutcome {
     data class TargetOffline(val name: String?) : PrivateMessageOutcome
     data object SelfTarget : PrivateMessageOutcome
     data object NoReplyTarget : PrivateMessageOutcome
+    data object ReplyDisabled : PrivateMessageOutcome
     data object RecipientUnavailable : PrivateMessageOutcome
     data object RecipientStateLoading : PrivateMessageOutcome
 

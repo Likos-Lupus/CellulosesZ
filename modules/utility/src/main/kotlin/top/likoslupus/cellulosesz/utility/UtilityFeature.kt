@@ -1,8 +1,12 @@
 package top.likoslupus.cellulosesz.utility
 
 import com.mojang.serialization.JsonOps
+import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.VanillaFallbackPermissionBridge
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -20,8 +24,19 @@ import top.likoslupus.cellulosesz.utility.item.AdministrativeActionAuditPort
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityCommands
 import top.likoslupus.cellulosesz.utility.item.ItemUtilityService
 import top.likoslupus.cellulosesz.utility.item.MinecraftItemUtilityBackend
+import top.likoslupus.cellulosesz.utility.itemtools.ItemToolsCommands
+import top.likoslupus.cellulosesz.utility.itemtools.ItemToolsService
+import top.likoslupus.cellulosesz.utility.itemtools.MinecraftItemToolsBackend
 import top.likoslupus.cellulosesz.utility.kit.*
 import top.likoslupus.cellulosesz.utility.position.PositionCommands
+import top.likoslupus.cellulosesz.utility.powertool.JdbcPowertoolRepository
+import top.likoslupus.cellulosesz.utility.powertool.PowertoolCommands
+import top.likoslupus.cellulosesz.utility.powertool.PowertoolInteractState
+import top.likoslupus.cellulosesz.utility.powertool.PowertoolService
+import top.likoslupus.cellulosesz.utility.unlimited.JdbcUnlimitedItemRepository
+import top.likoslupus.cellulosesz.utility.unlimited.MinecraftUnlimitedBackend
+import top.likoslupus.cellulosesz.utility.unlimited.UnlimitedCommands
+import top.likoslupus.cellulosesz.utility.unlimited.UnlimitedService
 import top.likoslupus.cellulosesz.utility.workstation.MinecraftWorkstationBackend
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationCommands
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationService
@@ -35,6 +50,9 @@ public class UtilityFeature internal constructor(
     private val kits: KitService,
     private val kitGrants: KitGrantService,
     private val items: ItemUtilityService,
+    private val itemTools: ItemToolsService,
+    private val unlimited: UnlimitedService,
+    private val powertools: PowertoolService,
     private val workstations: WorkstationService,
     private val inspection: InspectionService,
     private val known: KnownPlayerResolver,
@@ -43,6 +61,9 @@ public class UtilityFeature internal constructor(
     private val adventure: AdventureRuntime,
     private val presentation: TextPresentation,
     private val audit: AdministrativeActionAuditPort,
+    private val preferences: PlayerPreferenceService,
+    private val permissions: PermissionService,
+    private val settings: () -> UtilitySettings,
 ) {
 
     /** Narrow, Minecraft-free integration surface for the public kit facade. */
@@ -64,6 +85,27 @@ public class UtilityFeature internal constructor(
             presentation,
             audit,
             kernel,
+            preferences,
+        ) + ItemToolsCommands.commands(
+            itemTools,
+            known,
+            messages,
+            adventure,
+            presentation,
+            permissions,
+        ) + UnlimitedCommands.commands(
+            unlimited,
+            known,
+            kernel,
+            messages,
+            adventure,
+            presentation,
+        ) + PowertoolCommands.commands(
+            powertools,
+            kernel,
+            messages,
+            adventure,
+            presentation,
         ) + WorkstationCommands.commands(
             workstations,
             messages,
@@ -74,7 +116,9 @@ public class UtilityFeature internal constructor(
             known,
             messages,
             adventure,
-            presentation
+            presentation,
+            permissions,
+            { settings().inspection },
         ) + PositionCommands.commands(
             adventure,
             presentation
@@ -83,16 +127,29 @@ public class UtilityFeature internal constructor(
     public fun onServerStarting() {
         kits.beginLoad()
         kernel.launch { kits.load() }
+        kernel.launch { unlimited.load() }
+        kernel.launch { powertools.load() }
+        PowertoolInteractState.install(powertools)
     }
 
     public fun onServerStopping() {
         kits.shutdown()
+        unlimited.shutdown()
+        powertools.shutdown()
+        PowertoolInteractState.install(null)
         items.clearConfirmations()
     }
 
-    /** Drops any pending `/clearinventory` confirmation for a leaving player. */
+    /** Drops any pending per-player state for a leaving player. */
     public fun onPlayerQuit(playerId: UUID) {
         items.forgetInventoryClear(playerId)
+        powertools.forget(playerId)
+        unlimited.forget(playerId)
+    }
+
+    /** Server-thread tick: tops up a player's unlimited items. */
+    public fun onPlayerTick(player: ServerPlayer) {
+        unlimited.topUp(player.uuid)
     }
 
 }
@@ -106,8 +163,10 @@ public fun createUtilityFeature(
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
     presentation: TextPresentation,
+    preferences: PlayerPreferenceService,
     audit: AdministrativeActionAuditPort = AdministrativeActionAuditPort { _, _, _, _ -> },
     kitEligibility: KitClaimEligibility = KitClaimEligibility.AllowAll,
+    permissions: PermissionService = PermissionService(VanillaFallbackPermissionBridge),
 ): UtilityFeature {
     val runner = kernel.serverThreadRunner()
     val clock = Clock.systemUTC()
@@ -144,6 +203,23 @@ public fun createUtilityFeature(
         settings = { settings().items },
         editing = { settings().itemEditing },
     )
+    val itemTools = ItemToolsService(
+        backend = MinecraftItemToolsBackend(kernel),
+        known = known,
+        settings = { settings().give },
+    )
+    val unlimited = UnlimitedService(
+        runner = runner,
+        repository = JdbcUnlimitedItemRepository(database, namespace),
+        backend = MinecraftUnlimitedBackend(kernel),
+        known = known,
+    )
+    val powertools = PowertoolService(
+        runner = runner,
+        repository = JdbcPowertoolRepository(database, namespace),
+        kernel = kernel,
+        settings = { settings().powertools },
+    )
     val workstations = WorkstationService(
         backend = MinecraftWorkstationBackend(kernel),
         settings = { settings().workstations },
@@ -156,6 +232,9 @@ public fun createUtilityFeature(
         kits = kits,
         kitGrants = kitGrants,
         items = items,
+        itemTools = itemTools,
+        unlimited = unlimited,
+        powertools = powertools,
         workstations = workstations,
         inspection = inspection,
         known = known,
@@ -164,5 +243,8 @@ public fun createUtilityFeature(
         adventure = adventure,
         presentation = presentation,
         audit = audit,
+        preferences = preferences,
+        permissions = permissions,
+        settings = settings,
     )
 }

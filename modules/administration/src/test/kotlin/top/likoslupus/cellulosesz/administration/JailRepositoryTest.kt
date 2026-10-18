@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.administration
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -16,6 +15,7 @@ import top.likoslupus.cellulosesz.foundation.database.schema.SchemaInitializer
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.runBlocking
 
 class JailRepositoryTest {
 
@@ -82,7 +82,9 @@ class JailRepositoryTest {
                     actor = PersistedModerationActor.of(ModerationActor.Console),
                     reason = "griefing",
                     issuedAt = Instant.ofEpochMilli(1_000),
+                    mode = JailSentenceMode.WALL_CLOCK,
                     expiresAt = Instant.ofEpochMilli(9_000),
+                    remainingSeconds = null,
                     returnPosition = WorldPosition(
                         dimension = "minecraft:overworld",
                         x = 1.5,
@@ -135,6 +137,41 @@ class JailRepositoryTest {
 
                 assertTrue(repository.remove(player))
                 assertFalse(repository.loadAll().any { it.playerId == player })
+            }
+        }
+
+    @Test
+    fun `online sentence round-trips its mode and remaining seconds`() =
+        runBlocking {
+            runtime().use {
+                val repository = JdbcJailSentenceRepository(it, "default")
+                val player = UUID.randomUUID()
+                val jail = checkNotNull(JailName.parse("cells"))
+                val sentence = JailSentence(
+                    playerId = player,
+                    playerName = "Alice",
+                    jailName = jail,
+                    status = JailStatus.ACTIVE,
+                    actor = PersistedModerationActor.of(ModerationActor.Console),
+                    reason = "griefing",
+                    issuedAt = Instant.ofEpochMilli(1_000),
+                    mode = JailSentenceMode.ONLINE,
+                    expiresAt = null,
+                    remainingSeconds = 300L,
+                    returnPosition = null,
+                    releaseRequestedAt = null,
+                )
+
+                repository.put(sentence)
+                val loaded = repository.loadAll().single()
+                assertEquals(JailSentenceMode.ONLINE, loaded.mode)
+                assertEquals(300L, loaded.remainingSeconds)
+                assertNull(loaded.expiresAt)
+
+                assertTrue(repository.updateRemaining(player, 120L))
+                val updated = repository.loadAll().single()
+                assertEquals(120L, updated.remainingSeconds)
+                assertEquals(JailSentenceMode.ONLINE, updated.mode)
             }
         }
 

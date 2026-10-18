@@ -39,6 +39,14 @@ public object PlayerSettingsValidation {
                     )
                 )
             }
+            if (afk.kickAfterSeconds < 0) {
+                add(
+                    ValidationError(
+                        "players.afk.kickAfterSeconds",
+                        "must be zero (disabled) or a positive number of seconds",
+                    )
+                )
+            }
 
             val sessions = settings.sessions
             if (sessions.heartbeatIntervalSeconds < 1) {
@@ -82,6 +90,48 @@ public object PlayerSettingsValidation {
                         "must be at most $MAX_VISIBLE_NICKNAME_LENGTH",
                     )
                 )
+            }
+            if (nicknames.allowedPattern.isNotBlank()
+                && runCatching { Regex(nicknames.allowedPattern) }.isFailure
+            ) {
+                add(
+                    ValidationError(
+                        "players.nicknames.allowedPattern",
+                        "must be a valid regular expression",
+                    )
+                )
+            }
+
+            val list = settings.list
+            val groupIds = mutableSetOf<String>()
+            (list.groups + list.defaultGroup).forEach { group ->
+                if (group.id.isBlank()) {
+                    add(
+                        ValidationError(
+                            "players.list.groups[].id",
+                            "must not be blank",
+                        )
+                    )
+                } else if (!groupIds.add(group.id)) {
+                    add(
+                        ValidationError(
+                            "players.list.groups[].id",
+                            "duplicate group id '${group.id}'",
+                        )
+                    )
+                }
+                if (group.permission.isNotBlank()
+                    && (group.permission.any(Char::isWhitespace)
+                            || '/' in group.permission
+                            || ':' in group.permission)
+                ) {
+                    add(
+                        ValidationError(
+                            "players.list.groups[].permission",
+                            "must be a dot-separated permission node without whitespace, '/' or ':'",
+                        )
+                    )
+                }
             }
 
             val nearby = settings.nearby

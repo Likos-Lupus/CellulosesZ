@@ -31,7 +31,7 @@ class CommandRegistryConflictTest {
         FeatureFlagSet.of(),
     )
 
-    private val pureBuilder = CommandRootBuilder { _, literal, _, _, _ ->
+    private val pureBuilder = CommandRootBuilder { _, literal, _, _, _, _ ->
         LiteralArgumentBuilder
                 .literal<CommandSourceStack>(literal)
                 .executes { 1 }.build()

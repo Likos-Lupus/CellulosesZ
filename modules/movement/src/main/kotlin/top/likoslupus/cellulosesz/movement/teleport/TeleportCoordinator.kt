@@ -1,15 +1,17 @@
 package top.likoslupus.cellulosesz.movement.teleport
 
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.withTimeoutOrNull
 import org.slf4j.LoggerFactory
+import top.likoslupus.cellulosesz.core.player.TemporaryProtectionRegistry
 import top.likoslupus.cellulosesz.movement.CommittedTeleport
 import top.likoslupus.cellulosesz.movement.TeleportCommittedObserver
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
+import java.time.Instant
 import java.util.*
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The one path every CellulosesZ-initiated player move goes through. It owns the fixed transaction:
@@ -24,6 +26,8 @@ internal class TeleportCoordinator(
     private val historyEnabled: () -> Boolean,
     private val confinement: (UUID) -> Boolean = { false },
     private val observer: TeleportCommittedObserver = TeleportCommittedObserver.None,
+    private val worldAccess: TeleportWorldAccess = TeleportWorldAccess.AllowAll,
+    private val invulnerability: () -> Duration = { Duration.ZERO },
 ) {
 
     private val logger = LoggerFactory.getLogger(TeleportCoordinator::class.java)
@@ -77,6 +81,14 @@ internal class TeleportCoordinator(
                     ?: return TeleportOutcome.TargetOffline
         }
 
+        // The per-world access gate runs for every intent, on the fully resolved destination, so a
+        // delayed or player-following teleport is checked against the world actually being entered.
+        if (destination.dimension != origin.dimension
+            && !worldAccess.allows(intent.subjectId, destination.dimension)
+        ) {
+            return TeleportOutcome.WorldAccessDenied(destination.dimension)
+        }
+
         return when (
             val result = backend.move(
                 intent.subjectId,
@@ -88,6 +100,7 @@ internal class TeleportCoordinator(
             is BackendMoveResult.Success -> {
                 recordHistory(intent, origin)
                 cooldowns.recordSuccess(intent.subjectId)
+                grantInvulnerability(intent.subjectId)
                 observe(intent, origin, result.applied)
                 TeleportOutcome.Success(
                     TeleportReceipt(
@@ -140,6 +153,17 @@ internal class TeleportCoordinator(
                 exception,
             )
         }
+    }
+
+    private fun grantInvulnerability(playerId: UUID) {
+        val duration = invulnerability()
+        if (duration <= Duration.ZERO) {
+            return
+        }
+        TemporaryProtectionRegistry.protect(
+            playerId,
+            Instant.now().plusMillis(duration.inWholeMilliseconds),
+        )
     }
 
     private fun observe(

@@ -11,4 +11,7 @@ public data class MovementSettings(
     public val history: HistorySettings = HistorySettings(),
     public val randomTeleport: RandomTeleportSettings = RandomTeleportSettings(),
     public val terrain: TerrainSettings = TerrainSettings(),
+    public val worlds: WorldSettings = WorldSettings(),
+    public val worldAccess: WorldAccessSettings = WorldAccessSettings(),
+    public val warps: WarpSettings = WarpSettings(),
 )

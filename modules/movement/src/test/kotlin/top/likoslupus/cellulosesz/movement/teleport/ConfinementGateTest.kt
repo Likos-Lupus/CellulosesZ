@@ -1,15 +1,16 @@
 package top.likoslupus.cellulosesz.movement.teleport
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.movement.config.TeleportSafetySettings
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
+import top.likoslupus.cellulosesz.movement.teleport.history.HistoryCause
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryRepository
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
 import java.util.*
 import kotlin.time.Duration
+import kotlinx.coroutines.runBlocking
 
 class ConfinementGateTest {
 
@@ -134,10 +135,17 @@ class ConfinementGateTest {
 
     private class FakeHistoryRepository : TeleportHistoryRepository {
 
-        override suspend fun read(playerId: UUID): StoredPosition? =
+        override suspend fun read(
+            playerId: UUID,
+            cause: HistoryCause
+        ): StoredPosition? =
             null
 
-        override suspend fun write(playerId: UUID, position: StoredPosition) =
+        override suspend fun write(
+            playerId: UUID,
+            cause: HistoryCause,
+            position: StoredPosition,
+        ) =
             Unit
 
     }

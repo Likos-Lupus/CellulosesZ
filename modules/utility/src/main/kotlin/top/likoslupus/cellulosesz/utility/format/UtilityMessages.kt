@@ -4,8 +4,14 @@ import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
 import top.likoslupus.cellulosesz.utility.inspection.InspectionOpenResult
 import top.likoslupus.cellulosesz.utility.item.*
+import top.likoslupus.cellulosesz.utility.itemtools.*
 import top.likoslupus.cellulosesz.utility.kit.*
 import top.likoslupus.cellulosesz.utility.position.DepthReading
+import top.likoslupus.cellulosesz.utility.powertool.PowertoolBinding
+import top.likoslupus.cellulosesz.utility.powertool.PowertoolTrigger
+import top.likoslupus.cellulosesz.utility.unlimited.UnlimitedClearResult
+import top.likoslupus.cellulosesz.utility.unlimited.UnlimitedListResult
+import top.likoslupus.cellulosesz.utility.unlimited.UnlimitedToggleResult
 import top.likoslupus.cellulosesz.utility.workstation.WorkstationResult
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
@@ -387,6 +393,25 @@ internal object UtilityMessages {
             count(stacks)
         )
 
+    fun clearConfirmStatus(enabled: Boolean): Notice =
+        info(
+            when {
+                enabled -> MessageKey("utility.item.clear.confirm_status.enabled")
+                else -> MessageKey("utility.item.clear.confirm_status.disabled")
+            }
+        )
+
+    fun clearConfirmUpdated(enabled: Boolean): Notice =
+        success(
+            when {
+                enabled -> MessageKey("utility.item.clear.confirm_enabled")
+                else -> MessageKey("utility.item.clear.confirm_disabled")
+            }
+        )
+
+    fun preferenceStorageUnavailable(): Notice =
+        notice(MessageKey("utility.item.clear.confirm_storage"))
+
     fun position(
         dimension: String,
         x: Int,
@@ -475,6 +500,370 @@ internal object UtilityMessages {
                 InspectionOpenResult.Failed -> MessageKey("utility.inspection.failed")
             }
         )
+
+    fun inspectionSelf(): Notice =
+        notice(MessageKey("utility.inspection.self"))
+
+    fun give(result: GiveResult): List<Notice> =
+        when (result) {
+            is GiveResult.Given -> buildList {
+                add(
+                    success(
+                        MessageKey("utility.give.success"),
+                        identifier(result.targetName),
+                        literal(result.itemName),
+                        count(result.amount),
+                    )
+                )
+                if (result.dropped) {
+                    add(warning(MessageKey("utility.give.dropped")))
+                }
+            }
+
+            GiveResult.Blacklisted -> listOf(notice(MessageKey("utility.give.blacklisted")))
+            GiveResult.InvalidAmount -> listOf(notice(MessageKey("utility.give.invalid_amount")))
+            GiveResult.InvalidItem -> listOf(notice(MessageKey("utility.item.invalid")))
+            GiveResult.TargetOffline -> listOf(notice(MessageKey("utility.item.target_offline")))
+            GiveResult.InventoryFull -> listOf(notice(MessageKey("utility.give.inventory_full")))
+        }
+
+    fun enchant(result: EnchantResult): Notice =
+        notice(
+            when (result) {
+                is EnchantResult.Applied ->
+                    return success(
+                        MessageKey("utility.enchant.applied"),
+                        literal(result.enchantment),
+                        count(result.level),
+                        identifier(result.targetName),
+                    )
+
+                is EnchantResult.Removed ->
+                    return success(
+                        MessageKey("utility.enchant.removed"),
+                        literal(result.enchantment),
+                        identifier(result.targetName),
+                    )
+
+                EnchantResult.UnknownEnchantment -> MessageKey("utility.enchant.unknown")
+                EnchantResult.UnsafeDenied -> MessageKey("utility.enchant.unsafe")
+                EnchantResult.InvalidLevel -> MessageKey("utility.enchant.invalid_level")
+                EnchantResult.NoHeldItem -> MessageKey("utility.item.no_item")
+                EnchantResult.NotSupported -> MessageKey("utility.enchant.not_supported")
+                EnchantResult.TargetOffline -> MessageKey("utility.item.target_offline")
+            }
+        )
+
+    fun potion(result: PotionResult): Notice =
+        notice(
+            when (result) {
+                is PotionResult.Cleared -> return success(MessageKey("utility.potion.cleared"))
+                is PotionResult.Edited ->
+                    return success(
+                        MessageKey("utility.potion.edited"),
+                        count(result.effectCount),
+                    )
+
+                is PotionResult.Applied ->
+                    return success(
+                        MessageKey("utility.potion.applied"),
+                        identifier(result.targetName),
+                        count(result.effectCount),
+                    )
+
+                PotionResult.UnknownEffect -> MessageKey("utility.potion.unknown_effect")
+                PotionResult.NotPotion -> MessageKey("utility.potion.not_potion")
+                PotionResult.InvalidSpec -> MessageKey("utility.potion.invalid")
+                PotionResult.NoHeldItem -> MessageKey("utility.item.no_item")
+                PotionResult.TargetOffline -> MessageKey("utility.item.target_offline")
+            }
+        )
+
+    fun skull(result: SkullResult): Notice =
+        notice(
+            when (result) {
+                is SkullResult.Spawned ->
+                    return success(
+                        MessageKey("utility.skull.spawned"),
+                        literal(result.owner),
+                        identifier(result.recipient),
+                    )
+
+                is SkullResult.Edited ->
+                    return success(
+                        MessageKey("utility.skull.edited"),
+                        literal(result.owner),
+                    )
+
+                SkullResult.NoHeldItem -> MessageKey("utility.skull.no_item")
+                SkullResult.TargetOffline -> MessageKey("utility.item.target_offline")
+                SkullResult.InventoryFull -> MessageKey("utility.skull.inventory_full")
+            }
+        )
+
+    fun skullDenied(): Notice =
+        notice(MessageKey("utility.skull.denied"))
+
+    fun book(result: BookResult): Notice =
+        when (result) {
+            is BookResult.Converted -> success(
+                when (result.nowWritten) {
+                    true -> MessageKey("utility.book.converted_written")
+                    false -> MessageKey("utility.book.converted_writable")
+                }
+            )
+
+            is BookResult.AuthorSet ->
+                success(MessageKey("utility.book.author"), literal(result.author))
+
+            is BookResult.TitleSet ->
+                success(MessageKey("utility.book.title"), literal(result.title))
+
+            BookResult.NoHeldItem -> notice(MessageKey("utility.item.no_item"))
+            BookResult.NotBook -> notice(MessageKey("utility.book.not_book"))
+            BookResult.NotWrittenBook -> notice(MessageKey("utility.book.not_written"))
+            BookResult.TargetOffline -> notice(MessageKey("utility.item.target_offline"))
+        }
+
+    fun itemInfo(info: ItemInfo): DetailView =
+        DetailView(
+            title = LocalizedText(
+                MessageKey("utility.itemdb.title"),
+                listOf(literal(info.displayName)),
+            ),
+            fields = buildList {
+                add(
+                    field(
+                        MessageKey("utility.itemdb.field.id"),
+                        LocalizedText(
+                            MessageKey("core.value"),
+                            listOf(identifier(info.registryId))
+                        ),
+                    )
+                )
+                add(
+                    field(
+                        MessageKey("utility.itemdb.field.stack"),
+                        LocalizedText(
+                            MessageKey("core.value"),
+                            listOf(count(info.maxStackSize))
+                        ),
+                    )
+                )
+                add(
+                    field(
+                        MessageKey("utility.itemdb.field.aliases"),
+                        when (info.aliases.isEmpty()) {
+                            true -> LocalizedText(MessageKey("utility.itemdb.no_aliases"))
+                            false -> LocalizedText(
+                                MessageKey("core.value"),
+                                listOf(literal(info.aliases.joinToString(", ")))
+                            )
+                        },
+                    )
+                )
+                add(
+                    field(
+                        MessageKey("utility.itemdb.field.components"),
+                        when (info.components.isEmpty()) {
+                            true -> LocalizedText(MessageKey("utility.itemdb.no_components"))
+                            false -> LocalizedText(
+                                MessageKey("core.value"),
+                                listOf(
+                                    literal(
+                                        info.components.joinToString(", ") +
+                                            " (+${info.componentCount - info.components.size})"
+                                    )
+                                )
+                            )
+                        },
+                    )
+                )
+                info.durability?.let { durability ->
+                    add(
+                        field(
+                            MessageKey("utility.itemdb.field.durability"),
+                            LocalizedText(
+                                MessageKey("utility.itemdb.durability"),
+                                listOf(count(durability.maxDamage - durability.damage), count(durability.maxDamage))
+                            ),
+                        )
+                    )
+                }
+            },
+        )
+
+    fun itemInfoMissing(): Notice =
+        notice(MessageKey("utility.itemdb.no_item"))
+
+    fun recipes(
+        itemName: String,
+        entries: List<RecipeView>,
+        pageIndex: Int,
+        pageCount: Int,
+    ): ListPage =
+        ListPage(
+            title = LocalizedText(
+                MessageKey("utility.recipe.title"),
+                listOf(literal(itemName)),
+            ),
+            rows = entries.map { view ->
+                ListRow(
+                    main = LocalizedText(
+                        MessageKey("utility.recipe.row"),
+                        listOf(count(view.resultCount), literal(view.result)),
+                    ),
+                    supporting = LocalizedText(
+                        MessageKey("utility.recipe.ingredients"),
+                        listOf(
+                            literal(
+                                view.ingredients
+                                    .filter { it.isNotBlank() }
+                                    .joinToString(", ")
+                            )
+                        ),
+                    ),
+                )
+            },
+            emptyText = LocalizedText(MessageKey("utility.recipe.empty")),
+            summary = LocalizedText(
+                MessageKey("utility.recipe.page"),
+                listOf(count(pageIndex), count(pageCount)),
+            ),
+        )
+
+    fun unlimitedList(result: UnlimitedListResult): ListPage =
+        when (result) {
+            is UnlimitedListResult.Listed -> ListPage(
+                title = LocalizedText(
+                    MessageKey("utility.unlimited.list_title"),
+                    listOf(identifier(result.playerName)),
+                ),
+                rows = result.items.map { itemId ->
+                    ListRow(
+                        main = LocalizedText(
+                            MessageKey("core.value"),
+                            listOf(identifier(itemId))
+                        )
+                    )
+                },
+                emptyText = LocalizedText(MessageKey("utility.unlimited.list_empty")),
+            )
+
+            UnlimitedListResult.TargetOffline -> ListPage(
+                title = LocalizedText(MessageKey("utility.unlimited.list_title")),
+                rows = emptyList(),
+                emptyText = LocalizedText(MessageKey("utility.item.target_offline")),
+            )
+
+            UnlimitedListResult.StorageUnavailable -> ListPage(
+                title = LocalizedText(MessageKey("utility.unlimited.list_title")),
+                rows = emptyList(),
+                emptyText = LocalizedText(MessageKey("utility.unlimited.storage")),
+            )
+        }
+
+    fun unlimitedToggle(result: UnlimitedToggleResult): Notice =
+        when (result) {
+            is UnlimitedToggleResult.Added ->
+                success(
+                    MessageKey("utility.unlimited.added"),
+                    identifier(result.itemId),
+                    identifier(result.playerName),
+                )
+
+            is UnlimitedToggleResult.Removed ->
+                success(
+                    MessageKey("utility.unlimited.removed"),
+                    identifier(result.itemId),
+                    identifier(result.playerName),
+                )
+
+            UnlimitedToggleResult.NoHeldItem -> notice(MessageKey("utility.unlimited.no_item"))
+            UnlimitedToggleResult.TargetOffline -> notice(MessageKey("utility.item.target_offline"))
+            UnlimitedToggleResult.StorageUnavailable -> notice(MessageKey("utility.unlimited.storage"))
+        }
+
+    fun unlimitedClear(result: UnlimitedClearResult): Notice =
+        when (result) {
+            is UnlimitedClearResult.Cleared ->
+                success(
+                    MessageKey("utility.unlimited.cleared"),
+                    count(result.removed),
+                    identifier(result.playerName),
+                )
+
+            UnlimitedClearResult.TargetOffline -> notice(MessageKey("utility.item.target_offline"))
+            UnlimitedClearResult.StorageUnavailable -> notice(MessageKey("utility.unlimited.storage"))
+        }
+
+    fun powertoolBound(itemId: String, trigger: PowertoolTrigger): Notice =
+        success(
+            triggerBoundKey(trigger),
+            identifier(itemId),
+        )
+
+    fun powertoolCleared(itemId: String): Notice =
+        success(
+            MessageKey("utility.powertool.cleared"),
+            identifier(itemId),
+        )
+
+    fun powertoolRejected(recursive: Boolean): Notice =
+        notice(
+            when (recursive) {
+                true -> MessageKey("utility.powertool.recursive")
+                false -> MessageKey("utility.powertool.invalid")
+            }
+        )
+
+    fun powertoolNoItem(): Notice =
+        notice(MessageKey("utility.powertool.no_item"))
+
+    fun powertoolStorage(): Notice =
+        notice(MessageKey("utility.powertool.storage"))
+
+    fun powertoolDisabled(): Notice =
+        notice(MessageKey("utility.powertool.disabled"))
+
+    fun powertoolToggle(enabled: Boolean): Notice =
+        info(
+            when (enabled) {
+                true -> MessageKey("utility.powertool.toggled_on")
+                false -> MessageKey("utility.powertool.toggled_off")
+            }
+        )
+
+    fun powertoolList(bindings: List<PowertoolBinding>): ListPage =
+        ListPage(
+            title = LocalizedText(MessageKey("utility.powertool.list_title")),
+            rows = bindings.map { binding ->
+                ListRow(
+                    main = LocalizedText(
+                        triggerRowKey(binding.trigger),
+                        listOf(
+                            identifier(binding.itemId),
+                            literal("/" + binding.command),
+                        ),
+                    )
+                )
+            },
+            emptyText = LocalizedText(MessageKey("utility.powertool.list_empty")),
+        )
+
+    private fun triggerBoundKey(trigger: PowertoolTrigger): MessageKey =
+        when (trigger) {
+            PowertoolTrigger.LEFT -> MessageKey("utility.powertool.bound.left")
+            PowertoolTrigger.RIGHT -> MessageKey("utility.powertool.bound.right")
+            PowertoolTrigger.BOTH -> MessageKey("utility.powertool.bound.both")
+        }
+
+    private fun triggerRowKey(trigger: PowertoolTrigger): MessageKey =
+        when (trigger) {
+            PowertoolTrigger.LEFT -> MessageKey("utility.powertool.list_row.left")
+            PowertoolTrigger.RIGHT -> MessageKey("utility.powertool.list_row.right")
+            PowertoolTrigger.BOTH -> MessageKey("utility.powertool.list_row.both")
+        }
 
     private fun rows(entry: KitListEntry): List<ListRow> =
         listOf(

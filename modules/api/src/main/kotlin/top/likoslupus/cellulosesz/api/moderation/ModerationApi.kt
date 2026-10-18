@@ -13,11 +13,14 @@ public class ModerationStatusView(
     public val muted: Boolean,
     public val mutedUntil: Instant?,
     public val confined: Boolean,
+    public val confinedRemaining: Duration? = null,
 )
 
 public sealed interface ModerationStatusOutcome {
 
-    public data class Known(public val summary: ModerationStatusView) : ModerationStatusOutcome
+    public data class Known(
+        public val summary: ModerationStatusView
+    ) : ModerationStatusOutcome
 
     public data object NotFound : ModerationStatusOutcome
 
@@ -30,9 +33,13 @@ public sealed interface ModerationStatusOutcome {
 /** The actor of a moderation action: a player admin or an authorized addon. Never a free string. */
 public sealed interface ModerationActionActor {
 
-    public data class Player(public val playerId: UUID) : ModerationActionActor
+    public data class Player(
+        public val playerId: UUID
+    ) : ModerationActionActor
 
-    public data class Addon(public val access: AddonAccess) : ModerationActionActor
+    public data class Addon(
+        public val access: AddonAccess
+    ) : ModerationActionActor
 
 }
 
@@ -51,7 +58,9 @@ public class ModerationConfinementRequest(
 
 public sealed interface ModerationActionOutcome {
 
-    public data class Applied(public val actionId: String) : ModerationActionOutcome
+    public data class Applied(
+        public val actionId: String
+    ) : ModerationActionOutcome
 
     public data object AlreadyInState : ModerationActionOutcome
 
@@ -72,7 +81,10 @@ public sealed interface ModerationActionOutcome {
 
 public interface ModerationStatusApi {
 
-    public fun isMuted(viewerId: UUID, subjectId: UUID): ApiQuery<Boolean>
+    public fun isMuted(
+        viewerId: UUID,
+        subjectId: UUID
+    ): ApiQuery<Boolean>
 
     public fun status(
         viewerId: UUID,

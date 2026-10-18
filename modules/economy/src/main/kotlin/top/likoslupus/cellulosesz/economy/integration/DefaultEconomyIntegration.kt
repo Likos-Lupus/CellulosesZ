@@ -6,6 +6,8 @@ import top.likoslupus.cellulosesz.economy.ledger.EconomyReceipt
 import top.likoslupus.cellulosesz.economy.ledger.TransactionKind
 import top.likoslupus.cellulosesz.economy.money.Money
 import top.likoslupus.cellulosesz.economy.service.*
+import top.likoslupus.cellulosesz.economy.worth.WorthService
+import java.math.BigDecimal
 import java.util.*
 
 /**
@@ -16,6 +18,7 @@ import java.util.*
 internal class DefaultEconomyIntegration(
     private val service: EconomyService,
     private val observer: EconomyDomainObserver,
+    private val worth: WorthService,
 ) : EconomyIntegrationPort {
 
     override suspend fun balance(playerId: UUID): EconomyBalanceResult =
@@ -139,6 +142,28 @@ internal class DefaultEconomyIntegration(
             RankingResult.Disabled -> EconomyRankingResult.Disabled
             RankingResult.StorageUnavailable -> EconomyRankingResult.StorageUnavailable
         }
+
+    override suspend fun worthUnitPrice(itemId: String): BigDecimal? =
+        worth.unitPrice(itemId)?.decimal
+
+    override suspend fun worthCatalog(): List<EconomyWorthView> =
+        worth.entries().map {
+            EconomyWorthView(
+                it.itemId,
+                it.price.decimal
+            )
+        }
+
+    override suspend fun setWorth(
+        itemId: String,
+        unitPrice: BigDecimal,
+        actor: EconomyActorDescriptor,
+    ): Boolean =
+        worth.set(
+            itemId,
+            Money.of(unitPrice),
+            actor.id
+        )
 
     private fun EconomyMutationResult.toPort(): EconomyTransactionResult =
         when (this) {

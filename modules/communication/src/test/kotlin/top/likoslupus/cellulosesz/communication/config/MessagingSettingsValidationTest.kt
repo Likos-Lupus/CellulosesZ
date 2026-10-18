@@ -63,4 +63,36 @@ class MessagingSettingsValidationTest {
         assertTrue(errors.any { it.path == "messaging.announcements.maxMessageLength" })
     }
 
+    @Test
+    fun `rejects a negative join quit threshold and blank templates`() {
+        val errors = MessagingSettingsValidation.validate(
+            MessagingSettings(
+                joinQuit = JoinQuitSettings(
+                    hideAbovePlayerCount = -1,
+                    joinFormat = "  ",
+                )
+            )
+        )
+
+        assertTrue(errors.any { it.path == "messaging.joinQuit.hideAbovePlayerCount" })
+        assertTrue(errors.any { it.path == "messaging.joinQuit.joinFormat" })
+    }
+
+    @Test
+    fun `rejects malformed lifecycle and death templates`() {
+        val errors = MessagingSettingsValidation.validate(
+            MessagingSettings(
+                joinQuit = JoinQuitSettings(joinFormat = "<yellow>oops"),
+                death = DeathMessageSettings(
+                    customFormat = "<red>oops",
+                    coordinatesFormat = "<gray>oops",
+                ),
+            )
+        )
+
+        assertTrue(errors.any { it.path == "messaging.joinQuit.joinFormat" })
+        assertTrue(errors.any { it.path == "messaging.death.customFormat" })
+        assertTrue(errors.any { it.path == "messaging.death.coordinatesFormat" })
+    }
+
 }

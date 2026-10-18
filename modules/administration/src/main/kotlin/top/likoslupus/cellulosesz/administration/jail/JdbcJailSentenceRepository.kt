@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.administration.jail
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.administration.moderation.audit.PersistedModerationActor
 import top.likoslupus.cellulosesz.core.player.WorldPosition
@@ -10,6 +8,8 @@ import java.sql.SQLException
 import java.sql.Types
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Jail sentences in `cz_jail_sentences`. */
 internal class JdbcJailSentenceRepository(
@@ -38,7 +38,9 @@ internal class JdbcJailSentenceRepository(
                             return_yaw,
                             return_pitch,
                             release_requested_at_ms,
-                            player_name
+                            player_name,
+                            sentence_mode,
+                            remaining_seconds
                         FROM
                             ${AdministrationSqlSchema.JAIL_SENTENCES}
                         WHERE
@@ -79,6 +81,10 @@ internal class JdbcJailSentenceRepository(
                                 }
                                 val releaseRequestedAtMs =
                                     rs.getObject(14)?.let { rs.getLong(14) }
+                                val mode = JailSentenceMode.parse(rs.getString(16))
+                                    ?: JailSentenceMode.PERMANENT
+                                val remainingSeconds =
+                                    rs.getObject(17)?.let { rs.getLong(17) }
                                 sentences += JailSentence(
                                     playerId = playerId,
                                     playerName = rs.getString(15),
@@ -91,7 +97,9 @@ internal class JdbcJailSentenceRepository(
                                     ),
                                     reason = rs.getString(5),
                                     issuedAt = Instant.ofEpochMilli(issuedAtMs),
+                                    mode = mode,
                                     expiresAt = expiresAtMs?.let(Instant::ofEpochMilli),
+                                    remainingSeconds = remainingSeconds,
                                     returnPosition = returnPosition,
                                     releaseRequestedAt =
                                         releaseRequestedAtMs?.let(Instant::ofEpochMilli),
@@ -140,10 +148,12 @@ internal class JdbcJailSentenceRepository(
                             return_yaw,
                             return_pitch,
                             release_requested_at_ms,
-                            player_name
+                            player_name,
+                            sentence_mode,
+                            remaining_seconds
                         )
                         VALUES (
-                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                         );
                         """.trimIndent()
                     ).use { statement ->
@@ -177,6 +187,10 @@ internal class JdbcJailSentenceRepository(
                             statement.setLong(15, it.toEpochMilli())
                         } ?: statement.setNull(15, Types.BIGINT)
                         statement.setString(16, sentence.playerName)
+                        statement.setString(17, sentence.mode.name)
+                        sentence.remainingSeconds?.let {
+                            statement.setLong(18, it)
+                        } ?: statement.setNull(18, Types.BIGINT)
                         statement.executeUpdate()
                     }
                     Unit
@@ -241,6 +255,34 @@ internal class JdbcJailSentenceRepository(
                 }
             } catch (exception: SQLException) {
                 throw JailDataException("unable to remove jail sentence for $playerId", exception)
+            }
+        }
+
+    override suspend fun updateRemaining(playerId: UUID, remainingSeconds: Long): Boolean =
+        withContext(Dispatchers.IO) {
+            try {
+                database.transaction { connection ->
+                    connection.prepareStatement(
+                        /* language=SQL */ """
+                        UPDATE
+                            ${AdministrationSqlSchema.JAIL_SENTENCES}
+                        SET
+                            remaining_seconds = ?
+                        WHERE
+                            namespace = ? AND player_uuid = ?
+                        """.trimIndent()
+                    ).use { statement ->
+                        statement.setLong(1, remainingSeconds)
+                        statement.setString(2, namespace)
+                        statement.setString(3, playerId.toString())
+                        statement.executeUpdate() > 0
+                    }
+                }
+            } catch (exception: SQLException) {
+                throw JailDataException(
+                    "unable to update jail sentence remaining time for $playerId",
+                    exception,
+                )
             }
         }
 

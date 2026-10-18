@@ -14,6 +14,9 @@ internal sealed interface TeleportOutcome {
 
     data class UnknownDimension(val dimension: String) : TeleportOutcome
 
+    /** The subject is not allowed to cross into [dimension] (per-world access gate). */
+    data class WorldAccessDenied(val dimension: String) : TeleportOutcome
+
     data object OutsideWorldBorder : TeleportOutcome
 
     data object UnsafeDestination : TeleportOutcome

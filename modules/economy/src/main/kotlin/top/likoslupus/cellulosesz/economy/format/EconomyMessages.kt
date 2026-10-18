@@ -86,6 +86,88 @@ internal object EconomyMessages {
             money(balance, display),
         )
 
+    fun payConfirm(
+        receiver: String,
+        amount: BigDecimal,
+        display: EconomyDisplay,
+    ): Notice =
+        info(
+            key("economy.pay.confirm"),
+            playerName(receiver),
+            money(amount, display),
+        )
+
+    fun payReceiverDisabled(receiver: String): Notice =
+        notice(
+            key("economy.pay.error.receiver_disabled"),
+            playerName(receiver),
+        )
+
+    fun payBlocked(receiver: String): Notice =
+        notice(
+            key("economy.pay.error.blocked"),
+            playerName(receiver),
+        )
+
+    fun payToggleStatus(
+        isOther: Boolean,
+        name: String,
+        enabled: Boolean
+    ): Notice =
+        when {
+            isOther && enabled -> info(
+                key("economy.paytoggle.status.other.enabled"),
+                playerName(name),
+            )
+
+            isOther -> info(
+                key("economy.paytoggle.status.other.disabled"),
+                playerName(name),
+            )
+
+            enabled -> info(key("economy.paytoggle.status.enabled"))
+            else -> info(key("economy.paytoggle.status.disabled"))
+        }
+
+    fun payToggleUpdated(
+        isOther: Boolean,
+        name: String,
+        enabled: Boolean
+    ): Notice =
+        when {
+            isOther && enabled -> success(
+                key("economy.paytoggle.other.enabled"),
+                playerName(name),
+            )
+
+            isOther -> success(
+                key("economy.paytoggle.other.disabled"),
+                playerName(name),
+            )
+
+            enabled -> success(key("economy.paytoggle.enabled"))
+            else -> success(key("economy.paytoggle.disabled"))
+        }
+
+    fun payConfirmStatus(enabled: Boolean): Notice =
+        info(
+            when {
+                enabled -> key("economy.payconfirm.status.enabled")
+                else -> key("economy.payconfirm.status.disabled")
+            }
+        )
+
+    fun payConfirmUpdated(enabled: Boolean): Notice =
+        success(
+            when {
+                enabled -> key("economy.payconfirm.enabled")
+                else -> key("economy.payconfirm.disabled")
+            }
+        )
+
+    fun preferenceStorageUnavailable(): Notice =
+        notice(key("economy.paytoggle.storage"))
+
     fun ecoGrant(
         player: String,
         amount: BigDecimal,
@@ -195,45 +277,172 @@ internal object EconomyMessages {
         pageSize: Int,
         total: Int,
         display: EconomyDisplay,
-    ): ListPage =
-        ListPage(
-            title = LocalizedText(
-                key("economy.top.title"),
-                listOf(count(total.toLong()))
-            ),
-            rows = rows.map { row ->
-                ListRow(
-                    main = LocalizedText(
-                        key("economy.top.row"),
-                        listOf(
-                            count(row.rank.toLong()),
-                            playerName(row.name),
-                            money(row.amount, display)
-                        ),
-                    )
+    ): ListPage = ListPage(
+        title = LocalizedText(
+            key("economy.top.title"),
+            listOf(count(total.toLong()))
+        ),
+        rows = rows.map { row ->
+            ListRow(
+                main = LocalizedText(
+                    key("economy.top.row"),
+                    listOf(
+                        count(row.rank.toLong()),
+                        playerName(row.name),
+                        money(row.amount, display)
+                    ),
                 )
-            },
-            emptyText = LocalizedText(key("economy.top.empty")),
+            )
+        },
+        emptyText = LocalizedText(key("economy.top.empty")),
+    )
+
+    // ---- worth and sales -------------------------------------------------------------------
+
+    fun worthUnit(
+        itemId: String,
+        price: BigDecimal,
+        display: EconomyDisplay
+    ): Notice =
+        info(
+            key("economy.worth.unit"),
+            literal(itemId),
+            money(price, display),
         )
+
+    fun worthTotal(
+        itemId: String,
+        count: Int,
+        total: BigDecimal,
+        display: EconomyDisplay,
+    ): Notice =
+        info(
+            key("economy.worth.total"),
+            literal(itemId),
+            count(count.toLong()),
+            money(total, display),
+        )
+
+    fun worthMissing(itemId: String): Notice =
+        notice(
+            key("economy.worth.none"),
+            literal(itemId),
+        )
+
+    fun worthNothing(): Notice =
+        notice(key("economy.worth.nothing"))
+
+    fun worthHeldEmpty(): Notice =
+        notice(key("economy.worth.held.empty"))
+
+    fun worthInventory(
+        total: BigDecimal,
+        items: Int,
+        display: EconomyDisplay,
+    ): Notice =
+        info(
+            key("economy.worth.inventory"),
+            money(total, display),
+            count(items.toLong()),
+        )
+
+    fun worthBlocks(
+        total: BigDecimal,
+        items: Int,
+        display: EconomyDisplay,
+    ): Notice =
+        info(
+            key("economy.worth.blocks"),
+            money(total, display),
+            count(items.toLong()),
+        )
+
+    fun sellHeldEmpty(): Notice =
+        notice(key("economy.sell.held.empty"))
+
+    fun sellNothing(): Notice =
+        notice(key("economy.sell.nothing"))
+
+    fun sellUnpriced(itemId: String): Notice =
+        notice(
+            key("economy.sell.unpriced"),
+            literal(itemId),
+        )
+
+    fun sellNamed(itemId: String): Notice =
+        notice(
+            key("economy.sell.named"),
+            literal(itemId),
+        )
+
+    fun sellBulkDenied(): Notice =
+        notice(key("economy.sell.bulk_denied"))
+
+    fun sellExceeds(): Notice =
+        notice(key("economy.sell.exceeds"))
+
+    fun sellChanged(): Notice =
+        notice(key("economy.sell.changed"))
+
+    fun sellFailed(): Notice =
+        notice(key("economy.sell.failed"))
+
+    fun sellSuccess(
+        itemId: String,
+        items: Int,
+        amount: BigDecimal,
+        balance: BigDecimal,
+        display: EconomyDisplay,
+    ): Notice =
+        success(
+            key("economy.sell.success"),
+            literal(itemId),
+            count(items.toLong()),
+            money(amount, display),
+            money(balance, display),
+        )
+
+    fun setWorth(
+        itemId: String,
+        price: BigDecimal,
+        display: EconomyDisplay,
+    ): Notice =
+        success(
+            key("economy.setworth.success"),
+            literal(itemId),
+            money(price, display),
+        )
+
+    fun setWorthFailed(): Notice =
+        notice(key("economy.setworth.failed"))
 
     // ---- helpers ---------------------------------------------------------------------------
 
     private fun key(value: String): MessageKey =
         MessageKey(value)
 
-    private fun notice(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun notice(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.ERROR
         )
 
-    private fun success(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun success(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.SUCCESS
         )
 
-    private fun info(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun info(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.INFO
@@ -248,7 +457,10 @@ internal object EconomyMessages {
     private fun count(value: Long): TextArgument =
         TextArgument.Count(value)
 
-    private fun money(amount: BigDecimal, display: EconomyDisplay): TextArgument =
+    private fun money(
+        amount: BigDecimal,
+        display: EconomyDisplay
+    ): TextArgument =
         TextArgument.Literal("${amount.toPlainString()} ${display.currencyName}")
 
     private fun money(amount: Money, display: EconomyDisplay): TextArgument =

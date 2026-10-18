@@ -64,6 +64,7 @@ public sealed interface KitClaimResult {
         public val kitName: String,
         public val droppedStacks: Int,
         public val claimRecordedFully: Boolean,
+        public val equippedStacks: Int = 0,
     ) : KitClaimResult
 
     public data object Disabled : KitClaimResult
@@ -110,6 +111,7 @@ public sealed interface KitGrantResult {
         public val grantId: String,
         public val kitName: String,
         public val droppedStacks: Int,
+        public val equippedStacks: Int = 0,
     ) : KitGrantResult
 
     public data object AlreadyProcessed : KitGrantResult

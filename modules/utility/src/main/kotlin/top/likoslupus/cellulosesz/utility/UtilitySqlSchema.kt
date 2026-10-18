@@ -9,6 +9,8 @@ public object UtilitySqlSchema : SqlSchemaContributor {
     public const val KIT_ITEMS: String = "cz_kit_items"
     public const val KIT_CLAIMS: String = "cz_kit_claims"
     public const val KIT_GRANTS: String = "cz_kit_grants"
+    public const val POWERTOOLS: String = "cz_powertools"
+    public const val UNLIMITED_ITEMS: String = "cz_unlimited_items"
 
     public override val id: String
         get() = "utility"
@@ -62,6 +64,27 @@ public object UtilitySqlSchema : SqlSchemaContributor {
                     SqlColumn("delivered_at_ms", SqlColumnType.BIGINT, nullable = true),
                 ),
                 primaryKey = listOf("namespace", "addon_id", "grant_id", "player_uuid"),
+            ),
+            SqlTable(
+                name = POWERTOOLS,
+                columns = listOf(
+                    SqlColumn("namespace", SqlColumnType.NAME),
+                    SqlColumn("player_uuid", SqlColumnType.UUID),
+                    SqlColumn("item_id", SqlColumnType.RESOURCE),
+                    SqlColumn("trigger", SqlColumnType.NAME),
+                    SqlColumn("command", SqlColumnType.TEXT),
+                    SqlColumn("updated_at_ms", SqlColumnType.BIGINT),
+                ),
+                primaryKey = listOf("namespace", "player_uuid", "item_id", "trigger"),
+            ),
+            SqlTable(
+                name = UNLIMITED_ITEMS,
+                columns = listOf(
+                    SqlColumn("namespace", SqlColumnType.NAME),
+                    SqlColumn("player_uuid", SqlColumnType.UUID),
+                    SqlColumn("item_id", SqlColumnType.RESOURCE),
+                ),
+                primaryKey = listOf("namespace", "player_uuid", "item_id"),
             ),
         )
 

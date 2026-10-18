@@ -12,6 +12,8 @@ public object EconomySqlSchema : SqlSchemaContributor {
     public const val ACCOUNTS: String = "cz_economy_accounts"
     public const val TRANSACTIONS: String = "cz_economy_transactions"
     public const val ENTRIES: String = "cz_economy_entries"
+    public const val WORTH: String = "cz_economy_worth"
+    public const val SALE_INTENTS: String = "cz_economy_sale_intents"
 
     public override val id: String
         get() = "economy"
@@ -65,6 +67,35 @@ public object EconomySqlSchema : SqlSchemaContributor {
                 ),
                 primaryKey = listOf("namespace", "transaction_id", "entry_ordinal"),
             ),
+            SqlTable(
+                name = WORTH,
+                columns = listOf(
+                    SqlColumn("namespace", SqlColumnType.NAME),
+                    SqlColumn("item_id", SqlColumnType.RESOURCE),
+                    SqlColumn("price_minor", SqlColumnType.BIGINT),
+                    SqlColumn("updated_at_ms", SqlColumnType.BIGINT),
+                    SqlColumn("updated_by", SqlColumnType.NAME, nullable = true),
+                ),
+                primaryKey = listOf("namespace", "item_id"),
+            ),
+            SqlTable(
+                name = SALE_INTENTS,
+                columns = listOf(
+                    SqlColumn("namespace", SqlColumnType.NAME),
+                    SqlColumn("sale_id", SqlColumnType.UUID),
+                    SqlColumn("player_uuid", SqlColumnType.UUID),
+                    SqlColumn("player_name", SqlColumnType.NAME),
+                    SqlColumn("state", SqlColumnType.NAME),
+                    SqlColumn("item_id", SqlColumnType.RESOURCE),
+                    SqlColumn("item_count", SqlColumnType.INTEGER),
+                    SqlColumn("total_minor", SqlColumnType.BIGINT),
+                    SqlColumn("payload", SqlColumnType.TEXT),
+                    SqlColumn("transaction_id", SqlColumnType.UUID, nullable = true),
+                    SqlColumn("created_at_ms", SqlColumnType.BIGINT),
+                    SqlColumn("updated_at_ms", SqlColumnType.BIGINT),
+                ),
+                primaryKey = listOf("namespace", "sale_id"),
+            ),
         )
 
     public override fun indexes(): List<SqlIndex> =
@@ -95,6 +126,11 @@ public object EconomySqlSchema : SqlSchemaContributor {
                 name = "cz_economy_entries_account",
                 table = ENTRIES,
                 columns = listOf("namespace", "currency_id", "account_id", "transaction_id"),
+            ),
+            SqlIndex(
+                name = "cz_economy_sale_intents_state",
+                table = SALE_INTENTS,
+                columns = listOf("namespace", "state", "created_at_ms"),
             ),
         )
 

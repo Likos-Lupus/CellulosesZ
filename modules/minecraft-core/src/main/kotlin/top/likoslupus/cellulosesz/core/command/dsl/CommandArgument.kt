@@ -9,6 +9,8 @@ import net.minecraft.commands.CommandBuildContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.arguments.DimensionArgument
 import net.minecraft.commands.arguments.MessageArgument
+import net.minecraft.commands.arguments.item.ItemArgument
+import net.minecraft.commands.arguments.item.ItemInput
 import net.minecraft.network.chat.Component
 import net.minecraft.resources.Identifier
 
@@ -96,6 +98,17 @@ public fun dimension(): CommandArgument<Identifier> =
                 Identifier::class.java
             )
         },
+    )
+
+/**
+ * A vanilla item argument in the `id[component=value,...]` form. Its ceiling is [ItemInput], which
+ * keeps the component patch intact so the caller can materialize an exact stack with
+ * `createItemStack(count)` (strict validation included) instead of re-parsing a string.
+ */
+public fun item(): CommandArgument<ItemInput> =
+    CommandArgument(
+        { buildContext -> ItemArgument.item(buildContext) },
+        { context, name -> ItemArgument.getItem(context, name) },
     )
 
 /**

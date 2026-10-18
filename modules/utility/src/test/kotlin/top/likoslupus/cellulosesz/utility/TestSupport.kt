@@ -239,6 +239,7 @@ internal class FakeKitInventoryBackend : KitInventoryBackend {
         playerId: UUID,
         items: List<ItemStack>,
         overflowPolicy: KitOverflowPolicy,
+        autoEquip: Boolean,
     ): KitDeliveryResult {
         deliverCalls++
         return deliveryResult

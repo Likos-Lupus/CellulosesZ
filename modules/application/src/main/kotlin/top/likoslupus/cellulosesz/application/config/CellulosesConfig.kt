@@ -30,6 +30,7 @@ public data class CellulosesConfig(
     public val economy: EconomySettings = EconomySettings(),
     public val commands: CommandRoutingSettings = CommandRoutingSettings(),
     public val api: ApiIntegrationSettings = ApiIntegrationSettings(),
+    public val backup: BackupSettings = BackupSettings(),
 )
 
 @Serializable

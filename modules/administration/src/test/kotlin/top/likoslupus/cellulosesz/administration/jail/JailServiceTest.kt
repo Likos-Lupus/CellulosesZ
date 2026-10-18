@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.administration.jail
 
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.administration.config.JailSettings
@@ -16,10 +14,14 @@ import top.likoslupus.cellulosesz.administration.moderation.protection.TargetPro
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.runBlocking
 
 class JailServiceTest {
 
@@ -32,6 +34,7 @@ class JailServiceTest {
     private fun harness(
         timeline: MutableList<String> = mutableListOf(),
         failSentenceWrite: Boolean = false,
+        jailSettings: JailSettings = JailSettings(),
     ): Harness {
         val known = object : KnownPlayerResolver {
             private val identity = KnownPlayerIdentity(playerId, "Alice")
@@ -62,8 +65,8 @@ class JailServiceTest {
                 clock
             ),
             transfer = { transfer },
-            positions = JailPlayerPositionSource { null },
-            settings = { JailSettings() },
+            positions = { null },
+            settings = { jailSettings },
             clock = clock,
         )
         return Harness(service, sentences, transfer, timeline)
@@ -87,8 +90,16 @@ class JailServiceTest {
             val harness = harness()
             harness.service.load()
             assertEquals(
-                SetJailOutcome.Saved(checkNotNull(JailName.parse("cells"))),
-                harness.service.setLocation("cells", jailDestination, "Admin")
+                SetJailOutcome.Saved(
+                    checkNotNull(
+                        JailName.parse("cells")
+                    )
+                ),
+                harness.service.setLocation(
+                    "cells",
+                    jailDestination,
+                    "Admin"
+                )
             )
 
             val outcome = harness.service.jail(
@@ -103,8 +114,14 @@ class JailServiceTest {
             assertTrue((outcome as JailActionOutcome.Jailed).transferred)
             val putIndex = harness.timeline.indexOf("sentence.put")
             val transferIndex = harness.timeline.indexOf("transfer")
-            assertTrue(putIndex >= 0, "sentence must be written")
-            assertTrue(transferIndex >= 0, "transfer must run")
+            assertTrue(
+                putIndex >= 0,
+                "sentence must be written"
+            )
+            assertTrue(
+                transferIndex >= 0,
+                "transfer must run"
+            )
             assertTrue(
                 putIndex < transferIndex,
                 "sentence must be written before the transfer"
@@ -117,7 +134,11 @@ class JailServiceTest {
         runBlocking {
             val harness = harness(failSentenceWrite = true)
             harness.service.load()
-            harness.service.setLocation("cells", jailDestination, "Admin")
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
 
             val outcome = harness.service.jail(
                 ModerationActor.Console,
@@ -143,8 +164,18 @@ class JailServiceTest {
         runBlocking {
             val harness = harness()
             harness.service.load()
-            harness.service.setLocation("cells", jailDestination, "Admin")
-            harness.service.jail(ModerationActor.Console, "Alice", "cells", null, reason())
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
+            harness.service.jail(
+                ModerationActor.Console,
+                "Alice",
+                "cells",
+                null,
+                reason()
+            )
 
             val released = harness.service.release(
                 ModerationActor.Console,
@@ -175,7 +206,11 @@ class JailServiceTest {
         runBlocking {
             val harness = harness()
             harness.service.load()
-            harness.service.setLocation("cells", jailDestination, "Admin")
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
 
             val jailed = harness.service.toggle(
                 ModerationActor.Console,
@@ -197,7 +232,11 @@ class JailServiceTest {
         runBlocking {
             val harness = harness()
             harness.service.load()
-            harness.service.setLocation("cells", jailDestination, "Admin")
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
             harness.service.jail(
                 ModerationActor.Console,
                 "Alice",
@@ -219,6 +258,67 @@ class JailServiceTest {
             assertTrue(harness.service.isConfined(playerId))
         }
 
+    @Test
+    fun `online jail time counts only online ticks`() =
+        runBlocking {
+            val harness = harness(jailSettings = JailSettings(jailOnlineTime = true))
+            harness.service.load()
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
+            val outcome = harness.service.jail(
+                ModerationActor.Console,
+                "Alice",
+                "cells",
+                TemporaryDuration(Duration.ofSeconds(60)),
+                reason(),
+            )
+            assertTrue(outcome is JailActionOutcome.Jailed)
+            val sentence = harness.service.sentence(playerId)
+            assertNotNull(sentence)
+            assertEquals(JailSentenceMode.ONLINE, sentence?.mode)
+            assertEquals(60L, sentence?.remainingSeconds)
+            assertNull(sentence?.expiresAt)
+
+            repeat(20) { harness.service.onOnlineTick(playerId) }
+
+            assertEquals(
+                59L,
+                harness.service.sentence(playerId)?.remainingSeconds
+            )
+        }
+
+    @Test
+    fun `wall-clock jail time does not count online ticks`() =
+        runBlocking {
+            val harness = harness()
+            harness.service.load()
+            harness.service.setLocation(
+                "cells",
+                jailDestination,
+                "Admin"
+            )
+            harness.service.jail(
+                ModerationActor.Console,
+                "Alice",
+                "cells",
+                TemporaryDuration(Duration.ofSeconds(60)),
+                reason(),
+            )
+            val sentence = harness.service.sentence(playerId)
+            assertEquals(JailSentenceMode.WALL_CLOCK, sentence?.mode)
+            assertNull(sentence?.remainingSeconds)
+
+            repeat(40) { harness.service.onOnlineTick(playerId) }
+
+            assertEquals(
+                JailSentenceMode.WALL_CLOCK,
+                harness.service.sentence(playerId)?.mode,
+            )
+        }
+
     private data class Harness(
         val service: JailService,
         val sentences: FakeSentenceRepository,
@@ -228,7 +328,8 @@ class JailServiceTest {
 
     private class InlineJailRuntime : JailRuntime {
 
-        override suspend fun <T> onServerThread(block: () -> T): T = block()
+        override suspend fun <T> onServerThread(block: () -> T): T =
+            block()
 
         override fun launch(block: suspend CoroutineScope.() -> Unit) {
             runBlocking { block(this) }
@@ -287,6 +388,15 @@ class JailServiceTest {
         override suspend fun remove(playerId: UUID): Boolean {
             timeline += "sentence.remove"
             return stored.remove(playerId) != null
+        }
+
+        override suspend fun updateRemaining(
+            playerId: UUID,
+            remainingSeconds: Long
+        ): Boolean {
+            val current = stored[playerId] ?: return false
+            stored[playerId] = current.copy(remainingSeconds = remainingSeconds)
+            return true
         }
 
     }

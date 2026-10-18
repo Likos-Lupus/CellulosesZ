@@ -18,8 +18,20 @@ public object AdministrationSettingsValidation {
     private const val MAX_JAIL_ALLOWED_COMMANDS: Int = 64
     private const val MAX_EXPERIENCE_ADJUSTMENT: Int = 100_000_000
     private const val MAX_SPEED_MULTIPLIER: Double = 10.0
+    private const val MAX_LOGIN_ATTACK_DELAY_SECONDS: Int = 3_600
+    private const val MAX_HEAL_COOLDOWN_SECONDS: Long = 86_400
+    private const val MAX_SPAWN_AMOUNT: Int = 1_024
+    private const val MAX_REMOVE_RADIUS: Double = 1_024.0
+    private const val MAX_NUKE_RADIUS: Double = 128.0
+    private const val MAX_FIREWORK_POWER: Int = 32
+    private const val MAX_FIREWORK_AMOUNT: Int = 128
+    private const val MAX_BURN_SECONDS: Double = 3_600.0
+    private const val MAX_SIGN_LINE_LENGTH: Int = 4_096
+    private const val MAX_SIGN_DISTANCE: Double = 64.0
 
     private val JAIL_COMMAND_ENTRY: Regex = Regex("[a-z0-9_:-]+")
+
+    private val DIMENSION_ID: Regex = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
 
     public fun validate(settings: AdministrationSettings): List<ValidationError> =
         buildList {
@@ -45,15 +57,24 @@ public object AdministrationSettingsValidation {
                 }
             }
 
-            moderation.maxTemporaryMuteSeconds?.let { seconds ->
+            moderation.maxMuteSeconds?.let { seconds ->
                 if (seconds <= 0) {
                     add(
                         ValidationError(
-                            "administration.moderation.maxTemporaryMuteSeconds",
+                            "administration.moderation.maxMuteSeconds",
                             "must be > 0 when set",
                         )
                     )
                 }
+            }
+
+            if (moderation.loginAttackDelaySeconds !in 0..MAX_LOGIN_ATTACK_DELAY_SECONDS) {
+                add(
+                    ValidationError(
+                        "administration.moderation.loginAttackDelaySeconds",
+                        "must be between 0 and $MAX_LOGIN_ATTACK_DELAY_SECONDS",
+                    )
+                )
             }
 
             val reasonLength = moderation.maxReasonLength.coerceIn(
@@ -191,6 +212,107 @@ public object AdministrationSettingsValidation {
                     ValidationError(
                         "administration.playerAdjustments.minimumSpeedMultiplier",
                         "must be <= maximumSpeedMultiplier",
+                    )
+                )
+            }
+
+            if (adjustments.healCooldownSeconds !in 0..MAX_HEAL_COOLDOWN_SECONDS) {
+                add(
+                    ValidationError(
+                        "administration.playerAdjustments.healCooldownSeconds",
+                        "must be between 0 and $MAX_HEAL_COOLDOWN_SECONDS",
+                    )
+                )
+            }
+            adjustments.noGodWorlds.forEach { world ->
+                if (!DIMENSION_ID.matches(world)) {
+                    add(
+                        ValidationError(
+                            "administration.playerAdjustments.noGodWorlds",
+                            "entry '$world' must be a namespaced dimension id",
+                        )
+                    )
+                }
+            }
+
+            val entityTools = settings.entityTools
+            if (entityTools.maxSpawnAmount !in 1..MAX_SPAWN_AMOUNT) {
+                add(
+                    ValidationError(
+                        "administration.entityTools.maxSpawnAmount",
+                        "must be between 1 and $MAX_SPAWN_AMOUNT",
+                    )
+                )
+            }
+            if (!entityTools.maxRemoveRadius.isFinite()
+                || entityTools.maxRemoveRadius <= 0.0
+                || entityTools.maxRemoveRadius > MAX_REMOVE_RADIUS
+            ) {
+                add(
+                    ValidationError(
+                        "administration.entityTools.maxRemoveRadius",
+                        "must be a finite value in (0, $MAX_REMOVE_RADIUS]",
+                    )
+                )
+            }
+
+            val worldTools = settings.worldTools
+            if (!worldTools.maxNukeRadius.isFinite()
+                || worldTools.maxNukeRadius <= 0.0
+                || worldTools.maxNukeRadius > MAX_NUKE_RADIUS
+            ) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.maxNukeRadius",
+                        "must be a finite value in (0, $MAX_NUKE_RADIUS]",
+                    )
+                )
+            }
+            if (worldTools.maxFireworkPower !in 1..MAX_FIREWORK_POWER) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.maxFireworkPower",
+                        "must be between 1 and $MAX_FIREWORK_POWER",
+                    )
+                )
+            }
+            if (worldTools.maxFireworkAmount !in 1..MAX_FIREWORK_AMOUNT) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.maxFireworkAmount",
+                        "must be between 1 and $MAX_FIREWORK_AMOUNT",
+                    )
+                )
+            }
+            if (!worldTools.maxBurnSeconds.isFinite()
+                || worldTools.maxBurnSeconds <= 0.0
+                || worldTools.maxBurnSeconds > MAX_BURN_SECONDS
+            ) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.maxBurnSeconds",
+                        "must be a finite value in (0, $MAX_BURN_SECONDS]",
+                    )
+                )
+            }
+
+            val signEditing = settings.signEditing
+            if (signEditing.maxLineLength !in 1..MAX_SIGN_LINE_LENGTH) {
+                add(
+                    ValidationError(
+                        "administration.signEditing.maxLineLength",
+                        "must be between 1 and $MAX_SIGN_LINE_LENGTH",
+                    )
+                )
+            }
+            if (!signEditing.maxDistance.isFinite()
+                || signEditing.maxDistance <= 0.0
+                || signEditing.maxDistance > MAX_SIGN_DISTANCE
+            ) {
+                add(
+                    ValidationError(
+                        "administration.signEditing.maxDistance",
+                        "must be a finite value in (0, $MAX_SIGN_DISTANCE]",
                     )
                 )
             }

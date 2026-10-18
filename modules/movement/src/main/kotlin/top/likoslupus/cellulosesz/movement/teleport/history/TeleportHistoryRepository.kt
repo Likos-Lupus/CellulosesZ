@@ -5,9 +5,13 @@ import java.util.*
 
 internal interface TeleportHistoryRepository {
 
-    suspend fun read(playerId: UUID): StoredPosition?
+    suspend fun read(playerId: UUID, cause: HistoryCause): StoredPosition?
 
-    suspend fun write(playerId: UUID, position: StoredPosition)
+    suspend fun write(
+        playerId: UUID,
+        cause: HistoryCause,
+        position: StoredPosition
+    )
 
 }
 

@@ -7,6 +7,8 @@ import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.hasPermission
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
@@ -27,6 +29,7 @@ internal object NicknameCommands {
         nicknames: NicknameService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
@@ -57,6 +60,7 @@ internal object NicknameCommands {
                             nicknames,
                             kernel,
                             messages,
+                            permissions,
                             adventure,
                             presentation
                         )
@@ -92,6 +96,7 @@ internal object NicknameCommands {
                                 nicknames,
                                 kernel,
                                 messages,
+                                permissions,
                                 adventure,
                                 presentation
                             )
@@ -173,18 +178,32 @@ internal object NicknameCommands {
         nicknames: NicknameService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
-    ): Int =
-        playerLaunch(source, kernel, messages, adventure) { target ->
+    ): Int {
+        val colorsAllowed = source.hasPermission(
+            permissions,
+            CommandPermissions.NICK_COLORS
+        )
+        return playerLaunch(source, kernel, messages, adventure) { target ->
             kernel.sendNotices(
                 target,
                 adventure,
                 presentation,
                 playerId,
-                listOf(PlayerMessages.nicknameFeedback(nicknames.set(playerId, raw)))
+                listOf(
+                    PlayerMessages.nicknameFeedback(
+                        nicknames.set(
+                            playerId,
+                            raw,
+                            colorsAllowed = colorsAllowed
+                        )
+                    )
+                )
             )
         }
+    }
 
     private fun clearOwn(
         source: CommandSourceStack,
@@ -212,12 +231,19 @@ internal object NicknameCommands {
         nicknames: NicknameService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
         val actorId = source.player?.uuid
+        val colorsAllowed = source.hasPermission(permissions, CommandPermissions.NICK_COLORS)
         return playerLaunch(source, kernel, messages, adventure) { target ->
-            val result = nicknames.setFor(actorId, targetName, raw)
+            val result = nicknames.setFor(
+                actorId,
+                targetName,
+                raw,
+                colorsAllowed
+            )
             kernel.sendNotices(
                 target,
                 adventure,

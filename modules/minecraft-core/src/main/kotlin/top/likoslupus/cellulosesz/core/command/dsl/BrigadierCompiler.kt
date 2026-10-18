@@ -7,6 +7,8 @@ import com.mojang.brigadier.tree.LiteralCommandNode
 import net.minecraft.commands.CommandBuildContext
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.commands.Commands
+import top.likoslupus.cellulosesz.core.command.CommandInterceptor
+import top.likoslupus.cellulosesz.core.command.CommandInvocation
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import java.util.function.Predicate
@@ -26,6 +28,7 @@ public object BrigadierCompiler {
         permissions: PermissionService,
         buildContext: CommandBuildContext,
         additionalPermission: PermissionSpec? = null,
+        interceptor: CommandInterceptor? = null,
     ): LiteralCommandNode<CommandSourceStack> {
         val builder = Commands.literal(literal)
         // Mojang Brigadier's `requires` is a *setter*, not additive: calling it twice silently drops
@@ -44,7 +47,9 @@ public object BrigadierCompiler {
             builder.executes(
                 executor(
                     it,
-                    emptyList()
+                    emptyList(),
+                    definition.name,
+                    interceptor,
                 )
             )
         }
@@ -53,7 +58,9 @@ public object BrigadierCompiler {
             definition.root.children,
             permissions,
             buildContext,
-            emptyList()
+            emptyList(),
+            definition.name,
+            interceptor,
         )
         return builder.build()
     }
@@ -64,6 +71,8 @@ public object BrigadierCompiler {
         permissions: PermissionService,
         buildContext: CommandBuildContext,
         ancestors: List<ArgumentKey<*>>,
+        commandName: String,
+        interceptor: CommandInterceptor?,
     ) {
         children.forEach { child ->
             when (child) {
@@ -79,7 +88,9 @@ public object BrigadierCompiler {
                         builder.executes(
                             executor(
                                 it,
-                                ancestors
+                                ancestors,
+                                commandName,
+                                interceptor,
                             )
                         )
                     }
@@ -88,7 +99,9 @@ public object BrigadierCompiler {
                         child.children,
                         permissions,
                         buildContext,
-                        ancestors
+                        ancestors,
+                        commandName,
+                        interceptor,
                     )
                     parent.then(builder)
                 }
@@ -99,6 +112,8 @@ public object BrigadierCompiler {
                     permissions,
                     buildContext,
                     ancestors,
+                    commandName,
+                    interceptor,
                 )
             }
         }
@@ -111,6 +126,8 @@ public object BrigadierCompiler {
         permissions: PermissionService,
         buildContext: CommandBuildContext,
         ancestors: List<ArgumentKey<*>>,
+        commandName: String,
+        interceptor: CommandInterceptor?,
     ) {
         val spec = child as ArgumentNodeSpec<Any>
         val builder = Commands.argument(
@@ -133,7 +150,9 @@ public object BrigadierCompiler {
             builder.executes(
                 executor(
                     it,
-                    keys
+                    keys,
+                    commandName,
+                    interceptor,
                 )
             )
         }
@@ -142,7 +161,9 @@ public object BrigadierCompiler {
             spec.children,
             permissions,
             buildContext,
-            keys
+            keys,
+            commandName,
+            interceptor,
         )
         parent.then(builder)
     }
@@ -189,9 +210,23 @@ public object BrigadierCompiler {
     private fun executor(
         execution: CommandExecution,
         arguments: List<ArgumentKey<*>>,
+        commandName: String,
+        interceptor: CommandInterceptor?,
     ): Command<CommandSourceStack> =
-        Command {
-            execution.action(ExecutionScope(it.source, it, arguments))
+        Command { context ->
+            val action = { execution.action(ExecutionScope(context.source, context, arguments)) }
+            if (interceptor == null) {
+                action()
+            } else {
+                var executed = false
+                var result = 1
+                interceptor.intercept(CommandInvocation(commandName, context.source)) {
+                    executed = true
+                    result = action()
+                }
+                // A gate that defers leaves the body unrun; Brigadier still needs a synchronous result.
+                if (executed) result else 1
+            }
         }
 
     private fun provider(suggestion: CommandSuggestion): SuggestionProvider<CommandSourceStack> =

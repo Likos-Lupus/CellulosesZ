@@ -4,6 +4,9 @@
   "package": "top.likoslupus.cellulosesz.player.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "AfkFishingMixin",
+    "AfkFreezeMixin",
+    "AfkInteractMixin",
     "PlayerDisplayNameMixin"
   ],
   "injectors": {

@@ -16,13 +16,15 @@ import top.likoslupus.cellulosesz.api.economy.EconomyBalanceChanged
 import top.likoslupus.cellulosesz.api.economy.EconomyTransactionCommitted
 import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
 import top.likoslupus.cellulosesz.api.movement.*
+import top.likoslupus.cellulosesz.application.ApplicationSqlSchema
 import top.likoslupus.cellulosesz.application.api.*
 import top.likoslupus.cellulosesz.application.api.extension.AddonMessageOverlay
 import top.likoslupus.cellulosesz.application.api.extension.ApplicationExtensionHub
 import top.likoslupus.cellulosesz.application.api.extension.ComposedKitEligibility
 import top.likoslupus.cellulosesz.application.api.extension.ComposedTeleportPreflight
-import top.likoslupus.cellulosesz.application.command.CommandRegistrationDiagnostics
-import top.likoslupus.cellulosesz.application.command.RootCommand
+import top.likoslupus.cellulosesz.application.backup.BackupCommand
+import top.likoslupus.cellulosesz.application.backup.BackupService
+import top.likoslupus.cellulosesz.application.command.*
 import top.likoslupus.cellulosesz.application.command.help.SelectiveVanillaHelpOverlay
 import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigDefaults
@@ -35,12 +37,21 @@ import top.likoslupus.cellulosesz.core.command.help.CommandDocumentationService
 import top.likoslupus.cellulosesz.core.command.help.CommandHelpResolver
 import top.likoslupus.cellulosesz.core.command.registry.*
 import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
+import top.likoslupus.cellulosesz.core.permission.VanillaPermissionFallback
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
+import top.likoslupus.cellulosesz.core.player.SleepExclusionRegistry
+import top.likoslupus.cellulosesz.core.player.TemporaryProtectionRegistry
 import top.likoslupus.cellulosesz.core.player.identity.IdentitySqlSchema
 import top.likoslupus.cellulosesz.core.player.identity.JdbcPlayerIdentityRepository
+import top.likoslupus.cellulosesz.core.preference.JdbcPlayerPreferenceRepository
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
+import top.likoslupus.cellulosesz.core.preference.PreferenceSqlSchema
 import top.likoslupus.cellulosesz.core.runtime.KernelState
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
+import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.document.ClasspathCommandDocumentSource
 import top.likoslupus.cellulosesz.core.text.document.DocumentTheme
@@ -49,13 +60,18 @@ import top.likoslupus.cellulosesz.core.text.i18n.*
 import top.likoslupus.cellulosesz.core.text.i18n.preference.JdbcPlayerLanguagePreferenceRepository
 import top.likoslupus.cellulosesz.core.text.i18n.preference.LocalizationSqlSchema
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
+import top.likoslupus.cellulosesz.core.text.model.DetailField
+import top.likoslupus.cellulosesz.core.text.model.LocalizedText
+import top.likoslupus.cellulosesz.core.text.model.TextArgument
 import top.likoslupus.cellulosesz.core.text.presentation.createTextPresentation
 import top.likoslupus.cellulosesz.core.text.theme.TextThemeResolver
 import top.likoslupus.cellulosesz.economy.EconomyFeature
 import top.likoslupus.cellulosesz.economy.EconomySqlSchema
 import top.likoslupus.cellulosesz.economy.createEconomyFeature
+import top.likoslupus.cellulosesz.economy.integration.EconomyBalanceResult
 import top.likoslupus.cellulosesz.economy.integration.EconomyCommittedEvent
 import top.likoslupus.cellulosesz.economy.integration.EconomyDomainObserver
+import top.likoslupus.cellulosesz.economy.payment.PaymentEligibility
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
 import top.likoslupus.cellulosesz.foundation.config.TomlConfigCodec
@@ -76,6 +92,7 @@ import top.likoslupus.cellulosesz.player.integration.PlayerDomainObserver
 import top.likoslupus.cellulosesz.utility.UtilityFeature
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import top.likoslupus.cellulosesz.utility.createUtilityFeature
+import java.lang.management.ManagementFactory
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
@@ -100,6 +117,8 @@ public object CellulosesZ {
         UtilitySqlSchema,
         PlayerSqlSchema,
         EconomySqlSchema,
+        ApplicationSqlSchema,
+        PreferenceSqlSchema,
     )
 
     public fun initialize(platform: PlatformServices) {
@@ -154,6 +173,24 @@ public object CellulosesZ {
         )
         val languageRepository = JdbcPlayerLanguagePreferenceRepository(database, namespace)
         val languagePreferences = PlayerLanguagePreferences(languageRepository)
+        // One shared preference service for every feature toggle. The default map is a function so a
+        // reload can move the default for a player who never expressed a preference.
+        val preferenceRepository = JdbcPlayerPreferenceRepository(database, namespace)
+        val preferences = PlayerPreferenceService(preferenceRepository) {
+            val current = config.current
+            mapOf(
+                PlayerPreference.TELEPORT_ENABLED to
+                        current.movement.requests.acceptByDefault,
+                PlayerPreference.ACCEPTING_PAY to
+                        current.economy.pay.acceptByDefault,
+                PlayerPreference.PAY_CONFIRMATION to
+                        current.economy.pay.confirmByDefault,
+                PlayerPreference.REPLY_TO_LAST_RECIPIENT to
+                        current.messaging.privateMessages.defaultReplyRecipient,
+                PlayerPreference.CLEAR_INVENTORY_CONFIRMATION to
+                        current.utility.itemEditing.confirmClear,
+            )
+        }
         val languageResolver = LanguageResolver(catalog, languagePreferences) {
             config.current.localization
         }
@@ -203,6 +240,8 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+            preferences = preferences,
+            known = known,
             confinement = { administration.isConfined(it) },
             requestReachability = { senderId, targetId ->
                 administration.canBeSeenBy(senderId, targetId)
@@ -228,6 +267,41 @@ public object CellulosesZ {
             configDirectory = configDirectory,
             languages = languageResolver,
             documentTheme = { DocumentTheme.from(presentationTheme()) },
+            playerPreferences = preferences,
+            groupResolver = { playerId ->
+                val player = kernel.requireServer().playerList.getPlayer(playerId)
+                if (player == null) {
+                    null
+                } else {
+                    val source = player.createCommandSourceStack()
+                    config.current.players.list.groups.firstOrNull { group ->
+                        group.permission.isBlank() ||
+                                permissions.allows(
+                                    source,
+                                    PermissionSpec(
+                                        group.permission,
+                                        VanillaPermissionFallback.DENY_ALL,
+                                        "list group ${group.id}",
+                                    ),
+                                )
+                    }?.id
+                }
+            },
+            onlineCount = { kernel.requireServer().playerList.playerCount },
+            uniqueCount = { known.knownCount },
+            uptime = {
+                val totalSeconds = ManagementFactory.getRuntimeMXBean().uptime / 1000
+                val days = totalSeconds / 86_400
+                val hours = totalSeconds % 86_400 / 3_600
+                val minutes = totalSeconds % 3_600 / 60
+                when {
+                    days > 0 -> "${days}d ${hours}h ${minutes}m"
+                    hours > 0 -> "${hours}h ${minutes}m"
+                    else -> "${minutes}m"
+                }
+            },
+            silentJoinVanish = { administration.forceVanish(it) },
+            hiddenJoinQuit = { administration.shouldHideJoinQuit(it) },
         )
         val utility = createUtilityFeature(
             kernel = kernel,
@@ -238,6 +312,8 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+            preferences = preferences,
+            permissions = permissions,
             audit = { actorId, targetId, targetName, cleared ->
                 administration.recordInventoryClear(
                     actorId,
@@ -270,6 +346,13 @@ public object CellulosesZ {
             messages = messages,
             adventure = adventure,
             presentation = presentation,
+            preferences = preferences,
+            permissions = permissions,
+            // The ignore list is owned by communication; this adapter only projects the query, so
+            // economy never depends on the communication module.
+            eligibility = PaymentEligibility { payerId, receiverId ->
+                !communication.integration.ignoresPlayer(receiverId, payerId)
+            },
             observer = object : EconomyDomainObserver {
                 override fun onTransactionCommitted(event: EconomyCommittedEvent) {
                     val sessionEconomy = sessionEvents.get()?.economy ?: return
@@ -302,6 +385,48 @@ public object CellulosesZ {
                 }
             },
         )
+
+        // Visibility is answered by administration, so `/list` and the public API never assume the
+        // player module knows about vanish.
+        playerFeature.vanishVisibility = { viewerId, targetId ->
+            administration.canBeSeenBy(viewerId, targetId)
+        }
+        playerFeature.registerWhoisContributor { playerId ->
+            val (muted, jailed) = kernel.onServerThread {
+                administration.isMuted(playerId) to administration.isConfined(playerId)
+            }
+            buildList {
+                if (muted) {
+                    add(
+                        DetailField(
+                            LocalizedText(MessageKey("player.whois.field.muted")),
+                            LocalizedText(MessageKey("player.whois.value.yes")),
+                        )
+                    )
+                }
+                if (jailed) {
+                    add(
+                        DetailField(
+                            LocalizedText(MessageKey("player.whois.field.jailed")),
+                            LocalizedText(MessageKey("player.whois.value.yes")),
+                        )
+                    )
+                }
+                when (val balance = economy.integration.balance(playerId)) {
+                    is EconomyBalanceResult.Available -> add(
+                        DetailField(
+                            LocalizedText(MessageKey("player.whois.field.balance")),
+                            LocalizedText(
+                                MessageKey("player.whois.value.money"),
+                                listOf(TextArgument.Literal(balance.snapshot.amount.toPlainString())),
+                            ),
+                        )
+                    )
+
+                    else -> Unit
+                }
+            }
+        }
 
         // Domain facts are forwarded to the current session's public listeners (if any). The holder is
         // swapped per session, so an old session's listeners never receive a new session's events.
@@ -373,8 +498,24 @@ public object CellulosesZ {
         // view can never be revived by a later session in the same JVM.
         fun openApiSession() {
             val session = apiProvider.beginSession()
-            val playerApi = PlayerApiAdapter(playerFeature.integration, apiDispatcher)
-            val movementApi = MovementApiAdapter(movement.integration, apiDispatcher)
+            lateinit var playerApi: PlayerApiAdapter
+            val preferencesApi = PlayerPreferencesApiAdapter(
+                preferences = preferences,
+                known = known,
+                hub = extensions,
+                dispatcher = apiDispatcher,
+                dispatch = { playerApi.dispatchPreferenceChanged(it) },
+            )
+            playerApi = PlayerApiAdapter(playerFeature.integration, apiDispatcher, preferencesApi)
+            val worldsApi = WorldsApiAdapter(
+                kernel = kernel,
+                integration = movement.integration,
+                permissions = permissions,
+                settings = { config.current.movement },
+                hub = extensions,
+                dispatcher = apiDispatcher,
+            )
+            val movementApi = MovementApiAdapter(movement.integration, apiDispatcher, worldsApi)
             val communicationApi = CommunicationApiAdapter(communication.integration, apiDispatcher)
             val kitApi = KitApiAdapter(utility.integration, apiDispatcher)
             val moderationApi = ModerationApiAdapter(administration.integration, apiDispatcher)
@@ -392,12 +533,20 @@ public object CellulosesZ {
             val kitCatalog = utility.integration.observeCatalogChanges { event ->
                 kitApi.dispatchCatalogChanged(event)
             }
-            val economyApi = EconomyApiAdapter(
+            lateinit var economyApi: EconomyApiAdapter
+            val worthApi = EconomyWorthApiAdapter(
+                integration = economy.integration,
+                hub = extensions,
+                dispatcher = apiDispatcher,
+                dispatch = { economyApi.dispatchWorthChanged(it) },
+            )
+            economyApi = EconomyApiAdapter(
                 lease = session.lease,
                 integration = economy.integration,
                 dispatcher = apiDispatcher,
                 hub = extensions,
                 settings = { config.current.economy },
+                worth = worthApi,
             )
             sessionEvents.set(
                 ApiSessionEvents(
@@ -461,40 +610,67 @@ public object CellulosesZ {
         )
 
         val diagnostics = CommandRegistrationDiagnostics()
-        val commandRegistry = CommandRegistry(
-            buildList {
-                add(
-                    RootCommand.definition(
-                        config = config,
-                        kernel = kernel,
-                        health = health,
-                        messages = messages,
-                        adventure = adventure,
-                        presentation = presentation,
-                        languages = languagePreferences,
-                        resolver = languageResolver,
-                        catalog = catalog,
-                        modVersion = modVersion(),
-                        loaderName = platform.loaderName,
-                        diagnostics = diagnostics,
-                        permissions = permissions,
-                        inspector = platform.permissionInspector,
-                        onReloadApplied = {
-                            kernel.onServerThread {
-                                playerFeature.applyNicknameDisplay()
-                                administration.applyJailCommandRestrictions()
-                            }
-                        },
-                    )
-                )
-                addAll(movement.commands())
-                addAll(communication.commands(integration))
-                addAll(administration.commands())
-                addAll(utility.commands())
-                addAll(playerFeature.commands())
-                addAll(economy.commands())
-            }
+        val commandCooldowns = CommandCooldownStore(
+            JdbcCommandCooldownRepository(
+                database,
+                namespace
+            )
         )
+        val commandGate = CommandGate(
+            kernel = kernel,
+            settings = { config.current.commands },
+            permissions = permissions,
+            administration = administration,
+            economy = economy.integration,
+            cooldowns = commandCooldowns,
+            presentation = presentation,
+            adventure = adventure,
+        )
+        val backup = BackupService(
+            kernel = kernel,
+            settings = { config.current.backup },
+            onlineCount = { kernel.requireServer().playerList.playerCount },
+        )
+        val helpCatalog = CommandHelpCatalog()
+        val disabledCommands = config.current.commands.disabled.toSet()
+        val definitions = buildList {
+            add(
+                RootCommand.definition(
+                    config = config,
+                    kernel = kernel,
+                    health = health,
+                    messages = messages,
+                    adventure = adventure,
+                    presentation = presentation,
+                    languages = languagePreferences,
+                    resolver = languageResolver,
+                    catalog = catalog,
+                    modVersion = modVersion(),
+                    loaderName = platform.loaderName,
+                    diagnostics = diagnostics,
+                    permissions = permissions,
+                    inspector = platform.permissionInspector,
+                    helpCatalog = helpCatalog,
+                    onReloadApplied = {
+                        kernel.onServerThread {
+                            playerFeature.applyNicknameDisplay()
+                            playerFeature.applyAfkPolicy()
+                            administration.applyJailCommandRestrictions()
+                            backup.reload()
+                        }
+                    },
+                )
+            )
+            addAll(movement.commands())
+            addAll(communication.commands(integration))
+            addAll(administration.commands())
+            addAll(utility.commands())
+            addAll(playerFeature.commands())
+            addAll(economy.commands())
+            add(BackupCommand.definition(kernel, backup, messages, adventure))
+        }.filterNot { it.name in disabledCommands }
+        val commandRegistry = CommandRegistry(definitions)
+        helpCatalog.definitions = commandRegistry.definitions
         val helpResolver = CommandHelpResolver(
             definitions = commandRegistry.definitions,
             permissions = permissions,
@@ -551,7 +727,8 @@ public object CellulosesZ {
                 dispatcher,
                 buildContext,
                 permissions,
-                routingPolicy
+                routingPolicy,
+                interceptor = commandGate,
             )
             diagnostics.publish(report)
             health.recordCommands(report)
@@ -568,6 +745,7 @@ public object CellulosesZ {
             val bootstrap = StorageBootstrap(dataRoot(kernel), businessContributors)
             val result = bootstrap.startBlocking(config.current.database)
             database.initialize(result.database)
+            commandCooldowns.hydrateBlocking()
             health.storageType = result.descriptor.type.name.lowercase()
             health.storageEndpoint = result.descriptor.redactedEndpoint
             health.migration = result.migration
@@ -578,6 +756,7 @@ public object CellulosesZ {
             health.identityRecords = identities.size
 
             languagePreferences.hydrate(languageRepository.loadAllBlocking())
+            preferences.hydrate(preferenceRepository.loadAllBlocking())
 
             movement.onServerStarting()
             administration.onServerStarting()
@@ -590,11 +769,13 @@ public object CellulosesZ {
         }
         LifecycleEvent.SERVER_STARTED.register {
             kernel.onServerStarted()
+            backup.onServerStarted()
             health.transition(ApplicationHealth.State.READY)
             apiProvider.markReady()
         }
         LifecycleEvent.SERVER_STOPPING.register {
             health.transition(ApplicationHealth.State.STOPPING)
+            backup.onServerStopping()
             apiProvider.markStopping()
             sessionEvents.getAndSet(null)?.clear()
             movement.onServerStopping()
@@ -603,6 +784,8 @@ public object CellulosesZ {
             utility.onServerStopping()
             playerFeature.onServerStopping()
             economy.onServerStopping()
+            TemporaryProtectionRegistry.clearAll()
+            SleepExclusionRegistry.clear()
             database.close()
             kernel.onServerStopping()
             health.transition(ApplicationHealth.State.STOPPED)
@@ -618,11 +801,37 @@ public object CellulosesZ {
                 movement.onPlayerTick(player)
                 administration.onPlayerTick(player)
                 playerFeature.onPlayerTick(player)
+                utility.onPlayerTick(player)
             }
         }
-        EntityEvent.LIVING_HURT.register { entity, _, _ ->
+        EntityEvent.LIVING_HURT.register { entity, source, _ ->
             if (entity is ServerPlayer) {
+                val attackerId = (source.entity as? ServerPlayer)?.uuid
+                if (attackerId != null
+                    && attackerId != entity.uuid
+                    && administration.isLoginProtected(attackerId, Instant.now())
+                ) {
+                    return@register EventResult.interruptFalse()
+                }
+                if (TemporaryProtectionRegistry.isProtected(entity.uuid, Instant.now())) {
+                    return@register EventResult.interruptFalse()
+                }
                 movement.onPlayerHurt(entity.uuid)
+            }
+            EventResult.pass()
+        }
+
+        EntityEvent.LIVING_DEATH.register { entity, _ ->
+            if (entity is ServerPlayer) {
+                movement.recordDeathLocation(
+                    playerId = entity.uuid,
+                    dimension = entity.level().dimension().identifier().toString(),
+                    x = entity.x,
+                    y = entity.y,
+                    z = entity.z,
+                    yaw = entity.yRot,
+                    pitch = entity.xRot,
+                )
             }
             EventResult.pass()
         }
@@ -657,6 +866,15 @@ public object CellulosesZ {
                 }
                 EventResult.interruptFalse()
             } else {
+                player?.let { playerFeature.onChat(it.uuid) }
+                EventResult.pass()
+            }
+        }
+
+        PlayerEvent.PICKUP_ITEM_PRE.register { player, _, _ ->
+            if (player is ServerPlayer && playerFeature.blocksItemPickup(player.uuid)) {
+                EventResult.interruptFalse()
+            } else {
                 EventResult.pass()
             }
         }
@@ -666,6 +884,7 @@ public object CellulosesZ {
             communication.onPlayerQuit(player.uuid)
             utility.onPlayerQuit(player.uuid)
             playerFeature.onPlayerQuit(player)
+            economy.onPlayerQuit(player.uuid)
             val affected = movement.onPlayerQuit(player.uuid)
             if (kernel.state == KernelState.RUNNING) {
                 affected.forEach { senderId ->

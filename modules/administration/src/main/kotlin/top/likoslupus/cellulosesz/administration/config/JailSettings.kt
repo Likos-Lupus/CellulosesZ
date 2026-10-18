@@ -16,4 +16,10 @@ public data class JailSettings(
     public val confinementCheckIntervalTicks: Int = 20,
     public val restrictCommands: Boolean = false,
     public val allowedCommands: List<String> = listOf("helpop"),
+    /**
+     * When true, a timed sentence counts only the seconds the player is online: the remaining time
+     * is stored in `cz_jail_sentences.remaining_seconds` and decremented by a ticker. When false, a
+     * timed sentence expires on wall-clock time.
+     */
+    public val jailOnlineTime: Boolean = false,
 )

@@ -1,8 +1,6 @@
 package top.likoslupus.cellulosesz.player.nickname
 
 import com.mojang.logging.LogUtils
-import kotlinx.coroutines.CancellationException
-import net.minecraft.network.chat.Component
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.identity.PlayerIdentityRepository
@@ -10,6 +8,7 @@ import top.likoslupus.cellulosesz.core.runtime.ServerThreadRunner
 import top.likoslupus.cellulosesz.player.config.NicknameSettings
 import java.time.Clock
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 /** The outcome of a `/nick` set or clear. Expected failures are typed, never exceptions. */
 internal sealed interface NicknameSetResult {
@@ -27,6 +26,12 @@ internal sealed interface NicknameSetResult {
     data class TooLong(val maximum: Int) : NicknameSetResult
 
     data object InvalidCharacters : NicknameSetResult
+
+    data object ColorsNotAllowed : NicknameSetResult
+
+    data object PatternMismatch : NicknameSetResult
+
+    data object Blacklisted : NicknameSetResult
 
     data object Taken : NicknameSetResult
 
@@ -87,17 +92,28 @@ internal class NicknameService(
     private val clock: Clock,
 ) {
 
+    /**
+     * [colorsAllowed] is the composition of the `nicknames.allowColors` toggle and the actor's
+     * `NICK_COLORS` capability, resolved by the command so the service stays permission-free.
+     */
     suspend fun set(
         playerId: UUID,
         raw: String,
         updatedBy: UUID? = null,
+        colorsAllowed: Boolean = false,
     ): NicknameSetResult {
         val config = settings()
         if (!config.enabled) {
             return NicknameSetResult.Disabled
         }
 
-        val nickname = when (val parsed = Nickname.parse(raw, config)) {
+        val nickname = when (
+            val parsed = Nickname.parse(
+                raw,
+                config,
+                colorsAllowed && config.allowColors
+            )
+        ) {
             is NicknameParse.Valid ->
                 parsed.nickname
 
@@ -112,6 +128,15 @@ internal class NicknameService(
 
             NicknameParse.InvalidCharacters ->
                 return NicknameSetResult.InvalidCharacters
+
+            NicknameParse.ColorsNotAllowed ->
+                return NicknameSetResult.ColorsNotAllowed
+
+            NicknameParse.PatternMismatch ->
+                return NicknameSetResult.PatternMismatch
+
+            NicknameParse.Blacklisted ->
+                return NicknameSetResult.Blacklisted
         }
 
         val reserved = runner.run { known.knownByName(nickname.normalized) }
@@ -129,13 +154,14 @@ internal class NicknameService(
                     playerId = playerId,
                     display = nickname.display,
                     normalized = nickname.normalized,
+                    ownerName = resolveOwnerName(playerId),
                     updatedAt = clock.instant(),
                     updatedBy = updatedBy,
                 )
             )
             NicknameState.update(
                 playerId,
-                Component.literal(nickname.display)
+                Nickname.component(nickname.display, config.prefix)
             )
             NicknameSetResult.Set(nickname.display)
         } catch (cancellation: CancellationException) {
@@ -168,12 +194,18 @@ internal class NicknameService(
         updatedBy: UUID?,
         targetName: String,
         raw: String,
+        colorsAllowed: Boolean = false,
     ): NicknameForResult {
         val target = resolveTarget(targetName)
             ?: return NicknameForResult.TargetNotFound
         return NicknameForResult.Applied(
             targetName = target.name,
-            result = set(target.id, raw, updatedBy),
+            result = set(
+                target.id,
+                raw,
+                updatedBy,
+                colorsAllowed
+            ),
         )
     }
 
@@ -200,6 +232,10 @@ internal class NicknameService(
                 ?.let { KnownPlayerIdentity(it.id, it.name) }
     }
 
+    private suspend fun resolveOwnerName(playerId: UUID): String? =
+        runner.run { known.knownById(playerId)?.name }
+            ?: identities.findById(playerId)?.name
+
     suspend fun clear(playerId: UUID): NicknameSetResult =
         try {
             repository.delete(playerId)
@@ -214,19 +250,34 @@ internal class NicknameService(
 
     /**
      * Hydrates the display snapshot for a joined player from durable storage. A player without a
-     * stored nickname is cleared so a reused UUID can never keep a stale display.
+     * stored nickname is cleared so a reused UUID can never keep a stale display. When
+     * `resetOnNameChange` is set and the account name differs from the one recorded when the
+     * nickname was set, the nickname is discarded.
      */
-    suspend fun loadDisplay(playerId: UUID) {
+    suspend fun loadDisplay(
+        playerId: UUID,
+        currentName: String? = null,
+    ) {
         try {
             val stored = repository.find(playerId)
-            if (stored != null) {
-                NicknameState.update(
-                    playerId,
-                    Component.literal(stored.display)
-                )
-            } else {
+            if (stored == null) {
                 NicknameState.clear(playerId)
+                return
             }
+            val config = settings()
+            if (config.resetOnNameChange
+                && currentName != null
+                && stored.ownerName != null
+                && !stored.ownerName.equals(currentName, ignoreCase = true)
+            ) {
+                repository.delete(playerId)
+                NicknameState.clear(playerId)
+                return
+            }
+            NicknameState.update(
+                playerId,
+                Nickname.component(stored.display, config.prefix)
+            )
         } catch (cancellation: CancellationException) {
             throw cancellation
         } catch (exception: Exception) {

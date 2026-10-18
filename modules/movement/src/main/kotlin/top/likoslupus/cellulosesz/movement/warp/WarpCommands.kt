@@ -19,6 +19,7 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendDetail
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.core.text.presentation.sendPage
+import top.likoslupus.cellulosesz.movement.access.MovementAccess
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
@@ -32,6 +33,7 @@ internal object WarpCommands {
         backend: TeleportBackend,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
+        access: MovementAccess,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -52,6 +54,7 @@ internal object WarpCommands {
                         service,
                         teleports,
                         teleportSettings,
+                        access,
                         kernel,
                         messages,
                         adventure,
@@ -71,6 +74,7 @@ internal object WarpCommands {
                 listWarps(
                     context,
                     service,
+                    access,
                     kernel,
                     messages,
                     adventure,
@@ -151,6 +155,7 @@ internal object WarpCommands {
         service: WarpService,
         teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
+        access: MovementAccess,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -175,15 +180,28 @@ internal object WarpCommands {
         ) { target ->
             val notices = when (val result = service.get(name)) {
                 is WarpLookupResult.Found -> {
-                    val intent = TeleportIntent(
-                        subjectId = playerId,
-                        destination = TeleportDestination.Fixed(result.warp.position),
-                        cause = TeleportCause.WARP,
-                        policy = teleportPolicyFor(TeleportCause.WARP, teleportSettings()),
-                    )
-                    when (val outcome = teleports.execute(intent)) {
-                        is TeleportOutcome.Success -> listOf(MovementMessages.teleportToWarp(result.warp))
-                        else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
+                    val warpName = result.warp.name.value
+                    when {
+                        !access.allowsWarp(playerId, warpName) ->
+                            listOf(MovementMessages.warpNotPermitted(warpName))
+
+                        else -> {
+                            val intent = TeleportIntent(
+                                subjectId = playerId,
+                                destination = TeleportDestination.Fixed(result.warp.position),
+                                cause = TeleportCause.WARP,
+                                policy = teleportPolicyFor(TeleportCause.WARP, teleportSettings()),
+                            )
+                            when (val outcome = teleports.execute(intent)) {
+                                is TeleportOutcome.Success -> listOf(
+                                    MovementMessages.teleportToWarp(
+                                        result.warp
+                                    )
+                                )
+
+                                else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
+                            }
+                        }
                     }
                 }
 
@@ -203,6 +221,7 @@ internal object WarpCommands {
     private fun listWarps(
         context: CommandContext<CommandSourceStack>,
         service: WarpService,
+        access: MovementAccess,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -230,7 +249,7 @@ internal object WarpCommands {
                 adventure,
                 presentation,
                 playerId,
-                MovementMessages.warps(service.list())
+                MovementMessages.warps(access.visibleWarps(playerId, service.list()))
             )
         }
     }

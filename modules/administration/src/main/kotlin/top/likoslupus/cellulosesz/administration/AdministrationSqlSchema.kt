@@ -82,6 +82,8 @@ public object AdministrationSqlSchema : SqlSchemaContributor {
                     SqlColumn("reason", SqlColumnType.TEXT),
                     SqlColumn("issued_at_ms", SqlColumnType.BIGINT),
                     SqlColumn("expires_at_ms", SqlColumnType.BIGINT, nullable = true),
+                    SqlColumn("sentence_mode", SqlColumnType.NAME, nullable = true),
+                    SqlColumn("remaining_seconds", SqlColumnType.BIGINT, nullable = true),
                     SqlColumn("return_dimension", SqlColumnType.NAME, nullable = true),
                     SqlColumn("return_x", SqlColumnType.DOUBLE, nullable = true),
                     SqlColumn("return_y", SqlColumnType.DOUBLE, nullable = true),

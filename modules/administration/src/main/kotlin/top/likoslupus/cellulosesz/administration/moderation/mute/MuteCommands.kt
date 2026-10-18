@@ -14,7 +14,9 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -33,6 +35,7 @@ internal object MuteCommands {
         mutes: MuteService,
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
+        permissions: PermissionService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -53,6 +56,7 @@ internal object MuteCommands {
                         mutes,
                         notifier,
                         settings,
+                        permissions,
                         kernel,
                         messages,
                         adventure,
@@ -68,6 +72,7 @@ internal object MuteCommands {
                             mutes,
                             notifier,
                             settings,
+                            permissions,
                             kernel,
                             messages,
                             adventure,
@@ -94,6 +99,7 @@ internal object MuteCommands {
                             mutes,
                             notifier,
                             settings,
+                            permissions,
                             kernel,
                             messages,
                             adventure,
@@ -109,6 +115,7 @@ internal object MuteCommands {
                                 mutes,
                                 notifier,
                                 settings,
+                                permissions,
                                 kernel,
                                 messages,
                                 adventure,
@@ -200,6 +207,7 @@ internal object MuteCommands {
         mutes: MuteService,
         notifier: ModerationNotifier,
         settings: () -> ModerationSettings,
+        permissions: PermissionService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -217,6 +225,10 @@ internal object MuteCommands {
         if (temporary && duration == null) {
             return invalidDuration(source, messages, adventure)
         }
+        val unlimited = source.requiresPermission(
+            permissions,
+            CommandPermissions.MUTE_UNLIMITED
+        )
         val actor = source.moderationActor()
         val playerId = source.player?.uuid
 
@@ -229,7 +241,7 @@ internal object MuteCommands {
             LocalizedText(MessageKey("administration.pending.mute")),
         ) { feedback ->
             val now = Instant.now()
-            val result = mutes.mute(actor, target, reason, duration)
+            val result = mutes.mute(actor, target, reason, duration, unlimited)
             if (result is MuteResult.Applied) {
                 kernel.sendNotices(
                     CommandFeedbackTarget.Player(result.target.id),

@@ -28,6 +28,10 @@ public class MinecraftKnownPlayerResolver(
         identities.forEach(::record)
     }
 
+    /** The number of distinct identities known to this server process. */
+    public val knownCount: Int
+        get() = byId.size
+
     public fun clear() {
         byId.clear()
         byName.clear()

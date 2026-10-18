@@ -11,14 +11,20 @@ internal sealed interface InspectionOpenResult {
 }
 
 /**
- * Inventory inspection helpers. Only vanilla menu types are used; `/invsee` is strictly read-only.
- * Implementations are server-thread confined.
+ * Inventory inspection helpers. Only vanilla menu types are used. `/enderchest` and an editable
+ * `/invsee` back the menu with the target's real container (write-through); a non-editable `/invsee`
+ * snapshots into a read-only container. Implementations are server-thread confined.
  */
 internal interface InspectionBackend {
 
-    fun openEnderChest(playerId: UUID): InspectionOpenResult
+    fun openEnderChest(viewerId: UUID, targetId: UUID): InspectionOpenResult
 
-    fun openInventoryView(viewerId: UUID, targetId: UUID): InspectionOpenResult
+    fun openInventoryView(
+        viewerId: UUID,
+        targetId: UUID,
+        editable: Boolean,
+        equip: Boolean,
+    ): InspectionOpenResult
 
     fun openDisposal(playerId: UUID): InspectionOpenResult
 

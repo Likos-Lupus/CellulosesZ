@@ -139,6 +139,7 @@ internal class MuteService(
         rawTarget: String,
         reason: ModerationReason,
         duration: TemporaryDuration?,
+        unlimited: Boolean = false,
     ): MuteResult {
         if (state == ModerationState.STOPPING) {
             return MuteResult.RuntimeStopping
@@ -147,10 +148,12 @@ internal class MuteService(
             return MuteResult.StorageUnavailable
         }
 
-        val maxSeconds = settings().maxTemporaryMuteSeconds
-        if (duration != null
-            && maxSeconds != null
-            && duration.seconds > maxSeconds
+        if (
+            !MuteDurationPolicy.permits(
+                duration?.seconds,
+                settings().maxMuteSeconds,
+                unlimited
+            )
         ) {
             return MuteResult.DurationTooLong
         }

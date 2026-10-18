@@ -1,0 +1,44 @@
+# CellulosesZ bundled worth catalog.
+# One entry per line: <item id><TAB><exact price>.
+# Imported only once, and only while cz_economy_worth is empty. Edit prices with /setworth.
+minecraft:dirt	0.10
+minecraft:cobblestone	0.10
+minecraft:stone	0.20
+minecraft:sand	0.15
+minecraft:gravel	0.15
+minecraft:netherrack	0.10
+minecraft:oak_log	0.50
+minecraft:spruce_log	0.50
+minecraft:birch_log	0.50
+minecraft:oak_planks	0.25
+minecraft:coal	1.00
+minecraft:raw_iron	2.50
+minecraft:iron_ingot	4.00
+minecraft:raw_copper	1.00
+minecraft:copper_ingot	1.50
+minecraft:raw_gold	5.00
+minecraft:gold_ingot	8.00
+minecraft:redstone	0.50
+minecraft:lapis_lazuli	1.00
+minecraft:quartz	1.00
+minecraft:diamond	50.00
+minecraft:emerald	40.00
+minecraft:netherite_scrap	100.00
+minecraft:netherite_ingot	500.00
+minecraft:glass	0.30
+minecraft:wheat	0.75
+minecraft:carrot	0.50
+minecraft:potato	0.50
+minecraft:beetroot	0.50
+minecraft:apple	1.00
+minecraft:bone	0.25
+minecraft:string	0.50
+minecraft:leather	0.75
+minecraft:feather	0.20
+minecraft:gunpowder	1.50
+minecraft:blaze_rod	5.00
+minecraft:ender_pearl	8.00
+minecraft:slime_ball	1.00
+minecraft:glowstone_dust	1.50
+minecraft:sugar_cane	0.20
+minecraft:oak_sapling	0.25

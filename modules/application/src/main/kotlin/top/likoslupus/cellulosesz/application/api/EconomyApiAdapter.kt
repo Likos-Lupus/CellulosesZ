@@ -29,9 +29,12 @@ internal class EconomyApiAdapter(
     private val dispatcher: ApiRequestDispatcher,
     private val hub: ApplicationExtensionHub,
     private val settings: () -> EconomySettings,
+    worth: EconomyWorthApi,
 ) : EconomyApi {
 
     override val events: EconomyEventsAdapter = EconomyEventsAdapter(lease)
+
+    override val worth: EconomyWorthApi = worth
 
     override fun currency(): ApiQuery<EconomyCurrency> =
         when (lease.phase()) {
@@ -288,11 +291,17 @@ internal class EconomyApiAdapter(
                 )
         }
 
-    private fun actorFor(access: AddonAccess, kind: EconomyActorKind): EconomyActorDescriptor =
+    private fun actorFor(
+        access: AddonAccess,
+        kind: EconomyActorKind
+    ): EconomyActorDescriptor =
         EconomyActorDescriptor(kind, access.addonId)
 
     private fun originOf(access: AddonAccess): String =
         "addon:${access.addonId}"
+
+    fun dispatchWorthChanged(event: EconomyWorthChanged) =
+        events.dispatchWorthChanged(event)
 
     private companion object {
 
@@ -383,6 +392,7 @@ internal class EconomyEventsAdapter(
     private val transactionListeners = CopyOnWriteArrayList<ApiEventListener<EconomyTransactionCommitted>>()
     private val balanceListeners = CopyOnWriteArrayList<ApiEventListener<EconomyBalanceChanged>>()
     private val accountListeners = CopyOnWriteArrayList<ApiEventListener<EconomyAccountCreated>>()
+    private val worthListeners = CopyOnWriteArrayList<ApiEventListener<EconomyWorthChanged>>()
 
     override fun onTransactionCommitted(
         listener: ApiEventListener<EconomyTransactionCommitted>,
@@ -395,6 +405,10 @@ internal class EconomyEventsAdapter(
     override fun onAccountCreated(
         listener: ApiEventListener<EconomyAccountCreated>,
     ): Subscription = register(accountListeners, listener)
+
+    override fun onWorthChanged(
+        listener: ApiEventListener<EconomyWorthChanged>,
+    ): Subscription = register(worthListeners, listener)
 
     fun dispatchCommitted(event: EconomyTransactionCommitted) {
         if (!lease.isReady) {
@@ -423,6 +437,16 @@ internal class EconomyEventsAdapter(
         accountListeners.forEach { listener ->
             runCatching { listener.onEvent(event) }
                     .onFailure { LOGGER.warn("api_economy_listener_failed kind=account", it) }
+        }
+    }
+
+    fun dispatchWorthChanged(event: EconomyWorthChanged) {
+        if (!lease.isReady) {
+            return
+        }
+        worthListeners.forEach { listener ->
+            runCatching { listener.onEvent(event) }
+                    .onFailure { LOGGER.warn("api_economy_listener_failed kind=worth", it) }
         }
     }
 

@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.application.command
 
-import kotlinx.coroutines.CancellationException
 import net.minecraft.SharedConstants
 import net.minecraft.commands.CommandSourceStack
 import org.slf4j.LoggerFactory
@@ -9,6 +8,7 @@ import top.likoslupus.cellulosesz.application.health.ApplicationHealth
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
+import top.likoslupus.cellulosesz.core.command.dsl.integer
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.command.feedbackTarget
 import top.likoslupus.cellulosesz.core.command.registry.CommandRouteStatus
@@ -36,12 +36,15 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
 import top.likoslupus.cellulosesz.foundation.config.ConfigStore
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 internal object RootCommand {
 
     const val ROOT_LITERAL: String = "cellulosesz"
 
     private val LOGGER = LoggerFactory.getLogger(RootCommand::class.java)
+
+    private const val HELP_PAGE_SIZE: Int = 10
 
     fun definition(
         config: ConfigStore<CellulosesConfig>,
@@ -58,6 +61,7 @@ internal object RootCommand {
         diagnostics: CommandRegistrationDiagnostics,
         permissions: PermissionService,
         inspector: PermissionInspector?,
+        helpCatalog: CommandHelpCatalog,
         onReloadApplied: suspend () -> Unit = {},
     ): CommandDefinition =
         command(
@@ -230,6 +234,34 @@ internal object RootCommand {
                             adventure = adventure,
                             languages = languages,
                             catalog = catalog,
+                        )
+                    }
+                }
+            }
+            literal(
+                name = "help",
+                permission = CommandPermissions.ROOT,
+                documentation = "core/help",
+            ) {
+                executes {
+                    showHelpList(
+                        source,
+                        1,
+                        helpCatalog,
+                        permissions,
+                        messages,
+                        adventure
+                    )
+                }
+                argument("page", integer(1, 1_000)) { page ->
+                    executes {
+                        showHelpList(
+                            source,
+                            get(page),
+                            helpCatalog,
+                            permissions,
+                            messages,
+                            adventure,
                         )
                     }
                 }
@@ -515,6 +547,46 @@ internal object RootCommand {
         )
     }
 
+    private fun showHelpList(
+        source: CommandSourceStack,
+        page: Int,
+        catalog: CommandHelpCatalog,
+        permissions: PermissionService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): Int {
+        val playerId = source.player?.uuid
+        val visible = catalog.definitions.filter { permissions.allows(source, it.permission) }
+        val pageSize = HELP_PAGE_SIZE
+        val pages = maxOf(1, (visible.size + pageSize - 1) / pageSize)
+        val current = page.coerceIn(1, pages)
+        source.reply(
+            adventure,
+            messages.renderFor(
+                playerId,
+                MessageKey("core.help.title"),
+                listOf(
+                    MessageArgument(current.toString()),
+                    MessageArgument(pages.toString()),
+                ),
+            ),
+        )
+        visible.drop((current - 1) * pageSize).take(pageSize).forEach { definition ->
+            source.reply(
+                adventure,
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.help.entry"),
+                    listOf(
+                        MessageArgument(definition.name),
+                        MessageArgument(definition.permission.description),
+                    ),
+                ),
+            )
+        }
+        return 1
+    }
+
     private fun showCommandConflicts(
         source: CommandSourceStack,
         diagnostics: CommandRegistrationDiagnostics,
@@ -525,16 +597,25 @@ internal object RootCommand {
         val report = diagnostics.snapshot()
             ?: return source.reply(
                 adventure,
-                messages.renderFor(playerId, MessageKey("core.commands.not_ready"))
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.not_ready")
+                )
             )
         source.reply(
             adventure,
-            messages.renderFor(playerId, MessageKey("core.commands.conflicts_title"))
+            messages.renderFor(
+                playerId,
+                MessageKey("core.commands.conflicts_title")
+            )
         )
         if (report.conflicts.isEmpty()) {
             return source.reply(
                 adventure,
-                messages.renderFor(playerId, MessageKey("core.commands.conflicts_none"))
+                messages.renderFor(
+                    playerId,
+                    MessageKey("core.commands.conflicts_none")
+                )
             )
         }
         report.conflicts.forEach { conflict ->

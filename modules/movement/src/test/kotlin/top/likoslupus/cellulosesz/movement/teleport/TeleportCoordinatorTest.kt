@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.movement.teleport
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.movement.CommittedTeleport
@@ -10,12 +9,14 @@ import top.likoslupus.cellulosesz.movement.TeleportVetoReason
 import top.likoslupus.cellulosesz.movement.config.TeleportSafetySettings
 import top.likoslupus.cellulosesz.movement.pending.PendingTeleportService
 import top.likoslupus.cellulosesz.movement.teleport.cooldown.TeleportCooldowns
+import top.likoslupus.cellulosesz.movement.teleport.history.HistoryCause
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryRepository
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
 import java.util.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
+import kotlinx.coroutines.runBlocking
 
 class TeleportCoordinatorTest {
 
@@ -29,14 +30,15 @@ class TeleportCoordinatorTest {
 
     private fun newCoordinator(
         observer: TeleportCommittedObserver = TeleportCommittedObserver.None,
-    ) = TeleportCoordinator(
-        backend = backend,
-        pending = PendingTeleportService(),
-        cooldowns = TeleportCooldowns(timeSource),
-        history = TeleportHistoryService(historyRepository),
-        historyEnabled = { true },
-        observer = observer,
-    )
+    ) =
+        TeleportCoordinator(
+            backend = backend,
+            pending = PendingTeleportService(),
+            cooldowns = TeleportCooldowns(timeSource),
+            history = TeleportHistoryService(historyRepository),
+            historyEnabled = { true },
+            observer = observer,
+        )
 
     private fun policy(
         cooldown: Duration = Duration.ZERO,
@@ -184,7 +186,10 @@ class TeleportCoordinatorTest {
                 policy(cooldown = 10.seconds),
             )
 
-            assertEquals(TeleportOutcome.RejectedByPlatform, coordinator.execute(intent))
+            assertEquals(
+                TeleportOutcome.RejectedByPlatform,
+                coordinator.execute(intent)
+            )
             assertNull(historyRepository.entries[subject])
 
             // A rejection must not have consumed the cooldown: the next real move still succeeds.
@@ -230,7 +235,9 @@ class TeleportCoordinatorTest {
     fun `a hook rejection never records history or consumes the cooldown`(): Unit =
         runBlocking {
             backend.positions[subject] = position()
-            backend.moveResult = BackendMoveResult.RejectedByHook(TeleportVetoReason.REGION_DENIED)
+            backend.moveResult = BackendMoveResult.RejectedByHook(
+                TeleportVetoReason.REGION_DENIED
+            )
             val intent = TeleportIntent(
                 subject,
                 TeleportDestination.Fixed(position(y = 70.0)),
@@ -301,7 +308,8 @@ class TeleportCoordinatorTest {
         var moveResult: BackendMoveResult = BackendMoveResult.PlayerOffline
         var lastDestination: StoredPosition? = null
 
-        override suspend fun position(playerId: UUID): StoredPosition? = positions[playerId]
+        override suspend fun position(playerId: UUID): StoredPosition? =
+            positions[playerId]
 
         override suspend fun vanillaSpawnPosition(): StoredPosition =
             StoredPosition(
@@ -329,14 +337,23 @@ class TeleportCoordinatorTest {
 
         val entries = mutableMapOf<UUID, StoredPosition>()
 
-        override suspend fun read(playerId: UUID): StoredPosition? =
-            entries[playerId]
+        private val byCause = mutableMapOf<Pair<UUID, HistoryCause>, StoredPosition>()
+
+        override suspend fun read(
+            playerId: UUID,
+            cause: HistoryCause,
+        ): StoredPosition? =
+            byCause[playerId to cause]
 
         override suspend fun write(
             playerId: UUID,
-            position: StoredPosition
+            cause: HistoryCause,
+            position: StoredPosition,
         ) {
-            entries[playerId] = position
+            byCause[playerId to cause] = position
+            if (cause == HistoryCause.TELEPORT) {
+                entries[playerId] = position
+            }
         }
 
     }

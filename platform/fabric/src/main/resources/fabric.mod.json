@@ -13,7 +13,8 @@
   "mixins": [
     "cellulosesz.administration.mixins.json",
     "cellulosesz.player.mixins.json",
-    "cellulosesz.communication.mixins.json"
+    "cellulosesz.communication.mixins.json",
+    "cellulosesz.utility.mixins.json"
   ],
   "entrypoints": {
     "main": [

@@ -6,6 +6,9 @@ import java.util.*
 /**
  * One durable nickname row. It never carries a live player reference. [updatedBy] records the staff
  * member who set it through `/nick setfor`, or null when the owner set it themselves.
+ *
+ * [ownerName] is the account name at the time the nickname was set; `/nick` uses it to discard a
+ * nickname when `resetOnNameChange` is enabled and the owner has since changed their account name.
  */
 internal data class StoredNickname(
     val playerId: UUID,
@@ -13,6 +16,7 @@ internal data class StoredNickname(
     val normalized: String,
     val updatedAt: Instant,
     val updatedBy: UUID? = null,
+    val ownerName: String? = null,
 )
 
 /**

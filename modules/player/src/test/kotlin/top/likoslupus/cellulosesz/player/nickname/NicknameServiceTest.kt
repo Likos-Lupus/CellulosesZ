@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.player.nickname
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
@@ -13,6 +12,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.*
+import kotlinx.coroutines.runBlocking
 
 class NicknameServiceTest {
 
@@ -54,6 +54,50 @@ class NicknameServiceTest {
                 "cool name",
                 repository.byPlayer[alice]?.normalized
             )
+        }
+
+    @Test
+    fun `keeps colour codes in the display and strips them from the normalized form`() =
+        runBlocking {
+            val colored = serviceWith(settings.copy(allowColors = true))
+
+            val result = colored.set(alice, "&aCool", colorsAllowed = true)
+
+            assertEquals("&aCool", (result as NicknameSetResult.Set).display)
+            assertEquals("&aCool", repository.byPlayer[alice]?.display)
+            assertEquals("cool", repository.byPlayer[alice]?.normalized)
+        }
+
+    @Test
+    fun `refuses colour codes when the config does not allow them`() =
+        runBlocking {
+            assertEquals(
+                NicknameSetResult.ColorsNotAllowed,
+                service.set(
+                    alice,
+                    "&aCool",
+                    colorsAllowed = true
+                )
+            )
+        }
+
+    @Test
+    fun `reset on name change discards a nickname set under the old name`() =
+        runBlocking {
+            val resetting = serviceWith(settings.copy(resetOnNameChange = true))
+            repository.save(
+                StoredNickname(
+                    playerId = alice,
+                    display = "Cool",
+                    normalized = "cool",
+                    ownerName = "OldName",
+                    updatedAt = Instant.EPOCH,
+                )
+            )
+
+            resetting.loadDisplay(alice, "NewName")
+
+            assertNull(repository.byPlayer[alice])
         }
 
     @Test

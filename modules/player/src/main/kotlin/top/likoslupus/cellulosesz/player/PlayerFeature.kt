@@ -1,10 +1,13 @@
 package top.likoslupus.cellulosesz.player
 
+import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
+import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.VanillaFallbackPermissionBridge
+import top.likoslupus.cellulosesz.core.permission.hasPermission
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.identity.PlayerIdentityRepository
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
@@ -14,12 +17,15 @@ import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.player.afk.AfkCancelTrigger
 import top.likoslupus.cellulosesz.player.afk.AfkChange
 import top.likoslupus.cellulosesz.player.afk.AfkService
+import top.likoslupus.cellulosesz.player.afk.AfkState
 import top.likoslupus.cellulosesz.player.command.*
 import top.likoslupus.cellulosesz.player.config.PlayerSettings
 import top.likoslupus.cellulosesz.player.format.PlayerMessages
 import top.likoslupus.cellulosesz.player.integration.*
+import top.likoslupus.cellulosesz.player.list.PlayerListService
 import top.likoslupus.cellulosesz.player.nearby.NearbyService
 import top.likoslupus.cellulosesz.player.nickname.*
 import top.likoslupus.cellulosesz.player.presence.PlayerPresenceService
@@ -27,6 +33,9 @@ import top.likoslupus.cellulosesz.player.presence.PresenceLookup
 import top.likoslupus.cellulosesz.player.session.JdbcPlayerSessionRepository
 import top.likoslupus.cellulosesz.player.session.PlayerSessionService
 import top.likoslupus.cellulosesz.player.session.SessionCloseKind
+import top.likoslupus.cellulosesz.player.whois.WhoisContributor
+import top.likoslupus.cellulosesz.player.whois.WhoisContributorRegistry
+import top.likoslupus.cellulosesz.player.whois.WhoisService
 import java.time.Clock
 import java.util.*
 import java.util.concurrent.atomic.AtomicReference
@@ -42,6 +51,9 @@ public class PlayerFeature internal constructor(
     private val afk: AfkService,
     private val nearby: NearbyService,
     private val nicknames: NicknameService,
+    private val list: PlayerListService,
+    private val whois: WhoisService,
+    private val whoisContributors: WhoisContributorRegistry,
     private val kernel: RuntimeKernel,
     private val permissions: PermissionService,
     private val messages: LocalizedMessages,
@@ -56,6 +68,13 @@ public class PlayerFeature internal constructor(
 
     /** Receives committed player-domain facts; set by the composition root. */
     public var domainObserver: PlayerDomainObserver = PlayerDomainObserver.None
+
+    /**
+     * Vanish visibility query supplied by the composition root: `(viewerId, targetId) -> Boolean`.
+     * `/list` asks it for every online target; a console viewer never goes through it. The default
+     * makes every player visible, so the module is correct before the composition root wires vanish.
+     */
+    public var vanishVisibility: (viewerId: UUID, targetId: UUID) -> Boolean = { _, _ -> true }
 
     /** Narrow integration surface for the public API; never exposes the internal services. */
     public val integration: PlayerIntegrationPort = PlayerIntegration()
@@ -142,12 +161,14 @@ public class PlayerFeature internal constructor(
             messages,
             adventure,
             presentation,
-            clock
+            clock,
+            whois,
+            permissions,
         ) + AfkCommands.commands(
             afk,
             adventure,
             presentation,
-            ::announce
+            { change -> announce(change) }
         ) + PingCommands.commands(
             adventure,
             presentation
@@ -160,20 +181,35 @@ public class PlayerFeature internal constructor(
             nicknames,
             kernel,
             messages,
+            permissions,
+            adventure,
+            presentation
+        ) + ListCommands.commands(
+            list,
+            permissions,
+            settings,
+            vanishVisibility,
             adventure,
             presentation
         )
+
+    /** Registers an extra `/whois` field source (economy, administration, an addon). */
+    public fun registerWhoisContributor(contributor: WhoisContributor) {
+        whoisContributors.register(contributor)
+    }
 
     /** Recovers sessions left open by a previous process and starts heartbeats. */
     public fun onServerStarting() {
         sessions.onServerStarting()
         applyNicknameDisplay()
+        applyAfkPolicy()
     }
 
     /** Bounded blocking flush of open sessions before the database closes. */
     public fun onServerStopping() {
         sessions.finishAllBlocking()
         afk.clearAll()
+        AfkState.clear()
         nicknames.clearAllDisplays()
     }
 
@@ -184,7 +220,8 @@ public class PlayerFeature internal constructor(
         afkSnapshot.set(afkSnapshot.get() + (player.uuid to false))
         domainObserver.onPresenceChanged(player.uuid, true)
         applyNicknameDisplay()
-        kernel.launch { nicknames.loadDisplay(player.uuid) }
+        val name = player.gameProfile.name
+        kernel.launch { nicknames.loadDisplay(player.uuid, name) }
     }
 
     /**
@@ -196,20 +233,36 @@ public class PlayerFeature internal constructor(
         NicknameState.setApplyToVanillaDisplay(settings().nicknames.applyToVanillaDisplay)
     }
 
+    /**
+     * Publishes the AFK freeze and sleep policy from config. The composition root calls this after a
+     * reload; [onServerStarting] also seeds it. Must run on the server thread.
+     */
+    public fun applyAfkPolicy() {
+        afk.reapplyPolicy()
+    }
+
     /** Closes the play session with NORMAL and clears session-only state. Server thread. */
     public fun onPlayerQuit(player: ServerPlayer) {
         sessions.end(player.uuid, SessionCloseKind.NORMAL)
         afk.clear(player.uuid)
+        AfkState.drainActivity(player.uuid)
         nicknames.clearDisplay(player.uuid)
         onlineSnapshot.set(onlineSnapshot.get() - player.uuid)
         afkSnapshot.set(afkSnapshot.get() - player.uuid)
         domainObserver.onPresenceChanged(player.uuid, false)
     }
 
-    /** Server-thread tick hook that drives auto-AFK. */
+    /** Server-thread tick hook that drives auto-AFK, the AFK kick and interaction cancellation. */
     public fun onPlayerTick(player: ServerPlayer) {
+        val playerId = player.uuid
+        val triggers = AfkState.drainActivity(playerId)
+        if (triggers.isNotEmpty()) {
+            afk.cancelForActivity(playerId, player.gameProfile.name, triggers)
+                    ?.let { announce(it, PlayerAfkCause.ACTIVITY) }
+        }
+
         val change = afk.onTick(
-            playerId = player.uuid,
+            playerId = playerId,
             playerName = player.gameProfile.name,
             x = player.x,
             y = player.y,
@@ -217,17 +270,58 @@ public class PlayerFeature internal constructor(
             yaw = player.yRot,
             pitch = player.xRot,
         )
-        afkSnapshot.set(afkSnapshot.get() + (player.uuid to afk.isAfk(player.uuid)))
+        afkSnapshot.set(afkSnapshot.get() + (playerId to afk.isAfk(playerId)))
         if (change != null) {
-            announce(change)
+            announce(
+                change,
+                if (change.afk) PlayerAfkCause.TIMEOUT else PlayerAfkCause.ACTIVITY
+            )
         }
+        maybeKickAfk(player)
     }
 
-    private fun announce(change: AfkChange) {
+    /** Server-thread query used by the item-pickup gate. */
+    public fun blocksItemPickup(playerId: UUID): Boolean =
+        settings().afk.disableItemPickup && afk.isAfk(playerId)
+
+    /** Server-thread query for any feature that needs the AFK flag outside the tick. */
+    public fun isAfk(playerId: UUID): Boolean =
+        afk.isAfk(playerId)
+
+    /**
+     * Called by the composition root when a player sends chat. Clears AFK when `cancelOnChat` is set
+     * and the player is AFK. Must run on the server thread.
+     */
+    public fun onChat(playerId: UUID) {
+        val name = kernel.requireServer().playerList
+                .getPlayer(playerId)
+                ?.gameProfile
+                ?.name
+            ?: playerId.toString()
+        afk.cancelForActivity(playerId, name, setOf(AfkCancelTrigger.CHAT))
+                ?.let { announce(it, PlayerAfkCause.ACTIVITY) }
+    }
+
+    private fun maybeKickAfk(player: ServerPlayer) {
+        if (!afk.enabled() || !afk.isAfk(player.uuid)) {
+            return
+        }
+        val exempt = player.createCommandSourceStack()
+                .hasPermission(permissions, CommandPermissions.AFK_BYPASS)
+        if (!afk.shouldKick(player.uuid, clock.instant(), exempt)) {
+            return
+        }
+        player.connection.disconnect(Component.literal(AFK_KICK_REASON))
+    }
+
+    private fun announce(
+        change: AfkChange,
+        cause: PlayerAfkCause = PlayerAfkCause.OTHER,
+    ) {
         domainObserver.onAfkChanged(
             change.playerId,
             change.afk,
-            PlayerAfkCause.OTHER
+            cause
         )
         if (!settings().afk.announceStateChanges) {
             return
@@ -247,6 +341,13 @@ public class PlayerFeature internal constructor(
                 )
             }
         }
+    }
+
+    private companion object {
+
+        private const val AFK_KICK_REASON: String =
+            "You have been kicked for being AFK."
+
     }
 
 }
@@ -270,6 +371,11 @@ public fun createPlayerFeature(
         settings = { settings().sessions },
         clock = clock,
     )
+    val afk = AfkService(
+        settings = { settings().afk },
+        clock = clock,
+    )
+    val whoisContributors = WhoisContributorRegistry()
     return PlayerFeature(
         sessions = sessions,
         presence = PlayerPresenceService(
@@ -279,10 +385,7 @@ public fun createPlayerFeature(
             sessions = sessions,
             clock = clock,
         ),
-        afk = AfkService(
-            settings = { settings().afk },
-            clock = clock,
-        ),
+        afk = afk,
         nearby = NearbyService(
             kernel = kernel,
             settings = { settings().nearby },
@@ -295,6 +398,17 @@ public fun createPlayerFeature(
             settings = { settings().nicknames },
             clock = clock,
         ),
+        list = PlayerListService(
+            kernel = kernel,
+            permissions = permissions,
+            afk = afk,
+            settings = settings,
+        ),
+        whois = WhoisService(
+            kernel = kernel,
+            contributors = whoisContributors,
+        ),
+        whoisContributors = whoisContributors,
         kernel = kernel,
         permissions = permissions,
         messages = messages,

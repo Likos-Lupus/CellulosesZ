@@ -14,8 +14,12 @@ internal data class JailSentence(
     val actor: PersistedModerationActor,
     val reason: String,
     val issuedAt: Instant,
-    /** `null` means permanent; a timed sentence carries the instant it expires. */
+    /** How the term is measured. */
+    val mode: JailSentenceMode,
+    /** The instant a [JailSentenceMode.WALL_CLOCK] sentence expires; otherwise `null`. */
     val expiresAt: Instant?,
+    /** The seconds left on a [JailSentenceMode.ONLINE] sentence; otherwise `null`. */
+    val remainingSeconds: Long?,
     /** Where the player stood when jailed, or `null` when they were offline. */
     val returnPosition: WorldPosition?,
     /** When the sentence entered [JailStatus.RELEASE_PENDING], or `null` while active. */

@@ -23,7 +23,10 @@ internal sealed interface KitPreflightResult {
 
 internal sealed interface KitDeliveryResult {
 
-    data class Delivered(val droppedStacks: Int) : KitDeliveryResult
+    data class Delivered(
+        val droppedStacks: Int,
+        val equippedStacks: Int = 0,
+    ) : KitDeliveryResult
 
     data object PlayerOffline : KitDeliveryResult
 
@@ -50,6 +53,7 @@ internal interface KitInventoryBackend {
         playerId: UUID,
         items: List<ItemStack>,
         overflowPolicy: KitOverflowPolicy,
+        autoEquip: Boolean,
     ): KitDeliveryResult
 
 }

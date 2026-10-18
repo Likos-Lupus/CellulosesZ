@@ -10,6 +10,8 @@ plugins {
 
 val javaVersion = libs.versions.java.get().toInt()
 val minecraftVersion = libs.versions.minecraft.get()
+// The catalog has no dedicated minimessage alias; reuse the adventure version it pins.
+val adventureVersion: String = requireNotNull(libs.adventure.api.get().version)
 
 group = providers.gradleProperty("mod_group").get()
 
@@ -32,10 +34,14 @@ dependencies {
 
     compileOnly(libs.jspecify)
     compileOnly(libs.sponge.mixin)
+    // Strict MiniMessage parsing for lifecycle/death templates. The runtime copy is supplied by the
+    // bundled adventure platform mod, so this stays compile-only in the distribution.
+    compileOnly("net.kyori:adventure-text-minimessage:$adventureVersion")
     testCompileOnly(libs.jspecify)
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation(libs.sqlite.jdbc)
+    testImplementation("net.kyori:adventure-text-minimessage:$adventureVersion")
 }
 
 java {

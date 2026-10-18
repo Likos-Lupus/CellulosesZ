@@ -11,5 +11,7 @@ public data class TeleportSettings(
     public val cancelOnDamage: Boolean = true,
     public val movementTolerance: Double = 0.15,
     public val dismountPassengers: Boolean = true,
+    /** Damage immunity granted after a committed teleport; 0 disables it. */
+    public val invulnerabilitySeconds: Long = 0,
     public val safety: TeleportSafetySettings = TeleportSafetySettings(),
 )

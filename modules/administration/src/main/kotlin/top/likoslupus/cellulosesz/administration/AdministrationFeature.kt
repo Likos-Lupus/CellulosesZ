@@ -1,10 +1,14 @@
 package top.likoslupus.cellulosesz.administration
 
 import net.minecraft.server.level.ServerPlayer
+import top.likoslupus.cellulosesz.administration.amusement.FunCommands
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
+import top.likoslupus.cellulosesz.administration.entitytools.EntityToolsCommands
+import top.likoslupus.cellulosesz.administration.entitytools.EntityToolsService
 import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
 import top.likoslupus.cellulosesz.administration.integration.*
 import top.likoslupus.cellulosesz.administration.jail.*
+import top.likoslupus.cellulosesz.administration.login.LoginProtection
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
 import top.likoslupus.cellulosesz.administration.moderation.ModerationState
@@ -26,10 +30,15 @@ import top.likoslupus.cellulosesz.administration.operator.MinecraftPlayerControl
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlCommands
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlService
 import top.likoslupus.cellulosesz.administration.playerstate.*
+import top.likoslupus.cellulosesz.administration.sign.SignCommands
+import top.likoslupus.cellulosesz.administration.sign.SignEditService
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyCommands
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
+import top.likoslupus.cellulosesz.administration.worldtools.PersonalViews
+import top.likoslupus.cellulosesz.administration.worldtools.WorldToolsCommands
+import top.likoslupus.cellulosesz.administration.worldtools.WorldToolsService
 import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.requiresPermission
@@ -38,6 +47,7 @@ import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
+import top.likoslupus.cellulosesz.core.player.TemporaryProtectionRegistry
 import top.likoslupus.cellulosesz.core.player.WorldPosition
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
@@ -53,6 +63,7 @@ import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.util.*
 
 /**
@@ -67,6 +78,12 @@ public class AdministrationFeature internal constructor(
     private val vanish: VanishService,
     private val jail: JailService,
     private val adjustments: PlayerAdjustmentService,
+    private val playerState: PlayerStateService,
+    private val entityTools: EntityToolsService,
+    private val worldTools: WorldToolsService,
+    private val personalViews: PersonalViews,
+    private val signEdits: SignEditService,
+    private val login: LoginProtection,
     private val known: MinecraftKnownPlayerResolver,
     private val notifier: ModerationNotifier,
     private val audit: ModerationAuditService,
@@ -81,6 +98,8 @@ public class AdministrationFeature internal constructor(
 
     /** Narrow integration surface for the public API; never exposes the internal services. */
     public val integration: ModerationIntegrationPort = ModerationIntegration()
+
+    private val lastDimensions = HashMap<UUID, String>()
 
     private inner class ModerationIntegration : ModerationIntegrationPort {
 
@@ -112,6 +131,20 @@ public class AdministrationFeature internal constructor(
             return kernel.onServerThread {
                 val mute = mutes.activeMute(subjectId)
                 val confined = jail.isConfined(subjectId)
+                val sentence = jail.sentence(subjectId)
+                val confinedRemaining = sentence?.let { term ->
+                    when (term.mode) {
+                        JailSentenceMode.ONLINE ->
+                            term.remainingSeconds?.let(Duration::ofSeconds)
+
+                        JailSentenceMode.WALL_CLOCK ->
+                            term.expiresAt
+                                    ?.let { Duration.between(Instant.now(), it) }
+                                    ?.takeIf { !it.isNegative }
+
+                        JailSentenceMode.PERMANENT -> null
+                    }
+                }
                 val knownTarget = known.onlineById(subjectId) != null ||
                         known.knownById(subjectId) != null
 
@@ -122,6 +155,7 @@ public class AdministrationFeature internal constructor(
                             muted = mute != null,
                             mutedUntil = mute?.expiresAt,
                             confined = confined,
+                            confinedRemaining = confinedRemaining,
                         )
                     )
                 }
@@ -141,7 +175,8 @@ public class AdministrationFeature internal constructor(
                         null -> CommandPermissions.MUTE
                         else -> CommandPermissions.TEMP_MUTE
                     }
-                ) -> ModerationIntegrationOutcome.NotAuthorized
+                ) ->
+                    ModerationIntegrationOutcome.NotAuthorized
 
                 duration != null && (duration.isZero || duration.isNegative) ->
                     ModerationIntegrationOutcome.InvalidDuration
@@ -301,6 +336,7 @@ public class AdministrationFeature internal constructor(
             mutes,
             notifier,
             moderation,
+            permissions,
             kernel,
             messages,
             adventure,
@@ -324,6 +360,8 @@ public class AdministrationFeature internal constructor(
             adventure,
             presentation
         ) + PlayerStateCommands.commands(
+            playerState,
+            permissions,
             messages,
             adventure,
             presentation
@@ -345,6 +383,27 @@ public class AdministrationFeature internal constructor(
             messages,
             adventure,
             presentation
+        ) + EntityToolsCommands.commands(
+            entityTools,
+            { settings().entityTools },
+            adventure,
+            presentation
+        ) + WorldToolsCommands.commands(
+            worldTools,
+            personalViews,
+            { settings().worldTools },
+            adventure,
+            presentation
+        ) + FunCommands.commands(
+            { settings().amusement },
+            adventure,
+            presentation
+        ) + SignCommands.commands(
+            signEdits,
+            permissions,
+            { settings().signEditing },
+            adventure,
+            presentation
         )
     }
 
@@ -364,6 +423,7 @@ public class AdministrationFeature internal constructor(
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
     public fun onServerStarting() {
         RestrictCommandsState.set(JailCommandAccessPolicy.snapshotFrom(settings().jail))
+        vanish.applyPolicy()
         kernel.launch {
             kernel.onServerThread {
                 val server = kernel.requireServer()
@@ -402,6 +462,11 @@ public class AdministrationFeature internal constructor(
         jail.shutdown()
         vanish.clearAll()
         adjustments.restoreAllSpeeds()
+        playerState.clearAll()
+        personalViews.clearAll()
+        signEdits.clearAll()
+        login.clear()
+        lastDimensions.clear()
     }
 
     /** Records every joined player so offline moderation can resolve them later. */
@@ -412,18 +477,119 @@ public class AdministrationFeature internal constructor(
                 player.gameProfile.name
             )
         )
+        val now = Instant.now()
+        login.recordJoin(player.uuid, now)
+        val delay = settings().moderation.loginAttackDelaySeconds
+        if (delay > 0) {
+            TemporaryProtectionRegistry.protect(
+                player.uuid,
+                now.plusSeconds(delay.toLong()),
+            )
+        }
+        if (settings().playerAdjustments.flyOnJoin &&
+            player.createCommandSourceStack()
+                    .requiresPermission(permissions, CommandPermissions.FLY)
+        ) {
+            playerState.grantFly(player.uuid, true)
+        }
         jail.onPlayerJoined(player.uuid)
+        resendPersonalViews(player)
     }
 
     public fun onPlayerQuit(playerId: UUID) {
         spies.clear(playerId)
         vanish.clear(playerId)
         adjustments.restoreSpeed(playerId)
+        playerState.onPlayerQuit(playerId)
+        personalViews.clear(playerId)
+        signEdits.clear(playerId)
+        login.forget(playerId)
+        jail.onPlayerQuit(playerId)
+        lastDimensions.remove(playerId)
+    }
+
+    /**
+     * Re-sends a player's personal time and weather to their client. Called on join and whenever
+     * their dimension changes, because the client resets both when it loads a new world.
+     */
+    private fun resendPersonalViews(player: ServerPlayer) {
+        personalViews.time(player.uuid)?.let { worldTools.sendPersonalTime(player, it) }
+        personalViews.weather(player.uuid)?.let { worldTools.sendPersonalWeather(player, it) }
     }
 
     /** Server-thread confined mute gate used by communication and the chat gate. */
     public fun isMuted(playerId: UUID): Boolean =
         mutes.isMuted(playerId)
+
+    /**
+     * Server-thread login PvP gate: true when [attackerId] joined less than
+     * `[administration.moderation].loginAttackDelaySeconds` ago and does not hold
+     * `cellulosesz.pvpdelay.exempt`. The application damage gate calls this for the attacker.
+     */
+    public fun isLoginProtected(attackerId: UUID, now: Instant): Boolean {
+        val delay = settings().moderation.loginAttackDelaySeconds
+        if (!login.isProtected(attackerId, now, delay)) {
+            return false
+        }
+        val player = kernel.requireServer().playerList.getPlayer(attackerId)
+            ?: return false
+        return !player.createCommandSourceStack().requiresPermission(
+            permissions,
+            CommandPermissions.PVP_DELAY_EXEMPT,
+        )
+    }
+
+    /** Server-thread confined vanish query for join/quit announcement suppression. */
+    public fun isVanished(playerId: UUID): Boolean =
+        vanish.isVanished(playerId)
+
+    /** Command roots blocked while muted, from live config. Server thread. */
+    public fun mutedCommandRoots(): List<String> =
+        settings().moderation.mutedCommands
+
+    /** Social-spy command observation; the root command only, never its arguments. Server thread. */
+    public fun observeCommand(actorId: UUID?, command: String) {
+        if (actorId == null || !settings().moderation.socialSpyCommands) {
+            return
+        }
+        val recipients = spies.recipients(setOf(actorId))
+        if (recipients.isEmpty()) {
+            return
+        }
+        val actorName = kernel.requireServer().playerList
+                .getPlayer(actorId)?.gameProfile?.name
+            ?: actorId.toString()
+        val notice = Notice(
+            LocalizedText(
+                MessageKey("administration.socialspy.command"),
+                listOf(
+                    TextArgument.PlayerName(actorName),
+                    TextArgument.Literal(command)
+                ),
+            ),
+            NoticeTone.INFO,
+        )
+        kernel.launch {
+            recipients.forEach { recipientId ->
+                presentation.renderFor(recipientId, notice).forEach { line ->
+                    kernel.message(
+                        CommandFeedbackTarget.Player(recipientId),
+                        adventure,
+                        line
+                    )
+                }
+            }
+        }
+    }
+
+    /** Forces vanish on for a silent join. Server-thread confined. */
+    public fun forceVanish(playerId: UUID) {
+        vanish.forceVanish(playerId)
+    }
+
+    /** True when a vanished player's join/quit announcement must be hidden. Server thread. */
+    public fun shouldHideJoinQuit(playerId: UUID): Boolean =
+        settings().vanish.hideJoinQuit && vanish.isVanished(playerId)
 
     /** Server-thread confined confinement query consumed by movement's teleport path. */
     override fun isConfined(playerId: UUID): Boolean =
@@ -437,6 +603,13 @@ public class AdministrationFeature internal constructor(
      * is disabled.
      */
     public fun onPlayerTick(player: ServerPlayer) {
+        playerState.onPlayerObserved(player.uuid)
+        jail.onOnlineTick(player.uuid)
+        val dimension = player.level().dimension().identifier().toString()
+        val previousDimension = lastDimensions.put(player.uuid, dimension)
+        if (previousDimension != null && previousDimension != dimension) {
+            resendPersonalViews(player)
+        }
         val config = settings().jail
         val server = kernel.requireServer()
         val respawned = JailRespawnState.consume(player.uuid)
@@ -646,12 +819,28 @@ public fun createAdministrationFeature(
         audit = audit,
     )
     val spies = SocialSpyService(kernel, audit)
-    val vanish = VanishService(kernel, audit, events = events::publish)
+    val vanish = VanishService(
+        kernel,
+        audit,
+        { settings().vanish },
+        events = events::publish,
+    )
     val adjustments = PlayerAdjustmentService(
         backend = MinecraftPlayerAdjustmentBackend(kernel),
         known = known,
         settings = { settings().playerAdjustments },
     )
+    val playerState = PlayerStateService(
+        backend = MinecraftPlayerStateBackend(kernel),
+        known = known,
+        settings = { settings().playerAdjustments },
+        clock = clock,
+    )
+    val entityTools = EntityToolsService()
+    val worldTools = WorldToolsService()
+    val personalViews = PersonalViews()
+    val signEdits = SignEditService()
+    val login = LoginProtection()
     val jail = JailService(
         runtime = KernelJailRuntime(kernel),
         locations = JdbcJailLocationRepository(database, namespace),
@@ -686,6 +875,12 @@ public fun createAdministrationFeature(
         vanish = vanish,
         jail = jail,
         adjustments = adjustments,
+        playerState = playerState,
+        entityTools = entityTools,
+        worldTools = worldTools,
+        personalViews = personalViews,
+        signEdits = signEdits,
+        login = login,
         known = known,
         notifier = notifier,
         audit = audit,

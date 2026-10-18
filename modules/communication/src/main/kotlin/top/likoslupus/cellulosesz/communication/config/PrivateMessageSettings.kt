@@ -10,6 +10,12 @@ public data class PrivateMessageSettings(
     public val defaultReplyMode: ReplyMode = ReplyMode.LAST_INTERACTION,
 
     /**
+     * Whether `/reply` targets the last conversation partner until a player changes it with
+     * `/rtoggle`.
+     */
+    public val defaultReplyRecipient: Boolean = true,
+
+    /**
      * `null` means session reply state does not expire by time.
      */
     public val replyTimeoutSeconds: Long? = null,

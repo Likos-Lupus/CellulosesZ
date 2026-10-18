@@ -21,6 +21,13 @@ public data class CommandRoutingSettings(
     public val aliasesEnabled: Boolean = true,
     public val vanillaHelpOverlayEnabled: Boolean = true,
     public val vanillaOverrides: VanillaOverrideSettings = VanillaOverrideSettings(),
+    /** Canonical command name -> exact decimal cost, charged through the economy service. */
+    public val costs: Map<String, String> = emptyMap(),
+    /** Canonical command name -> cooldown in seconds; `"*"` is the default for every command. */
+    public val cooldowns: Map<String, Int> = emptyMap(),
+    public val cooldownPersistence: Boolean = true,
+    /** Canonical CellulosesZ command names that must not be registered. Startup binding. */
+    public val disabled: List<String> = emptyList(),
 )
 
 /**

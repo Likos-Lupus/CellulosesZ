@@ -9,4 +9,7 @@ public data class UtilitySettings(
     public val items: ItemUtilitySettings = ItemUtilitySettings(),
     public val itemEditing: ItemEditingSettings = ItemEditingSettings(),
     public val workstations: WorkstationSettings = WorkstationSettings(),
+    public val give: GiveSettings = GiveSettings(),
+    public val powertools: PowertoolSettings = PowertoolSettings(),
+    public val inspection: InspectionSettings = InspectionSettings(),
 )

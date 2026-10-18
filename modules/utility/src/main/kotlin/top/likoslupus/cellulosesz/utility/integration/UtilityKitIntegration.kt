@@ -108,7 +108,8 @@ private fun ClaimKitResult.toResult(): KitClaimResult = when (this) {
         KitClaimResult.Delivered(
             kit.value,
             droppedStacks,
-            claimRecordedFully
+            claimRecordedFully,
+            equippedStacks,
         )
 
     ClaimKitResult.Disabled ->
@@ -150,7 +151,8 @@ private fun GrantKitResult.toResult(): KitGrantResult = when (this) {
         KitGrantResult.Delivered(
             grantId,
             kitName.value,
-            droppedStacks
+            droppedStacks,
+            equippedStacks,
         )
 
     GrantKitResult.AlreadyProcessed ->

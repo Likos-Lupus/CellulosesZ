@@ -7,8 +7,13 @@ import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
+import top.likoslupus.cellulosesz.core.preference.PreferenceWriteResult
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -36,6 +41,8 @@ internal object TeleportRequestCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
     ): List<CommandDefinition> = listOf(
         command(
             name = "tpa",
@@ -57,6 +64,7 @@ internal object TeleportRequestCommands {
                         messages,
                         adventure,
                         presentation,
+                        permissions,
                     )
                 }
             }
@@ -82,6 +90,7 @@ internal object TeleportRequestCommands {
                         messages,
                         adventure,
                         presentation,
+                        permissions,
                     )
                 }
             }
@@ -98,6 +107,7 @@ internal object TeleportRequestCommands {
                     context,
                     service,
                     reachability,
+                    permissions,
                     messages,
                     adventure,
                     presentation,
@@ -198,6 +208,7 @@ internal object TeleportRequestCommands {
                 status(
                     context,
                     tpAuto,
+                    preferences,
                     adventure,
                     presentation,
                 )
@@ -208,6 +219,7 @@ internal object TeleportRequestCommands {
                         context,
                         TpAutoMode.OFF,
                         tpAuto,
+                        preferences,
                         kernel,
                         messages,
                         adventure,
@@ -221,6 +233,7 @@ internal object TeleportRequestCommands {
                         context,
                         TpAutoMode.TRUSTED,
                         tpAuto,
+                        preferences,
                         kernel,
                         messages,
                         adventure,
@@ -234,6 +247,7 @@ internal object TeleportRequestCommands {
                         context,
                         TpAutoMode.ALL,
                         tpAuto,
+                        preferences,
                         kernel,
                         messages,
                         adventure,
@@ -246,6 +260,7 @@ internal object TeleportRequestCommands {
                     list(
                         context,
                         tpAuto,
+                        preferences,
                         adventure,
                         presentation,
                     )
@@ -259,6 +274,7 @@ internal object TeleportRequestCommands {
                             get(player),
                             true,
                             tpAuto,
+                            preferences,
                             kernel,
                             messages,
                             adventure,
@@ -275,6 +291,104 @@ internal object TeleportRequestCommands {
                             get(player),
                             false,
                             tpAuto,
+                            preferences,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+            }
+        },
+
+        command(
+            name = "tptoggle",
+            category = CommandCategory.MOVEMENT,
+            permission = CommandPermissions.TP_TOGGLE,
+            documentation = "movement/tptoggle",
+        ) {
+            executesPlayer {
+                toggleStatus(
+                    source,
+                    playerId,
+                    null,
+                    preferences,
+                    messages,
+                    adventure,
+                    presentation,
+                )
+            }
+            literal("on") {
+                executesPlayer {
+                    applyToggle(
+                        source,
+                        playerId,
+                        null,
+                        true,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("off") {
+                executesPlayer {
+                    applyToggle(
+                        source,
+                        playerId,
+                        null,
+                        false,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            argument(
+                "player",
+                word(),
+                permission = CommandPermissions.TP_TOGGLE_OTHERS,
+            ) { player ->
+                suggests { suggestAll(onlineNames(source)) }
+                executes {
+                    toggleStatus(
+                        source,
+                        source.player?.uuid,
+                        get(player),
+                        preferences,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+                literal("on") {
+                    executes {
+                        applyToggle(
+                            source,
+                            source.player?.uuid,
+                            get(player),
+                            true,
+                            preferences,
+                            kernel,
+                            messages,
+                            adventure,
+                            presentation,
+                        )
+                    }
+                }
+                literal("off") {
+                    executes {
+                        applyToggle(
+                            source,
+                            source.player?.uuid,
+                            get(player),
+                            false,
+                            preferences,
                             kernel,
                             messages,
                             adventure,
@@ -298,6 +412,7 @@ internal object TeleportRequestCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
     ): Int {
         val source = context.source
         val sender = source.player
@@ -317,8 +432,9 @@ internal object TeleportRequestCommands {
                     targetName
                 ),
             )
+        val bypass = source.requiresPermission(permissions, CommandPermissions.TP_TOGGLE_BYPASS)
 
-        return when (service.send(sender.uuid, target.uuid, type)) {
+        return when (service.send(sender.uuid, target.uuid, type, bypass)) {
             TpaSendResult.Self ->
                 source.replyError(
                     adventure,
@@ -354,6 +470,14 @@ internal object TeleportRequestCommands {
                         MessageKey("movement.request.target_queue_full"),
                         target.name.string,
                     ),
+                )
+
+            is TpaSendResult.TargetDisabled ->
+                source.replyNotice(
+                    adventure,
+                    presentation,
+                    sender.uuid,
+                    MovementMessages.requestTargetDisabled(target.name.string),
                 )
 
             is TpaSendResult.Sent -> {
@@ -410,6 +534,7 @@ internal object TeleportRequestCommands {
         context: CommandContext<CommandSourceStack>,
         service: TeleportRequestService,
         reachability: RequestReachabilityPort,
+        permissions: PermissionService,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
@@ -430,6 +555,10 @@ internal object TeleportRequestCommands {
             candidates = candidates,
             type = TeleportRequestType.BRING_TARGET,
             reachable = { reachability.canReach(sender.uuid, it) },
+            bypassTargetChoice = source.requiresPermission(
+                permissions,
+                CommandPermissions.TP_TOGGLE_BYPASS,
+            ),
         )
 
         return when (result) {
@@ -736,12 +865,15 @@ internal object TeleportRequestCommands {
     private fun status(
         context: CommandContext<CommandSourceStack>,
         tpAuto: TpAutoService,
+        preferences: PlayerPreferenceService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
         val source = context.source
         val player = source.player
             ?: return 0
+        teleportDisabled(source, player.uuid, preferences, adventure, presentation)
+                ?.let { return it }
         return source.replyNotices(
             adventure,
             presentation,
@@ -757,6 +889,7 @@ internal object TeleportRequestCommands {
         context: CommandContext<CommandSourceStack>,
         mode: TpAutoMode,
         tpAuto: TpAutoService,
+        preferences: PlayerPreferenceService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -766,6 +899,8 @@ internal object TeleportRequestCommands {
         val player = source.player
             ?: return 0
         val playerId = player.uuid
+        teleportDisabled(source, playerId, preferences, adventure, presentation)
+                ?.let { return it }
         return movementLaunch(
             source,
             kernel,
@@ -790,12 +925,15 @@ internal object TeleportRequestCommands {
     private fun list(
         context: CommandContext<CommandSourceStack>,
         tpAuto: TpAutoService,
+        preferences: PlayerPreferenceService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
         val source = context.source
         val player = source.player
             ?: return 0
+        teleportDisabled(source, player.uuid, preferences, adventure, presentation)
+                ?.let { return it }
         val names = tpAuto.allowedBy(player.uuid)
                 .map {
                     PlayerResolver.onlineById(source.server, it)?.name?.string
@@ -814,6 +952,7 @@ internal object TeleportRequestCommands {
         targetName: String,
         add: Boolean,
         tpAuto: TpAutoService,
+        preferences: PlayerPreferenceService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -828,6 +967,8 @@ internal object TeleportRequestCommands {
                     MessageKey("core.error.player_required")
                 )
             )
+        teleportDisabled(source, player.uuid, preferences, adventure, presentation)
+                ?.let { return it }
         val target = PlayerResolver.onlineByName(source.server, targetName)
             ?: return source.replyError(
                 adventure,
@@ -869,6 +1010,161 @@ internal object TeleportRequestCommands {
             )
         }
     }
+
+    /** Rejects a `/tpauto` change while the caller has teleport requests disabled. */
+    private fun teleportDisabled(
+        source: CommandSourceStack,
+        playerId: UUID,
+        preferences: PlayerPreferenceService,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int? =
+        when {
+            preferences.isEnabled(
+                playerId,
+                PlayerPreference.TELEPORT_ENABLED
+            ) -> null
+
+            else -> source.replyNotice(
+                adventure,
+                presentation,
+                playerId,
+                MovementMessages.tpAutoTeleportDisabled(),
+            )
+        }
+
+    private fun toggleStatus(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        preferences: PlayerPreferenceService,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val target = resolveToggleTarget(
+            source,
+            actorId,
+            targetName,
+            messages,
+            adventure
+        ) ?: return 0
+        val enabled = preferences.isEnabled(
+            target.id,
+            PlayerPreference.TELEPORT_ENABLED
+        )
+        return source.replyNotice(
+            adventure,
+            presentation,
+            actorId,
+            MovementMessages.teleportToggleStatus(
+                isOther = targetName != null,
+                name = target.name,
+                enabled = enabled,
+            ),
+        )
+    }
+
+    private fun applyToggle(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        enabled: Boolean,
+        preferences: PlayerPreferenceService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val target = resolveToggleTarget(
+            source,
+            actorId,
+            targetName,
+            messages,
+            adventure
+        ) ?: return 0
+        val targetId = target.id
+        return movementLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("movement.pending.updating_teleport"),
+        ) { feedback ->
+            val notice = when (
+                preferences.set(
+                    targetId,
+                    PlayerPreference.TELEPORT_ENABLED,
+                    enabled,
+                )
+            ) {
+                PreferenceWriteResult.StorageUnavailable ->
+                    MovementMessages.preferenceStorageUnavailable()
+
+                else -> MovementMessages.teleportToggleUpdated(
+                    isOther = targetName != null,
+                    name = target.name,
+                    enabled = enabled,
+                )
+            }
+            kernel.sendNotices(
+                feedback,
+                adventure,
+                presentation,
+                actorId,
+                listOf(notice),
+            )
+        }
+    }
+
+    /**
+     * Resolves the player a `/tptoggle` action targets. A null [targetName] means the actor
+     * themselves and requires a player source; otherwise the named player must be online. Replies an
+     * error and returns null when resolution fails.
+     */
+    private fun resolveToggleTarget(
+        source: CommandSourceStack,
+        actorId: UUID?,
+        targetName: String?,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+    ): ToggleTarget? {
+        if (targetName == null) {
+            val player = source.player
+                ?: run {
+                    source.replyError(
+                        adventure,
+                        messages.renderFor(
+                            null,
+                            MessageKey("core.error.player_required")
+                        ),
+                    )
+                    return null
+                }
+            return ToggleTarget(player.uuid, player.gameProfile.name)
+        }
+        val resolved = PlayerResolver.onlineByName(source.server, targetName)
+            ?: run {
+                source.replyError(
+                    adventure,
+                    messages.renderFor(
+                        actorId,
+                        MessageKey("movement.teleport.player_not_online"),
+                        targetName,
+                    ),
+                )
+                return null
+            }
+        return ToggleTarget(resolved.uuid, resolved.name.string)
+    }
+
+    private fun onlineNames(source: CommandSourceStack): List<String> =
+        source.server.playerList.players.map { it.gameProfile.name }
+
+    private data class ToggleTarget(
+        val id: UUID,
+        val name: String,
+    )
 
     private fun notify(
         targetId: UUID,

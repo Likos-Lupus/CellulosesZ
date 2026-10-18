@@ -18,4 +18,7 @@ internal interface JailSentenceRepository {
 
     suspend fun remove(playerId: UUID): Boolean
 
+    /** Persists the remaining online seconds of an ONLINE sentence. */
+    suspend fun updateRemaining(playerId: UUID, remainingSeconds: Long): Boolean
+
 }

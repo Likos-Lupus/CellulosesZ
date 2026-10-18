@@ -549,6 +549,7 @@ public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyAp
 	public abstract fun balanceTop (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
 	public abstract fun currency ()Ltop/likoslupus/cellulosesz/api/ApiQuery;
 	public abstract fun getEvents ()Ltop/likoslupus/cellulosesz/api/economy/EconomyEvents;
+	public abstract fun getWorth ()Ltop/likoslupus/cellulosesz/api/economy/EconomyWorthApi;
 	public abstract fun grantByAddon (Ltop/likoslupus/cellulosesz/api/economy/AddonEconomyGrantRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
 	public abstract fun history (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ltop/likoslupus/cellulosesz/api/economy/EconomyHistoryQuery;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
 	public abstract fun setByAddon (Ltop/likoslupus/cellulosesz/api/economy/AddonEconomySetRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
@@ -610,6 +611,7 @@ public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyEv
 	public abstract fun onAccountCreated (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 	public abstract fun onBalanceChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 	public abstract fun onTransactionCommitted (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+	public abstract fun onWorthChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 }
 
 public final class top/likoslupus/cellulosesz/api/economy/EconomyHistoryEntryView {
@@ -829,6 +831,19 @@ public final class top/likoslupus/cellulosesz/api/economy/EconomyTransactionRece
 	public final fun getTransactionId ()Ljava/util/UUID;
 }
 
+public abstract interface class top/likoslupus/cellulosesz/api/economy/EconomyWorthApi {
+	public abstract fun page (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/lang/String;ILtop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun set (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/lang/String;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun unitPrice (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/lang/String;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/EconomyWorthChanged {
+	public fun <init> (Ljava/lang/String;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/time/Instant;)V
+	public final fun getItemId ()Ljava/lang/String;
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getUnitPrice ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+}
+
 public final class top/likoslupus/cellulosesz/api/economy/PlayerEconomyTransferRequest {
 	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;)V
 	public synthetic fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
@@ -838,6 +853,129 @@ public final class top/likoslupus/cellulosesz/api/economy/PlayerEconomyTransferR
 	public final fun getReceiverId ()Ljava/util/UUID;
 	public final fun getReferenceId ()Ljava/lang/String;
 	public final fun getRequestKey ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Found : top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Found;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Found;Ltop/likoslupus/cellulosesz/api/economy/WorthView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$Found;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorth ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$NotFound : top/likoslupus/cellulosesz/api/economy/WorthLookupOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthLookupOutcome$NotFound;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Changed : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Changed;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Changed;Ltop/likoslupus/cellulosesz/api/economy/WorthView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Changed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorth ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$InvalidAmount : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$InvalidAmount;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$InvalidItem : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$InvalidItem;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Unchanged : top/likoslupus/cellulosesz/api/economy/WorthMutationOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/economy/WorthView;)Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Unchanged;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Unchanged;Ltop/likoslupus/cellulosesz/api/economy/WorthView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/WorthMutationOutcome$Unchanged;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorth ()Ltop/likoslupus/cellulosesz/api/economy/WorthView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/economy/WorthPageOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Disabled : top/likoslupus/cellulosesz/api/economy/WorthPageOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Listed : top/likoslupus/cellulosesz/api/economy/WorthPageOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/common/ApiPage;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/common/ApiPage;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/common/ApiPage;)Ltop/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Listed;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Listed;Ltop/likoslupus/cellulosesz/api/common/ApiPage;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/economy/WorthPageOutcome$Listed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPage ()Ltop/likoslupus/cellulosesz/api/common/ApiPage;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthPageOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/economy/WorthPageOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/economy/WorthPageOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/economy/WorthView {
+	public fun <init> (Ljava/lang/String;Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;Ljava/time/Instant;)V
+	public final fun getItemId ()Ljava/lang/String;
+	public final fun getUnitPrice ()Ltop/likoslupus/cellulosesz/api/economy/EconomyAmount;
+	public final fun getUpdatedAt ()Ljava/time/Instant;
 }
 
 public abstract interface class top/likoslupus/cellulosesz/api/extension/AddonRegistration {
@@ -1083,14 +1221,17 @@ public final class top/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Cooldown :
 }
 
 public final class top/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered : top/likoslupus/cellulosesz/api/kit/KitClaimOutcome {
-	public fun <init> (IZ)V
+	public fun <init> (IZI)V
+	public synthetic fun <init> (IZIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()I
 	public final fun component2 ()Z
-	public final fun copy (IZ)Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;
-	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;IZILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;
+	public final fun component3 ()I
+	public final fun copy (IZI)Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;IZIILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/kit/KitClaimOutcome$Delivered;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getClaimRecordedFully ()Z
 	public final fun getDroppedStacks ()I
+	public final fun getEquippedStacks ()I
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
 }
@@ -1201,13 +1342,16 @@ public final class top/likoslupus/cellulosesz/api/kit/KitGrantOutcome$AlreadyPro
 }
 
 public final class top/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered : top/likoslupus/cellulosesz/api/kit/KitGrantOutcome {
-	public fun <init> (Ljava/lang/String;I)V
+	public fun <init> (Ljava/lang/String;II)V
+	public synthetic fun <init> (Ljava/lang/String;IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun component1 ()Ljava/lang/String;
 	public final fun component2 ()I
-	public final fun copy (Ljava/lang/String;I)Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;
-	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;Ljava/lang/String;IILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;
+	public final fun component3 ()I
+	public final fun copy (Ljava/lang/String;II)Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;Ljava/lang/String;IIILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/kit/KitGrantOutcome$Delivered;
 	public fun equals (Ljava/lang/Object;)Z
 	public final fun getDroppedStacks ()I
+	public final fun getEquippedStacks ()I
 	public final fun getGrantId ()Ljava/lang/String;
 	public fun hashCode ()I
 	public fun toString ()Ljava/lang/String;
@@ -1521,8 +1665,10 @@ public final class top/likoslupus/cellulosesz/api/moderation/ModerationStatusOut
 }
 
 public final class top/likoslupus/cellulosesz/api/moderation/ModerationStatusView {
-	public fun <init> (ZLjava/time/Instant;Z)V
+	public fun <init> (ZLjava/time/Instant;ZLjava/time/Duration;)V
+	public synthetic fun <init> (ZLjava/time/Instant;ZLjava/time/Duration;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public final fun getConfined ()Z
+	public final fun getConfinedRemaining ()Ljava/time/Duration;
 	public final fun getMuted ()Z
 	public final fun getMutedUntil ()Ljava/time/Instant;
 }
@@ -1757,6 +1903,34 @@ public abstract interface class top/likoslupus/cellulosesz/api/movement/HomesApi
 	public abstract fun setAtCurrentPosition (Ljava/util/UUID;Ljava/lang/String;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
 }
 
+public abstract interface class top/likoslupus/cellulosesz/api/movement/LastLocationOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Found : top/likoslupus/cellulosesz/api/movement/LastLocationOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/ApiPosition;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/ApiPosition;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/ApiPosition;)Ltop/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Found;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Found;Ltop/likoslupus/cellulosesz/api/ApiPosition;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Found;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPosition ()Ltop/likoslupus/cellulosesz/api/ApiPosition;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/LastLocationOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/movement/LastLocationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/LastLocationOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Unknown : top/likoslupus/cellulosesz/api/movement/LastLocationOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/LastLocationOutcome$Unknown;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public abstract interface class top/likoslupus/cellulosesz/api/movement/MovementApi {
 	public abstract fun getEvents ()Ltop/likoslupus/cellulosesz/api/movement/MovementEvents;
 	public abstract fun getHomes ()Ltop/likoslupus/cellulosesz/api/movement/HomesApi;
@@ -1764,6 +1938,7 @@ public abstract interface class top/likoslupus/cellulosesz/api/movement/Movement
 	public abstract fun getSpawn ()Ltop/likoslupus/cellulosesz/api/movement/SpawnApi;
 	public abstract fun getTeleport ()Ltop/likoslupus/cellulosesz/api/movement/TeleportApi;
 	public abstract fun getWarps ()Ltop/likoslupus/cellulosesz/api/movement/WarpsApi;
+	public abstract fun getWorlds ()Ltop/likoslupus/cellulosesz/api/movement/WorldsApi;
 }
 
 public abstract interface class top/likoslupus/cellulosesz/api/movement/MovementEvents {
@@ -2128,6 +2303,17 @@ public final class top/likoslupus/cellulosesz/api/movement/TeleportTarget$Warp :
 	public fun toString ()Ljava/lang/String;
 }
 
+public final class top/likoslupus/cellulosesz/api/movement/TeleportTarget$World : top/likoslupus/cellulosesz/api/movement/TeleportTarget {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/movement/TeleportTarget$World;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/movement/TeleportTarget$World;Ljava/lang/String;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/movement/TeleportTarget$World;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorldId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
 public final class top/likoslupus/cellulosesz/api/movement/WarpChangeKind : java/lang/Enum {
 	public static final field CREATED Ltop/likoslupus/cellulosesz/api/movement/WarpChangeKind;
 	public static final field DELETED Ltop/likoslupus/cellulosesz/api/movement/WarpChangeKind;
@@ -2300,6 +2486,99 @@ public abstract interface class top/likoslupus/cellulosesz/api/movement/WarpsApi
 	public abstract fun listVisible (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
 }
 
+public abstract interface class top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$Allowed : top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$Allowed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$Denied : top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$Denied;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$UnknownWorld : top/likoslupus/cellulosesz/api/movement/WorldAccessOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldAccessOutcome$UnknownWorld;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/movement/WorldListOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldListOutcome$Listed : top/likoslupus/cellulosesz/api/movement/WorldListOutcome {
+	public fun <init> (Ljava/util/List;)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun copy (Ljava/util/List;)Ltop/likoslupus/cellulosesz/api/movement/WorldListOutcome$Listed;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/movement/WorldListOutcome$Listed;Ljava/util/List;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/movement/WorldListOutcome$Listed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorlds ()Ljava/util/List;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldListOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/movement/WorldListOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldListOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$Found : top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/movement/WorldView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/movement/WorldView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/movement/WorldView;)Ltop/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$Found;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$Found;Ltop/likoslupus/cellulosesz/api/movement/WorldView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$Found;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getWorld ()Ltop/likoslupus/cellulosesz/api/movement/WorldView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$NotFound : top/likoslupus/cellulosesz/api/movement/WorldLookupOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/movement/WorldLookupOutcome$NotFound;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/movement/WorldView {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun getAlias ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/movement/WorldsApi {
+	public abstract fun canAccess (Ljava/util/UUID;Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/ApiQuery;
+	public abstract fun find (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/ApiQuery;
+	public abstract fun lastKnownLocation (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun list ()Ltop/likoslupus/cellulosesz/api/ApiQuery;
+}
+
 public final class top/likoslupus/cellulosesz/api/player/AfkChangeCause : java/lang/Enum {
 	public static final field ACTIVITY Ltop/likoslupus/cellulosesz/api/player/AfkChangeCause;
 	public static final field MANUAL Ltop/likoslupus/cellulosesz/api/player/AfkChangeCause;
@@ -2418,6 +2697,7 @@ public final class top/likoslupus/cellulosesz/api/player/PlayerAfkChanged {
 public abstract interface class top/likoslupus/cellulosesz/api/player/PlayerEvents {
 	public abstract fun onAfkChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 	public abstract fun onNicknameChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
+	public abstract fun onPreferenceChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 	public abstract fun onPresenceChanged (Ltop/likoslupus/cellulosesz/api/common/ApiEventListener;)Ltop/likoslupus/cellulosesz/api/Subscription;
 }
 
@@ -2431,6 +2711,137 @@ public final class top/likoslupus/cellulosesz/api/player/PlayerNicknameChanged {
 	public final fun getCurrent ()Ljava/lang/String;
 	public final fun getPlayerId ()Ljava/util/UUID;
 	public final fun getPrevious ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreference : java/lang/Enum {
+	public static final field ACCEPTING_PAY Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static final field CLEAR_INVENTORY_CONFIRMATION Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static final field PAY_CONFIRMATION Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static final field REPLY_TO_LAST_RECIPIENT Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static final field TELEPORT_ENABLED Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public static fun values ()[Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Changed : top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;Z)V
+	public final fun component1 ()Ljava/util/UUID;
+	public final fun component2 ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;Z)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Changed;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Changed;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;ZILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Changed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnabled ()Z
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getPreference ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Disabled : top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Unchanged : top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;Z)V
+	public final fun component1 ()Ljava/util/UUID;
+	public final fun component2 ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;Z)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Unchanged;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Unchanged;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;ZILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$Unchanged;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEnabled ()Z
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getPreference ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$UnknownPlayer : top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeOutcome$UnknownPlayer;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeRequest {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;Z)V
+	public final fun getAccess ()Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;
+	public final fun getEnabled ()Z
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getPreference ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferenceChanged {
+	public fun <init> (Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;ZLjava/time/Instant;)V
+	public final fun getEnabled ()Z
+	public final fun getOccurredAt ()Ljava/time/Instant;
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getPreference ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreference;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/player/PlayerPreferencesApi {
+	public abstract fun change (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferenceChangeRequest;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+	public abstract fun read (Ltop/likoslupus/cellulosesz/api/actor/AddonAccess;Ljava/util/UUID;Ltop/likoslupus/cellulosesz/api/common/ApiCallback;)Ltop/likoslupus/cellulosesz/api/common/ApiRequestHandle;
+}
+
+public abstract interface class top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome {
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Available : top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome {
+	public fun <init> (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesView;)V
+	public final fun component1 ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesView;
+	public final fun copy (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesView;)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Available;
+	public static synthetic fun copy$default (Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Available;Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesView;ILjava/lang/Object;)Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Available;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getPreferences ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesView;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Disabled : top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$Disabled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$NotAuthorized : top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$NotAuthorized;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$UnknownPlayer : top/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome {
+	public static final field INSTANCE Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesOutcome$UnknownPlayer;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class top/likoslupus/cellulosesz/api/player/PlayerPreferencesView {
+	public fun <init> (Ljava/util/UUID;ZZZZZ)V
+	public final fun getAcceptingPay ()Z
+	public final fun getClearInventoryConfirmation ()Z
+	public final fun getPayConfirmation ()Z
+	public final fun getPlayerId ()Ljava/util/UUID;
+	public final fun getReplyToLastRecipient ()Z
+	public final fun getTeleportEnabled ()Z
 }
 
 public abstract interface class top/likoslupus/cellulosesz/api/player/PlayerPresenceApi {
@@ -2481,6 +2892,7 @@ public final class top/likoslupus/cellulosesz/api/player/PlayerProfileOutcome$Un
 public abstract interface class top/likoslupus/cellulosesz/api/player/PlayersApi {
 	public abstract fun getEvents ()Ltop/likoslupus/cellulosesz/api/player/PlayerEvents;
 	public abstract fun getNicknames ()Ltop/likoslupus/cellulosesz/api/player/PlayerNicknameApi;
+	public abstract fun getPreferences ()Ltop/likoslupus/cellulosesz/api/player/PlayerPreferencesApi;
 	public abstract fun getPresence ()Ltop/likoslupus/cellulosesz/api/player/PlayerPresenceApi;
 }
 

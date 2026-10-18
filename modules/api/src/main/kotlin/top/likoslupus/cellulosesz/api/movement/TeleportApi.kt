@@ -5,7 +5,7 @@ import top.likoslupus.cellulosesz.api.TeleportOriginKind
 import top.likoslupus.cellulosesz.api.common.ApiCallback
 import top.likoslupus.cellulosesz.api.common.ApiRequestHandle
 import java.time.Duration
-import java.util.UUID
+import java.util.*
 
 /** A travel destination that CellulosesZ resolves and validates itself. */
 public sealed interface TeleportTarget {
@@ -17,6 +17,8 @@ public sealed interface TeleportTarget {
     public data object Spawn : TeleportTarget
 
     public data class Player(public val playerId: UUID) : TeleportTarget
+
+    public data class World(public val worldId: String) : TeleportTarget
 
 }
 

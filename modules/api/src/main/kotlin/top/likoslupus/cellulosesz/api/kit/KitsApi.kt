@@ -13,7 +13,9 @@ public sealed interface KitReuseView {
 
     public data object Once : KitReuseView
 
-    public data class Cooldown(public val duration: Duration) : KitReuseView
+    public data class Cooldown(
+        public val duration: Duration
+    ) : KitReuseView
 
 }
 
@@ -24,7 +26,9 @@ public sealed interface KitAvailabilityView {
 
     public data object AlreadyUsed : KitAvailabilityView
 
-    public data class Cooldown(public val remaining: Duration) : KitAvailabilityView
+    public data class Cooldown(
+        public val remaining: Duration
+    ) : KitAvailabilityView
 
 }
 
@@ -50,7 +54,9 @@ public sealed interface KitListOutcome {
 
 public sealed interface KitAvailabilityOutcome {
 
-    public data class Found(public val availability: KitAvailabilityView) : KitAvailabilityOutcome
+    public data class Found(
+        public val availability: KitAvailabilityView
+    ) : KitAvailabilityOutcome
 
     public data object NotFound : KitAvailabilityOutcome
 
@@ -69,6 +75,7 @@ public sealed interface KitClaimOutcome {
     public data class Delivered(
         public val droppedStacks: Int,
         public val claimRecordedFully: Boolean,
+        public val equippedStacks: Int = 0,
     ) : KitClaimOutcome
 
     public data object Disabled : KitClaimOutcome
@@ -79,7 +86,9 @@ public sealed interface KitClaimOutcome {
 
     public data object InvalidName : KitClaimOutcome
 
-    public data class Cooldown(public val remaining: Duration) : KitClaimOutcome
+    public data class Cooldown(
+        public val remaining: Duration
+    ) : KitClaimOutcome
 
     public data object AlreadyUsed : KitClaimOutcome
 
@@ -95,7 +104,9 @@ public sealed interface KitClaimOutcome {
     public data object DeliveryFailedAfterReservation : KitClaimOutcome
 
     /** An addon eligibility check denied the claim before any precheck or reservation. */
-    public data class Denied(public val reasonKey: String) : KitClaimOutcome
+    public data class Denied(
+        public val reasonKey: String
+    ) : KitClaimOutcome
 
 }
 
@@ -115,6 +126,7 @@ public sealed interface KitGrantOutcome {
     public data class Delivered(
         public val grantId: String,
         public val droppedStacks: Int,
+        public val equippedStacks: Int = 0,
     ) : KitGrantOutcome
 
     public data object AlreadyProcessed : KitGrantOutcome

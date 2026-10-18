@@ -50,6 +50,7 @@ internal sealed interface RenameHomeResult {
 internal class HomeService(
     private val repository: HomeRepository,
     private val policy: () -> HomeSettings,
+    private val maxHomes: suspend (UUID) -> Int = { policy().maxPerPlayer },
 ) {
 
     suspend fun set(
@@ -63,7 +64,7 @@ internal class HomeService(
 
         val existing = repository.list(playerId)
         if (existing.none { it.name == name }
-            && existing.size >= config.maxPerPlayer
+            && existing.size >= maxHomes(playerId)
         ) {
             return SetHomeResult.LimitReached
         }

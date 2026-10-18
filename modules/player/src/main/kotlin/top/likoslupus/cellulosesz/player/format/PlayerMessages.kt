@@ -3,12 +3,16 @@ package top.likoslupus.cellulosesz.player.format
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
 import top.likoslupus.cellulosesz.player.afk.AfkChange
+import top.likoslupus.cellulosesz.player.list.PlayerListResult
 import top.likoslupus.cellulosesz.player.nearby.NearbyResult
 import top.likoslupus.cellulosesz.player.nickname.NicknameCurrent
 import top.likoslupus.cellulosesz.player.nickname.NicknameForResult
 import top.likoslupus.cellulosesz.player.nickname.NicknameSetResult
 import top.likoslupus.cellulosesz.player.presence.PlayerPresence
+import top.likoslupus.cellulosesz.player.whois.WhoisEnrichment
+import top.likoslupus.cellulosesz.player.whois.WhoisLive
 import java.time.Instant
+import java.util.*
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -50,46 +54,156 @@ internal object PlayerMessages {
             elapsed(duration)
         )
 
-    fun whois(presence: PlayerPresence, now: Instant): DetailView =
+    fun whois(
+        presence: PlayerPresence,
+        now: Instant,
+        enrichment: WhoisEnrichment? = null,
+    ): DetailView =
         DetailView(
             title = LocalizedText(
                 MessageKey("player.whois.title"),
                 listOf(playerName(presence.name))
             ),
-            fields = listOf(
+            fields = buildList {
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.name")),
+                        value = text(presence.name),
+                    )
+                )
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.uuid")),
+                        value = text(presence.id.toString()),
+                    )
+                )
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.first_seen")),
+                        value = agoOrUnknown(presence.firstSeen, now),
+                    )
+                )
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.last_seen")),
+                        value = agoOrUnknown(presence.lastSeen, now),
+                    )
+                )
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.playtime")),
+                        value = LocalizedText(
+                            MessageKey("player.whois.value.duration"),
+                            listOf(elapsed(presence.playtime))
+                        ),
+                    )
+                )
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.online")),
+                        value = LocalizedText(
+                            when {
+                                presence.online -> MessageKey("player.whois.value.online")
+                                else -> MessageKey("player.whois.value.offline")
+                            }
+                        ),
+                    )
+                )
+                enrichment?.live?.let { live ->
+                    addAll(liveFields(live))
+                }
+                enrichment?.extra?.let(::addAll)
+            },
+        )
+
+    private fun liveFields(live: WhoisLive): List<DetailField> =
+        buildList {
+            add(
                 DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.name")),
-                    value = text(presence.name),
-                ),
-                DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.uuid")),
-                    value = text(presence.id.toString()),
-                ),
-                DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.first_seen")),
-                    value = agoOrUnknown(presence.firstSeen, now),
-                ),
-                DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.last_seen")),
-                    value = agoOrUnknown(presence.lastSeen, now),
-                ),
-                DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.playtime")),
+                    label = LocalizedText(MessageKey("player.whois.field.health")),
                     value = LocalizedText(
-                        MessageKey("player.whois.value.duration"),
-                        listOf(elapsed(presence.playtime))
+                        MessageKey("player.whois.value.fraction"),
+                        listOf(
+                            literal(decimal(live.health)),
+                            literal(decimal(live.maxHealth))
+                        ),
                     ),
-                ),
+                )
+            )
+            add(
                 DetailField(
-                    label = LocalizedText(MessageKey("player.whois.field.online")),
+                    label = LocalizedText(MessageKey("player.whois.field.hunger")),
                     value = LocalizedText(
-                        when {
-                            presence.online -> MessageKey("player.whois.value.online")
-                            else -> MessageKey("player.whois.value.offline")
-                        }
+                        MessageKey("player.whois.value.fraction"),
+                        listOf(count(live.food), count(MAX_FOOD)),
                     ),
-                ),
-            ),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.experience")),
+                    value = LocalizedText(
+                        MessageKey("player.whois.value.experience"),
+                        listOf(count(live.experienceLevel)),
+                    ),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.location")),
+                    value = LocalizedText(
+                        MessageKey("core.value"),
+                        listOf(
+                            TextArgument.Position(
+                                x = live.x,
+                                y = live.y,
+                                z = live.z,
+                                dimension = live.dimension,
+                            )
+                        ),
+                    ),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.game_mode")),
+                    value = text(live.gameMode),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.operator")),
+                    value = yesNo(live.operator),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.whitelisted")),
+                    value = yesNo(live.whitelisted),
+                )
+            )
+            add(
+                DetailField(
+                    label = LocalizedText(MessageKey("player.whois.field.afk")),
+                    value = yesNo(live.afk),
+                )
+            )
+            live.address?.let { address ->
+                add(
+                    DetailField(
+                        label = LocalizedText(MessageKey("player.whois.field.ip")),
+                        value = text(address),
+                    )
+                )
+            }
+        }
+
+    private fun yesNo(value: Boolean): LocalizedText =
+        LocalizedText(
+            when {
+                value -> MessageKey("player.whois.value.yes")
+                else -> MessageKey("player.whois.value.no")
+            }
         )
 
     fun notFound(name: String): Notice =
@@ -188,6 +302,59 @@ internal object PlayerMessages {
             )
         }
 
+    fun listPage(result: PlayerListResult.Rows, afkMarker: String): ListPage {
+        val rows = result.entries.map { entry ->
+            val main = when {
+                entry.afk -> LocalizedText(
+                    MessageKey("player.list.entry_afk"),
+                    listOf(
+                        playerName(entry.name),
+                        literal(afkMarker)
+                    ),
+                )
+
+                else -> LocalizedText(
+                    MessageKey("player.list.entry"),
+                    listOf(playerName(entry.name)),
+                )
+            }
+            ListRow(
+                main = main,
+                supporting = LocalizedText(
+                    MessageKey("core.value"),
+                    listOf(literal(entry.groupLabel)),
+                ),
+            )
+        }
+        val summary = when (val label = result.filterLabel) {
+            null -> LocalizedText(
+                MessageKey("player.list.summary"),
+                listOf(
+                    count(result.online),
+                    count(result.maximum)
+                ),
+            )
+
+            else -> LocalizedText(
+                MessageKey("player.list.summary_group"),
+                listOf(
+                    literal(label),
+                    count(result.online),
+                    count(result.maximum)
+                ),
+            )
+        }
+        return ListPage(
+            title = LocalizedText(MessageKey("player.list.title")),
+            rows = rows,
+            emptyText = LocalizedText(MessageKey("player.list.empty")),
+            summary = summary,
+        )
+    }
+
+    fun listUnknownGroup(raw: String): Notice =
+        error(MessageKey("player.list.unknown_group"), literal(raw))
+
     fun nicknameFeedback(result: NicknameSetResult): Notice =
         when (result) {
             is NicknameSetResult.Set -> success(
@@ -210,6 +377,15 @@ internal object PlayerMessages {
 
             NicknameSetResult.InvalidCharacters ->
                 error(MessageKey("player.nickname.invalid_characters"))
+
+            NicknameSetResult.ColorsNotAllowed ->
+                error(MessageKey("player.nickname.colors_not_allowed"))
+
+            NicknameSetResult.PatternMismatch ->
+                error(MessageKey("player.nickname.pattern"))
+
+            NicknameSetResult.Blacklisted ->
+                error(MessageKey("player.nickname.blacklisted"))
 
             NicknameSetResult.Taken -> error(MessageKey("player.nickname.taken"))
             NicknameSetResult.Reserved -> error(MessageKey("player.nickname.reserved"))
@@ -313,7 +489,17 @@ internal object PlayerMessages {
     private fun count(value: Double): TextArgument =
         TextArgument.Count(value.toLong())
 
+    /** Formats a float without a trailing `.0`, so health reads `20` or `19.5`. */
+    private fun decimal(value: Float): String =
+        when (val rounded = value.toDouble()) {
+            rounded.toLong().toDouble() -> rounded.toLong().toString()
+            else -> String.format(Locale.ROOT, "%.1f", rounded)
+        }
+
     private fun elapsed(value: Duration): TextArgument =
         TextArgument.Elapsed(value)
+
+    /** Vanilla food scale, so hunger reads as a fraction of twenty. */
+    private const val MAX_FOOD: Int = 20
 
 }

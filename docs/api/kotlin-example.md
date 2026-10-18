@@ -74,3 +74,19 @@ fun grantQuestReward(
     }
 }
 ```
+
+## Preferences and worth
+
+```kotlin
+api.player.preferences.read(access, playerId) { result ->
+    val preferences = (result as? ApiCallResult.Completed)
+            ?.value
+            ?.let { it as? PlayerPreferencesOutcome.Available }
+            ?.preferences
+    // preferences?.teleportEnabled, preferences?.acceptingPay, ...
+}
+
+api.economy.worth.unitPrice(access, "minecraft:diamond") { result ->
+    // WorthLookupOutcome.Found / NotFound / NotAuthorized
+}
+```

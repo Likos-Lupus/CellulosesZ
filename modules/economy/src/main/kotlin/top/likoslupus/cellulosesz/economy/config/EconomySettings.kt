@@ -68,4 +68,7 @@ public data class EconomySettings(
     public val balanceTopPageSize: Int = 10,
     @SerialName("show-zero-balances-in-top")
     public val showZeroBalancesInTop: Boolean = false,
+    public val pay: PaySettings = PaySettings(),
+    public val worth: WorthSettings = WorthSettings(),
+    public val sell: SellSettings = SellSettings(),
 )

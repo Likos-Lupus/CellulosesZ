@@ -41,6 +41,7 @@ dependencies {
     compileOnly(libs.jspecify)
     testCompileOnly(libs.jspecify)
     testImplementation(libs.junit.jupiter)
+    testImplementation("net.kyori:adventure-text-minimessage:${libs.adventure.api.get().version}")
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 

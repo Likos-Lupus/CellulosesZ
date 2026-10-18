@@ -7,6 +7,9 @@ import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.*
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
+import top.likoslupus.cellulosesz.core.preference.PreferenceWriteResult
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -16,6 +19,8 @@ import top.likoslupus.cellulosesz.core.text.model.Notice
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotices
+import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
+import top.likoslupus.cellulosesz.utility.command.utilityLaunch
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
 import java.util.*
 
@@ -29,6 +34,7 @@ internal object ItemUtilityCommands {
         presentation: TextPresentation,
         audit: AdministrativeActionAuditPort,
         kernel: RuntimeKernel,
+        preferences: PlayerPreferenceService,
     ): List<CommandDefinition> = listOf(
         command(
             name = "repair",
@@ -254,24 +260,26 @@ internal object ItemUtilityCommands {
             documentation = "utility/clearinventory",
         ) {
             executesPlayer {
-                context.source.replyNotice(
+                clearSelf(
+                    source,
+                    playerId,
+                    ClearScope.MAIN,
+                    service,
+                    preferences,
                     adventure,
                     presentation,
-                    playerId,
-                    UtilityMessages.clearRequest(
-                        service.requestInventoryClear(playerId, ClearScope.MAIN)
-                    ),
                 )
             }
             literal("all") {
                 executesPlayer {
-                    context.source.replyNotice(
+                    clearSelf(
+                        source,
+                        playerId,
+                        ClearScope.ALL,
+                        service,
+                        preferences,
                         adventure,
                         presentation,
-                        playerId,
-                        UtilityMessages.clearRequest(
-                            service.requestInventoryClear(playerId, ClearScope.ALL)
-                        ),
                     )
                 }
             }
@@ -306,6 +314,7 @@ internal object ItemUtilityCommands {
                                 get(player),
                                 ClearScope.MAIN,
                                 service,
+                                preferences,
                                 adventure,
                                 presentation,
                             )
@@ -319,6 +328,7 @@ internal object ItemUtilityCommands {
                                 get(player),
                                 ClearScope.ALL,
                                 service,
+                                preferences,
                                 adventure,
                                 presentation,
                             )
@@ -354,7 +364,72 @@ internal object ItemUtilityCommands {
                 }
             }
         },
+
+        command(
+            name = "clearinventoryconfirmtoggle",
+            category = CommandCategory.UTILITY,
+            permission = CommandPermissions.CLEAR_INVENTORY_CONFIRM_TOGGLE,
+            documentation = "utility/clearinventoryconfirmtoggle",
+        ) {
+            executesPlayer {
+                context.source.replyNotice(
+                    adventure,
+                    presentation,
+                    playerId,
+                    UtilityMessages.clearConfirmStatus(
+                        confirmationRequired(playerId, preferences)
+                    ),
+                )
+            }
+            literal("on") {
+                executesPlayer {
+                    setConfirmation(
+                        context,
+                        playerId,
+                        true,
+                        service,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+            literal("off") {
+                executesPlayer {
+                    setConfirmation(
+                        context,
+                        playerId,
+                        false,
+                        service,
+                        preferences,
+                        kernel,
+                        messages,
+                        adventure,
+                        presentation,
+                    )
+                }
+            }
+        },
     )
+
+    private fun clearSelf(
+        source: CommandSourceStack,
+        playerId: UUID,
+        scope: ClearScope,
+        service: ItemUtilityService,
+        preferences: PlayerPreferenceService,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val notice = if (confirmationRequired(playerId, preferences)) {
+            UtilityMessages.clearRequest(service.requestInventoryClear(playerId, scope))
+        } else {
+            UtilityMessages.clearInventory(service.clearInventoryNow(playerId, scope))
+        }
+        return source.replyNotice(adventure, presentation, playerId, notice)
+    }
 
     private fun requestOther(
         source: CommandSourceStack,
@@ -362,9 +437,28 @@ internal object ItemUtilityCommands {
         targetName: String,
         scope: ClearScope,
         service: ItemUtilityService,
+        preferences: PlayerPreferenceService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
+        if (!confirmationRequired(actorId, preferences)) {
+            val targetId = runningOnlineId(source, targetName)
+            val result = service.clearInventoryForNow(targetName, scope)
+            if (result is ClearInventoryResult.Cleared && targetId != null) {
+                notify(
+                    targetId,
+                    UtilityMessages.clearTargetDone(result.stacks),
+                    adventure,
+                    presentation,
+                )
+            }
+            return source.replyNotice(
+                adventure,
+                presentation,
+                actorId,
+                UtilityMessages.clearInventory(result),
+            )
+        }
         val result = service.requestInventoryClearFor(actorId, targetName, scope)
         if (result is ClearRequestResult.Issued && result.targetId != null) {
             notify(
@@ -381,6 +475,65 @@ internal object ItemUtilityCommands {
             UtilityMessages.clearRequest(result),
         )
     }
+
+    private fun setConfirmation(
+        context: CommandContext<CommandSourceStack>,
+        playerId: UUID,
+        enabled: Boolean,
+        service: ItemUtilityService,
+        preferences: PlayerPreferenceService,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int {
+        val source = context.source
+        return utilityLaunch(
+            source,
+            kernel,
+            messages,
+            adventure,
+            MessageKey("utility.pending.updating_settings"),
+        ) { target ->
+            val result = preferences.set(
+                playerId,
+                PlayerPreference.CLEAR_INVENTORY_CONFIRMATION,
+                enabled,
+            )
+            service.forgetInventoryClear(playerId)
+            val notice = when (result) {
+                PreferenceWriteResult.StorageUnavailable ->
+                    UtilityMessages.preferenceStorageUnavailable()
+
+                else -> UtilityMessages.clearConfirmUpdated(enabled)
+            }
+            kernel.sendNotices(
+                target,
+                adventure,
+                presentation,
+                playerId,
+                listOf(notice),
+            )
+        }
+    }
+
+    private fun confirmationRequired(
+        playerId: UUID,
+        preferences: PlayerPreferenceService,
+    ): Boolean =
+        preferences.isEnabled(
+            playerId,
+            PlayerPreference.CLEAR_INVENTORY_CONFIRMATION
+        )
+
+    /** Resolves an online player id for a just-completed clear without blocking. Server thread. */
+    private fun runningOnlineId(
+        source: CommandSourceStack,
+        name: String,
+    ): UUID? =
+        source.server.playerList.players
+                .firstOrNull { it.gameProfile.name.equals(name, ignoreCase = true) }
+                ?.uuid
 
     private fun confirmOther(
         source: CommandSourceStack,

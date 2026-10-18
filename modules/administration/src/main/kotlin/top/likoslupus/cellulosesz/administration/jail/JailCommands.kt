@@ -349,21 +349,32 @@ internal object JailCommands {
                 )
                 if (config.notifyModerators) {
                     val expiresAt = result.expiresAt
+                    val remaining = result.remainingSeconds
                     notifyModerators(
                         kernel,
                         notifier,
-                        if (expiresAt != null) {
-                            AdministrationMessages.notifyJailTemp(
-                                actor.displayName,
-                                result.target.name,
-                                expiresAt,
-                                now,
-                            )
-                        } else {
-                            AdministrationMessages.notifyJail(
-                                actor.displayName,
-                                result.target.name
-                            )
+                        when {
+                            expiresAt != null ->
+                                AdministrationMessages.notifyJailTemp(
+                                    actor.displayName,
+                                    result.target.name,
+                                    expiresAt,
+                                    now,
+                                )
+
+                            remaining != null ->
+                                AdministrationMessages.notifyJailTemp(
+                                    actor.displayName,
+                                    result.target.name,
+                                    now.plusSeconds(remaining),
+                                    now,
+                                )
+
+                            else ->
+                                AdministrationMessages.notifyJail(
+                                    actor.displayName,
+                                    result.target.name
+                                )
                         },
                     )
                 }

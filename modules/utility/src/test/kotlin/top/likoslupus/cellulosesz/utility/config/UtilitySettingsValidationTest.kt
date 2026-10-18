@@ -71,4 +71,31 @@ class UtilitySettingsValidationTest {
         assertTrue("utility.itemEditing.clearConfirmationSeconds" in errors)
     }
 
+    @Test
+    fun `rejects an invalid give default`() {
+        val errors = UtilitySettingsValidation.validate(
+            UtilitySettings(give = GiveSettings(defaultAmount = 5, maxAmount = 3))
+        ).map { it.path }.toSet()
+
+        assertTrue("utility.give.defaultAmount" in errors)
+    }
+
+    @Test
+    fun `rejects a non positive give maximum`() {
+        val errors = UtilitySettingsValidation.validate(
+            UtilitySettings(give = GiveSettings(defaultAmount = 1, maxAmount = 0))
+        ).map { it.path }.toSet()
+
+        assertTrue("utility.give.maxAmount" in errors)
+    }
+
+    @Test
+    fun `rejects a negative powertool throttle`() {
+        val errors = UtilitySettingsValidation.validate(
+            UtilitySettings(powertools = PowertoolSettings(throttleSeconds = -1))
+        ).map { it.path }.toSet()
+
+        assertTrue("utility.powertools.throttleSeconds" in errors)
+    }
+
 }

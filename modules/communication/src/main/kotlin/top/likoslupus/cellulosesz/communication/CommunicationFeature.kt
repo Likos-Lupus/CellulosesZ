@@ -9,6 +9,8 @@ import top.likoslupus.cellulosesz.communication.config.MessagingSettings
 import top.likoslupus.cellulosesz.communication.format.CommunicationMessages
 import top.likoslupus.cellulosesz.communication.integration.CommunicationIntegrationPort
 import top.likoslupus.cellulosesz.communication.integration.DefaultCommunicationIntegrationPort
+import top.likoslupus.cellulosesz.communication.lifecycle.DeathMessageService
+import top.likoslupus.cellulosesz.communication.lifecycle.LifecycleMessageService
 import top.likoslupus.cellulosesz.communication.mail.JdbcMailboxRepository
 import top.likoslupus.cellulosesz.communication.mail.MailRateLimiter
 import top.likoslupus.cellulosesz.communication.mail.MailService
@@ -32,6 +34,8 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.runtime.serverThreadRunner
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -77,6 +81,9 @@ public class CommunicationFeature internal constructor(
     private val presentation: TextPresentation,
     private val languages: LanguageResolver,
     private val documentTheme: () -> DocumentTheme,
+    private val playerPreferences: PlayerPreferenceService,
+    private val lifecycleMessages: LifecycleMessageService,
+    private val deathMessages: DeathMessageService,
 ) {
 
     /**
@@ -97,6 +104,8 @@ public class CommunicationFeature internal constructor(
         holder.value = integration
         return PrivateMessageCommands.commands(
             privateMessages,
+            playerPreferences,
+            kernel,
             messages,
             adventure,
             presentation
@@ -144,7 +153,8 @@ public class CommunicationFeature internal constructor(
     }
 
     public fun onServerStarting() {
-        // All state is per-player and lazily loaded; there is nothing to scan at startup.
+        lifecycleMessages.install()
+        deathMessages.install()
     }
 
     /**
@@ -171,6 +181,8 @@ public class CommunicationFeature internal constructor(
     }
 
     public fun onServerStopping() {
+        lifecycleMessages.uninstall()
+        deathMessages.uninstall()
         preferences.shutdown()
     }
 
@@ -234,6 +246,13 @@ public fun createCommunicationFeature(
     configDirectory: Path,
     languages: LanguageResolver,
     documentTheme: () -> DocumentTheme,
+    playerPreferences: PlayerPreferenceService,
+    groupResolver: (UUID) -> String?,
+    onlineCount: () -> Int,
+    uniqueCount: () -> Int,
+    uptime: () -> String,
+    silentJoinVanish: (UUID) -> Unit,
+    hiddenJoinQuit: (UUID) -> Boolean,
 ): CommunicationFeature {
     val holder = IntegrationHolder()
     val runner = kernel.serverThreadRunner()
@@ -255,6 +274,9 @@ public fun createCommunicationFeature(
         integration = { holder.value },
         presentation = presentation,
         adventure = adventure,
+        replyToLastRecipient = { playerId ->
+            playerPreferences.isEnabled(playerId, PlayerPreference.REPLY_TO_LAST_RECIPIENT)
+        },
     )
 
     val mail = MailService(
@@ -294,6 +316,25 @@ public fun createCommunicationFeature(
         integration = { holder.value },
         settings = { settings().actionMessage },
     )
+    val lifecycleMessages = LifecycleMessageService(
+        kernel = kernel,
+        settings = settings,
+        permissions = permissions,
+        known = known,
+        adventure = adventure,
+        groupResolver = groupResolver,
+        onlineCount = onlineCount,
+        uniqueCount = uniqueCount,
+        uptime = uptime,
+        silentJoinVanish = silentJoinVanish,
+        hiddenJoinQuit = hiddenJoinQuit,
+    )
+    val deathMessages = DeathMessageService(
+        kernel = kernel,
+        settings = settings,
+        adventure = adventure,
+        presentation = presentation,
+    )
 
     return CommunicationFeature(
         privateMessages = privateMessages,
@@ -313,5 +354,8 @@ public fun createCommunicationFeature(
         presentation = presentation,
         languages = languages,
         documentTheme = documentTheme,
+        playerPreferences = playerPreferences,
+        lifecycleMessages = lifecycleMessages,
+        deathMessages = deathMessages,
     )
 }

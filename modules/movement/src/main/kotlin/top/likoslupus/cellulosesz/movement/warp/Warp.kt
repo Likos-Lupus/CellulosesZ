@@ -7,13 +7,12 @@ internal value class WarpName private constructor(val value: String) {
 
     companion object {
 
-        private val PATTERN = Regex("[a-z0-9_-]{1,32}")
+        private val PATTERN = Regex("[a-z0-9._-]{1,32}")
 
         fun parse(raw: String): WarpName? =
-            if (PATTERN.matches(raw)) {
-                WarpName(raw)
-            } else {
-                null
+            when {
+                PATTERN.matches(raw) -> WarpName(raw)
+                else -> null
             }
 
     }

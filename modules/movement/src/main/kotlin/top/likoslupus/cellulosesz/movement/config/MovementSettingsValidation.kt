@@ -12,12 +12,22 @@ public object MovementSettingsValidation {
     private const val MAX_HORIZONTAL_RADIUS: Int = 8
     private const val MAX_VERTICAL_RADIUS: Int = 32
     private const val MAX_JUMP_DISTANCE: Int = 256
+    private val ALIAS_PATTERN: Regex = Regex("[a-z0-9._-]+")
+    private val RESOURCE_PATTERN: Regex = Regex("[a-z0-9_.-]+:[a-z0-9_./-]+")
 
     public fun validate(settings: MovementSettings): List<ValidationError> =
         buildList {
             val teleport = settings.teleport
             if (teleport.delaySeconds < 0) {
                 add(ValidationError("movement.teleport.delaySeconds", "must be >= 0"))
+            }
+            if (teleport.invulnerabilitySeconds < 0) {
+                add(
+                    ValidationError(
+                        "movement.teleport.invulnerabilitySeconds",
+                        "must be >= 0"
+                    )
+                )
             }
             if (teleport.cooldownSeconds < 0) {
                 add(ValidationError("movement.teleport.cooldownSeconds", "must be >= 0"))
@@ -83,6 +93,43 @@ public object MovementSettingsValidation {
             }
             if (settings.homes.defaultName.isBlank()) {
                 add(ValidationError("movement.homes.defaultName", "must not be blank"))
+            }
+            settings.homes.limits.forEachIndexed { index, limit ->
+                if (limit.permission.isBlank()) {
+                    add(
+                        ValidationError(
+                            "movement.homes.limits[$index].permission",
+                            "must not be blank",
+                        )
+                    )
+                }
+                if (limit.max < 0) {
+                    add(
+                        ValidationError(
+                            "movement.homes.limits[$index].max",
+                            "must be >= 0",
+                        )
+                    )
+                }
+            }
+
+            settings.worlds.aliases.forEach { (alias, dimension) ->
+                if (!ALIAS_PATTERN.matches(alias)) {
+                    add(
+                        ValidationError(
+                            "movement.worlds.aliases.$alias",
+                            "alias must match ${ALIAS_PATTERN.pattern}",
+                        )
+                    )
+                }
+                if (!RESOURCE_PATTERN.matches(dimension)) {
+                    add(
+                        ValidationError(
+                            "movement.worlds.aliases.$alias",
+                            "dimension id '$dimension' must be a resource location",
+                        )
+                    )
+                }
             }
 
             val random = settings.randomTeleport

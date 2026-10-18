@@ -208,6 +208,13 @@ public class EconomyAccountCreated(
     public val occurredAt: Instant,
 )
 
+/** One item's configured unit worth changed at a committed write point. */
+public class EconomyWorthChanged(
+    public val itemId: String,
+    public val unitPrice: EconomyAmount,
+    public val occurredAt: Instant,
+)
+
 public interface EconomyEvents {
 
     public fun onTransactionCommitted(
@@ -220,6 +227,10 @@ public interface EconomyEvents {
 
     public fun onAccountCreated(
         listener: ApiEventListener<EconomyAccountCreated>,
+    ): Subscription
+
+    public fun onWorthChanged(
+        listener: ApiEventListener<EconomyWorthChanged>,
     ): Subscription
 
 }
@@ -270,6 +281,7 @@ public interface EconomyApi {
         callback: ApiCallback<EconomyTransactionOutcome>,
     ): ApiRequestHandle
 
+    public val worth: EconomyWorthApi
     public val events: EconomyEvents
 
 }

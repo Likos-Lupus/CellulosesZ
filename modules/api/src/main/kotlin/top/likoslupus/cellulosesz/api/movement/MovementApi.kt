@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.api.movement
 
-/** Groups the Movement domain: homes, warps, spawn, teleport, requests and their events. */
+/** Groups the Movement domain: homes, warps, spawn, worlds, teleport, requests and events. */
 public interface MovementApi {
 
     public val homes: HomesApi
@@ -8,6 +8,8 @@ public interface MovementApi {
     public val warps: WarpsApi
 
     public val spawn: SpawnApi
+
+    public val worlds: WorldsApi
 
     public val teleport: TeleportApi
 

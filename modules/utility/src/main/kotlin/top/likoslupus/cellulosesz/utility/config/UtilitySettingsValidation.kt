@@ -71,6 +71,36 @@ public object UtilitySettingsValidation {
                     )
                 )
             }
+
+            val give = settings.give
+            if (give.defaultAmount !in 1..give.maxAmount) {
+                add(
+                    ValidationError(
+                        "utility.give.defaultAmount",
+                        "must be in 1..maxAmount",
+                    )
+                )
+            }
+            if (give.maxAmount !in 1..MAX_GIVE_AMOUNT) {
+                add(
+                    ValidationError(
+                        "utility.give.maxAmount",
+                        "must be in 1..$MAX_GIVE_AMOUNT",
+                    )
+                )
+            }
+
+            val powertools = settings.powertools
+            if (powertools.throttleSeconds !in 0..60) {
+                add(
+                    ValidationError(
+                        "utility.powertools.throttleSeconds",
+                        "must be in 0..60",
+                    )
+                )
+            }
         }
+
+    private const val MAX_GIVE_AMOUNT: Int = 100_000
 
 }

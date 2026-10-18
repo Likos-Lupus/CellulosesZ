@@ -1,6 +1,5 @@
 package top.likoslupus.cellulosesz.movement
 
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -13,10 +12,12 @@ import top.likoslupus.cellulosesz.movement.home.Home
 import top.likoslupus.cellulosesz.movement.home.HomeName
 import top.likoslupus.cellulosesz.movement.home.HomeRenameOutcome
 import top.likoslupus.cellulosesz.movement.home.JdbcHomeRepository
+import top.likoslupus.cellulosesz.movement.location.JdbcLastLocationRepository
 import top.likoslupus.cellulosesz.movement.request.JdbcTpAutoRepository
 import top.likoslupus.cellulosesz.movement.request.TpAutoMode
 import top.likoslupus.cellulosesz.movement.spawn.JdbcSpawnRepository
 import top.likoslupus.cellulosesz.movement.teleport.StoredPosition
+import top.likoslupus.cellulosesz.movement.teleport.history.HistoryCause
 import top.likoslupus.cellulosesz.movement.teleport.history.JdbcTeleportHistoryRepository
 import top.likoslupus.cellulosesz.movement.warp.JdbcWarpRepository
 import top.likoslupus.cellulosesz.movement.warp.Warp
@@ -25,6 +26,7 @@ import top.likoslupus.cellulosesz.movement.warp.WarpName
 import java.nio.file.Path
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.runBlocking
 
 class MovementPersistenceTest {
 
@@ -208,10 +210,81 @@ class MovementPersistenceTest {
             runtime().use {
                 val repository = JdbcTeleportHistoryRepository(it, "default")
                 val player = UUID.randomUUID()
-                repository.write(player, position(3.0))
-                repository.write(player, position(4.0))
-                assertEquals(4.0, repository.read(player)?.x)
-                assertNull(repository.read(UUID.randomUUID()))
+                repository.write(player, HistoryCause.TELEPORT, position(3.0))
+                repository.write(player, HistoryCause.TELEPORT, position(4.0))
+                assertEquals(
+                    4.0,
+                    repository.read(player, HistoryCause.TELEPORT)?.x
+                )
+                assertNull(
+                    repository.read(
+                        UUID.randomUUID(),
+                        HistoryCause.TELEPORT
+                    )
+                )
+            }
+        }
+
+    @Test
+    fun `teleport history keeps a separate death row`() =
+        runBlocking {
+            runtime().use {
+                val repository = JdbcTeleportHistoryRepository(it, "default")
+                val player = UUID.randomUUID()
+                repository.write(player, HistoryCause.DEATH, position(11.0))
+                repository.write(player, HistoryCause.DEATH, position(12.0))
+                repository.write(player, HistoryCause.TELEPORT, position(5.0))
+
+                assertEquals(
+                    12.0,
+                    repository.read(player, HistoryCause.DEATH)?.x
+                )
+                assertEquals(
+                    5.0,
+                    repository.read(player, HistoryCause.TELEPORT)?.x
+                )
+                assertNull(
+                    repository.read(
+                        UUID.randomUUID(),
+                        HistoryCause.DEATH
+                    )
+                )
+            }
+        }
+
+    @Test
+    fun `last locations round-trip and are namespaced`() =
+        runBlocking {
+            runtime().use {
+                val repository = JdbcLastLocationRepository(it, "default")
+                val player = UUID.randomUUID()
+                val at = Instant.ofEpochMilli(1_234L)
+
+                assertNull(repository.read(player))
+
+                repository.write(player, position(7.0), at)
+
+                val read = checkNotNull(repository.read(player))
+                assertEquals(7.0, read.position.x)
+                assertEquals("minecraft:overworld", read.position.dimension)
+                assertEquals(at, read.updatedAt)
+
+                repository.write(
+                    player,
+                    position(8.0),
+                    Instant.ofEpochMilli(9_999L)
+                )
+                assertEquals(
+                    8.0,
+                    repository.read(player)?.position?.x
+                )
+
+                assertNull(
+                    JdbcLastLocationRepository(
+                        it,
+                        "other"
+                    ).read(player)
+                )
             }
         }
 

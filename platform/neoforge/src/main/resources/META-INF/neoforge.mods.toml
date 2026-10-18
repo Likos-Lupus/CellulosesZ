@@ -19,6 +19,9 @@ config = "cellulosesz.player.mixins.json"
 [[mixins]]
 config = "cellulosesz.communication.mixins.json"
 
+[[mixins]]
+config = "cellulosesz.utility.mixins.json"
+
 [[dependencies.cellulosesz]]
 modId = "neoforge"
 type = "required"

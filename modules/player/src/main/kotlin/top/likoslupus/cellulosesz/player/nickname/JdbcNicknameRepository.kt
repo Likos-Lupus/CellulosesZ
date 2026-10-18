@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.player.nickname
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.player.PlayerDataException
 import top.likoslupus.cellulosesz.player.PlayerSqlSchema
@@ -9,6 +7,8 @@ import java.sql.ResultSet
 import java.sql.SQLException
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** JDBC nicknames in `cz_player_nicknames`. A row that fails to map is reported, never overwritten. */
 internal class JdbcNicknameRepository(
@@ -26,6 +26,7 @@ internal class JdbcNicknameRepository(
                             player_uuid,
                             nickname_display,
                             normalized_nickname,
+                            owner_name,
                             updated_at_ms
                         FROM
                             ${PlayerSqlSchema.NICKNAMES}
@@ -55,6 +56,7 @@ internal class JdbcNicknameRepository(
                             player_uuid,
                             nickname_display,
                             normalized_nickname,
+                            owner_name,
                             updated_at_ms
                         FROM
                             ${PlayerSqlSchema.NICKNAMES}
@@ -97,11 +99,12 @@ internal class JdbcNicknameRepository(
                             player_uuid,
                             nickname_display,
                             normalized_nickname,
+                            owner_name,
                             updated_at_ms,
                             updated_by_uuid
                         )
                         VALUES (
-                            ?, ?, ?, ?, ?, ?
+                            ?, ?, ?, ?, ?, ?, ?
                         );
                         """.trimIndent()
                     ).use { statement ->
@@ -109,8 +112,9 @@ internal class JdbcNicknameRepository(
                         statement.setString(2, record.playerId.toString())
                         statement.setString(3, record.display)
                         statement.setString(4, record.normalized)
-                        statement.setLong(5, record.updatedAt.toEpochMilli())
-                        statement.setString(6, record.updatedBy?.toString())
+                        statement.setString(5, record.ownerName)
+                        statement.setLong(6, record.updatedAt.toEpochMilli())
+                        statement.setString(7, record.updatedBy?.toString())
                         statement.executeUpdate()
                     }
                     Unit
@@ -156,7 +160,8 @@ internal class JdbcNicknameRepository(
             playerId = playerId,
             display = display,
             normalized = normalized,
-            updatedAt = Instant.ofEpochMilli(rs.getLong(4)),
+            ownerName = rs.getString(4),
+            updatedAt = Instant.ofEpochMilli(rs.getLong(5)),
         )
     }
 

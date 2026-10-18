@@ -1,5 +1,6 @@
 package top.likoslupus.cellulosesz.communication.config
 
+import top.likoslupus.cellulosesz.communication.lifecycle.JoinQuitRenderer
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
 
 /**
@@ -158,6 +159,70 @@ public object MessagingSettingsValidation {
                     )
                 )
             }
+
+            val joinQuit = settings.joinQuit
+            if (joinQuit.hideAbovePlayerCount < 0) {
+                add(
+                    ValidationError(
+                        "messaging.joinQuit.hideAbovePlayerCount",
+                        "must be >= 0",
+                    )
+                )
+            }
+            if (joinQuit.enabled) {
+                validateTemplate(
+                    path = "messaging.joinQuit.joinFormat",
+                    template = joinQuit.joinFormat,
+                )
+                validateTemplate(
+                    path = "messaging.joinQuit.quitFormat",
+                    template = joinQuit.quitFormat,
+                )
+                validateTemplate(
+                    path = "messaging.joinQuit.firstJoinFormat",
+                    template = joinQuit.firstJoinFormat,
+                )
+                validateTemplate(
+                    path = "messaging.joinQuit.newUsernameFormat",
+                    template = joinQuit.newUsernameFormat,
+                )
+            }
+
+            val death = settings.death
+            if (death.enabled) {
+                death.customFormat?.let { custom ->
+                    if (custom.isNotBlank()) {
+                        validateTemplate("messaging.death.customFormat", custom)
+                    }
+                }
+                if (death.showCoordinates && death.coordinatesFormat.isNotBlank()) {
+                    validateTemplate(
+                        "messaging.death.coordinatesFormat",
+                        death.coordinatesFormat,
+                    )
+                }
+            }
         }
+
+    /** A blank template is rejected when active; a malformed one fails the strict MiniMessage parse. */
+    private fun MutableList<ValidationError>.validateTemplate(
+        path: String,
+        template: String,
+    ) {
+        if (template.isBlank()) {
+            add(ValidationError(path, "must not be blank when enabled"))
+            return
+        }
+        try {
+            JoinQuitRenderer.parse(template)
+        } catch (exception: Exception) {
+            add(
+                ValidationError(
+                    path,
+                    "invalid MiniMessage template: ${exception.message}",
+                )
+            )
+        }
+    }
 
 }

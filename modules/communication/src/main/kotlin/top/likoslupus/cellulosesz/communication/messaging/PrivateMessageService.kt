@@ -26,6 +26,7 @@ internal class PrivateMessageService(
     private val integration: () -> CommunicationIntegration,
     private val presentation: TextPresentation,
     private val adventure: AdventureRuntime,
+    private val replyToLastRecipient: (UUID) -> Boolean = { true },
 ) {
 
     fun send(
@@ -80,6 +81,9 @@ internal class PrivateMessageService(
 
         val sender = backend.onlineIdentityById(senderId)
             ?: return PrivateMessageOutcome.SenderOffline
+        if (!replyToLastRecipient(senderId)) {
+            return PrivateMessageOutcome.ReplyDisabled
+        }
         val targetId = replyState.resolve(
             senderId,
             recipients.replyMode(senderId)

@@ -12,4 +12,6 @@ public data class MessagingSettings(
     public val announcements: AnnouncementSettings = AnnouncementSettings(),
     public val serverPages: ServerPageSettings = ServerPageSettings(),
     public val actionMessage: ActionMessageSettings = ActionMessageSettings(),
+    public val joinQuit: JoinQuitSettings = JoinQuitSettings(),
+    public val death: DeathMessageSettings = DeathMessageSettings(),
 )

@@ -1,12 +1,13 @@
 package top.likoslupus.cellulosesz.player.command
 
-import kotlinx.coroutines.CancellationException
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.hasPermission
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
@@ -16,8 +17,10 @@ import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.player.format.PlayerMessages
 import top.likoslupus.cellulosesz.player.presence.PlayerPresenceService
 import top.likoslupus.cellulosesz.player.presence.PresenceLookup
+import top.likoslupus.cellulosesz.player.whois.WhoisService
 import java.time.Clock
 import java.util.*
+import kotlinx.coroutines.CancellationException
 
 /** `/seen`, `/playtime` and `/whois`: durable presence and playtime queries. */
 internal object SessionCommands {
@@ -29,6 +32,8 @@ internal object SessionCommands {
         adventure: AdventureRuntime,
         presentation: TextPresentation,
         clock: Clock,
+        whoisService: WhoisService,
+        permissions: PermissionService,
     ): List<CommandDefinition> = listOf(
         command(
             name = "seen",
@@ -104,6 +109,8 @@ internal object SessionCommands {
                         source = source,
                         raw = get(key),
                         presence = presence,
+                        whoisService = whoisService,
+                        permissions = permissions,
                         kernel = kernel,
                         messages = messages,
                         adventure = adventure,
@@ -214,6 +221,8 @@ internal object SessionCommands {
         source: CommandSourceStack,
         raw: String,
         presence: PlayerPresenceService,
+        whoisService: WhoisService,
+        permissions: PermissionService,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
@@ -221,6 +230,7 @@ internal object SessionCommands {
         clock: Clock,
     ): Int {
         val requesterId = source.player?.uuid
+        val showIp = source.hasPermission(permissions, CommandPermissions.WHOIS_IP)
         return playerLaunch(
             source,
             kernel,
@@ -228,13 +238,16 @@ internal object SessionCommands {
             adventure
         ) { target ->
             when (val result = presence.lookup(raw)) {
-                is PresenceLookup.Found -> kernel.sendDetail(
-                    target,
-                    adventure,
-                    presentation,
-                    requesterId,
-                    PlayerMessages.whois(result.presence, clock.instant())
-                )
+                is PresenceLookup.Found -> {
+                    val enrichment = whoisService.enrichment(result.presence.id, showIp)
+                    kernel.sendDetail(
+                        target,
+                        adventure,
+                        presentation,
+                        requesterId,
+                        PlayerMessages.whois(result.presence, clock.instant(), enrichment)
+                    )
+                }
 
                 PresenceLookup.NotFound -> kernel.sendNotices(
                     target,

@@ -16,6 +16,7 @@ internal sealed interface GrantKitResult {
         val grantId: String,
         val kitName: KitName,
         val droppedStacks: Int,
+        val equippedStacks: Int = 0,
     ) : GrantKitResult
 
     data object AlreadyProcessed : GrantKitResult
@@ -150,7 +151,8 @@ internal class KitGrantService(
             inventory.deliver(
                 playerId,
                 kit.items,
-                config.overflowPolicy
+                config.overflowPolicy,
+                config.autoEquip,
             )
         }
 
@@ -161,6 +163,7 @@ internal class KitGrantService(
                     grantId = grantId,
                     kitName = kit.name,
                     droppedStacks = delivery.droppedStacks,
+                    equippedStacks = delivery.equippedStacks,
                 )
             }
 

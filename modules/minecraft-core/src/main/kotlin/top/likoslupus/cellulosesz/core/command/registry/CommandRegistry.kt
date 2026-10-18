@@ -8,6 +8,7 @@ import net.minecraft.commands.CommandSourceStack
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.core.command.CommandCatalog
 import top.likoslupus.cellulosesz.core.command.CommandDescriptor
+import top.likoslupus.cellulosesz.core.command.CommandInterceptor
 import top.likoslupus.cellulosesz.core.command.dsl.BrigadierCompiler
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.permission.PermissionService
@@ -26,6 +27,7 @@ internal fun interface CommandRootBuilder {
         permissions: PermissionService,
         buildContext: CommandBuildContext,
         additionalPermission: PermissionSpec?,
+        interceptor: CommandInterceptor?,
     ): LiteralCommandNode<CommandSourceStack>
 
 }
@@ -71,6 +73,7 @@ public class CommandRegistry(
         buildContext: CommandBuildContext,
         permissions: PermissionService,
         policy: CommandRoutingPolicy = CommandRoutingPolicy(),
+        interceptor: CommandInterceptor? = null,
     ): CommandRegistrationReport {
         val generation = generationCounter.incrementAndGet()
         if (dispatcher !== lastDispatcher) {
@@ -87,7 +90,8 @@ public class CommandRegistry(
                 permissions,
                 generation,
                 route,
-                installed
+                installed,
+                interceptor,
             )
         }
         lastInstalled = installed
@@ -101,6 +105,7 @@ public class CommandRegistry(
         generation: Int,
         route: CommandRoute,
         installedInto: MutableMap<String, CommandNode<CommandSourceStack>>,
+        interceptor: CommandInterceptor?,
     ): CommandRouteResult {
         val fallback = fallbackFor(route)
 
@@ -142,6 +147,7 @@ public class CommandRegistry(
             permissions,
             buildContext,
             route.additionalPermission,
+            interceptor,
         )
         dispatcher.root.addChild(node)
 

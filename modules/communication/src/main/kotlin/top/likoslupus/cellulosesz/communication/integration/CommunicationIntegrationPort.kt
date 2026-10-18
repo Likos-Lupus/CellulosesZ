@@ -1,7 +1,7 @@
 package top.likoslupus.cellulosesz.communication.integration
 
 import java.time.Duration
-import java.util.UUID
+import java.util.*
 
 /**
  * Outcome of a private-message operation expressed at the domain boundary. It is a *result*, not a
@@ -108,6 +108,13 @@ public interface CommunicationIntegrationPort {
      * other cached reads in this feature.
      */
     public fun receivingEnabled(playerId: UUID): Boolean?
+
+    /**
+     * Whether [ignorerId] currently ignores [targetId]. Server-thread confined, like the other
+     * cached reads; an unloaded snapshot answers `false`. Used by the economy to exclude ignored
+     * players from payments.
+     */
+    public fun ignoresPlayer(ignorerId: UUID, targetId: UUID): Boolean
 
     /** Reads a mailbox summary; never exposes message bodies. */
     public suspend fun mailSummary(ownerId: UUID): MailSummaryPortOutcome

@@ -9,8 +9,12 @@ import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.double
 import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
+import top.likoslupus.cellulosesz.core.preference.PlayerPreference
+import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
@@ -18,11 +22,15 @@ import top.likoslupus.cellulosesz.core.text.adventure.replyError
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.renderFor
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
+import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
+import top.likoslupus.cellulosesz.movement.config.HistorySettings
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.request.TeleportPreferenceGate
 import top.likoslupus.cellulosesz.movement.teleport.*
+import top.likoslupus.cellulosesz.movement.teleport.history.BackSelection
 import top.likoslupus.cellulosesz.movement.teleport.history.TeleportHistoryService
 import java.util.*
 
@@ -33,10 +41,13 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
+        historySettings: () -> HistorySettings,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
     ): List<CommandDefinition> = listOf(
         command(
             name = "back",
@@ -50,10 +61,12 @@ internal object TeleportCommands {
                     teleports,
                     history,
                     teleportSettings,
+                    historySettings,
                     kernel,
                     messages,
                     adventure,
                     presentation,
+                    permissions,
                 )
             }
         },
@@ -76,6 +89,8 @@ internal object TeleportCommands {
                         messages,
                         adventure,
                         presentation,
+                        permissions,
+                        preferences,
                     )
                 }
                 argument("second", word()) { second ->
@@ -90,6 +105,8 @@ internal object TeleportCommands {
                             messages,
                             adventure,
                             presentation,
+                            permissions,
+                            preferences,
                         )
                     }
                 }
@@ -113,6 +130,8 @@ internal object TeleportCommands {
                         messages,
                         adventure,
                         presentation,
+                        permissions,
+                        preferences,
                     )
                 }
             }
@@ -170,10 +189,12 @@ internal object TeleportCommands {
         teleports: TeleportCoordinator,
         history: TeleportHistoryService,
         teleportSettings: () -> TeleportSettings,
+        historySettings: () -> HistorySettings,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
     ): Int {
         val source = context.source
         val playerId = source.player?.uuid
@@ -185,6 +206,12 @@ internal object TeleportCommands {
                 )
             )
 
+        val config = historySettings()
+        val hasDeathPermission = source.requiresPermission(
+            permissions,
+            CommandPermissions.BACK_ON_DEATH
+        )
+
         return movementLaunch(
             source,
             kernel,
@@ -192,13 +219,25 @@ internal object TeleportCommands {
             adventure,
             MessageKey("movement.pending.teleport")
         ) { target ->
-            val notices = when (val previous = history.previous(playerId)) {
+            val previous = history.previous(playerId)
+            val death = if (config.recordDeath && hasDeathPermission) {
+                history.death(playerId)
+            } else {
+                null
+            }
+            val destination = BackSelection.select(
+                teleport = previous,
+                death = death,
+                recordDeath = config.recordDeath,
+                hasDeathPermission = hasDeathPermission,
+            )
+            val notices = when (destination) {
                 null -> listOf(MovementMessages.noPreviousLocation())
                 else -> when (
                     val outcome = teleports.execute(
                         intent(
                             playerId,
-                            previous,
+                            destination,
                             TeleportCause.BACK,
                             teleportSettings
                         )
@@ -218,6 +257,41 @@ internal object TeleportCommands {
         }
     }
 
+    /**
+     * Vetoes a direct teleport when the other player has teleport requests disabled, unless the
+     * sender holds the bypass capability. Replies the denial notice and returns its result, else null.
+     */
+    private fun disabledTarget(
+        source: CommandSourceStack,
+        playerId: UUID,
+        playerName: String,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): Int? {
+        val bypass = source.requiresPermission(
+            permissions,
+            CommandPermissions.TP_TOGGLE_BYPASS
+        )
+        val allowed = TeleportPreferenceGate.allowsTarget(
+            preferences.isEnabled(
+                playerId,
+                PlayerPreference.TELEPORT_ENABLED
+            ),
+            bypass,
+        )
+        return when {
+            allowed -> null
+            else -> source.replyNotice(
+                adventure,
+                presentation,
+                source.player?.uuid,
+                MovementMessages.requestTargetDisabled(playerName),
+            )
+        }
+    }
+
     private fun direct(
         context: CommandContext<CommandSourceStack>,
         firstName: String,
@@ -228,6 +302,8 @@ internal object TeleportCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
     ): Int {
         val source = context.source
         if (secondName == null) {
@@ -248,6 +324,15 @@ internal object TeleportCommands {
                         firstName
                     ),
                 )
+            disabledTarget(
+                source,
+                target.uuid,
+                target.name.string,
+                permissions,
+                preferences,
+                adventure,
+                presentation,
+            )?.let { return it }
 
             return when (subject.uuid) {
                 target.uuid -> source.replyError(
@@ -291,6 +376,24 @@ internal object TeleportCommands {
                     secondName
                 ),
             )
+        disabledTarget(
+            source,
+            subject.uuid,
+            subject.name.string,
+            permissions,
+            preferences,
+            adventure,
+            presentation,
+        )?.let { return it }
+        disabledTarget(
+            source,
+            target.uuid,
+            target.name.string,
+            permissions,
+            preferences,
+            adventure,
+            presentation,
+        )?.let { return it }
         return launch(
             source,
             subject.uuid,
@@ -314,6 +417,8 @@ internal object TeleportCommands {
         messages: LocalizedMessages,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
+        permissions: PermissionService,
+        preferences: PlayerPreferenceService,
     ): Int {
         val source = context.source
         val executor = source.player
@@ -333,6 +438,15 @@ internal object TeleportCommands {
                     targetName
                 ),
             )
+        disabledTarget(
+            source,
+            target.uuid,
+            target.name.string,
+            permissions,
+            preferences,
+            adventure,
+            presentation,
+        )?.let { return it }
         return launch(
             source,
             target.uuid,

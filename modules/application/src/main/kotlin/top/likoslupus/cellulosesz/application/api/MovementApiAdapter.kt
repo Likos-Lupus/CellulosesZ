@@ -22,6 +22,7 @@ import kotlin.time.toJavaDuration
 internal class MovementApiAdapter(
     private val port: MovementIntegrationPort,
     private val dispatcher: ApiRequestDispatcher,
+    worlds: WorldsApi,
 ) : MovementApi {
 
     private val sinks = MovementEventSinks()
@@ -35,6 +36,8 @@ internal class MovementApiAdapter(
     override val teleport: TeleportApi = MovementTeleportAdapter(port, dispatcher)
 
     override val requests: TeleportRequestApi = MovementRequestsAdapter(port, dispatcher)
+
+    override val worlds: WorldsApi = worlds
 
     override val events: MovementEvents = sinks.events
 
@@ -445,6 +448,7 @@ private fun TeleportTarget.toMovementTarget(): MovementTravelTarget =
         is TeleportTarget.Warp -> MovementTravelTarget.Warp(name)
         TeleportTarget.Spawn -> MovementTravelTarget.Spawn
         is TeleportTarget.Player -> MovementTravelTarget.Player(playerId)
+        is TeleportTarget.World -> MovementTravelTarget.World(worldId)
     }
 
 private fun MovementPosition.toApi(): ApiPosition =

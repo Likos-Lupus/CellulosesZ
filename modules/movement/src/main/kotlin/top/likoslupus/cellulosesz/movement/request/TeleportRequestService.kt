@@ -21,6 +21,9 @@ internal sealed interface TpaSendResult {
 
     data class TargetQueueFull(val targetId: UUID) : TpaSendResult
 
+    /** The target has teleport requests disabled and the sender lacks the bypass. */
+    data class TargetDisabled(val targetId: UUID) : TpaSendResult
+
 }
 
 internal sealed interface TpaBatchSendResult {
@@ -66,9 +69,15 @@ internal sealed interface TpaDenyResult {
  * server-wide [TeleportRequestSettings.maxRequestsServerWide]); a target accepts at most
  * [TeleportRequestSettings.maxIncomingPerPlayer] concurrent requests. A same-target send refreshes
  * the recorded location and direction.
+ *
+ * [targetAccepts] is the teleport-preference policy (the composition root wires it to
+ * `PlayerPreference.TELEPORT_ENABLED`); it is consulted before any queue check so a disabled target
+ * never sees a request. A sender holding the bypass capability passes [send]'s `bypassTargetChoice`
+ * to skip just that check.
  */
 internal class TeleportRequestService(
     private val settings: () -> TeleportRequestSettings,
+    private val targetAccepts: (UUID) -> Boolean = { true },
     private val timeSource: TimeSource = TimeSource.Monotonic,
 ) {
 
@@ -79,12 +88,17 @@ internal class TeleportRequestService(
         senderId: UUID,
         targetId: UUID,
         type: TeleportRequestType,
+        bypassTargetChoice: Boolean = false,
     ): TpaSendResult {
         if (senderId == targetId) {
             return TpaSendResult.Self
         }
 
         purgeExpired()
+
+        if (!TeleportPreferenceGate.allowsTarget(targetAccepts(targetId), bypassTargetChoice)) {
+            return TpaSendResult.TargetDisabled(targetId)
+        }
 
         val byTarget = outbound[senderId]
         val existing = byTarget?.get(targetId)
@@ -129,6 +143,7 @@ internal class TeleportRequestService(
         senderId: UUID,
         candidates: List<UUID>,
         type: TeleportRequestType,
+        bypassTargetChoice: Boolean = false,
         reachable: (UUID) -> Boolean,
     ): TpaBatchSendResult {
         purgeExpired()
@@ -150,7 +165,7 @@ internal class TeleportRequestService(
         val recipients = mutableListOf<UUID>()
         var blocking: TpaBatchSendResult? = null
         for (targetId in eligible) {
-            when (send(senderId, targetId, type)) {
+            when (send(senderId, targetId, type, bypassTargetChoice)) {
                 is TpaSendResult.Sent,
                 is TpaSendResult.Refreshed ->
                     recipients += targetId

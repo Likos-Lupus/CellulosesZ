@@ -111,4 +111,74 @@ class AdministrationSettingsValidationTest {
         )
     }
 
+    @Test
+    fun `new moderation and adjustment bounds are validated`() {
+        assertTrue(
+            "administration.moderation.loginAttackDelaySeconds" in
+                    paths(
+                        AdministrationSettings(
+                            moderation = ModerationSettings(loginAttackDelaySeconds = -1)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.playerAdjustments.healCooldownSeconds" in
+                    paths(
+                        AdministrationSettings(
+                            playerAdjustments = PlayerAdjustmentSettings(healCooldownSeconds = -1)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.playerAdjustments.noGodWorlds" in
+                    paths(
+                        AdministrationSettings(
+                            playerAdjustments = PlayerAdjustmentSettings(
+                                noGodWorlds = listOf("overworld")
+                            )
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.entityTools.maxSpawnAmount" in
+                    paths(
+                        AdministrationSettings(
+                            entityTools = EntityToolsSettings(maxSpawnAmount = 0)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.worldTools.maxNukeRadius" in
+                    paths(
+                        AdministrationSettings(
+                            worldTools = WorldToolsSettings(maxNukeRadius = -1.0)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.worldTools.maxFireworkPower" in
+                    paths(
+                        AdministrationSettings(
+                            worldTools = WorldToolsSettings(maxFireworkPower = 0)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.signEditing.maxLineLength" in
+                    paths(
+                        AdministrationSettings(
+                            signEditing = SignEditingSettings(maxLineLength = 0)
+                        )
+                    )
+        )
+        assertTrue(
+            "administration.signEditing.maxDistance" in
+                    paths(
+                        AdministrationSettings(
+                            signEditing = SignEditingSettings(maxDistance = 0.0)
+                        )
+                    )
+        )
+    }
+
 }

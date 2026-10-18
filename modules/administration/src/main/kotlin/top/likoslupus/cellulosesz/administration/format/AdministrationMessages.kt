@@ -11,9 +11,7 @@ import top.likoslupus.cellulosesz.administration.moderation.mute.Mute
 import top.likoslupus.cellulosesz.administration.moderation.mute.MuteResult
 import top.likoslupus.cellulosesz.administration.moderation.mute.UnmuteResult
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlResult
-import top.likoslupus.cellulosesz.administration.playerstate.ExperienceOperation
-import top.likoslupus.cellulosesz.administration.playerstate.ExperienceResult
-import top.likoslupus.cellulosesz.administration.playerstate.SpeedResult
+import top.likoslupus.cellulosesz.administration.playerstate.*
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyResult
 import top.likoslupus.cellulosesz.administration.vanish.VanishResult
 import top.likoslupus.cellulosesz.core.text.MessageKey
@@ -321,6 +319,23 @@ internal object AdministrationMessages {
             player(target)
         )
 
+    fun heal(result: HealResult): Notice =
+        when (result) {
+            is HealResult.Healed -> success(
+                MessageKey("administration.playerstate.healed"),
+                player(result.target),
+            )
+
+            is HealResult.OnCooldown -> error(
+                MessageKey("administration.playerstate.heal_cooldown"),
+                elapsed(result.remaining),
+            )
+
+            HealResult.TargetOffline -> error(
+                MessageKey("administration.playerstate.player_not_found")
+            )
+        }
+
     fun fed(target: String): Notice =
         success(
             MessageKey("administration.playerstate.fed"),
@@ -336,6 +351,21 @@ internal object AdministrationMessages {
             player(target),
         )
 
+    fun flight(result: FlyResult): Notice =
+        when (result) {
+            is FlyResult.Applied -> success(
+                when {
+                    result.enabled -> MessageKey("administration.playerstate.flight_enabled")
+                    else -> MessageKey("administration.playerstate.flight_disabled")
+                },
+                player(result.target),
+            )
+
+            FlyResult.TargetOffline -> error(
+                MessageKey("administration.playerstate.player_not_found")
+            )
+        }
+
     fun god(target: String, enabled: Boolean): Notice =
         success(
             when {
@@ -344,6 +374,25 @@ internal object AdministrationMessages {
             },
             player(target),
         )
+
+    fun god(result: GodResult): Notice =
+        when (result) {
+            is GodResult.Applied -> success(
+                when {
+                    result.enabled -> MessageKey("administration.playerstate.god_enabled")
+                    else -> MessageKey("administration.playerstate.god_disabled")
+                },
+                player(result.target),
+            )
+
+            GodResult.DisabledWorld -> error(
+                MessageKey("administration.playerstate.god_disabled_world")
+            )
+
+            GodResult.TargetOffline -> error(
+                MessageKey("administration.playerstate.player_not_found")
+            )
+        }
 
     fun playerNotFound(): Notice =
         error(MessageKey("administration.playerstate.player_not_found"))
@@ -526,6 +575,14 @@ internal object AdministrationMessages {
                             elapsed(result.expiresAt, now),
                         )
 
+                    result.remainingSeconds != null ->
+                        success(
+                            MessageKey("administration.jail.success_temp"),
+                            player(result.target.name),
+                            identifier(result.jailName.value),
+                            elapsed(Duration.ofSeconds(result.remainingSeconds)),
+                        )
+
                     else ->
                         success(
                             MessageKey("administration.jail.success"),
@@ -651,8 +708,17 @@ internal object AdministrationMessages {
         ListPage(
             title = LocalizedText(MessageKey("administration.jailedplayers.title")),
             rows = sentences.map { sentence ->
-                val supporting = when (val expiresAt = sentence.expiresAt) {
-                    null -> LocalizedText(
+                val supporting = when {
+                    sentence.mode == JailSentenceMode.ONLINE &&
+                            sentence.remainingSeconds != null -> LocalizedText(
+                        MessageKey("administration.jailedplayers.row_online"),
+                        listOf(
+                            identifier(sentence.jailName.value),
+                            elapsed(Duration.ofSeconds(sentence.remainingSeconds)),
+                        ),
+                    )
+
+                    sentence.expiresAt == null -> LocalizedText(
                         MessageKey("administration.jailedplayers.row"),
                         listOf(identifier(sentence.jailName.value)),
                     )
@@ -661,7 +727,7 @@ internal object AdministrationMessages {
                         MessageKey("administration.jailedplayers.row_temp"),
                         listOf(
                             identifier(sentence.jailName.value),
-                            elapsed(expiresAt, now),
+                            elapsed(sentence.expiresAt, now),
                         ),
                     )
                 }
@@ -743,7 +809,10 @@ internal object AdministrationMessages {
             )
         }
 
-    private fun field(label: MessageKey, value: LocalizedText): DetailField =
+    private fun field(
+        label: MessageKey,
+        value: LocalizedText
+    ): DetailField =
         DetailField(LocalizedText(label), value)
 
     private fun bare(vararg arguments: TextArgument): LocalizedText =
@@ -752,22 +821,34 @@ internal object AdministrationMessages {
     fun mutedChat(): Notice =
         error(MessageKey("administration.moderation.muted_chat"))
 
-    private fun notice(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun notice(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.ERROR
         )
 
-    private fun error(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun error(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         notice(key, *arguments)
 
-    private fun success(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun success(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.SUCCESS
         )
 
-    private fun warning(key: MessageKey, vararg arguments: TextArgument): Notice =
+    private fun warning(
+        key: MessageKey,
+        vararg arguments: TextArgument
+    ): Notice =
         Notice(
             LocalizedText(key, arguments.toList()),
             NoticeTone.WARNING
@@ -782,7 +863,12 @@ internal object AdministrationMessages {
     private fun identifier(value: String): TextArgument =
         TextArgument.Identifier(value)
 
-    private fun position(x: Double, y: Double, z: Double, dimension: String): TextArgument =
+    private fun position(
+        x: Double,
+        y: Double,
+        z: Double,
+        dimension: String
+    ): TextArgument =
         TextArgument.Position(
             x = kotlin.math.floor(x).toInt(),
             y = kotlin.math.floor(y).toInt(),
@@ -801,6 +887,11 @@ internal object AdministrationMessages {
             Duration.between(now, expiresAt)
                     .coerceAtLeast(Duration.ZERO)
                     .toKotlinDuration()
+        )
+
+    private fun elapsed(duration: Duration): TextArgument =
+        TextArgument.Elapsed(
+            duration.coerceAtLeast(Duration.ZERO).toKotlinDuration()
         )
 
 }

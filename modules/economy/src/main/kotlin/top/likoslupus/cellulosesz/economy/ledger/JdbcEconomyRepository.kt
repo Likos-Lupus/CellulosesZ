@@ -487,6 +487,20 @@ internal class JdbcEconomyRepository(
 
     // ---- transaction internals -------------------------------------------------------------
 
+    override suspend fun transactionId(originId: String, requestKey: String): UUID? =
+        withContext(Dispatchers.IO) {
+            try {
+                database.read { connection ->
+                    readTransactionRow(connection, originId, requestKey)?.transactionId
+                }
+            } catch (exception: SQLException) {
+                throw EconomyDataException(
+                    "unable to look up the economy transaction for '$originId/$requestKey'",
+                    exception
+                )
+            }
+        }
+
     private fun postLedger(
         connection: Connection,
         header: LedgerHeader,

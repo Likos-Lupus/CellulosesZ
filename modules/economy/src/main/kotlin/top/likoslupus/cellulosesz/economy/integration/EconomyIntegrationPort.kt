@@ -19,6 +19,12 @@ public class EconomyActorDescriptor(
     public val id: String,
 )
 
+/** One worth-catalog row as exposed to integrations: an exact two-scale unit price. */
+public class EconomyWorthView(
+    public val itemId: String,
+    public val unitPrice: BigDecimal,
+)
+
 public class EconomyAccountSnapshot(
     public val playerId: UUID,
     public val amount: BigDecimal,
@@ -236,5 +242,21 @@ public interface EconomyIntegrationPort {
     public suspend fun history(playerId: UUID, page: Int): EconomyHistoryResult
 
     public suspend fun top(page: Int): EconomyRankingResult
+
+    /** The exact unit price of one item, or null when no worth is set. Read-only. */
+    public suspend fun worthUnitPrice(itemId: String): BigDecimal?
+
+    /** Every worth row, ordered by item id; integrations page it themselves. Read-only. */
+    public suspend fun worthCatalog(): List<EconomyWorthView>
+
+    /**
+     * Sets one item's worth. Attribution-only [actor]; returns false when storage is unavailable.
+     * Writes are persisted and mirrored into the cache, never applied to a balance.
+     */
+    public suspend fun setWorth(
+        itemId: String,
+        unitPrice: BigDecimal,
+        actor: EconomyActorDescriptor,
+    ): Boolean
 
 }

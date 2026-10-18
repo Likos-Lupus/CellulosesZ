@@ -277,6 +277,7 @@ private fun ModerationIntegrationStatus.toPublic(): ModerationStatusOutcome =
                 muted = summary.muted,
                 mutedUntil = summary.mutedUntil,
                 confined = summary.confined,
+                confinedRemaining = summary.confinedRemaining,
             )
         )
 

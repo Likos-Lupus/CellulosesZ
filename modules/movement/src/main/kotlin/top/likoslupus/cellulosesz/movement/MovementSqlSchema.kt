@@ -13,6 +13,7 @@ public object MovementSqlSchema : SqlSchemaContributor {
     public const val WARP_METADATA: String = "cz_warp_metadata"
     public const val TPAUTO_PREFERENCES: String = "cz_tpauto_preferences"
     public const val TPAUTO_ALLOWED: String = "cz_tpauto_allowed"
+    public const val LAST_LOCATIONS: String = "cz_last_locations"
 
     public override val id: String get() = "movement"
 
@@ -50,9 +51,10 @@ public object MovementSqlSchema : SqlSchemaContributor {
                 columns = buildList {
                     add(SqlColumn("namespace", SqlColumnType.NAME))
                     add(SqlColumn("player_uuid", SqlColumnType.UUID))
+                    add(SqlColumn("cause", SqlColumnType.NAME))
                     addAll(positionColumns())
                 },
-                primaryKey = listOf("namespace", "player_uuid"),
+                primaryKey = listOf("namespace", "player_uuid", "cause"),
             ),
             SqlTable(
                 name = RANDOM_TELEPORT_REGIONS,
@@ -97,6 +99,16 @@ public object MovementSqlSchema : SqlSchemaContributor {
                     SqlColumn("allowed_uuid", SqlColumnType.UUID),
                 ),
                 primaryKey = listOf("namespace", "owner_uuid", "allowed_uuid"),
+            ),
+            SqlTable(
+                name = LAST_LOCATIONS,
+                columns = buildList {
+                    add(SqlColumn("namespace", SqlColumnType.NAME))
+                    add(SqlColumn("player_uuid", SqlColumnType.UUID))
+                    addAll(positionColumns())
+                    add(SqlColumn("updated_at_ms", SqlColumnType.BIGINT))
+                },
+                primaryKey = listOf("namespace", "player_uuid"),
             ),
         )
 

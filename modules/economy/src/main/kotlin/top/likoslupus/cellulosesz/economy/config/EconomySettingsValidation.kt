@@ -11,6 +11,10 @@ public object EconomySettingsValidation {
 
     private const val MAX_LABEL_LENGTH = 32
 
+    private const val MAX_PERMISSION_LENGTH = 128
+
+    private val MAX_MULTIPLIER = BigDecimal("1000.00")
+
     public fun validate(settings: EconomySettings): List<ValidationError> =
         buildList {
             validateAmount(
@@ -109,6 +113,8 @@ public object EconomySettingsValidation {
                 settings.currencySymbol
             )
 
+            validateMultipliers(settings.sell.multipliers)
+
             if (settings.historyPageSize !in 1..50) {
                 add(
                     ValidationError(
@@ -144,6 +150,68 @@ public object EconomySettingsValidation {
             return
         }
         extra(scaled)
+    }
+
+    /**
+     * Sell multipliers are a deny-by-default list: each entry names the permission to test and the
+     * exact factor it awards. Duplicate permissions are rejected so `highest wins` is unambiguous.
+     */
+    private fun MutableList<ValidationError>.validateMultipliers(multipliers: List<SellMultiplier>) {
+        val seen = mutableSetOf<String>()
+        multipliers.forEachIndexed { index, entry ->
+            val field = "economy.sell.multipliers[$index]"
+            val permission = entry.permission
+            when {
+                permission.isBlank() ->
+                    add(
+                        ValidationError(
+                            "$field.permission",
+                            "permission must not be blank"
+                        )
+                    )
+
+                permission.length > MAX_PERMISSION_LENGTH ->
+                    add(
+                        ValidationError(
+                            "$field.permission",
+                            "permission is too long"
+                        )
+                    )
+
+                permission.any { it.isWhitespace() || it.isISOControl() } ->
+                    add(
+                        ValidationError(
+                            "$field.permission",
+                            "permission contains invalid characters"
+                        )
+                    )
+
+                !seen.add(permission) ->
+                    add(
+                        ValidationError(
+                            "$field.permission",
+                            "duplicate permission '$permission'"
+                        )
+                    )
+            }
+            validateAmount("$field.multiplier", entry.multiplier) { value ->
+                when {
+                    value.signum() < 0 -> add(
+                        ValidationError(
+                            "$field.multiplier",
+                            "multiplier must not be negative"
+                        )
+                    )
+
+                    value > MAX_MULTIPLIER -> add(
+                        ValidationError(
+                            "$field.multiplier",
+                            "multiplier is unreasonably large"
+                        )
+                    )
+                }
+            }
+        }
     }
 
     private fun MutableList<ValidationError>.validateLabel(field: String, value: String) {
