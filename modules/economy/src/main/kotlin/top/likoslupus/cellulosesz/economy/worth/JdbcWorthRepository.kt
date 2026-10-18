@@ -4,8 +4,8 @@ import top.likoslupus.cellulosesz.economy.EconomySqlSchema
 import top.likoslupus.cellulosesz.economy.ledger.EconomyDataException
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.readIo
-import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlDialects
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.SQLException
@@ -21,7 +21,12 @@ internal class JdbcWorthRepository(
     private val namespace: String,
 ) : WorthRepository {
 
-    private val upsertSql: String =
+    /**
+     * Resolved per write, not cached in the constructor: feature repositories are built during mod
+     * init, while the `DeferredDatabaseRuntime` is bound at `SERVER_STARTING`. Caching would also
+     * pin the dialect of a previous integrated-server session after a backend change.
+     */
+    private fun upsertSql(): String =
         SqlDialects.of(database.type).upsertSql(
             table = EconomySqlSchema.WORTH,
             keyColumns = listOf("namespace", "item_id"),
@@ -83,7 +88,7 @@ internal class JdbcWorthRepository(
             )
         }
 
-    override suspend fun insertMissing(records: List<WorthRecord>): Unit {
+    override suspend fun insertMissing(records: List<WorthRecord>) {
         if (records.isEmpty()) return
         try {
             database.transactionIo { connection ->
@@ -101,11 +106,7 @@ internal class JdbcWorthRepository(
                             VALUES (?, ?, ?, ?, ?);
                             """.trimIndent()
                     ).use {
-                        it.setString(1, namespace)
-                        it.setString(2, record.itemId)
-                        it.setLong(3, record.priceMinor)
-                        it.setLong(4, record.updatedAt.toEpochMilli())
-                        setUpdatedBy(it, 5, record.updatedBy)
+                        bindWorthRecord(it, record)
                         it.executeUpdate()
                     }
                 }
@@ -139,15 +140,20 @@ internal class JdbcWorthRepository(
             throw EconomyDataException("unable to count the worth catalog", exception)
         }
 
+    @Suppress("SqlSourceToSinkFlow") // SQL is generated from constant table/column names.
     private fun writeRecord(connection: Connection, record: WorthRecord) {
-        connection.prepareStatement(upsertSql).use { statement ->
-            statement.setString(1, namespace)
-            statement.setString(2, record.itemId)
-            statement.setLong(3, record.priceMinor)
-            statement.setLong(4, record.updatedAt.toEpochMilli())
-            setUpdatedBy(statement, 5, record.updatedBy)
+        connection.prepareStatement(upsertSql()).use { statement ->
+            bindWorthRecord(statement, record)
             statement.executeUpdate()
         }
+    }
+
+    private fun bindWorthRecord(statement: PreparedStatement, record: WorthRecord) {
+        statement.setString(1, namespace)
+        statement.setString(2, record.itemId)
+        statement.setLong(3, record.priceMinor)
+        statement.setLong(4, record.updatedAt.toEpochMilli())
+        setUpdatedBy(statement, record.updatedBy)
     }
 
     private fun exists(connection: Connection, itemId: String): Boolean =
@@ -166,14 +172,10 @@ internal class JdbcWorthRepository(
             statement.executeQuery().use { rs -> rs.next() }
         }
 
-    private fun setUpdatedBy(
-        statement: PreparedStatement,
-        index: Int,
-        value: String?,
-    ) {
+    private fun setUpdatedBy(statement: PreparedStatement, value: String?) {
         when (value) {
-            null -> statement.setNull(index, Types.VARCHAR)
-            else -> statement.setString(index, value)
+            null -> statement.setNull(5, Types.VARCHAR)
+            else -> statement.setString(5, value)
         }
     }
 
