@@ -17,6 +17,9 @@ import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.core.text.presentation.sendPage
 import top.likoslupus.cellulosesz.utility.command.utilityLaunch
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import top.likoslupus.cellulosesz.utility.format.unlimitedClear
+import top.likoslupus.cellulosesz.utility.format.unlimitedList
+import top.likoslupus.cellulosesz.utility.format.unlimitedToggle
 import java.util.*
 
 internal object UnlimitedCommands {
@@ -154,7 +157,14 @@ internal object UnlimitedCommands {
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
-        val targetId = resolve(source, actorId, targetName, known, messages, adventure) ?: return 0
+        val targetId = resolve(
+            source,
+            actorId,
+            targetName,
+            known,
+            messages,
+            adventure
+        ) ?: return 0
         return utilityLaunch(
             source,
             kernel,
@@ -183,7 +193,14 @@ internal object UnlimitedCommands {
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
-        val targetId = resolve(source, actorId, targetName, known, messages, adventure) ?: return 0
+        val targetId = resolve(
+            source,
+            actorId,
+            targetName,
+            known,
+            messages,
+            adventure
+        ) ?: return 0
         return utilityLaunch(
             source,
             kernel,
@@ -212,7 +229,14 @@ internal object UnlimitedCommands {
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
-        val targetId = resolve(source, actorId, targetName, known, messages, adventure) ?: return 0
+        val targetId = resolve(
+            source,
+            actorId,
+            targetName,
+            known,
+            messages,
+            adventure
+        ) ?: return 0
         return utilityLaunch(
             source,
             kernel,

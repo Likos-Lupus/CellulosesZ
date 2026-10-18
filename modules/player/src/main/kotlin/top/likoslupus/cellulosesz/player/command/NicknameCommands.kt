@@ -14,7 +14,7 @@ import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
-import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.format.*
 import top.likoslupus.cellulosesz.player.nickname.NicknameLookup
 import top.likoslupus.cellulosesz.player.nickname.NicknameService
 import java.util.*

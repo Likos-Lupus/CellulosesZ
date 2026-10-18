@@ -23,7 +23,7 @@ import top.likoslupus.cellulosesz.player.afk.AfkService
 import top.likoslupus.cellulosesz.player.afk.AfkState
 import top.likoslupus.cellulosesz.player.command.*
 import top.likoslupus.cellulosesz.player.config.PlayerSettings
-import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.format.*
 import top.likoslupus.cellulosesz.player.integration.*
 import top.likoslupus.cellulosesz.player.list.PlayerListService
 import top.likoslupus.cellulosesz.player.nearby.NearbyService

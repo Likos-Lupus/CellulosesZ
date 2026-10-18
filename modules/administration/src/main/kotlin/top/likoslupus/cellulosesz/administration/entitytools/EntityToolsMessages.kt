@@ -1,26 +1,24 @@
 package top.likoslupus.cellulosesz.administration.entitytools
 
-import top.likoslupus.cellulosesz.administration.format.AdminText
 import top.likoslupus.cellulosesz.core.text.MessageKey
-import top.likoslupus.cellulosesz.core.text.model.LocalizedText
 import top.likoslupus.cellulosesz.core.text.model.Notice
-import top.likoslupus.cellulosesz.core.text.model.NoticeTone
-import top.likoslupus.cellulosesz.core.text.model.TextArgument
+import top.likoslupus.cellulosesz.core.text.presentation.MessageSupport
+import java.util.*
 
 /** Semantic results for `/spawner`, `/spawnmob` and `/remove`. */
-internal object EntityToolsMessages {
+internal object EntityToolsMessages : MessageSupport() {
 
     fun spawnerConfigured(type: String, delayTicks: Int?): Notice =
         when (delayTicks) {
             null -> success(
                 MessageKey("administration.spawner.success"),
-                AdminText.identifier(type),
+                identifier(type),
             )
 
             else -> success(
                 MessageKey("administration.spawner.delay"),
-                AdminText.identifier(type),
-                AdminText.count(delayTicks),
+                identifier(type),
+                count(delayTicks),
             )
         }
 
@@ -30,22 +28,22 @@ internal object EntityToolsMessages {
     fun spawnMobSpawned(type: String, count: Int): Notice =
         success(
             MessageKey("administration.spawnmob.success"),
-            AdminText.count(count),
-            AdminText.identifier(type),
+            count(count),
+            identifier(type),
         )
 
     fun spawnMobCapped(requested: Int, spawned: Int): Notice =
         success(
             MessageKey("administration.spawnmob.capped"),
-            AdminText.count(requested),
-            AdminText.count(spawned),
+            count(requested),
+            count(spawned),
         )
 
     fun removeSuccess(selector: String, count: Int): Notice =
         success(
             MessageKey("administration.remove.success"),
-            AdminText.count(count),
-            AdminText.literal(selector),
+            count(count),
+            literal(selector),
         )
 
     fun removeInvalid(): Notice =
@@ -54,13 +52,13 @@ internal object EntityToolsMessages {
     fun unknownEntityType(raw: String): Notice =
         error(
             MessageKey("administration.entity_type.unknown"),
-            AdminText.literal(raw),
+            literal(raw),
         )
 
     fun radiusTooLarge(max: Double): Notice =
         error(
             MessageKey("administration.remove.radius_too_large"),
-            AdminText.literal(format(max)),
+            literal(format(max)),
         )
 
     fun invalidRadius(): Notice =
@@ -76,19 +74,7 @@ internal object EntityToolsMessages {
         if (value == value.toLong().toDouble()) {
             value.toLong().toString()
         } else {
-            String.format(java.util.Locale.ROOT, "%.1f", value)
+            String.format(Locale.ROOT, "%.1f", value)
         }
-
-    private fun success(key: MessageKey, vararg arguments: TextArgument): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.SUCCESS
-        )
-
-    private fun error(key: MessageKey, vararg arguments: TextArgument): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.ERROR
-        )
 
 }

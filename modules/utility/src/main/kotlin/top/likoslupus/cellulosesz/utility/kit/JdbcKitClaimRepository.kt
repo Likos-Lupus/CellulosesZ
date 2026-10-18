@@ -1,9 +1,10 @@
 package top.likoslupus.cellulosesz.utility.kit
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
+import top.likoslupus.cellulosesz.foundation.parseUuidOrThrow
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import java.sql.Connection
 import java.sql.SQLException
@@ -17,45 +18,43 @@ internal class JdbcKitClaimRepository(
 ) : KitClaimRepository {
 
     override suspend fun load(playerId: UUID): Map<KitName, KitClaim> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            kit_name,
-                            kit_id,
-                            claimed_at_ms,
-                            status
-                        FROM
-                            ${UtilitySqlSchema.KIT_CLAIMS}
-                        WHERE
-                            namespace = ? AND player_uuid = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.executeQuery().use { rs ->
-                            val claims = LinkedHashMap<KitName, KitClaim>()
-                            while (rs.next()) {
-                                val name = KitName.parse(rs.getString(1))
-                                    ?: throw KitClaimDataException("kit claims contain an invalid kit name")
-                                claims[name] = KitClaim(
-                                    kitId = parseUuid(rs.getString(2), "kit id"),
-                                    claimedAt = Instant.ofEpochMilli(rs.getLong(3)),
-                                    status = parseStatus(rs.getString(4)),
-                                )
-                            }
-                            if (claims.size > MAX_STORED_CLAIMS_PER_PLAYER) {
-                                throw KitClaimDataException("kit claims exceed the stored cap for $playerId")
-                            }
-                            claims
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        kit_name,
+                        kit_id,
+                        claimed_at_ms,
+                        status
+                    FROM
+                        ${UtilitySqlSchema.KIT_CLAIMS}
+                    WHERE
+                        namespace = ? AND player_uuid = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.executeQuery().use { rs ->
+                        val claims = LinkedHashMap<KitName, KitClaim>()
+                        while (rs.next()) {
+                            val name = KitName.parse(rs.getString(1))
+                                ?: throw KitClaimDataException("kit claims contain an invalid kit name")
+                            claims[name] = KitClaim(
+                                kitId = parseUuid(rs.getString(2), "kit id"),
+                                claimedAt = Instant.ofEpochMilli(rs.getLong(3)),
+                                status = parseStatus(rs.getString(4)),
+                            )
                         }
+                        if (claims.size > MAX_STORED_CLAIMS_PER_PLAYER) {
+                            throw KitClaimDataException("kit claims exceed the stored cap for $playerId")
+                        }
+                        claims
                     }
                 }
-            } catch (exception: SQLException) {
-                throw KitClaimDataException("unable to read kit claims for $playerId", exception)
             }
+        } catch (exception: SQLException) {
+            throw KitClaimDataException("unable to read kit claims for $playerId", exception)
         }
 
     override suspend fun reserve(
@@ -83,26 +82,24 @@ internal class JdbcKitClaimRepository(
         )
 
     override suspend fun reset(playerId: UUID, name: KitName): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${UtilitySqlSchema.KIT_CLAIMS}
-                        WHERE
-                            namespace = ? AND player_uuid = ? AND kit_name = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, name.value)
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${UtilitySqlSchema.KIT_CLAIMS}
+                    WHERE
+                        namespace = ? AND player_uuid = ? AND kit_name = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, name.value)
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw KitClaimDataException("unable to reset kit claim for $playerId", exception)
             }
+        } catch (exception: SQLException) {
+            throw KitClaimDataException("unable to reset kit claim for $playerId", exception)
         }
 
     private suspend fun upsert(
@@ -110,9 +107,9 @@ internal class JdbcKitClaimRepository(
         kit: KitDefinition,
         at: Instant,
         status: KitClaimStatus,
-    ) = withContext(Dispatchers.IO) {
+    ) =
         try {
-            database.transaction { connection ->
+            database.transactionIo { connection ->
                 val count = countClaims(connection, player.id)
                 if (count >= MAX_STORED_CLAIMS_PER_PLAYER
                     && !hasClaim(
@@ -125,11 +122,11 @@ internal class JdbcKitClaimRepository(
                 }
                 connection.prepareStatement(
                     /* language=SQL */ """
-                    DELETE FROM
-                        ${UtilitySqlSchema.KIT_CLAIMS}
-                    WHERE
-                        namespace = ? AND player_uuid = ? AND kit_name = ?;
-                    """.trimIndent()
+                DELETE FROM
+                    ${UtilitySqlSchema.KIT_CLAIMS}
+                WHERE
+                    namespace = ? AND player_uuid = ? AND kit_name = ?;
+                """.trimIndent()
                 ).use { statement ->
                     statement.setString(1, namespace)
                     statement.setString(2, player.id.toString())
@@ -138,19 +135,19 @@ internal class JdbcKitClaimRepository(
                 }
                 connection.prepareStatement(
                     /* language=SQL */ """
-                    INSERT INTO ${UtilitySqlSchema.KIT_CLAIMS} (
-                        namespace,
-                        player_uuid,
-                        player_name,
-                        kit_name,
-                        kit_id,
-                        claimed_at_ms,
-                        status
-                    )
-                    VALUES (
-                        ?, ?, ?, ?, ?, ?, ?
-                    );
-                    """.trimIndent()
+                INSERT INTO ${UtilitySqlSchema.KIT_CLAIMS} (
+                    namespace,
+                    player_uuid,
+                    player_name,
+                    kit_name,
+                    kit_id,
+                    claimed_at_ms,
+                    status
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?
+                );
+                """.trimIndent()
                 ).use { statement ->
                     statement.setString(1, namespace)
                     statement.setString(2, player.id.toString())
@@ -166,7 +163,6 @@ internal class JdbcKitClaimRepository(
         } catch (exception: SQLException) {
             throw KitClaimDataException("unable to record kit claim for ${player.id}", exception)
         }
-    }
 
     private fun countClaims(connection: Connection, playerId: UUID): Int =
         connection.prepareStatement(
@@ -210,9 +206,7 @@ internal class JdbcKitClaimRepository(
             ?: throw KitClaimDataException("kit claims contain an unknown status '$raw'")
 
     private fun parseUuid(raw: String, label: String): UUID =
-        try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
+        parseUuidOrThrow(raw) {
             throw KitClaimDataException("kit claims contain an invalid $label")
         }
 

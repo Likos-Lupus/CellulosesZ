@@ -1,25 +1,25 @@
 package top.likoslupus.cellulosesz.administration.sign
 
-import top.likoslupus.cellulosesz.administration.format.AdminText
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.LocalizedText
 import top.likoslupus.cellulosesz.core.text.model.Notice
 import top.likoslupus.cellulosesz.core.text.model.NoticeTone
 import top.likoslupus.cellulosesz.core.text.model.TextArgument
+import top.likoslupus.cellulosesz.core.text.presentation.MessageSupport
 
 /** Semantic results for `/editsign`. */
-internal object SignMessages {
+internal object SignMessages : MessageSupport() {
 
     fun setLine(line: Int): Notice =
         success(
             MessageKey("administration.editsign.set"),
-            AdminText.count(line)
+            count(line)
         )
 
     fun clearedLine(line: Int): Notice =
         success(
             MessageKey("administration.editsign.cleared"),
-            AdminText.count(line)
+            count(line)
         )
 
     fun clearedAll(): Notice =
@@ -48,17 +48,5 @@ internal object SignMessages {
 
     fun tooLong(): Notice =
         error(MessageKey("administration.editsign.too_long"))
-
-    private fun success(key: MessageKey, vararg arguments: TextArgument): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.SUCCESS
-        )
-
-    private fun error(key: MessageKey, vararg arguments: TextArgument): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.ERROR
-        )
 
 }

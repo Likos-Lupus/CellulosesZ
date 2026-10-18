@@ -1,13 +1,14 @@
 package top.likoslupus.cellulosesz.utility.powertool
 
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
+import top.likoslupus.cellulosesz.foundation.parseUuidOrThrow
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.Instant
 import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** Powertool bindings in `cz_powertools`. */
 internal class JdbcPowertoolRepository(
@@ -16,40 +17,38 @@ internal class JdbcPowertoolRepository(
 ) : PowertoolRepository {
 
     override suspend fun loadAll(): Map<UUID, List<PowertoolBinding>> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            player_uuid,
-                            item_id,
-                            trigger,
-                            command
-                        FROM
-                            ${UtilitySqlSchema.POWERTOOLS}
-                        WHERE
-                            namespace = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.executeQuery().use { rs ->
-                            val result = LinkedHashMap<UUID, MutableList<PowertoolBinding>>()
-                            while (rs.next()) {
-                                val playerId = parseUuid(rs.getString(1))
-                                result.getOrPut(playerId) { mutableListOf() } += PowertoolBinding(
-                                    itemId = rs.getString(2),
-                                    trigger = parseTrigger(rs.getString(3)),
-                                    command = rs.getString(4),
-                                )
-                            }
-                            result
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        player_uuid,
+                        item_id,
+                        trigger,
+                        command
+                    FROM
+                        ${UtilitySqlSchema.POWERTOOLS}
+                    WHERE
+                        namespace = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.executeQuery().use { rs ->
+                        val result = LinkedHashMap<UUID, MutableList<PowertoolBinding>>()
+                        while (rs.next()) {
+                            val playerId = parseUuid(rs.getString(1))
+                            result.getOrPut(playerId) { mutableListOf() } += PowertoolBinding(
+                                itemId = rs.getString(2),
+                                trigger = parseTrigger(rs.getString(3)),
+                                command = rs.getString(4),
+                            )
                         }
+                        result
                     }
                 }
-            } catch (exception: SQLException) {
-                throw PowertoolDataException("unable to read powertools", exception)
             }
+        } catch (exception: SQLException) {
+            throw PowertoolDataException("unable to read powertools", exception)
         }
 
     override suspend fun bind(
@@ -57,39 +56,35 @@ internal class JdbcPowertoolRepository(
         binding: PowertoolBinding,
         at: Instant,
     ): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    delete(connection, playerId, binding.itemId, binding.trigger)
-                    insert(connection, playerId, binding, at)
-                    true
-                }
-            } catch (exception: SQLException) {
-                throw PowertoolDataException("unable to store powertool for $playerId", exception)
+        try {
+            database.transactionIo { connection ->
+                delete(connection, playerId, binding.itemId, binding.trigger)
+                insert(connection, playerId, binding, at)
+                true
             }
+        } catch (exception: SQLException) {
+            throw PowertoolDataException("unable to store powertool for $playerId", exception)
         }
 
     override suspend fun removeAll(playerId: UUID, itemId: String): Int =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${UtilitySqlSchema.POWERTOOLS}
-                        WHERE
-                            namespace = ? AND player_uuid = ? AND item_id = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, itemId)
-                        statement.executeUpdate()
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${UtilitySqlSchema.POWERTOOLS}
+                    WHERE
+                        namespace = ? AND player_uuid = ? AND item_id = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, itemId)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw PowertoolDataException("unable to remove powertool for $playerId", exception)
             }
+        } catch (exception: SQLException) {
+            throw PowertoolDataException("unable to remove powertool for $playerId", exception)
         }
 
     private fun delete(
@@ -150,9 +145,7 @@ internal class JdbcPowertoolRepository(
             ?: throw PowertoolDataException("powertools contain an unknown trigger '$raw'")
 
     private fun parseUuid(raw: String): UUID =
-        try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
+        parseUuidOrThrow(raw) {
             throw PowertoolDataException("powertools contain an invalid player id")
         }
 

@@ -8,6 +8,7 @@ import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyDetail
 import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.format.compass
 
 /** `/compass`: a read-only bearing reading. It mutates nothing and holds no state. */
 internal object CompassCommands {

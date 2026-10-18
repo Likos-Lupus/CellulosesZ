@@ -16,7 +16,7 @@ import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.core.text.presentation.sendPage
 import top.likoslupus.cellulosesz.utility.command.utilityLaunch
-import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import top.likoslupus.cellulosesz.utility.format.*
 import java.util.*
 
 internal object PowertoolCommands {

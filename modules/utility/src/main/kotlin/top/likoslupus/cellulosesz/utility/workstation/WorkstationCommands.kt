@@ -9,6 +9,7 @@ import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import top.likoslupus.cellulosesz.utility.format.workstation
 
 internal object WorkstationCommands {
 

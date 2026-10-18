@@ -95,7 +95,8 @@ another economy mod is limited to command-name conflict handling (the namespaced
 
 ## Verification
 
-- `MoneyTest` and `EconomyLedgerTest` cover the money type and the SQLite ledger contract;
+- `MoneyTest`, `EconomyLedgerCommitTest` and `EconomyLedgerQueryTest` cover the money type and the
+  SQLite ledger contract;
   `EconomyLedgerBackendsTest` repeats the contract on **both SQLite and H2** and adds a concurrency
   case (interleaved transfers neither overdraw nor lose funds). `EconomySchemaGroupMigrationTest`
   covers the 0/3, 3/3 and partial-group migration rules. `MoneyCommitFenceTest` and

@@ -9,7 +9,7 @@ import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
-import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.format.*
 
 /**
  * `/ping [player]`: reports connection latency. Viewing another player's latency needs the

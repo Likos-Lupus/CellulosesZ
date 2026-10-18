@@ -2,7 +2,7 @@ package top.likoslupus.cellulosesz.administration.playerstate
 
 import net.minecraft.commands.CommandSourceStack
 import net.minecraft.server.level.ServerPlayer
-import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
+import top.likoslupus.cellulosesz.administration.format.*
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command

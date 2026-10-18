@@ -13,68 +13,10 @@ import top.likoslupus.cellulosesz.administration.moderation.audit.PersistedModer
 import top.likoslupus.cellulosesz.administration.moderation.identity.MinecraftAccountResolver
 import top.likoslupus.cellulosesz.administration.moderation.protection.ProtectionResult
 import top.likoslupus.cellulosesz.administration.moderation.protection.TargetProtectionPolicy
-import top.likoslupus.cellulosesz.core.player.WorldPosition
 import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
 import java.time.Clock
-import java.time.Instant
 import java.util.*
 import kotlinx.coroutines.CancellationException
-
-/** Outcome of a jail or release request. Expected failures are values. */
-internal sealed interface JailActionOutcome {
-
-    data class Jailed(
-        val target: PlayerIdentity,
-        val jailName: JailName,
-        val transferred: Boolean,
-        val auditRecorded: Boolean,
-        val expiresAt: Instant?,
-        val remainingSeconds: Long?,
-        val returnRecorded: Boolean,
-        val actionId: String,
-    ) : JailActionOutcome
-
-    data class ReleaseRequested(
-        val target: PlayerIdentity,
-        val auditRecorded: Boolean,
-        val actionId: String? = null,
-    ) : JailActionOutcome
-
-    data object TargetUnknown : JailActionOutcome
-    data object SelfTarget : JailActionOutcome
-    data object TargetProtected : JailActionOutcome
-    data object AlreadyJailed : JailActionOutcome
-    data object NotJailed : JailActionOutcome
-    data object InvalidJailName : JailActionOutcome
-    data class JailUnknown(val jailName: JailName) : JailActionOutcome
-    data object NoDefaultJail : JailActionOutcome
-    data object Disabled : JailActionOutcome
-    data object StorageUnavailable : JailActionOutcome
-    data object RuntimeStopping : JailActionOutcome
-
-}
-
-internal sealed interface SetJailOutcome {
-
-    data class Saved(val name: JailName) : SetJailOutcome
-
-    data object InvalidName : SetJailOutcome
-    data object LimitReached : SetJailOutcome
-    data object Disabled : SetJailOutcome
-    data object StorageUnavailable : SetJailOutcome
-    data object RuntimeStopping : SetJailOutcome
-
-}
-
-internal sealed interface DeleteJailOutcome {
-
-    data object Deleted : DeleteJailOutcome
-    data object NotFound : DeleteJailOutcome
-    data object HasSentences : DeleteJailOutcome
-    data object StorageUnavailable : DeleteJailOutcome
-    data object RuntimeStopping : DeleteJailOutcome
-
-}
 
 /**
  * Owns jail locations, active sentences, and their persistence. Locations and sentences are held in
@@ -101,8 +43,34 @@ internal class JailService(
 
     private val locationCache = LinkedHashMap<String, JailLocation>()
     private val sentenceCache = HashMap<UUID, JailSentence>()
-    private val inFlight = HashSet<UUID>()
-    private val onlineTicks = HashMap<UUID, Int>()
+
+    private val transfers = JailTransferCoordinator(
+        runtime = runtime,
+        transfer = transfer,
+        sentences = sentences,
+        settings = settings,
+        clock = clock,
+        confined = { playerId -> sentenceCache[playerId] },
+        markReleasePending = { sentence, at ->
+            sentenceCache[sentence.playerId] = sentence.copy(
+                status = JailStatus.RELEASE_PENDING,
+                releaseRequestedAt = at,
+            )
+            publishConfined()
+        },
+        forget = { playerId ->
+            sentenceCache.remove(playerId)
+            publishConfined()
+        },
+    )
+
+    private val ticker = JailOnlineTicker(
+        runtime = runtime,
+        sentences = sentences,
+        sentenceFor = { playerId -> sentenceCache[playerId] },
+        onRemainingChanged = { sentence -> sentenceCache[sentence.playerId] = sentence },
+        onExpired = transfers::scheduleExpiryRelease,
+    )
 
     @Volatile private var state: ModerationState = ModerationState.LOADING
 
@@ -359,7 +327,7 @@ internal class JailService(
             reason.value,
             expiresAt,
         )
-        val transferred = runTransfer(target.id, location, JailTransferKind.CONFINEMENT)
+        val transferred = transfers.runTransfer(target.id, location, JailTransferKind.CONFINEMENT)
         val actionId = UUID.randomUUID().toString()
         events(ModerationDomainEvent.Confined(target.id, actionId))
         return JailActionOutcome.Jailed(
@@ -443,7 +411,7 @@ internal class JailService(
             JailStatus.ACTIVE -> {
                 val expiresAt = sentence.expiresAt
                 if (expiresAt != null && !clock.instant().isBefore(expiresAt)) {
-                    scheduleExpiryRelease(playerId)
+                    transfers.scheduleExpiryRelease(playerId)
                     return
                 }
 
@@ -455,11 +423,15 @@ internal class JailService(
                 if (dimension != location.dimension
                     || dx * dx + dy * dy + dz * dz > radius * radius
                 ) {
-                    scheduleTransfer(playerId, location, JailTransferKind.CORRECTION)
+                    transfers.scheduleTransfer(
+                        playerId,
+                        location,
+                        JailTransferKind.CORRECTION
+                    )
                 }
             }
 
-            JailStatus.RELEASE_PENDING -> scheduleRelease(playerId)
+            JailStatus.RELEASE_PENDING -> transfers.scheduleRelease(playerId)
         }
     }
 
@@ -472,10 +444,10 @@ internal class JailService(
         when (sentence.status) {
             JailStatus.ACTIVE -> {
                 val location = locationCache[sentence.jailName.value] ?: return
-                scheduleTransfer(playerId, location, JailTransferKind.CONFINEMENT)
+                transfers.scheduleTransfer(playerId, location, JailTransferKind.CONFINEMENT)
             }
 
-            JailStatus.RELEASE_PENDING -> scheduleRelease(playerId)
+            JailStatus.RELEASE_PENDING -> transfers.scheduleRelease(playerId)
         }
     }
 
@@ -483,59 +455,17 @@ internal class JailService(
         state = ModerationState.STOPPING
         JailState.clear()
         JailRespawnState.clear()
-        onlineTicks.clear()
+        ticker.clear()
     }
 
-    /**
-     * Server-thread online-time tick for a single player. Decrements the remaining seconds of an
-     * ONLINE sentence once per second; when it reaches zero the sentence is driven into release.
-     * Remaining time is flushed to storage every five seconds and on quit.
-     */
+    /** Server-thread online-time tick; the accounting itself lives in [JailOnlineTicker]. */
     fun onOnlineTick(playerId: UUID) {
-        val sentence = sentenceCache[playerId] ?: return
-        if (sentence.mode != JailSentenceMode.ONLINE || sentence.status != JailStatus.ACTIVE) {
-            return
-        }
-        val remaining = sentence.remainingSeconds ?: return
-        val ticks = (onlineTicks[playerId] ?: 0) + 1
-        if (ticks < TICKS_PER_SECOND) {
-            onlineTicks[playerId] = ticks
-            return
-        }
-        onlineTicks[playerId] = 0
-        val updated = JailSentenceMath.decrement(remaining, 1L)
-        if (updated <= 0L) {
-            sentenceCache[playerId] = sentence.copy(remainingSeconds = 0L)
-            scheduleExpiryRelease(playerId)
-            return
-        }
-        sentenceCache[playerId] = sentence.copy(remainingSeconds = updated)
-        if (updated % REMAINING_FLUSH_SECONDS == 0L) {
-            persistRemaining(playerId, updated)
-        }
+        ticker.onOnlineTick(playerId)
     }
 
     /** Persists the remaining online seconds of a player's sentence and stops tracking them. */
     fun onPlayerQuit(playerId: UUID) {
-        onlineTicks.remove(playerId)
-        val sentence = sentenceCache[playerId] ?: return
-        if (sentence.mode != JailSentenceMode.ONLINE) {
-            return
-        }
-        val remaining = sentence.remainingSeconds ?: return
-        persistRemaining(playerId, remaining)
-    }
-
-    private fun persistRemaining(playerId: UUID, remainingSeconds: Long) {
-        runtime.launch {
-            try {
-                sentences.updateRemaining(playerId, remainingSeconds)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (exception: Exception) {
-                LOGGER.warn("failed to persist remaining jail time for {}", playerId, exception)
-            }
-        }
+        ticker.onPlayerQuit(playerId)
     }
 
     /** Republishes the confined-id snapshot read by the command-restriction mixin. Server thread. */
@@ -554,167 +484,9 @@ internal class JailService(
         return locationCache.keys.firstOrNull()?.let(JailName::parse)
     }
 
-    private suspend fun runTransfer(
-        playerId: UUID,
-        location: JailLocation,
-        kind: JailTransferKind,
-    ): Boolean {
-        val acquired = runtime.onServerThread { inFlight.add(playerId) }
-        return acquired && try {
-            val result = transfer().transfer(playerId, location.toDestination(), kind)
-            result == JailTransferResult.Transferred
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (exception: Exception) {
-            LOGGER.error("failed to transfer player {} into jail", playerId, exception)
-            false
-        } finally {
-            runtime.onServerThread { inFlight.remove(playerId) }
-        }
-    }
-
-    private fun scheduleTransfer(
-        playerId: UUID,
-        location: JailLocation,
-        kind: JailTransferKind,
-    ) {
-        if (!inFlight.add(playerId)) {
-            return
-        }
-
-        runtime.launch {
-            try {
-                transfer().transfer(playerId, location.toDestination(), kind)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (exception: Exception) {
-                LOGGER.error("failed to re-anchor jailed player {}", playerId, exception)
-            } finally {
-                runtime.onServerThread { inFlight.remove(playerId) }
-            }
-        }
-    }
-
-    private fun scheduleRelease(playerId: UUID) {
-        if (!inFlight.add(playerId)) {
-            return
-        }
-
-        runtime.launch {
-            try {
-                val sentence = runtime.onServerThread { sentenceCache[playerId] }
-                    ?: return@launch
-                releasePlayer(sentence)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (exception: Exception) {
-                LOGGER.error("failed to release jailed player {}", playerId, exception)
-            } finally {
-                runtime.onServerThread { inFlight.remove(playerId) }
-            }
-        }
-    }
-
-    /**
-     * Marks an expired active sentence release-pending, then drives the return transfer. Permanent
-     * sentences (no [JailSentence.expiresAt]) never take this path.
-     */
-    private fun scheduleExpiryRelease(playerId: UUID) {
-        if (!inFlight.add(playerId)) {
-            return
-        }
-
-        runtime.launch {
-            try {
-                val current = runtime.onServerThread { sentenceCache[playerId] }
-                    ?: return@launch
-                if (current.status != JailStatus.ACTIVE) {
-                    return@launch
-                }
-                val now = clock.instant()
-                val marked = sentences.updateStatus(
-                    playerId,
-                    JailStatus.RELEASE_PENDING,
-                    now,
-                )
-                if (!marked) {
-                    return@launch
-                }
-                runtime.onServerThread {
-                    sentenceCache[playerId] = current.copy(
-                        status = JailStatus.RELEASE_PENDING,
-                        releaseRequestedAt = now,
-                    )
-                    publishConfined()
-                }
-                releasePlayer(current)
-            } catch (cancellation: CancellationException) {
-                throw cancellation
-            } catch (exception: Exception) {
-                LOGGER.error("failed to expire jail sentence for {}", playerId, exception)
-            } finally {
-                runtime.onServerThread { inFlight.remove(playerId) }
-            }
-        }
-    }
-
-    /** Returns a release-pending player, then deletes the sentence. Must run off the server thread. */
-    private suspend fun releasePlayer(sentence: JailSentence) {
-        val playerId = sentence.playerId
-        if (settings().returnOnRelease) {
-            val result = releaseDestination(sentence)
-            if (result != JailTransferResult.Transferred) {
-                return
-            }
-        }
-        val removed = sentences.remove(playerId)
-        if (removed) {
-            runtime.onServerThread {
-                sentenceCache.remove(playerId)
-                publishConfined()
-            }
-        }
-    }
-
-    private suspend fun releaseDestination(sentence: JailSentence): JailTransferResult {
-        val returnPosition = sentence.returnPosition
-        return if (returnPosition != null) {
-            transfer().transfer(
-                sentence.playerId,
-                returnPosition.toDestination(),
-                JailTransferKind.RELEASE,
-            )
-        } else {
-            transfer().release(sentence.playerId)
-        }
-    }
-
-    private fun JailLocation.toDestination(): JailDestination =
-        JailDestination(
-            dimension = dimension,
-            x = x,
-            y = y,
-            z = z,
-            yaw = yaw,
-            pitch = pitch,
-        )
-
-    private fun WorldPosition.toDestination(): JailDestination =
-        JailDestination(
-            dimension = dimension,
-            x = x,
-            y = y,
-            z = z,
-            yaw = yaw,
-            pitch = pitch,
-        )
-
     private companion object {
 
         private val LOGGER = LogUtils.getLogger()
-
-        private const val TICKS_PER_SECOND: Int = 20
-        private const val REMAINING_FLUSH_SECONDS: Long = 5L
 
     }
 

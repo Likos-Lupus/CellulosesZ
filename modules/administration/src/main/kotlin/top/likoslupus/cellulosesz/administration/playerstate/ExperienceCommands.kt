@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.administration.playerstate
 
-import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
+import top.likoslupus.cellulosesz.administration.format.*
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.*
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions

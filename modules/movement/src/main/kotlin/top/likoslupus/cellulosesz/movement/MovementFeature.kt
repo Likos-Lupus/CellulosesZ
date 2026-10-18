@@ -18,7 +18,7 @@ import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.movement.access.MovementAccess
 import top.likoslupus.cellulosesz.movement.compass.CompassCommands
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
-import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.format.*
 import top.likoslupus.cellulosesz.movement.home.HomeCommands
 import top.likoslupus.cellulosesz.movement.home.HomeOverwriteConfirmations
 import top.likoslupus.cellulosesz.movement.home.HomeService

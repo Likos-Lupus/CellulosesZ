@@ -1,10 +1,10 @@
 package top.likoslupus.cellulosesz.core.preference
 
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
+import top.likoslupus.cellulosesz.foundation.parseUuidOrThrow
 import java.sql.SQLException
 import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 public class JdbcPlayerPreferenceRepository(
     private val database: DatabaseRuntime,
@@ -52,56 +52,52 @@ public class JdbcPlayerPreferenceRepository(
         preference: PlayerPreference,
         enabled: Boolean,
     ) {
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${PreferenceSqlSchema.PREFERENCES}
-                        WHERE
-                            namespace = ? AND player_uuid = ? AND preference_key = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, preference.storageKey)
-                        statement.executeUpdate()
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${PreferenceSqlSchema.PREFERENCES} (
-                            namespace,
-                            player_uuid,
-                            preference_key,
-                            preference_value
-                        )
-                        VALUES (
-                            ?, ?, ?, ?
-                        );
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, preference.storageKey)
-                        statement.setBoolean(4, enabled)
-                        statement.executeUpdate()
-                    }
-                    Unit
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${PreferenceSqlSchema.PREFERENCES}
+                    WHERE
+                        namespace = ? AND player_uuid = ? AND preference_key = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, preference.storageKey)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw PlayerPreferenceDataException(
-                    "unable to write preference ${preference.storageKey} for $playerId",
-                    exception
-                )
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${PreferenceSqlSchema.PREFERENCES} (
+                        namespace,
+                        player_uuid,
+                        preference_key,
+                        preference_value
+                    )
+                    VALUES (
+                        ?, ?, ?, ?
+                    );
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, preference.storageKey)
+                    statement.setBoolean(4, enabled)
+                    statement.executeUpdate()
+                }
+                Unit
             }
+        } catch (exception: SQLException) {
+            throw PlayerPreferenceDataException(
+                "unable to write preference ${preference.storageKey} for $playerId",
+                exception
+            )
         }
     }
 
     private fun parseUuid(raw: String): UUID =
-        try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
+        parseUuidOrThrow(raw) {
             throw PlayerPreferenceDataException("invalid preference player UUID '$raw'")
         }
 

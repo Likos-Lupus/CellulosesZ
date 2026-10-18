@@ -3,10 +3,9 @@ package top.likoslupus.cellulosesz.application.command
 import org.slf4j.LoggerFactory
 import top.likoslupus.cellulosesz.application.ApplicationSqlSchema
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import java.sql.SQLException
 import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** The JDBC owner of `cz_command_cooldowns`; the cache in [CommandCooldownStore] never sees SQL. */
 internal class JdbcCommandCooldownRepository(
@@ -56,51 +55,49 @@ internal class JdbcCommandCooldownRepository(
         command: String,
         expiresAt: Long,
     ) {
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${ApplicationSqlSchema.COMMAND_COOLDOWNS}
-                        WHERE
-                            namespace = ? AND player_uuid = ? AND command = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, command)
-                        statement.executeUpdate()
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${ApplicationSqlSchema.COMMAND_COOLDOWNS} (
-                            namespace,
-                            player_uuid,
-                            command,
-                            expires_at_ms
-                        )
-                        VALUES (
-                            ?, ?, ?, ?
-                        );
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, command)
-                        statement.setLong(4, expiresAt)
-                        statement.executeUpdate()
-                    }
-                    Unit
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${ApplicationSqlSchema.COMMAND_COOLDOWNS}
+                    WHERE
+                        namespace = ? AND player_uuid = ? AND command = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, command)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                logger.warn(
-                    "command_cooldown_write_failed player={} command={}",
-                    playerId,
-                    command,
-                    exception,
-                )
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${ApplicationSqlSchema.COMMAND_COOLDOWNS} (
+                        namespace,
+                        player_uuid,
+                        command,
+                        expires_at_ms
+                    )
+                    VALUES (
+                        ?, ?, ?, ?
+                    );
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, command)
+                    statement.setLong(4, expiresAt)
+                    statement.executeUpdate()
+                }
+                Unit
             }
+        } catch (exception: SQLException) {
+            logger.warn(
+                "command_cooldown_write_failed player={} command={}",
+                playerId,
+                command,
+                exception,
+            )
         }
     }
 

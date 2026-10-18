@@ -3,14 +3,14 @@ package top.likoslupus.cellulosesz.economy.sale
 import top.likoslupus.cellulosesz.economy.EconomySqlSchema
 import top.likoslupus.cellulosesz.economy.ledger.EconomyDataException
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import java.sql.PreparedStatement
 import java.sql.ResultSet
 import java.sql.SQLException
 import java.sql.Types
 import java.time.Instant
 import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * The JDBC owner of the durable sale intents. Transitions are guarded by the expected current state
@@ -22,49 +22,48 @@ internal class JdbcSaleIntentRepository(
 ) : SaleIntentRepository {
 
     override suspend fun insert(record: SaleIntentRecord): Unit =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${EconomySqlSchema.SALE_INTENTS} (
-                            namespace,
-                            sale_id,
-                            player_uuid,
-                            player_name,
-                            state,
-                            item_id,
-                            item_count,
-                            total_minor,
-                            payload,
-                            transaction_id,
-                            created_at_ms,
-                            updated_at_ms
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, record.saleId.toString())
-                        statement.setString(3, record.playerId.toString())
-                        statement.setString(4, record.playerName)
-                        statement.setString(5, record.state.name)
-                        statement.setString(6, record.itemId)
-                        statement.setInt(7, record.itemCount)
-                        statement.setLong(8, record.totalMinor)
-                        statement.setString(9, record.payload)
-                        when (record.transactionId) {
-                            null -> statement.setNull(10, Types.VARCHAR)
-                            else -> statement.setString(10, record.transactionId.toString())
-                        }
-                        statement.setLong(11, record.createdAtMs)
-                        statement.setLong(12, record.updatedAtMs)
-                        statement.executeUpdate()
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${EconomySqlSchema.SALE_INTENTS} (
+                        namespace,
+                        sale_id,
+                        player_uuid,
+                        player_name,
+                        state,
+                        item_id,
+                        item_count,
+                        total_minor,
+                        payload,
+                        transaction_id,
+                        created_at_ms,
+                        updated_at_ms
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, record.saleId.toString())
+                    statement.setString(3, record.playerId.toString())
+                    statement.setString(4, record.playerName)
+                    statement.setString(5, record.state.name)
+                    statement.setString(6, record.itemId)
+                    statement.setInt(7, record.itemCount)
+                    statement.setLong(8, record.totalMinor)
+                    statement.setString(9, record.payload)
+                    when (record.transactionId) {
+                        null -> statement.setNull(10, Types.VARCHAR)
+                        else -> statement.setString(10, record.transactionId.toString())
                     }
+                    statement.setLong(11, record.createdAtMs)
+                    statement.setLong(12, record.updatedAtMs)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to record sale '${record.saleId}'", exception)
             }
+            Unit
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to record sale '${record.saleId}'", exception)
         }
 
     override suspend fun markTaken(saleId: UUID, at: Instant): Boolean =
@@ -138,58 +137,54 @@ internal class JdbcSaleIntentRepository(
         }
 
     override suspend fun loadOpen(): List<SaleIntentRecord> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            sale_id,
-                            player_uuid,
-                            player_name,
-                            state,
-                            item_id,
-                            item_count,
-                            total_minor,
-                            payload,
-                            transaction_id,
-                            created_at_ms,
-                            updated_at_ms
-                        FROM
-                            ${EconomySqlSchema.SALE_INTENTS}
-                        WHERE
-                            namespace = ?
-                            AND state IN (?, ?)
-                        ORDER BY
-                            created_at_ms ASC, sale_id ASC;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, SaleIntentState.PREPARED.name)
-                        statement.setString(3, SaleIntentState.TAKEN.name)
-                        statement.executeQuery().use(::readRows)
-                    }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        sale_id,
+                        player_uuid,
+                        player_name,
+                        state,
+                        item_id,
+                        item_count,
+                        total_minor,
+                        payload,
+                        transaction_id,
+                        created_at_ms,
+                        updated_at_ms
+                    FROM
+                        ${EconomySqlSchema.SALE_INTENTS}
+                    WHERE
+                        namespace = ?
+                        AND state IN (?, ?)
+                    ORDER BY
+                        created_at_ms ASC, sale_id ASC;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, SaleIntentState.PREPARED.name)
+                    statement.setString(3, SaleIntentState.TAKEN.name)
+                    statement.executeQuery().use(::readRows)
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to load open sale records", exception)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to load open sale records", exception)
         }
 
     private suspend fun transition(
         sql: String,
         bind: (PreparedStatement) -> Unit,
     ): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(sql).use { statement ->
-                        bind(statement)
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(sql).use { statement ->
+                    bind(statement)
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to update a sale record", exception)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to update a sale record", exception)
         }
 
     private fun readRows(rs: ResultSet): List<SaleIntentRecord> =

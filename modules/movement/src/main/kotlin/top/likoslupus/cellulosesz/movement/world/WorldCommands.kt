@@ -18,7 +18,7 @@ import top.likoslupus.cellulosesz.core.text.presentation.replyPage
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.MovementSettings
-import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.format.*
 import top.likoslupus.cellulosesz.movement.teleport.*
 
 /**

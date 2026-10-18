@@ -17,9 +17,9 @@ import java.util.*
 import kotlinx.coroutines.*
 
 /**
- * The same ledger contract as [EconomyLedgerTest], exercised against both supported local backends
- * (SQLite and H2), plus a concurrency case that proves the guarded conditional updates never overdraw
- * or lose funds under interleaved requests.
+ * The same ledger contract as [EconomyLedgerCommitTest] and [EconomyLedgerQueryTest], exercised
+ * against both supported local backends (SQLite and H2), plus a concurrency case that proves the
+ * guarded conditional updates never overdraw or lose funds under interleaved requests.
  */
 class EconomyLedgerBackendsTest {
 

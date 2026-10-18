@@ -18,6 +18,8 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.utility.config.InspectionSettings
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import top.likoslupus.cellulosesz.utility.format.inspection
+import top.likoslupus.cellulosesz.utility.format.inspectionSelf
 import java.util.*
 
 internal object InspectionCommands {

@@ -22,7 +22,7 @@ import top.likoslupus.cellulosesz.core.text.presentation.sendPage
 import top.likoslupus.cellulosesz.movement.access.MovementAccess
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
-import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.format.*
 import top.likoslupus.cellulosesz.movement.teleport.*
 import java.time.Instant
 

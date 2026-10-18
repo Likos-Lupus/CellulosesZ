@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
 import top.likoslupus.cellulosesz.player.afk.AfkChange
 import top.likoslupus.cellulosesz.player.afk.AfkService
-import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.format.*
 import java.util.*
 
 /** `/afk [reason?]`: toggles the caller's session-only AFK state. */

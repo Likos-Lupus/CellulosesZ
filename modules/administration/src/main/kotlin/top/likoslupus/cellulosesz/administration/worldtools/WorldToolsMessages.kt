@@ -1,23 +1,23 @@
 package top.likoslupus.cellulosesz.administration.worldtools
 
-import top.likoslupus.cellulosesz.administration.format.AdminText
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
+import top.likoslupus.cellulosesz.core.text.presentation.MessageSupport
 import java.util.*
 
 /** Semantic results for the world/environment tool commands. */
-internal object WorldToolsMessages {
+internal object WorldToolsMessages : MessageSupport() {
 
     fun timeSet(ticks: Long): Notice =
         success(
             MessageKey("administration.time.set"),
-            AdminText.count(ticks),
+            count(ticks),
         )
 
     fun timeAdded(ticks: Long): Notice =
         success(
             MessageKey("administration.time.added"),
-            AdminText.count(ticks),
+            count(ticks),
         )
 
     fun timeForAll(): Notice =
@@ -29,7 +29,7 @@ internal object WorldToolsMessages {
     fun timeCurrent(ticks: Long): Notice =
         info(
             MessageKey("administration.time.current"),
-            AdminText.count(ticks),
+            count(ticks),
         )
 
     fun timeInvalid(): Notice =
@@ -45,7 +45,7 @@ internal object WorldToolsMessages {
             else -> success(
                 MessageKey("administration.weather.set_duration"),
                 literal(type.name.lowercase()),
-                AdminText.count(seconds),
+                count(seconds),
             )
         }
 
@@ -61,7 +61,7 @@ internal object WorldToolsMessages {
     fun lightningStruck(count: Int): Notice =
         success(
             MessageKey("administration.lightning.struck"),
-            AdminText.count(count),
+            count(count),
         )
 
     fun fireballLaunched(type: FireballType): Notice =
@@ -76,7 +76,7 @@ internal object WorldToolsMessages {
     fun fireworkPower(power: Int): Notice =
         success(
             MessageKey("administration.firework.power"),
-            AdminText.count(power),
+            count(power),
         )
 
     fun fireworkCleared(): Notice =
@@ -85,7 +85,7 @@ internal object WorldToolsMessages {
     fun fireworkFired(count: Int): Notice =
         success(
             MessageKey("administration.firework.fired"),
-            AdminText.count(count),
+            count(count),
         )
 
     fun fireworkNoRocket(): Notice =
@@ -115,7 +115,7 @@ internal object WorldToolsMessages {
     fun iceFrozen(count: Int): Notice =
         success(
             MessageKey("administration.ice.frozen"),
-            AdminText.count(count),
+            count(count),
         )
 
     fun extinguished(): Notice =
@@ -124,7 +124,7 @@ internal object WorldToolsMessages {
     fun burned(target: String, seconds: Double): Notice =
         success(
             MessageKey("administration.burn.success"),
-            AdminText.player(target),
+            playerName(target),
             literal(format(seconds)),
         )
 
@@ -176,7 +176,7 @@ internal object WorldToolsMessages {
                         MessageKey("administration.gc.uptime"),
                         LocalizedText(
                             MessageKey("administration.gc.seconds"),
-                            listOf(AdminText.count(stats.uptimeTicks / 20)),
+                            listOf(count(stats.uptimeTicks / 20)),
                         ),
                     )
                 )
@@ -185,7 +185,7 @@ internal object WorldToolsMessages {
                         MessageKey("administration.gc.tps"),
                         LocalizedText(
                             MessageKey("core.value"),
-                            listOf(AdminText.literal(format(stats.tps))),
+                            listOf(literal(format(stats.tps))),
                         ),
                     )
                 )
@@ -194,7 +194,7 @@ internal object WorldToolsMessages {
                         MessageKey("administration.gc.tick"),
                         LocalizedText(
                             MessageKey("administration.gc.millis"),
-                            listOf(AdminText.literal(format(stats.averageTickMillis))),
+                            listOf(literal(format(stats.averageTickMillis))),
                         ),
                     )
                 )
@@ -204,9 +204,9 @@ internal object WorldToolsMessages {
                         LocalizedText(
                             MessageKey("administration.gc.memory_value"),
                             listOf(
-                                AdminText.literal(formatMegabytes(stats.usedMemoryBytes)),
-                                AdminText.literal(formatMegabytes(stats.totalMemoryBytes)),
-                                AdminText.literal(formatMegabytes(stats.maxMemoryBytes)),
+                                literal(formatMegabytes(stats.usedMemoryBytes)),
+                                literal(formatMegabytes(stats.totalMemoryBytes)),
+                                literal(formatMegabytes(stats.maxMemoryBytes)),
                             ),
                         ),
                     )
@@ -218,10 +218,10 @@ internal object WorldToolsMessages {
                             LocalizedText(
                                 MessageKey("administration.gc.world_row"),
                                 listOf(
-                                    AdminText.identifier(world.dimension),
-                                    AdminText.count(world.players),
-                                    AdminText.count(world.chunks),
-                                    AdminText.count(world.entities),
+                                    identifier(world.dimension),
+                                    count(world.players),
+                                    count(world.chunks),
+                                    count(world.entities),
                                 ),
                             ),
                         )
@@ -229,9 +229,6 @@ internal object WorldToolsMessages {
                 }
             },
         )
-
-    private fun field(label: MessageKey, value: LocalizedText): DetailField =
-        DetailField(LocalizedText(label), value)
 
     private fun format(value: Double): String =
         String.format(
@@ -245,36 +242,6 @@ internal object WorldToolsMessages {
             Locale.ROOT,
             "%.1f",
             bytes.toDouble() / (1024.0 * 1024.0)
-        )
-
-    private fun literal(value: String): TextArgument =
-        AdminText.literal(value)
-
-    private fun success(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.SUCCESS,
-        )
-
-    private fun info(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.INFO,
-        )
-
-    private fun error(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.ERROR,
         )
 
 }

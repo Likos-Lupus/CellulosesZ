@@ -1,73 +1,53 @@
 package top.likoslupus.cellulosesz.administration
 
 import net.minecraft.server.level.ServerPlayer
-import top.likoslupus.cellulosesz.administration.amusement.FunCommands
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
-import top.likoslupus.cellulosesz.administration.entitytools.EntityToolsCommands
 import top.likoslupus.cellulosesz.administration.entitytools.EntityToolsService
 import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
+import top.likoslupus.cellulosesz.administration.format.mutedChat
 import top.likoslupus.cellulosesz.administration.integration.*
-import top.likoslupus.cellulosesz.administration.jail.*
+import top.likoslupus.cellulosesz.administration.jail.ConfinementQuery
+import top.likoslupus.cellulosesz.administration.jail.JailSentenceMode
+import top.likoslupus.cellulosesz.administration.jail.JailService
 import top.likoslupus.cellulosesz.administration.login.LoginProtection
 import top.likoslupus.cellulosesz.administration.moderation.ModerationActor
 import top.likoslupus.cellulosesz.administration.moderation.ModerationReason
 import top.likoslupus.cellulosesz.administration.moderation.ModerationState
-import top.likoslupus.cellulosesz.administration.moderation.PlayerIdentity
-import top.likoslupus.cellulosesz.administration.moderation.audit.JdbcModerationAuditRepository
-import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditAction
 import top.likoslupus.cellulosesz.administration.moderation.audit.ModerationAuditService
-import top.likoslupus.cellulosesz.administration.moderation.ban.BanCommands
 import top.likoslupus.cellulosesz.administration.moderation.ban.BanService
-import top.likoslupus.cellulosesz.administration.moderation.ban.IpBanCommands
-import top.likoslupus.cellulosesz.administration.moderation.ban.MinecraftBanBackend
-import top.likoslupus.cellulosesz.administration.moderation.identity.MinecraftAccountResolver
-import top.likoslupus.cellulosesz.administration.moderation.kick.KickCommands
 import top.likoslupus.cellulosesz.administration.moderation.kick.KickService
-import top.likoslupus.cellulosesz.administration.moderation.mute.*
+import top.likoslupus.cellulosesz.administration.moderation.mute.MuteService
 import top.likoslupus.cellulosesz.administration.moderation.notify.ModerationNotifier
-import top.likoslupus.cellulosesz.administration.moderation.protection.TargetProtectionPolicy
-import top.likoslupus.cellulosesz.administration.operator.MinecraftPlayerControlBackend
-import top.likoslupus.cellulosesz.administration.operator.PlayerControlCommands
 import top.likoslupus.cellulosesz.administration.operator.PlayerControlService
-import top.likoslupus.cellulosesz.administration.playerstate.*
-import top.likoslupus.cellulosesz.administration.sign.SignCommands
+import top.likoslupus.cellulosesz.administration.playerstate.PlayerAdjustmentService
+import top.likoslupus.cellulosesz.administration.playerstate.PlayerStateService
 import top.likoslupus.cellulosesz.administration.sign.SignEditService
-import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyCommands
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
-import top.likoslupus.cellulosesz.administration.vanish.VanishCommands
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
 import top.likoslupus.cellulosesz.administration.worldtools.PersonalViews
-import top.likoslupus.cellulosesz.administration.worldtools.WorldToolsCommands
 import top.likoslupus.cellulosesz.administration.worldtools.WorldToolsService
-import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.requiresPermission
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.permission.PermissionSpec
-import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.core.player.MinecraftKnownPlayerResolver
-import top.likoslupus.cellulosesz.core.player.TemporaryProtectionRegistry
-import top.likoslupus.cellulosesz.core.player.WorldPosition
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
-import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
-import top.likoslupus.cellulosesz.core.text.adventure.message
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
-import top.likoslupus.cellulosesz.core.text.model.LocalizedText
 import top.likoslupus.cellulosesz.core.text.model.Notice
-import top.likoslupus.cellulosesz.core.text.model.NoticeTone
-import top.likoslupus.cellulosesz.core.text.model.TextArgument
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
-import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.time.TemporaryDuration
-import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.util.*
 
 /**
  * Public surface of the administration bounded context. Internals stay `internal`.
+ *
+ * The facade keeps the lifecycle-independent queries and the public-API integration port; server
+ * lifecycle, observation hooks, and command assembly live in [AdministrationLifecycle],
+ * [AdministrationObservation], and [AdministrationCommandFactory].
  */
 public class AdministrationFeature internal constructor(
     private val kick: KickService,
@@ -99,7 +79,58 @@ public class AdministrationFeature internal constructor(
     /** Narrow integration surface for the public API; never exposes the internal services. */
     public val integration: ModerationIntegrationPort = ModerationIntegration()
 
-    private val lastDimensions = HashMap<UUID, String>()
+    private val lifecycle = AdministrationLifecycle(
+        kernel = kernel,
+        settings = settings,
+        known = known,
+        bans = bans,
+        mutes = mutes,
+        jail = jail,
+        vanish = vanish,
+        spies = spies,
+        adjustments = adjustments,
+        playerState = playerState,
+        personalViews = personalViews,
+        worldTools = worldTools,
+        signEdits = signEdits,
+        login = login,
+        permissions = permissions,
+    )
+
+    private val observation = AdministrationObservation(
+        kernel = kernel,
+        settings = settings,
+        spies = spies,
+        vanish = vanish,
+        known = known,
+        audit = audit,
+        adventure = adventure,
+        presentation = presentation,
+    )
+
+    private val commandFactory = AdministrationCommandFactory(
+        kick = kick,
+        bans = bans,
+        mutes = mutes,
+        control = control,
+        spies = spies,
+        vanish = vanish,
+        jail = jail,
+        adjustments = adjustments,
+        playerState = playerState,
+        entityTools = entityTools,
+        worldTools = worldTools,
+        personalViews = personalViews,
+        signEdits = signEdits,
+        known = known,
+        notifier = notifier,
+        settings = settings,
+        kernel = kernel,
+        permissions = permissions,
+        messages = messages,
+        adventure = adventure,
+        presentation = presentation,
+    )
 
     private inner class ModerationIntegration : ModerationIntegrationPort {
 
@@ -306,106 +337,8 @@ public class AdministrationFeature internal constructor(
             }
         }
 
-    public fun commands(): List<CommandDefinition> {
-        val moderation = { settings().moderation }
-        return KickCommands.commands(
-            kick,
-            notifier,
-            moderation,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + BanCommands.commands(
-            bans,
-            notifier,
-            moderation,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + IpBanCommands.commands(
-            bans,
-            notifier,
-            moderation,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + MuteCommands.commands(
-            mutes,
-            notifier,
-            moderation,
-            permissions,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + PlayerControlCommands.commands(
-            control,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + SocialSpyCommands.commands(
-            spies,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + VanishCommands.commands(
-            vanish,
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + PlayerStateCommands.commands(
-            playerState,
-            permissions,
-            messages,
-            adventure,
-            presentation
-        ) + ExperienceCommands.commands(
-            adjustments,
-            known,
-            adventure,
-            presentation
-        ) + SpeedCommands.commands(
-            adjustments,
-            known,
-            adventure,
-            presentation
-        ) + JailCommands.commands(
-            jail,
-            notifier,
-            { settings().moderation },
-            kernel,
-            messages,
-            adventure,
-            presentation
-        ) + EntityToolsCommands.commands(
-            entityTools,
-            { settings().entityTools },
-            adventure,
-            presentation
-        ) + WorldToolsCommands.commands(
-            worldTools,
-            personalViews,
-            { settings().worldTools },
-            adventure,
-            presentation
-        ) + FunCommands.commands(
-            { settings().amusement },
-            adventure,
-            presentation
-        ) + SignCommands.commands(
-            signEdits,
-            permissions,
-            { settings().signEditing },
-            adventure,
-            presentation
-        )
-    }
+    public fun commands(): List<CommandDefinition> =
+        commandFactory.create()
 
     /** Localized notice shown to a muted player whose chat is blocked. */
     public fun mutedChatNotice(): Notice =
@@ -417,104 +350,25 @@ public class AdministrationFeature internal constructor(
      * server. Must be called on the server thread.
      */
     public fun applyJailCommandRestrictions() {
-        RestrictCommandsState.set(JailCommandAccessPolicy.snapshotFrom(settings().jail))
+        lifecycle.applyJailCommandRestrictions()
     }
 
     /** Seeds known identities and loads durable mutes. Must run when a server reference exists. */
     public fun onServerStarting() {
-        RestrictCommandsState.set(JailCommandAccessPolicy.snapshotFrom(settings().jail))
-        vanish.applyPolicy()
-        kernel.launch {
-            kernel.onServerThread {
-                val server = kernel.requireServer()
-                known.clear()
-                server.playerList.players.forEach { player ->
-                    known.record(
-                        KnownPlayerIdentity(
-                            player.uuid,
-                            player.gameProfile.name
-                        )
-                    )
-                }
-                bans.listedAccountIdentities().forEach {
-                    known.record(KnownPlayerIdentity(it.id, it.name))
-                }
-            }
-
-            mutes.load()
-            jail.load()
-
-            kernel.onServerThread {
-                mutes.activeMutes().forEach { mute ->
-                    known.record(
-                        KnownPlayerIdentity(
-                            mute.playerId,
-                            mute.playerName
-                        )
-                    )
-                }
-            }
-        }
+        lifecycle.onServerStarting()
     }
 
     public fun onServerStopping() {
-        mutes.shutdown()
-        jail.shutdown()
-        vanish.clearAll()
-        adjustments.restoreAllSpeeds()
-        playerState.clearAll()
-        personalViews.clearAll()
-        signEdits.clearAll()
-        login.clear()
-        lastDimensions.clear()
+        lifecycle.onServerStopping()
     }
 
     /** Records every joined player so offline moderation can resolve them later. */
     public fun onPlayerJoined(player: ServerPlayer) {
-        known.record(
-            KnownPlayerIdentity(
-                player.uuid,
-                player.gameProfile.name
-            )
-        )
-        val now = Instant.now()
-        login.recordJoin(player.uuid, now)
-        val delay = settings().moderation.loginAttackDelaySeconds
-        if (delay > 0) {
-            TemporaryProtectionRegistry.protect(
-                player.uuid,
-                now.plusSeconds(delay.toLong()),
-            )
-        }
-        if (settings().playerAdjustments.flyOnJoin &&
-            player.createCommandSourceStack()
-                    .requiresPermission(permissions, CommandPermissions.FLY)
-        ) {
-            playerState.grantFly(player.uuid, true)
-        }
-        jail.onPlayerJoined(player.uuid)
-        resendPersonalViews(player)
+        lifecycle.onPlayerJoined(player)
     }
 
     public fun onPlayerQuit(playerId: UUID) {
-        spies.clear(playerId)
-        vanish.clear(playerId)
-        adjustments.restoreSpeed(playerId)
-        playerState.onPlayerQuit(playerId)
-        personalViews.clear(playerId)
-        signEdits.clear(playerId)
-        login.forget(playerId)
-        jail.onPlayerQuit(playerId)
-        lastDimensions.remove(playerId)
-    }
-
-    /**
-     * Re-sends a player's personal time and weather to their client. Called on join and whenever
-     * their dimension changes, because the client resets both when it loads a new world.
-     */
-    private fun resendPersonalViews(player: ServerPlayer) {
-        personalViews.time(player.uuid)?.let { worldTools.sendPersonalTime(player, it) }
-        personalViews.weather(player.uuid)?.let { worldTools.sendPersonalWeather(player, it) }
+        lifecycle.onPlayerQuit(playerId)
     }
 
     /** Server-thread confined mute gate used by communication and the chat gate. */
@@ -549,42 +403,12 @@ public class AdministrationFeature internal constructor(
 
     /** Social-spy command observation; the root command only, never its arguments. Server thread. */
     public fun observeCommand(actorId: UUID?, command: String) {
-        if (actorId == null || !settings().moderation.socialSpyCommands) {
-            return
-        }
-        val recipients = spies.recipients(setOf(actorId))
-        if (recipients.isEmpty()) {
-            return
-        }
-        val actorName = kernel.requireServer().playerList
-                .getPlayer(actorId)?.gameProfile?.name
-            ?: actorId.toString()
-        val notice = Notice(
-            LocalizedText(
-                MessageKey("administration.socialspy.command"),
-                listOf(
-                    TextArgument.PlayerName(actorName),
-                    TextArgument.Literal(command)
-                ),
-            ),
-            NoticeTone.INFO,
-        )
-        kernel.launch {
-            recipients.forEach { recipientId ->
-                presentation.renderFor(recipientId, notice).forEach { line ->
-                    kernel.message(
-                        CommandFeedbackTarget.Player(recipientId),
-                        adventure,
-                        line
-                    )
-                }
-            }
-        }
+        observation.observeCommand(actorId, command)
     }
 
     /** Forces vanish on for a silent join. Server-thread confined. */
     public fun forceVanish(playerId: UUID) {
-        vanish.forceVanish(playerId)
+        observation.forceVanish(playerId)
     }
 
     /** True when a vanished player's join/quit announcement must be hidden. Server thread. */
@@ -603,28 +427,7 @@ public class AdministrationFeature internal constructor(
      * is disabled.
      */
     public fun onPlayerTick(player: ServerPlayer) {
-        playerState.onPlayerObserved(player.uuid)
-        jail.onOnlineTick(player.uuid)
-        val dimension = player.level().dimension().identifier().toString()
-        val previousDimension = lastDimensions.put(player.uuid, dimension)
-        if (previousDimension != null && previousDimension != dimension) {
-            resendPersonalViews(player)
-        }
-        val config = settings().jail
-        val server = kernel.requireServer()
-        val respawned = JailRespawnState.consume(player.uuid)
-        val interval = config.confinementCheckIntervalTicks
-        if (!respawned && (interval <= 0 || server.tickCount % interval != 0)) {
-            return
-        }
-
-        jail.onObservation(
-            playerId = player.uuid,
-            dimension = player.level().dimension().identifier().toString(),
-            x = player.x,
-            y = player.y,
-            z = player.z,
-        )
+        lifecycle.onPlayerTick(player)
     }
 
     /**
@@ -645,14 +448,11 @@ public class AdministrationFeature internal constructor(
         targetName: String,
         cleared: Boolean,
     ): Boolean =
-        audit.record(
-            actor = ModerationActor.Player(
-                id = actorId,
-                name = known.onlineById(actorId)?.name ?: actorId.toString(),
-            ),
-            action = ModerationAuditAction.CLEAR_INVENTORY,
-            target = PlayerIdentity(targetId, targetName),
-            reason = if (cleared) "cleared" else "failed",
+        observation.recordInventoryClear(
+            actorId,
+            targetId,
+            targetName,
+            cleared
         )
 
     /**
@@ -667,229 +467,15 @@ public class AdministrationFeature internal constructor(
         targetName: String,
         text: String,
     ) {
-        val recipients = spies.recipients(setOf(senderId, targetId))
-        if (recipients.isEmpty()) return
-
-        val copy = Notice(
-            LocalizedText(
-                MessageKey("administration.socialspy.copy"),
-                listOf(
-                    TextArgument.PlayerName(senderName),
-                    TextArgument.PlayerName(targetName),
-                    TextArgument.Literal(text),
-                ),
-            ),
-            NoticeTone.INFO,
+        observation.observePrivateMessage(
+            senderId,
+            senderName,
+            targetId,
+            targetName,
+            text
         )
-        kernel.launch {
-            recipients.forEach { recipientId ->
-                val target = CommandFeedbackTarget.Player(recipientId)
-                presentation.renderFor(recipientId, copy).forEach { line ->
-                    kernel.message(target, adventure, line)
-                }
-            }
-        }
     }
 
 }
 
 private const val DEFAULT_JAIL_REASON: String = "Jailed by an administrator"
-
-/** Maps the internal mute outcome onto the integration port's result set. */
-private fun MuteResult.toIntegration(): ModerationIntegrationOutcome =
-    when (this) {
-        is MuteResult.Applied ->
-            when {
-                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
-                else -> ModerationIntegrationOutcome.PartiallyApplied
-            }
-
-        MuteResult.AlreadyMuted -> ModerationIntegrationOutcome.AlreadyInState
-        MuteResult.SelfTarget -> ModerationIntegrationOutcome.ProtectedTarget
-        MuteResult.TargetProtected -> ModerationIntegrationOutcome.ProtectedTarget
-        MuteResult.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
-        MuteResult.DurationTooLong -> ModerationIntegrationOutcome.InvalidDuration
-        MuteResult.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
-        MuteResult.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
-    }
-
-/** Maps the internal unmute outcome onto the integration port's result set. */
-private fun UnmuteResult.toIntegration(): ModerationIntegrationOutcome =
-    when (this) {
-        is UnmuteResult.Unmuted ->
-            when {
-                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
-                else -> ModerationIntegrationOutcome.PartiallyApplied
-            }
-
-        UnmuteResult.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
-        UnmuteResult.NotMuted -> ModerationIntegrationOutcome.AlreadyInState
-        UnmuteResult.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
-        UnmuteResult.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
-    }
-
-/** Maps the internal jail outcome onto the integration port's result set. */
-private fun JailActionOutcome.toIntegration(): ModerationIntegrationOutcome =
-    when (this) {
-        is JailActionOutcome.Jailed ->
-            when {
-                auditRecorded -> ModerationIntegrationOutcome.Applied(actionId)
-                else -> ModerationIntegrationOutcome.PartiallyApplied
-            }
-
-        is JailActionOutcome.ReleaseRequested ->
-            actionId.let {
-                when {
-                    it == null -> ModerationIntegrationOutcome.AlreadyInState
-                    !auditRecorded -> ModerationIntegrationOutcome.PartiallyApplied
-                    else -> ModerationIntegrationOutcome.Applied(it)
-                }
-            }
-
-        JailActionOutcome.AlreadyJailed -> ModerationIntegrationOutcome.AlreadyInState
-        JailActionOutcome.NotJailed -> ModerationIntegrationOutcome.AlreadyInState
-        JailActionOutcome.TargetUnknown -> ModerationIntegrationOutcome.TargetUnknown
-        JailActionOutcome.SelfTarget -> ModerationIntegrationOutcome.ProtectedTarget
-        JailActionOutcome.TargetProtected -> ModerationIntegrationOutcome.ProtectedTarget
-        JailActionOutcome.InvalidJailName -> ModerationIntegrationOutcome.Unavailable
-        is JailActionOutcome.JailUnknown -> ModerationIntegrationOutcome.Unavailable
-        JailActionOutcome.NoDefaultJail -> ModerationIntegrationOutcome.Unavailable
-        JailActionOutcome.Disabled -> ModerationIntegrationOutcome.Unavailable
-        JailActionOutcome.StorageUnavailable -> ModerationIntegrationOutcome.StorageUnavailable
-        JailActionOutcome.RuntimeStopping -> ModerationIntegrationOutcome.RuntimeStopping
-    }
-
-public fun createAdministrationFeature(
-    kernel: RuntimeKernel,
-    database: DatabaseRuntime,
-    namespace: String,
-    permissions: PermissionService,
-    settings: () -> AdministrationSettings,
-    known: MinecraftKnownPlayerResolver,
-    jailTransfer: () -> JailTransferPort,
-    messages: LocalizedMessages,
-    adventure: AdventureRuntime,
-    presentation: TextPresentation,
-): AdministrationFeature {
-    val clock = Clock.systemUTC()
-    val accountResolver = MinecraftAccountResolver(known)
-    val protection = TargetProtectionPolicy(kernel) { settings().moderation }
-    val events = ModerationEventBus()
-    val audit = ModerationAuditService(
-        repository = JdbcModerationAuditRepository(database, namespace),
-        settings = { settings().moderation },
-        clock = clock,
-    )
-    val notifier = ModerationNotifier(
-        kernel,
-        permissions,
-        adventure,
-        presentation
-    )
-    val kick = KickService(
-        kernel = kernel,
-        accountResolver = accountResolver,
-        protection = protection,
-        audit = audit,
-    )
-    val bans = BanService(
-        kernel = kernel,
-        backend = MinecraftBanBackend(kernel),
-        accountResolver = accountResolver,
-        protection = protection,
-        audit = audit,
-        settings = { settings().moderation },
-        clock = clock,
-    )
-    val mutes = MuteService(
-        kernel = kernel,
-        repository = JdbcMuteRepository(database, namespace),
-        accountResolver = accountResolver,
-        protection = protection,
-        audit = audit,
-        settings = { settings().moderation },
-        clock = clock,
-        events = events::publish,
-    )
-    val control = PlayerControlService(
-        kernel = kernel,
-        backend = MinecraftPlayerControlBackend(kernel),
-        accountResolver = accountResolver,
-        protection = protection,
-        audit = audit,
-    )
-    val spies = SocialSpyService(kernel, audit)
-    val vanish = VanishService(
-        kernel,
-        audit,
-        { settings().vanish },
-        events = events::publish,
-    )
-    val adjustments = PlayerAdjustmentService(
-        backend = MinecraftPlayerAdjustmentBackend(kernel),
-        known = known,
-        settings = { settings().playerAdjustments },
-    )
-    val playerState = PlayerStateService(
-        backend = MinecraftPlayerStateBackend(kernel),
-        known = known,
-        settings = { settings().playerAdjustments },
-        clock = clock,
-    )
-    val entityTools = EntityToolsService()
-    val worldTools = WorldToolsService()
-    val personalViews = PersonalViews()
-    val signEdits = SignEditService()
-    val login = LoginProtection()
-    val jail = JailService(
-        runtime = KernelJailRuntime(kernel),
-        locations = JdbcJailLocationRepository(database, namespace),
-        sentences = JdbcJailSentenceRepository(database, namespace),
-        accountResolver = accountResolver,
-        protection = protection,
-        audit = audit,
-        transfer = jailTransfer,
-        positions = { playerId ->
-            kernel.requireServer().playerList.getPlayer(playerId)?.let { player ->
-                WorldPosition(
-                    dimension = player.level().dimension().identifier().toString(),
-                    x = player.x,
-                    y = player.y,
-                    z = player.z,
-                    yaw = player.yRot,
-                    pitch = player.xRot,
-                )
-            }
-        },
-        settings = { settings().jail },
-        clock = clock,
-        events = events::publish,
-    )
-
-    return AdministrationFeature(
-        kick = kick,
-        bans = bans,
-        mutes = mutes,
-        control = control,
-        spies = spies,
-        vanish = vanish,
-        jail = jail,
-        adjustments = adjustments,
-        playerState = playerState,
-        entityTools = entityTools,
-        worldTools = worldTools,
-        personalViews = personalViews,
-        signEdits = signEdits,
-        login = login,
-        known = known,
-        notifier = notifier,
-        audit = audit,
-        settings = settings,
-        kernel = kernel,
-        permissions = permissions,
-        events = events,
-        messages = messages,
-        adventure = adventure,
-        presentation = presentation,
-    )
-}

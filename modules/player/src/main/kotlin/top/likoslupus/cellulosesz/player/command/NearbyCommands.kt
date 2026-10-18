@@ -11,7 +11,7 @@ import top.likoslupus.cellulosesz.core.permission.hasPermission
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyPage
-import top.likoslupus.cellulosesz.player.format.PlayerMessages
+import top.likoslupus.cellulosesz.player.format.*
 import top.likoslupus.cellulosesz.player.nearby.NearbyService
 import java.util.*
 

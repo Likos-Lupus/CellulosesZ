@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.movement.spawn
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import top.likoslupus.cellulosesz.movement.bindPosition
 import top.likoslupus.cellulosesz.movement.readStoredPosition
@@ -14,9 +14,9 @@ internal class JdbcSpawnRepository(
     private val namespace: String,
 ) : SpawnRepository {
 
-    override suspend fun read(): StoredPosition? = withContext(Dispatchers.IO) {
+    override suspend fun read(): StoredPosition? =
         try {
-            database.read { connection ->
+            database.readIo { connection ->
                 connection.prepareStatement(
                     "SELECT dimension, x, y, z, yaw, pitch FROM ${MovementSqlSchema.SPAWN} WHERE namespace = ?"
                 ).use { statement ->
@@ -29,11 +29,10 @@ internal class JdbcSpawnRepository(
         } catch (exception: SQLException) {
             throw SpawnDataException("unable to read spawn", exception)
         }
-    }
 
-    override suspend fun write(position: StoredPosition?) = withContext(Dispatchers.IO) {
+    override suspend fun write(position: StoredPosition?) =
         try {
-            database.transaction { connection ->
+            database.transactionIo { connection ->
                 connection.prepareStatement(
                     "DELETE FROM ${MovementSqlSchema.SPAWN} WHERE namespace = ?"
                 ).use { statement ->
@@ -43,7 +42,7 @@ internal class JdbcSpawnRepository(
                 if (position != null) {
                     connection.prepareStatement(
                         "INSERT INTO ${MovementSqlSchema.SPAWN} " +
-                            "(namespace, dimension, x, y, z, yaw, pitch) VALUES (?, ?, ?, ?, ?, ?, ?)"
+                                "(namespace, dimension, x, y, z, yaw, pitch) VALUES (?, ?, ?, ?, ?, ?, ?)"
                     ).use { statement ->
                         statement.setString(1, namespace)
                         statement.bindPosition(2, position)
@@ -54,5 +53,5 @@ internal class JdbcSpawnRepository(
         } catch (exception: SQLException) {
             throw SpawnDataException("unable to write spawn", exception)
         }
-    }
+
 }

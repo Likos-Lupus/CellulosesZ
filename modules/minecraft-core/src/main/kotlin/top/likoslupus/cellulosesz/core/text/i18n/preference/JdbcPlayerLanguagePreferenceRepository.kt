@@ -1,13 +1,14 @@
 package top.likoslupus.cellulosesz.core.text.i18n.preference
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.core.text.i18n.LanguageId
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.StorageException
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import java.sql.Connection
 import java.sql.SQLException
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** JDBC-backed language preference repository. Never touched on the message render path. */
 public class JdbcPlayerLanguagePreferenceRepository(
@@ -30,49 +31,45 @@ public class JdbcPlayerLanguagePreferenceRepository(
         playerId: UUID,
         language: LanguageId
     ): Unit =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    delete(connection, playerId)
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${LocalizationSqlSchema.PLAYER_LANGUAGES} (
-                            namespace,
-                            player_uuid,
-                            language
-                        )
-                        VALUES (
-                            ?, ?, ?
-                        );
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.setString(3, language.value)
-                        statement.executeUpdate()
-                    }
-                    Unit
+        try {
+            database.transactionIo { connection ->
+                delete(connection, playerId)
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${LocalizationSqlSchema.PLAYER_LANGUAGES} (
+                        namespace,
+                        player_uuid,
+                        language
+                    )
+                    VALUES (
+                        ?, ?, ?
+                    );
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.setString(3, language.value)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw StorageException(
-                    "unable to record language preference for $playerId",
-                    exception
-                )
+                Unit
             }
+        } catch (exception: SQLException) {
+            throw StorageException(
+                "unable to record language preference for $playerId",
+                exception
+            )
         }
 
     override suspend fun remove(playerId: UUID): Unit =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    delete(connection, playerId)
-                }
-            } catch (exception: SQLException) {
-                throw StorageException(
-                    "unable to clear language preference for $playerId",
-                    exception
-                )
+        try {
+            database.transactionIo { connection ->
+                delete(connection, playerId)
             }
+        } catch (exception: SQLException) {
+            throw StorageException(
+                "unable to clear language preference for $playerId",
+                exception
+            )
         }
 
     private fun delete(connection: Connection, playerId: UUID) {

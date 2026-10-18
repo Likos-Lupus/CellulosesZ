@@ -8,6 +8,8 @@ import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyDetail
 import top.likoslupus.cellulosesz.utility.format.UtilityMessages
+import top.likoslupus.cellulosesz.utility.format.depth
+import top.likoslupus.cellulosesz.utility.format.positionView
 import kotlin.math.floor
 
 /** `/getpos` and `/depth`: read-only views of the sender's own position and depth. */
@@ -30,7 +32,7 @@ internal object PositionCommands {
                     adventure,
                     presentation,
                     playerId,
-                    UtilityMessages.position(
+                    UtilityMessages.positionView(
                         dimension = level.dimension().identifier().toString(),
                         x = floor(player.x).toInt(),
                         y = floor(player.y).toInt(),

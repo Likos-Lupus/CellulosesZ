@@ -2,6 +2,7 @@ package top.likoslupus.cellulosesz.economy.format
 
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.model.*
+import top.likoslupus.cellulosesz.core.text.presentation.MessageSupport
 import top.likoslupus.cellulosesz.economy.integration.EconomyTransactionResult
 import top.likoslupus.cellulosesz.economy.money.Money
 import java.math.BigDecimal
@@ -29,7 +30,7 @@ internal class HistoryRow(
  * Maps economy domain results to semantic values. It holds no language and no colour: the
  * presentation layer renders per recipient.
  */
-internal object EconomyMessages {
+internal object EconomyMessages : MessageSupport() {
 
     fun balanceSelf(amount: BigDecimal, display: EconomyDisplay): Notice =
         success(
@@ -420,42 +421,6 @@ internal object EconomyMessages {
 
     private fun key(value: String): MessageKey =
         MessageKey(value)
-
-    private fun notice(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.ERROR
-        )
-
-    private fun success(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.SUCCESS
-        )
-
-    private fun info(
-        key: MessageKey,
-        vararg arguments: TextArgument
-    ): Notice =
-        Notice(
-            LocalizedText(key, arguments.toList()),
-            NoticeTone.INFO
-        )
-
-    private fun literal(value: String): TextArgument =
-        TextArgument.Literal(value)
-
-    private fun playerName(value: String): TextArgument =
-        TextArgument.PlayerName(value)
-
-    private fun count(value: Long): TextArgument =
-        TextArgument.Count(value)
 
     private fun money(
         amount: BigDecimal,

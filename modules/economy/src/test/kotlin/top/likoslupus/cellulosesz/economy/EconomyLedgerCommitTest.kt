@@ -2,70 +2,16 @@ package top.likoslupus.cellulosesz.economy
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.io.TempDir
-import top.likoslupus.cellulosesz.economy.config.EconomySettings
-import top.likoslupus.cellulosesz.economy.ledger.ActorKind
-import top.likoslupus.cellulosesz.economy.ledger.JdbcEconomyRepository
 import top.likoslupus.cellulosesz.economy.money.Money
 import top.likoslupus.cellulosesz.economy.service.*
-import top.likoslupus.cellulosesz.foundation.database.DatabaseDescriptorResolver
-import top.likoslupus.cellulosesz.foundation.database.DatabaseSettings
-import top.likoslupus.cellulosesz.foundation.database.HikariDatabaseRuntime
-import top.likoslupus.cellulosesz.foundation.database.SqliteSettings
-import top.likoslupus.cellulosesz.foundation.database.schema.SchemaInitializer
-import java.math.BigDecimal
-import java.nio.file.Path
-import java.time.Instant
 import java.util.*
 import kotlinx.coroutines.runBlocking
 
-class EconomyLedgerTest {
-
-    @TempDir
-    lateinit var directory: Path
-
-    private val actor = EconomyActor(ActorKind.INTERNAL, "test")
-
-    private fun runtime(): HikariDatabaseRuntime {
-        val descriptor = DatabaseDescriptorResolver.resolve(
-            DatabaseSettings(
-                sqlite = SqliteSettings(
-                    path = directory.resolve("cz.db").toString()
-                )
-            ),
-            directory,
-        )
-        val runtime = HikariDatabaseRuntime.create(descriptor)
-        SchemaInitializer.initializeBlocking(runtime, listOf(EconomySqlSchema))
-        return runtime
-    }
-
-    private fun service(
-        runtime: HikariDatabaseRuntime,
-        starting: String = "0.00",
-        maximum: String = "1000.00",
-    ): EconomyService {
-        val settings = EconomySettings(
-            enabled = true,
-            startingBalance = BigDecimal(starting),
-            maximumBalance = BigDecimal(maximum),
-            minimumPayment = BigDecimal("0.01"),
-            maximumPayment = BigDecimal(maximum),
-        )
-        var tick = 0L
-        return EconomyService(
-            JdbcEconomyRepository(
-                runtime,
-                "default"
-            ),
-            { settings }
-        ) {
-            Instant.ofEpochMilli(++tick)
-        }
-    }
-
-    private suspend fun EconomyService.amountOf(playerId: UUID): Money =
-        (balance(playerId) as BalanceResult.Balance).amount
+/**
+ * The ledger write path: opening balances, transfers, idempotent receipts, `set` and `take` all
+ * commit exactly once and leave the expected balances behind.
+ */
+internal class EconomyLedgerCommitTest : EconomyLedgerTestSupport() {
 
     @Test
     fun `opening balance is applied exactly once`() =
@@ -136,53 +82,6 @@ class EconomyLedgerTest {
         }
 
     @Test
-    fun `insufficient funds leaves every balance untouched`() =
-        runBlocking {
-            runtime().use { runtime ->
-                val service = service(runtime)
-                val alice = UUID.randomUUID()
-                val bob = UUID.randomUUID()
-                service.ensureAccount(alice)
-                service.ensureAccount(bob)
-                service.grant(
-                    GrantIntent(
-                        actor,
-                        alice,
-                        Money.parse("10.00"),
-                        "test",
-                        "seed",
-                        "seed"
-                    )
-                )
-
-                val result = service.transfer(
-                    TransferIntent(
-                        actor,
-                        alice,
-                        bob,
-                        Money.parse("25.00"),
-                        "test",
-                        "t1",
-                        "pay"
-                    )
-                )
-
-                assertEquals(
-                    EconomyMutationResult.InsufficientFunds,
-                    result
-                )
-                assertEquals(
-                    Money.parse("10.00"),
-                    service.amountOf(alice)
-                )
-                assertEquals(
-                    Money.parse("0.00"),
-                    service.amountOf(bob)
-                )
-            }
-        }
-
-    @Test
     fun `a repeated request key returns the original receipt without a second move`() =
         runBlocking {
             runtime().use { runtime ->
@@ -239,117 +138,6 @@ class EconomyLedgerTest {
                 )
                 assertEquals(
                     Money.parse("25.00"),
-                    service.amountOf(bob)
-                )
-            }
-        }
-
-    @Test
-    fun `the same request key with a different amount conflicts`() =
-        runBlocking {
-            runtime().use { runtime ->
-                val service = service(runtime)
-                val alice = UUID.randomUUID()
-                val bob = UUID.randomUUID()
-                service.ensureAccount(alice)
-                service.ensureAccount(bob)
-                service.grant(
-                    GrantIntent(
-                        actor,
-                        alice,
-                        Money.parse("100.00"),
-                        "test",
-                        "seed",
-                        "seed"
-                    )
-                )
-
-                service.transfer(
-                    TransferIntent(
-                        actor,
-                        alice,
-                        bob,
-                        Money.parse("10.00"),
-                        "test",
-                        "k",
-                        "pay"
-                    )
-                )
-                val conflict = service.transfer(
-                    TransferIntent(
-                        actor,
-                        alice,
-                        bob,
-                        Money.parse("20.00"),
-                        "test",
-                        "k",
-                        "pay"
-                    )
-                )
-
-                assertEquals(
-                    EconomyMutationResult.IdempotencyConflict,
-                    conflict
-                )
-                assertEquals(
-                    Money.parse("90.00"),
-                    service.amountOf(alice)
-                )
-            }
-        }
-
-    @Test
-    fun `a credit that would exceed the maximum is rejected atomically`() =
-        runBlocking {
-            runtime().use { runtime ->
-                val service = service(runtime, maximum = "100.00")
-                val alice = UUID.randomUUID()
-                val bob = UUID.randomUUID()
-                service.ensureAccount(alice)
-                service.ensureAccount(bob)
-                service.grant(
-                    GrantIntent(
-                        actor,
-                        alice,
-                        Money.parse("90.00"),
-                        "test",
-                        "sa",
-                        "seed"
-                    )
-                )
-                service.grant(
-                    GrantIntent(
-                        actor,
-                        bob,
-                        Money.parse("90.00"),
-                        "test",
-                        "sb",
-                        "seed"
-                    )
-                )
-
-                val result = service.transfer(
-                    TransferIntent(
-                        actor,
-                        alice,
-                        bob,
-                        Money.parse("20.00"),
-                        "test",
-                        "t",
-                        "pay"
-                    )
-                )
-
-                assertEquals(
-                    EconomyMutationResult.BalanceLimitExceeded,
-                    result
-                )
-                assertEquals(
-                    Money.parse("90.00"),
-                    service.amountOf(alice)
-                )
-                assertEquals(
-                    Money.parse("90.00"),
                     service.amountOf(bob)
                 )
             }
@@ -478,31 +266,6 @@ class EconomyLedgerTest {
                     Money.parse("20.00"),
                     service.amountOf(alice)
                 )
-            }
-        }
-
-    @Test
-    fun `a player account can never go negative`() =
-        runBlocking {
-            runtime().use { runtime ->
-                val service = service(runtime)
-                val alice = UUID.randomUUID()
-                service.ensureAccount(alice)
-                val result = service.take(
-                    TakeIntent(
-                        actor,
-                        alice,
-                        Money.parse("1.00"),
-                        "test",
-                        "k",
-                        "admin"
-                    )
-                )
-                assertEquals(
-                    EconomyMutationResult.InsufficientFunds,
-                    result
-                )
-                assertFalse((service.amountOf(alice)).isPositive)
             }
         }
 

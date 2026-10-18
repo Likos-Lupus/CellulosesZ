@@ -1,8 +1,9 @@
 package top.likoslupus.cellulosesz.player.session
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
+import top.likoslupus.cellulosesz.foundation.parseUuidOrThrow
 import top.likoslupus.cellulosesz.player.PlayerDataException
 import top.likoslupus.cellulosesz.player.PlayerSqlSchema
 import java.sql.Connection
@@ -19,69 +20,65 @@ internal class JdbcPlayerSessionRepository(
 ) : PlayerSessionRepository {
 
     override suspend fun begin(session: PlayerSession): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    if (exists(connection, session.sessionId)) {
-                        return@transaction false
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${PlayerSqlSchema.SESSIONS} (
-                            namespace,
-                            session_uuid,
-                            player_uuid,
-                            login_at_ms,
-                            last_heartbeat_at_ms,
-                            closed_at_ms,
-                            close_kind
-                        )
-                        VALUES (
-                            ?, ?, ?, ?, ?, ?, ?
-                        );
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, session.sessionId.toString())
-                        statement.setString(3, session.playerId.toString())
-                        statement.setLong(4, session.loginAt.toEpochMilli())
-                        statement.setLong(5, session.lastHeartbeatAt.toEpochMilli())
-                        statement.setNull(6, Types.BIGINT)
-                        statement.setNull(7, Types.VARCHAR)
-                        statement.executeUpdate()
-                    }
-                    true
+        try {
+            database.transactionIo { connection ->
+                if (exists(connection, session.sessionId)) {
+                    return@transactionIo false
                 }
-            } catch (exception: SQLException) {
-                throw PlayerDataException(
-                    "unable to begin session for ${session.playerId}",
-                    exception
-                )
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${PlayerSqlSchema.SESSIONS} (
+                        namespace,
+                        session_uuid,
+                        player_uuid,
+                        login_at_ms,
+                        last_heartbeat_at_ms,
+                        closed_at_ms,
+                        close_kind
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?, ?
+                    );
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, session.sessionId.toString())
+                    statement.setString(3, session.playerId.toString())
+                    statement.setLong(4, session.loginAt.toEpochMilli())
+                    statement.setLong(5, session.lastHeartbeatAt.toEpochMilli())
+                    statement.setNull(6, Types.BIGINT)
+                    statement.setNull(7, Types.VARCHAR)
+                    statement.executeUpdate()
+                }
+                true
             }
+        } catch (exception: SQLException) {
+            throw PlayerDataException(
+                "unable to begin session for ${session.playerId}",
+                exception
+            )
         }
 
     override suspend fun heartbeat(sessionId: UUID, at: Instant): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        UPDATE ${PlayerSqlSchema.SESSIONS}
-                        SET
-                            last_heartbeat_at_ms = ?
-                        WHERE
-                            namespace = ? AND session_uuid = ? AND closed_at_ms IS NULL;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setLong(1, at.toEpochMilli())
-                        statement.setString(2, namespace)
-                        statement.setString(3, sessionId.toString())
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    UPDATE ${PlayerSqlSchema.SESSIONS}
+                    SET
+                        last_heartbeat_at_ms = ?
+                    WHERE
+                        namespace = ? AND session_uuid = ? AND closed_at_ms IS NULL;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setLong(1, at.toEpochMilli())
+                    statement.setString(2, namespace)
+                    statement.setString(3, sessionId.toString())
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw PlayerDataException("unable to heartbeat session $sessionId", exception)
             }
+        } catch (exception: SQLException) {
+            throw PlayerDataException("unable to heartbeat session $sessionId", exception)
         }
 
     override suspend fun close(
@@ -89,29 +86,27 @@ internal class JdbcPlayerSessionRepository(
         at: Instant,
         kind: SessionCloseKind,
     ): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        UPDATE ${PlayerSqlSchema.SESSIONS}
-                        SET
-                            closed_at_ms = ?,
-                            close_kind = ?
-                        WHERE
-                            namespace = ? AND session_uuid = ? AND closed_at_ms IS NULL;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setLong(1, at.toEpochMilli())
-                        statement.setString(2, kind.name)
-                        statement.setString(3, namespace)
-                        statement.setString(4, sessionId.toString())
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    UPDATE ${PlayerSqlSchema.SESSIONS}
+                    SET
+                        closed_at_ms = ?,
+                        close_kind = ?
+                    WHERE
+                        namespace = ? AND session_uuid = ? AND closed_at_ms IS NULL;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setLong(1, at.toEpochMilli())
+                    statement.setString(2, kind.name)
+                    statement.setString(3, namespace)
+                    statement.setString(4, sessionId.toString())
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw PlayerDataException("unable to close session $sessionId", exception)
             }
+        } catch (exception: SQLException) {
+            throw PlayerDataException("unable to close session $sessionId", exception)
         }
 
     override fun closeAllOpenBlocking(at: Instant, kind: SessionCloseKind): Int =
@@ -160,40 +155,38 @@ internal class JdbcPlayerSessionRepository(
         }
 
     override suspend fun loadSessions(playerId: UUID): List<PlayerSession> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            session_uuid,
-                            player_uuid,
-                            login_at_ms,
-                            last_heartbeat_at_ms,
-                            closed_at_ms,
-                            close_kind
-                        FROM
-                            ${PlayerSqlSchema.SESSIONS}
-                        WHERE
-                            namespace = ? AND player_uuid = ?
-                        ORDER BY
-                            login_at_ms DESC;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, playerId.toString())
-                        statement.executeQuery().use { rs ->
-                            buildList {
-                                while (rs.next()) {
-                                    add(map(rs))
-                                }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        session_uuid,
+                        player_uuid,
+                        login_at_ms,
+                        last_heartbeat_at_ms,
+                        closed_at_ms,
+                        close_kind
+                    FROM
+                        ${PlayerSqlSchema.SESSIONS}
+                    WHERE
+                        namespace = ? AND player_uuid = ?
+                    ORDER BY
+                        login_at_ms DESC;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, playerId.toString())
+                    statement.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(map(rs))
                             }
                         }
                     }
                 }
-            } catch (exception: SQLException) {
-                throw PlayerDataException("unable to load sessions for $playerId", exception)
             }
+        } catch (exception: SQLException) {
+            throw PlayerDataException("unable to load sessions for $playerId", exception)
         }
 
     private fun exists(connection: Connection, sessionId: UUID): Boolean =
@@ -246,9 +239,7 @@ internal class JdbcPlayerSessionRepository(
     }
 
     private fun parseUuid(raw: String, label: String): UUID =
-        try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
+        parseUuidOrThrow(raw) {
             throw PlayerDataException("session row has an invalid $label")
         }
 

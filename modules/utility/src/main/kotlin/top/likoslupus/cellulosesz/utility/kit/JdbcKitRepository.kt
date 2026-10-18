@@ -1,9 +1,10 @@
 package top.likoslupus.cellulosesz.utility.kit
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import net.minecraft.world.item.ItemStack
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
+import top.likoslupus.cellulosesz.foundation.parseUuidOrThrow
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import java.sql.Connection
 import java.sql.SQLException
@@ -19,96 +20,88 @@ internal class JdbcKitRepository(
 ) : KitRepository {
 
     override suspend fun loadAll(): Map<KitName, KitDefinition> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    val kits = LinkedHashMap<KitName, KitDefinition>()
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            kit_id,
-                            name,
-                            reuse_mode,
-                            cooldown_seconds
-                        FROM
-                            ${UtilitySqlSchema.KITS}
-                        WHERE
-                            namespace = ?
-                        ORDER BY
-                            name;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.executeQuery().use { rs ->
-                            while (rs.next()) {
-                                val kitId = parseUuid(rs.getString(1), "kit id")
-                                val name = KitName.parse(rs.getString(2))
-                                    ?: throw KitDataException("kit catalog contains an invalid kit name")
-                                val mode = parseMode(rs.getString(3))
-                                val cooldown = rs.getObject(4)?.let { rs.getLong(4) }
-                                kits[name] = KitDefinition(
-                                    id = KitId(kitId),
-                                    name = name,
-                                    reuse = reusePolicy(name, mode, cooldown),
-                                    items = loadItems(connection, kitId, name),
-                                )
-                            }
+        try {
+            database.readIo { connection ->
+                val kits = LinkedHashMap<KitName, KitDefinition>()
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        kit_id,
+                        name,
+                        reuse_mode,
+                        cooldown_seconds
+                    FROM
+                        ${UtilitySqlSchema.KITS}
+                    WHERE
+                        namespace = ?
+                    ORDER BY
+                        name;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val kitId = parseUuid(rs.getString(1), "kit id")
+                            val name = KitName.parse(rs.getString(2))
+                                ?: throw KitDataException("kit catalog contains an invalid kit name")
+                            val mode = parseMode(rs.getString(3))
+                            val cooldown = rs.getObject(4)?.let { rs.getLong(4) }
+                            kits[name] = KitDefinition(
+                                id = KitId(kitId),
+                                name = name,
+                                reuse = reusePolicy(name, mode, cooldown),
+                                items = loadItems(connection, kitId, name),
+                            )
                         }
                     }
-                    if (kits.size > MAX_STORED_KITS) {
-                        throw KitDataException("kit catalog exceeds the stored kit cap")
-                    }
-                    kits
                 }
-            } catch (exception: SQLException) {
-                throw KitDataException("unable to read kit catalog", exception)
+                if (kits.size > MAX_STORED_KITS) {
+                    throw KitDataException("kit catalog exceeds the stored kit cap")
+                }
+                kits
             }
+        } catch (exception: SQLException) {
+            throw KitDataException("unable to read kit catalog", exception)
         }
 
     override suspend fun create(definition: KitDefinition): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    if (exists(connection, definition.name)) {
-                        return@transaction false
-                    }
-                    insertKit(connection, definition)
-                    true
+        try {
+            database.transactionIo { connection ->
+                if (exists(connection, definition.name)) {
+                    return@transactionIo false
                 }
-            } catch (exception: SQLException) {
-                throw KitDataException("unable to create kit '${definition.name.value}'", exception)
+                insertKit(connection, definition)
+                true
             }
+        } catch (exception: SQLException) {
+            throw KitDataException("unable to create kit '${definition.name.value}'", exception)
         }
 
     override suspend fun replace(definition: KitDefinition): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    val existing = existingKitId(connection, definition.name)
-                        ?: return@transaction false
-                    deleteKit(connection, existing)
-                    insertKit(connection, definition)
-                    true
-                }
-            } catch (exception: SQLException) {
-                throw KitDataException(
-                    "unable to replace kit '${definition.name.value}'",
-                    exception
-                )
+        try {
+            database.transactionIo { connection ->
+                val existing = existingKitId(connection, definition.name)
+                    ?: return@transactionIo false
+                deleteKit(connection, existing)
+                insertKit(connection, definition)
+                true
             }
+        } catch (exception: SQLException) {
+            throw KitDataException(
+                "unable to replace kit '${definition.name.value}'",
+                exception
+            )
         }
 
     override suspend fun remove(name: KitName): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    val existing = existingKitId(connection, name) ?: return@transaction false
-                    deleteKit(connection, existing)
-                    true
-                }
-            } catch (exception: SQLException) {
-                throw KitDataException("unable to remove kit '${name.value}'", exception)
+        try {
+            database.transactionIo { connection ->
+                val existing = existingKitId(connection, name) ?: return@transactionIo false
+                deleteKit(connection, existing)
+                true
             }
+        } catch (exception: SQLException) {
+            throw KitDataException("unable to remove kit '${name.value}'", exception)
         }
 
     private fun exists(connection: Connection, name: KitName): Boolean =
@@ -308,9 +301,7 @@ internal class JdbcKitRepository(
         }
 
     private fun parseUuid(raw: String, label: String): UUID =
-        try {
-            UUID.fromString(raw)
-        } catch (_: IllegalArgumentException) {
+        parseUuidOrThrow(raw) {
             throw KitDataException("kit catalog has an invalid $label")
         }
 

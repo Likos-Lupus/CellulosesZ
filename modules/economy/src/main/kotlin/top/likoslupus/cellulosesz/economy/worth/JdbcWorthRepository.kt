@@ -3,14 +3,14 @@ package top.likoslupus.cellulosesz.economy.worth
 import top.likoslupus.cellulosesz.economy.EconomySqlSchema
 import top.likoslupus.cellulosesz.economy.ledger.EconomyDataException
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import top.likoslupus.cellulosesz.foundation.database.schema.SqlDialects
 import java.sql.Connection
 import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.sql.Types
 import java.time.Instant
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * The JDBC owner of the worth catalog. Prices are BIGINT minor units; the item id is the logical
@@ -35,67 +35,62 @@ internal class JdbcWorthRepository(
         )
 
     override suspend fun loadAll(): List<WorthRecord> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            item_id,
-                            price_minor,
-                            updated_at_ms,
-                            updated_by
-                        FROM
-                            ${EconomySqlSchema.WORTH}
-                        WHERE
-                            namespace = ?;
-                        """.trimIndent()
-                    ).use {
-                        it.setString(1, namespace)
-                        it.executeQuery().use { rs ->
-                            buildList {
-                                while (rs.next()) {
-                                    add(
-                                        WorthRecord(
-                                            itemId = rs.getString(1),
-                                            priceMinor = rs.getLong(2),
-                                            updatedAt = Instant.ofEpochMilli(rs.getLong(3)),
-                                            updatedBy = rs.getString(4),
-                                        )
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        item_id,
+                        price_minor,
+                        updated_at_ms,
+                        updated_by
+                    FROM
+                        ${EconomySqlSchema.WORTH}
+                    WHERE
+                        namespace = ?;
+                    """.trimIndent()
+                ).use {
+                    it.setString(1, namespace)
+                    it.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(
+                                    WorthRecord(
+                                        itemId = rs.getString(1),
+                                        priceMinor = rs.getLong(2),
+                                        updatedAt = Instant.ofEpochMilli(rs.getLong(3)),
+                                        updatedBy = rs.getString(4),
                                     )
-                                }
+                                )
                             }
                         }
                     }
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to load the worth catalog", exception)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to load the worth catalog", exception)
         }
 
     override suspend fun upsert(record: WorthRecord): Unit =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    writeRecord(connection, record)
-                }
-            } catch (exception: SQLException) {
-                throw EconomyDataException(
-                    "unable to store the worth of '${record.itemId}'",
-                    exception
-                )
+        try {
+            database.transactionIo { connection ->
+                writeRecord(connection, record)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException(
+                "unable to store the worth of '${record.itemId}'",
+                exception
+            )
         }
 
-    override suspend fun insertMissing(records: List<WorthRecord>): Unit =
-        withContext(Dispatchers.IO) {
-            if (records.isEmpty()) return@withContext
-            try {
-                database.transaction { connection ->
-                    records.forEach { record ->
-                        if (exists(connection, record.itemId)) return@forEach
-                        connection.prepareStatement(
-                            /* language=SQL */ """
+    override suspend fun insertMissing(records: List<WorthRecord>): Unit {
+        if (records.isEmpty()) return
+        try {
+            database.transactionIo { connection ->
+                records.forEach { record ->
+                    if (exists(connection, record.itemId)) return@forEach
+                    connection.prepareStatement(
+                        /* language=SQL */ """
                             INSERT INTO ${EconomySqlSchema.WORTH} (
                                 namespace,
                                 item_id,
@@ -105,45 +100,43 @@ internal class JdbcWorthRepository(
                             )
                             VALUES (?, ?, ?, ?, ?);
                             """.trimIndent()
-                        ).use {
-                            it.setString(1, namespace)
-                            it.setString(2, record.itemId)
-                            it.setLong(3, record.priceMinor)
-                            it.setLong(4, record.updatedAt.toEpochMilli())
-                            setUpdatedBy(it, 5, record.updatedBy)
-                            it.executeUpdate()
-                        }
+                    ).use {
+                        it.setString(1, namespace)
+                        it.setString(2, record.itemId)
+                        it.setLong(3, record.priceMinor)
+                        it.setLong(4, record.updatedAt.toEpochMilli())
+                        setUpdatedBy(it, 5, record.updatedBy)
+                        it.executeUpdate()
                     }
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to import the default worth catalog", exception)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to import the default worth catalog", exception)
         }
+    }
 
     override suspend fun count(): Int =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            COUNT(*)
-                        FROM
-                            ${EconomySqlSchema.WORTH}
-                        WHERE
-                            namespace = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.executeQuery().use { rs ->
-                            rs.next()
-                            rs.getInt(1)
-                        }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        COUNT(*)
+                    FROM
+                        ${EconomySqlSchema.WORTH}
+                    WHERE
+                        namespace = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.executeQuery().use { rs ->
+                        rs.next()
+                        rs.getInt(1)
                     }
                 }
-            } catch (exception: SQLException) {
-                throw EconomyDataException("unable to count the worth catalog", exception)
             }
+        } catch (exception: SQLException) {
+            throw EconomyDataException("unable to count the worth catalog", exception)
         }
 
     private fun writeRecord(connection: Connection, record: WorthRecord) {

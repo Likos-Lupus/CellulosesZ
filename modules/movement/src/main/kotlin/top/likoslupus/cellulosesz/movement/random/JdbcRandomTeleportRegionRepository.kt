@@ -1,8 +1,8 @@
 package top.likoslupus.cellulosesz.movement.random
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import top.likoslupus.cellulosesz.movement.MovementSqlSchema
 import java.sql.ResultSet
 import java.sql.SQLException
@@ -13,208 +13,198 @@ internal class JdbcRandomTeleportRegionRepository(
 ) : RandomTeleportRegionRepository {
 
     override suspend fun list(): List<RandomTeleportRegion> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            name,
-                            dimension,
-                            center_x,
-                            center_z,
-                            minimum_radius,
-                            maximum_radius,
-                            enabled,
-                            revision
-                        FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ?
-                        ORDER BY
-                            name;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.executeQuery().use { rs ->
-                            buildList {
-                                while (rs.next()) {
-                                    add(readRegion(rs))
-                                }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        name,
+                        dimension,
+                        center_x,
+                        center_z,
+                        minimum_radius,
+                        maximum_radius,
+                        enabled,
+                        revision
+                    FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ?
+                    ORDER BY
+                        name;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.executeQuery().use { rs ->
+                        buildList {
+                            while (rs.next()) {
+                                add(readRegion(rs))
                             }
                         }
                     }
                 }
-            } catch (exception: SQLException) {
-                throw RandomTeleportDataException(
-                    "unable to read random teleport regions",
-                    exception
-                )
             }
+        } catch (exception: SQLException) {
+            throw RandomTeleportDataException(
+                "unable to read random teleport regions",
+                exception
+            )
         }
 
     override suspend fun find(name: RegionName): RandomTeleportRegion? =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            name,
-                            dimension,
-                            center_x,
-                            center_z,
-                            minimum_radius,
-                            maximum_radius,
-                            enabled,
-                            revision
-                        FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ? AND name = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, name.value)
-                        statement.executeQuery().use { rs ->
-                            when {
-                                rs.next() -> readRegion(rs)
-                                else -> null
-                            }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        name,
+                        dimension,
+                        center_x,
+                        center_z,
+                        minimum_radius,
+                        maximum_radius,
+                        enabled,
+                        revision
+                    FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ? AND name = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, name.value)
+                    statement.executeQuery().use { rs ->
+                        when {
+                            rs.next() -> readRegion(rs)
+                            else -> null
                         }
                     }
                 }
-            } catch (exception: SQLException) {
-                throw RandomTeleportDataException(
-                    "unable to read random teleport region '${name.value}'",
-                    exception,
-                )
             }
+        } catch (exception: SQLException) {
+            throw RandomTeleportDataException(
+                "unable to read random teleport region '${name.value}'",
+                exception,
+            )
         }
 
     override suspend fun count(): Int =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            COUNT(*)
-                        FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.executeQuery().use { rs ->
-                            if (rs.next()) rs.getInt(1) else 0
-                        }
+        try {
+            database.readIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        COUNT(*)
+                    FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.executeQuery().use { rs ->
+                        if (rs.next()) rs.getInt(1) else 0
                     }
                 }
-            } catch (exception: SQLException) {
-                throw RandomTeleportDataException(
-                    "unable to count random teleport regions",
-                    exception
-                )
             }
+        } catch (exception: SQLException) {
+            throw RandomTeleportDataException(
+                "unable to count random teleport regions",
+                exception
+            )
         }
 
     override suspend fun put(region: RandomTeleportRegion) =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    val revision = connection.prepareStatement(
-                        /* language=SQL */ """
-                        SELECT
-                            revision
-                        FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ? AND name = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, region.name.value)
-                        statement.executeQuery().use { rs ->
-                            if (rs.next()) rs.getLong(1) else 0L
-                        }
-                    } + 1L
+        try {
+            database.transactionIo { connection ->
+                val revision = connection.prepareStatement(
+                    /* language=SQL */ """
+                    SELECT
+                        revision
+                    FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ? AND name = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, region.name.value)
+                    statement.executeQuery().use { rs ->
+                        if (rs.next()) rs.getLong(1) else 0L
+                    }
+                } + 1L
 
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ? AND name = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, region.name.value)
-                        statement.executeUpdate()
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        INSERT INTO ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS} (
-                            namespace,
-                            name,
-                            dimension,
-                            center_x,
-                            center_z,
-                            minimum_radius,
-                            maximum_radius,
-                            enabled,
-                            revision
-                        )
-                        VALUES (
-                            ?, ?, ?, ?, ?, ?, ?, ?, ?
-                        );
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, region.name.value)
-                        statement.setString(3, region.dimension)
-                        statement.setDouble(4, region.centerX)
-                        statement.setDouble(5, region.centerZ)
-                        statement.setDouble(6, region.minimumRadius)
-                        statement.setDouble(7, region.maximumRadius)
-                        statement.setBoolean(8, region.enabled)
-                        statement.setLong(9, revision)
-                        statement.executeUpdate()
-                    }
-                    Unit
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ? AND name = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, region.name.value)
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw RandomTeleportDataException(
-                    "unable to write random teleport region '${region.name.value}'",
-                    exception,
-                )
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    INSERT INTO ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS} (
+                        namespace,
+                        name,
+                        dimension,
+                        center_x,
+                        center_z,
+                        minimum_radius,
+                        maximum_radius,
+                        enabled,
+                        revision
+                    )
+                    VALUES (
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?
+                    );
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, region.name.value)
+                    statement.setString(3, region.dimension)
+                    statement.setDouble(4, region.centerX)
+                    statement.setDouble(5, region.centerZ)
+                    statement.setDouble(6, region.minimumRadius)
+                    statement.setDouble(7, region.maximumRadius)
+                    statement.setBoolean(8, region.enabled)
+                    statement.setLong(9, revision)
+                    statement.executeUpdate()
+                }
+                Unit
             }
+        } catch (exception: SQLException) {
+            throw RandomTeleportDataException(
+                "unable to write random teleport region '${region.name.value}'",
+                exception,
+            )
         }
 
     override suspend fun remove(name: RegionName): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        DELETE FROM
-                            ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
-                        WHERE
-                            namespace = ? AND name = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, name.value)
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    DELETE FROM
+                        ${MovementSqlSchema.RANDOM_TELEPORT_REGIONS}
+                    WHERE
+                        namespace = ? AND name = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, name.value)
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw RandomTeleportDataException(
-                    "unable to remove random teleport region '${name.value}'",
-                    exception,
-                )
             }
+        } catch (exception: SQLException) {
+            throw RandomTeleportDataException(
+                "unable to remove random teleport region '${name.value}'",
+                exception,
+            )
         }
 
     private fun readRegion(rs: ResultSet): RandomTeleportRegion {

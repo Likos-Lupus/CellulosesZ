@@ -1,15 +1,17 @@
 package top.likoslupus.cellulosesz.core.player.identity
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import top.likoslupus.cellulosesz.core.player.KnownPlayerIdentity
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
 import top.likoslupus.cellulosesz.foundation.database.StorageException
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import java.sql.Connection
 import java.sql.ResultSet
 import java.sql.SQLException
 import java.time.Instant
 import java.util.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** JDBC Player Identity Index. Never blocks the command path: it is only used at boot and on join. */
 public class JdbcPlayerIdentityRepository(
@@ -29,33 +31,28 @@ public class JdbcPlayerIdentityRepository(
         }
 
     override suspend fun findById(id: UUID): PersistedPlayerIdentity? =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection -> readById(connection, id) }
-            } catch (exception: SQLException) {
-                throw StorageException("unable to read player identity for $id", exception)
-            }
+        try {
+            database.readIo { connection -> readById(connection, id) }
+        } catch (exception: SQLException) {
+            throw StorageException("unable to read player identity for $id", exception)
         }
 
     override suspend fun findCandidatesByName(name: String): List<PersistedPlayerIdentity> =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection -> readCandidatesByName(connection, name) }
-            } catch (exception: SQLException) {
-                throw StorageException("unable to search player identities by name", exception)
-            }
+        try {
+            database.readIo { connection -> readCandidatesByName(connection, name) }
+        } catch (exception: SQLException) {
+            throw StorageException("unable to search player identities by name", exception)
         }
 
     override suspend fun observe(
         identity: KnownPlayerIdentity,
         at: Instant
-    ): Unit =
-        withContext(Dispatchers.IO) {
-            val normalized = normalize(identity.name)
-            try {
-                database.transaction { connection ->
-                    val existingFirst = connection.prepareStatement(
-                        /* language=SQL */ """
+    ) {
+        val normalized = normalize(identity.name)
+        try {
+            database.transactionIo { connection ->
+                val existingFirst = connection.prepareStatement(
+                    /* language=SQL */ """
                         SELECT
                             first_seen_ms
                         FROM
@@ -63,31 +60,31 @@ public class JdbcPlayerIdentityRepository(
                         WHERE
                             namespace = ? AND player_uuid = ?;
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.executeQuery().use { rs ->
-                            when {
-                                rs.next() -> rs.getLong(1)
-                                else -> null
-                            }
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.executeQuery().use { rs ->
+                        when {
+                            rs.next() -> rs.getLong(1)
+                            else -> null
                         }
-                    } ?: at.toEpochMilli()
+                    }
+                } ?: at.toEpochMilli()
 
-                    connection.prepareStatement(
-                        /* language=SQL */ """
+                connection.prepareStatement(
+                    /* language=SQL */ """
                         DELETE FROM
                             ${IdentitySqlSchema.PLAYERS}
                         WHERE
                             namespace = ? AND player_uuid = ?;
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.executeUpdate()
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.executeUpdate()
+                }
+                connection.prepareStatement(
+                    /* language=SQL */ """
                         INSERT INTO ${IdentitySqlSchema.PLAYERS} (
                             namespace,
                             player_uuid,
@@ -100,18 +97,18 @@ public class JdbcPlayerIdentityRepository(
                             ?, ?, ?, ?, ?, ?
                         );
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.setString(3, identity.name)
-                        statement.setString(4, normalized)
-                        statement.setLong(5, existingFirst)
-                        statement.setLong(6, at.toEpochMilli())
-                        statement.executeUpdate()
-                    }
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.setString(3, identity.name)
+                    statement.setString(4, normalized)
+                    statement.setLong(5, existingFirst)
+                    statement.setLong(6, at.toEpochMilli())
+                    statement.executeUpdate()
+                }
 
-                    val nameFirst = connection.prepareStatement(
-                        /* language=SQL */ """
+                val nameFirst = connection.prepareStatement(
+                    /* language=SQL */ """
                         SELECT
                             first_seen_ms
                         FROM
@@ -119,33 +116,33 @@ public class JdbcPlayerIdentityRepository(
                         WHERE
                             namespace = ? AND player_uuid = ? AND normalized_name = ?;
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.setString(3, normalized)
-                        statement.executeQuery().use { rs ->
-                            when {
-                                rs.next() -> rs.getLong(1)
-                                else -> null
-                            }
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.setString(3, normalized)
+                    statement.executeQuery().use { rs ->
+                        when {
+                            rs.next() -> rs.getLong(1)
+                            else -> null
                         }
-                    } ?: at.toEpochMilli()
+                    }
+                } ?: at.toEpochMilli()
 
-                    connection.prepareStatement(
-                        /* language=SQL */ """
+                connection.prepareStatement(
+                    /* language=SQL */ """
                         DELETE FROM
                             ${IdentitySqlSchema.PLAYER_NAMES}
                         WHERE
                             namespace = ? AND player_uuid = ? AND normalized_name = ?;
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.setString(3, normalized)
-                        statement.executeUpdate()
-                    }
-                    connection.prepareStatement(
-                        /* language=SQL */ """
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.setString(3, normalized)
+                    statement.executeUpdate()
+                }
+                connection.prepareStatement(
+                    /* language=SQL */ """
                         INSERT INTO ${IdentitySqlSchema.PLAYER_NAMES} (
                             namespace,
                             player_uuid,
@@ -158,24 +155,24 @@ public class JdbcPlayerIdentityRepository(
                             ?, ?, ?, ?, ?, ?
                         );
                         """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, namespace)
-                        statement.setString(2, identity.id.toString())
-                        statement.setString(3, identity.name)
-                        statement.setString(4, normalized)
-                        statement.setLong(5, nameFirst)
-                        statement.setLong(6, at.toEpochMilli())
-                        statement.executeUpdate()
-                    }
-                    Unit
+                ).use { statement ->
+                    statement.setString(1, namespace)
+                    statement.setString(2, identity.id.toString())
+                    statement.setString(3, identity.name)
+                    statement.setString(4, normalized)
+                    statement.setLong(5, nameFirst)
+                    statement.setLong(6, at.toEpochMilli())
+                    statement.executeUpdate()
                 }
-            } catch (exception: SQLException) {
-                throw StorageException(
-                    "unable to record player identity for ${identity.id}",
-                    exception
-                )
+                Unit
             }
+        } catch (exception: SQLException) {
+            throw StorageException(
+                "unable to record player identity for ${identity.id}",
+                exception
+            )
         }
+    }
 
     private fun readAll(connection: Connection): List<PersistedPlayerIdentity> =
         connection.prepareStatement(

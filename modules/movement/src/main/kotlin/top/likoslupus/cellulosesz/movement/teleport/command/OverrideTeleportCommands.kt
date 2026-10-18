@@ -7,6 +7,7 @@ import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.onlineNames
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
 import top.likoslupus.cellulosesz.core.player.KnownPlayerResolver
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
@@ -20,15 +21,20 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 import top.likoslupus.cellulosesz.movement.command.movementLaunch
 import top.likoslupus.cellulosesz.movement.config.TeleportSettings
-import top.likoslupus.cellulosesz.movement.format.MovementMessages
+import top.likoslupus.cellulosesz.movement.format.*
 import top.likoslupus.cellulosesz.movement.location.LastLocationService
-import top.likoslupus.cellulosesz.movement.teleport.*
-import java.util.*
+import top.likoslupus.cellulosesz.movement.teleport.TeleportCoordinator
+import top.likoslupus.cellulosesz.movement.teleport.TeleportDestination
+import top.likoslupus.cellulosesz.movement.teleport.TeleportOutcome
 
 /**
- * The `/tpo*` override family: `/tpo`, `/tpohere`, `/tpoffline` and `/tpall`. These are the admin
- * escape hatch and are deliberately not gated by `/tptoggle`; every move still funnels through the
- * single [TeleportCoordinator] path so the per-world access gate, safety and preflight stay intact.
+ * The `/tpo*` override family entry point: `/tpo`, `/tpohere`, `/tpoffline` and `/tpall`. These are
+ * the admin escape hatch and are deliberately not gated by `/tptoggle`; every move still funnels
+ * through the single [TeleportCoordinator] path so the per-world access gate, safety and preflight
+ * stay intact.
+ *
+ * `/tpo` and `/tpohere` are declared here; [OfflineTeleportCommand] and [TpAllCommand] own the
+ * other two, and `TeleportCommandSupport.kt` holds the shared admin execution helper.
  */
 internal object OverrideTeleportCommands {
 
@@ -36,6 +42,39 @@ internal object OverrideTeleportCommands {
         teleports: TeleportCoordinator,
         lastLocations: LastLocationService,
         known: KnownPlayerResolver,
+        teleportSettings: () -> TeleportSettings,
+        kernel: RuntimeKernel,
+        messages: LocalizedMessages,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ): List<CommandDefinition> =
+        overrideCommands(
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation,
+        ) + OfflineTeleportCommand.commands(
+            teleports,
+            lastLocations,
+            known,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation,
+        ) + TpAllCommand.commands(
+            teleports,
+            teleportSettings,
+            kernel,
+            messages,
+            adventure,
+            presentation,
+        )
+
+    private fun overrideCommands(
+        teleports: TeleportCoordinator,
         teleportSettings: () -> TeleportSettings,
         kernel: RuntimeKernel,
         messages: LocalizedMessages,
@@ -103,65 +142,6 @@ internal object OverrideTeleportCommands {
                 }
             }
         },
-
-        command(
-            name = "tpoffline",
-            category = CommandCategory.MOVEMENT,
-            permission = CommandPermissions.TP_OFFLINE,
-            documentation = "movement/tpoffline",
-        ) {
-            argument("player", word()) { player ->
-                executesPlayer {
-                    executorToOffline(
-                        context,
-                        get(player),
-                        teleports,
-                        lastLocations,
-                        known,
-                        teleportSettings,
-                        kernel,
-                        messages,
-                        adventure,
-                        presentation,
-                    )
-                }
-            }
-        },
-
-        command(
-            name = "tpall",
-            category = CommandCategory.MOVEMENT,
-            permission = CommandPermissions.TP_ALL,
-            documentation = "movement/tpall",
-        ) {
-            executesPlayer {
-                everyoneTo(
-                    context,
-                    null,
-                    teleports,
-                    teleportSettings,
-                    kernel,
-                    messages,
-                    adventure,
-                    presentation,
-                )
-            }
-            argument("player", word()) { player ->
-                suggests { suggestAll(onlineNames(source)) }
-                executes {
-                    everyoneTo(
-                        context,
-                        get(player),
-                        teleports,
-                        teleportSettings,
-                        kernel,
-                        messages,
-                        adventure,
-                        presentation,
-                    )
-                }
-            }
-        },
     )
 
     private fun executorToPlayer(
@@ -202,7 +182,7 @@ internal object OverrideTeleportCommands {
             adventure,
             MessageKey("movement.pending.teleport"),
         ) { _ ->
-            val outcome = execute(
+            val outcome = executeAdminTeleport(
                 subjectId,
                 TeleportDestination.Player(targetId),
                 teleports,
@@ -266,7 +246,7 @@ internal object OverrideTeleportCommands {
             adventure,
             MessageKey("movement.pending.teleport"),
         ) { feedback ->
-            val outcome = execute(
+            val outcome = executeAdminTeleport(
                 subjectId,
                 TeleportDestination.Player(destinationId),
                 teleports,
@@ -332,7 +312,7 @@ internal object OverrideTeleportCommands {
             adventure,
             MessageKey("movement.pending.teleport"),
         ) { _ ->
-            val outcome = execute(
+            val outcome = executeAdminTeleport(
                 targetId,
                 TeleportDestination.Player(executorId),
                 teleports,
@@ -366,174 +346,5 @@ internal object OverrideTeleportCommands {
             }
         }
     }
-
-    private fun executorToOffline(
-        context: CommandContext<CommandSourceStack>,
-        targetName: String,
-        teleports: TeleportCoordinator,
-        lastLocations: LastLocationService,
-        known: KnownPlayerResolver,
-        teleportSettings: () -> TeleportSettings,
-        kernel: RuntimeKernel,
-        messages: LocalizedMessages,
-        adventure: AdventureRuntime,
-        presentation: TextPresentation,
-    ): Int {
-        val source = context.source
-        val executor = source.player
-            ?: return source.replyError(
-                adventure,
-                messages.renderFor(
-                    null,
-                    MessageKey("core.error.player_required")
-                )
-            )
-        val executorId = executor.uuid
-        val online = PlayerResolver.onlineByName(source.server, targetName)
-        val knownIdentity = when {
-            online != null -> null
-            else -> known.knownByName(targetName)
-        }
-        val targetId = online?.uuid ?: knownIdentity?.id
-        val resolvedName = online?.name?.string ?: knownIdentity?.name ?: targetName
-        if (targetId == null) {
-            return source.replyError(
-                adventure,
-                messages.renderFor(
-                    executorId,
-                    MessageKey("movement.teleport.player_not_online"),
-                    targetName,
-                ),
-            )
-        }
-        return movementLaunch(
-            source,
-            kernel,
-            messages,
-            adventure,
-            MessageKey("movement.pending.teleport"),
-        ) { _ ->
-            val location = lastLocations.lastLocation(targetId)
-            val notices = if (location == null) {
-                listOf(MovementMessages.noLastLocation(resolvedName))
-            } else {
-                val outcome = execute(
-                    executorId,
-                    TeleportDestination.Fixed(location.position),
-                    teleports,
-                    teleportSettings,
-                )
-                when (outcome) {
-                    is TeleportOutcome.Success ->
-                        listOf(MovementMessages.teleportedToOffline(resolvedName))
-
-                    else -> listOfNotNull(MovementMessages.teleportOutcome(outcome))
-                }
-            }
-            kernel.sendNotices(
-                CommandFeedbackTarget.Player(executorId),
-                adventure,
-                presentation,
-                executorId,
-                notices,
-            )
-        }
-    }
-
-    private fun everyoneTo(
-        context: CommandContext<CommandSourceStack>,
-        destinationName: String?,
-        teleports: TeleportCoordinator,
-        teleportSettings: () -> TeleportSettings,
-        kernel: RuntimeKernel,
-        messages: LocalizedMessages,
-        adventure: AdventureRuntime,
-        presentation: TextPresentation,
-    ): Int {
-        val source = context.source
-        val actorId = source.player?.uuid
-        val destinationId = when (destinationName) {
-            null -> actorId
-            else -> {
-                val resolved = PlayerResolver.onlineByName(source.server, destinationName)
-                    ?: return source.replyError(
-                        adventure,
-                        messages.renderFor(
-                            actorId,
-                            MessageKey("movement.teleport.player_not_online"),
-                            destinationName,
-                        )
-                    )
-                resolved.uuid
-            }
-        }
-        if (destinationId == null) {
-            return source.replyError(
-                adventure,
-                messages.renderFor(
-                    null,
-                    MessageKey("core.error.player_required")
-                )
-            )
-        }
-        val resolvedDestination = when (destinationName) {
-            null -> source.player?.name?.string
-            else -> PlayerResolver.onlineById(source.server, destinationId)?.name?.string
-                ?: destinationName
-        }
-        return movementLaunch(
-            source,
-            kernel,
-            messages,
-            adventure,
-            MessageKey("movement.pending.teleport"),
-        ) { feedback ->
-            val subjects = kernel.onServerThread {
-                PlayerResolver.online(kernel.requireServer())
-                        .map { it.uuid }
-                        .filter { it != destinationId }
-            }
-            var moved = 0
-            subjects.forEach { subjectId ->
-                val outcome = execute(
-                    subjectId,
-                    TeleportDestination.Player(destinationId),
-                    teleports,
-                    teleportSettings,
-                )
-                if (outcome is TeleportOutcome.Success) {
-                    moved++
-                }
-            }
-            kernel.sendNotices(
-                feedback,
-                adventure,
-                presentation,
-                actorId,
-                listOf(MovementMessages.teleportedAll(moved, resolvedDestination)),
-            )
-        }
-    }
-
-    private suspend fun execute(
-        subjectId: UUID,
-        destination: TeleportDestination,
-        teleports: TeleportCoordinator,
-        teleportSettings: () -> TeleportSettings,
-    ): TeleportOutcome =
-        teleports.execute(
-            TeleportIntent(
-                subjectId = subjectId,
-                destination = destination,
-                cause = TeleportCause.ADMIN,
-                policy = teleportPolicyFor(
-                    TeleportCause.ADMIN,
-                    teleportSettings()
-                ),
-            )
-        )
-
-    private fun onlineNames(source: CommandSourceStack): List<String> =
-        source.server.playerList.players.map { it.gameProfile.name }
 
 }

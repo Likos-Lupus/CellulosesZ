@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.utility.kit
 
 import top.likoslupus.cellulosesz.foundation.database.DatabaseRuntime
+import top.likoslupus.cellulosesz.foundation.database.readIo
+import top.likoslupus.cellulosesz.foundation.database.transactionIo
 import top.likoslupus.cellulosesz.utility.UtilitySqlSchema
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.Instant
 import java.util.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** The system-grant ledger in `cz_kit_grants`; RESERVED is written before delivery (fail closed). */
 internal class JdbcKitGrantRepository(
@@ -20,14 +20,12 @@ internal class JdbcKitGrantRepository(
         grantId: String,
         playerId: UUID,
     ): KitGrantRecord? =
-        withContext(Dispatchers.IO) {
-            try {
-                database.read { connection ->
-                    find(connection, addonId, grantId, playerId)
-                }
-            } catch (exception: SQLException) {
-                throw KitGrantDataException("unable to read kit grant '$grantId'", exception)
+        try {
+            database.readIo { connection ->
+                find(connection, addonId, grantId, playerId)
             }
+        } catch (exception: SQLException) {
+            throw KitGrantDataException("unable to read kit grant '$grantId'", exception)
         }
 
     override suspend fun reserve(
@@ -37,32 +35,30 @@ internal class JdbcKitGrantRepository(
         grantId: String,
         at: Instant,
     ): KitGrantReservation =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    val existing = find(connection, addonId, grantId, playerId)
-                    if (existing != null) {
-                        KitGrantReservation.Existing(existing.state)
-                    } else {
-                        insert(connection, addonId, playerId, kitName, grantId, at)
-                        KitGrantReservation.Inserted
-                    }
+        try {
+            database.transactionIo { connection ->
+                val existing = find(connection, addonId, grantId, playerId)
+                if (existing != null) {
+                    KitGrantReservation.Existing(existing.state)
+                } else {
+                    insert(connection, addonId, playerId, kitName, grantId, at)
+                    KitGrantReservation.Inserted
                 }
-            } catch (exception: SQLException) {
-                // A concurrent insert against the unique key is not an infrastructure failure:
-                // re-read the now-existing row instead of reporting storage as unavailable.
-                val existing = runCatching {
-                    database.read { connection ->
-                        find(connection, addonId, grantId, playerId)
-                    }
-                }.getOrNull()
-                when {
-                    existing != null -> KitGrantReservation.Existing(existing.state)
-                    else -> throw KitGrantDataException(
-                        "unable to reserve kit grant '$grantId'",
-                        exception,
-                    )
+            }
+        } catch (exception: SQLException) {
+            // A concurrent insert against the unique key is not an infrastructure failure:
+            // re-read the now-existing row instead of reporting storage as unavailable.
+            val existing = runCatching {
+                database.readIo { connection ->
+                    find(connection, addonId, grantId, playerId)
                 }
+            }.getOrNull()
+            when {
+                existing != null -> KitGrantReservation.Existing(existing.state)
+                else -> throw KitGrantDataException(
+                    "unable to reserve kit grant '$grantId'",
+                    exception,
+                )
             }
         }
 
@@ -72,37 +68,35 @@ internal class JdbcKitGrantRepository(
         playerId: UUID,
         at: Instant,
     ): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                database.transaction { connection ->
-                    connection.prepareStatement(
-                        /* language=SQL */ """
-                        UPDATE
-                            ${UtilitySqlSchema.KIT_GRANTS}
-                        SET
-                            state = ?,
-                            delivered_at_ms = ?
-                        WHERE
-                            namespace = ?
-                            AND addon_id = ?
-                            AND grant_id = ?
-                            AND player_uuid = ?
-                            AND state = ?;
-                        """.trimIndent()
-                    ).use { statement ->
-                        statement.setString(1, KitGrantStatus.DELIVERED.name)
-                        statement.setLong(2, at.toEpochMilli())
-                        statement.setString(3, namespace)
-                        statement.setString(4, addonId)
-                        statement.setString(5, grantId)
-                        statement.setString(6, playerId.toString())
-                        statement.setString(7, KitGrantStatus.RESERVED.name)
-                        statement.executeUpdate() > 0
-                    }
+        try {
+            database.transactionIo { connection ->
+                connection.prepareStatement(
+                    /* language=SQL */ """
+                    UPDATE
+                        ${UtilitySqlSchema.KIT_GRANTS}
+                    SET
+                        state = ?,
+                        delivered_at_ms = ?
+                    WHERE
+                        namespace = ?
+                        AND addon_id = ?
+                        AND grant_id = ?
+                        AND player_uuid = ?
+                        AND state = ?;
+                    """.trimIndent()
+                ).use { statement ->
+                    statement.setString(1, KitGrantStatus.DELIVERED.name)
+                    statement.setLong(2, at.toEpochMilli())
+                    statement.setString(3, namespace)
+                    statement.setString(4, addonId)
+                    statement.setString(5, grantId)
+                    statement.setString(6, playerId.toString())
+                    statement.setString(7, KitGrantStatus.RESERVED.name)
+                    statement.executeUpdate() > 0
                 }
-            } catch (exception: SQLException) {
-                throw KitGrantDataException("unable to finalize kit grant '$grantId'", exception)
             }
+        } catch (exception: SQLException) {
+            throw KitGrantDataException("unable to finalize kit grant '$grantId'", exception)
         }
 
     private fun insert(
