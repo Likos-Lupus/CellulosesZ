@@ -1,13 +1,11 @@
 package top.likoslupus.cellulosesz.application.bootstrap
 
 import dev.architectury.platform.Platform
-import java.nio.file.Path
-import kotlinx.coroutines.Dispatchers
 import net.minecraft.world.level.storage.LevelResource
 import top.likoslupus.cellulosesz.administration.AdministrationFeature
 import top.likoslupus.cellulosesz.application.api.extension.AddonMessageOverlay
-import top.likoslupus.cellulosesz.application.config.CellulosesConfig
 import top.likoslupus.cellulosesz.application.config.ConfigDefaults
+import top.likoslupus.cellulosesz.application.config.ConfigFiles
 import top.likoslupus.cellulosesz.application.config.ConfigValidation
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
 import top.likoslupus.cellulosesz.communication.CommunicationFeature
@@ -19,23 +17,20 @@ import top.likoslupus.cellulosesz.core.preference.PlayerPreference
 import top.likoslupus.cellulosesz.core.preference.PlayerPreferenceService
 import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
-import top.likoslupus.cellulosesz.core.text.i18n.BundledTranslations
-import top.likoslupus.cellulosesz.core.text.i18n.LanguageResolver
-import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
-import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
-import top.likoslupus.cellulosesz.core.text.i18n.TranslationSource
+import top.likoslupus.cellulosesz.core.text.i18n.*
 import top.likoslupus.cellulosesz.core.text.i18n.preference.JdbcPlayerLanguagePreferenceRepository
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
 import top.likoslupus.cellulosesz.core.text.presentation.createTextPresentation
 import top.likoslupus.cellulosesz.core.text.theme.TextThemeResolver
 import top.likoslupus.cellulosesz.economy.EconomyFeature
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
-import top.likoslupus.cellulosesz.foundation.config.ConfigStore
-import top.likoslupus.cellulosesz.foundation.config.TomlConfigCodec
+import top.likoslupus.cellulosesz.foundation.config.describe
 import top.likoslupus.cellulosesz.foundation.database.DeferredDatabaseRuntime
 import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.player.PlayerFeature
 import top.likoslupus.cellulosesz.utility.UtilityFeature
+import java.nio.file.Path
+import kotlinx.coroutines.Dispatchers
 
 /**
  * Bootstrap phase one: the typed config store, the runtime kernel, the storage handle and the shared
@@ -53,21 +48,16 @@ internal object BootstrapConfiguration {
         val permissions = PermissionService(platform.permissionBridge)
 
         val configDirectory = configDirectory()
-        val configPath = configDirectory.resolve("cellulosesz.toml")
-        ConfigDefaults.writeIfMissing(configPath)
-        val config = ConfigStore(
-            path = configPath,
-            codec = TomlConfigCodec(CellulosesConfig.serializer()),
-            validate = ConfigValidation::validate,
-            validateTransition = ConfigValidation.rootTransition { dataRoot(kernel) },
+        ConfigDefaults.writeIfMissing(configDirectory, ConfigFiles.all)
+        val config = ConfigFiles.store(
+            directory = configDirectory,
             ioDispatcher = Dispatchers.IO,
+            validateTransition = ConfigValidation.rootTransition { dataRoot(kernel) },
         )
         when (val initial = config.initialLoadBlocking()) {
             is ConfigReloadResult.Success -> Unit
             is ConfigReloadResult.Failure -> {
-                val message = initial.errors.joinToString("; ") {
-                    "${it.path}: ${it.message}"
-                }
+                val message = initial.errors.joinToString("; ") { it.describe() }
                 health.fail("initial config load failed: $message")
                 error("initial config load failed: $message")
             }

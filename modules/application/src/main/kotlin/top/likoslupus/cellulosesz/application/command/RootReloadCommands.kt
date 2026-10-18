@@ -13,12 +13,13 @@ import top.likoslupus.cellulosesz.core.text.adventure.message
 import top.likoslupus.cellulosesz.core.text.adventure.reply
 import top.likoslupus.cellulosesz.core.text.adventure.replyError
 import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
+import top.likoslupus.cellulosesz.foundation.config.ConfigHandle
 import top.likoslupus.cellulosesz.foundation.config.ConfigReloadResult
-import top.likoslupus.cellulosesz.foundation.config.ConfigStore
+import top.likoslupus.cellulosesz.foundation.config.describe
 
 /** `/cellulosesz reload`. */
 internal fun CommandSyntax.reloadCommand(
-    config: ConfigStore<CellulosesConfig>,
+    config: ConfigHandle<CellulosesConfig>,
     kernel: RuntimeKernel,
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
@@ -40,7 +41,7 @@ internal fun CommandSyntax.reloadCommand(
 
 private fun reload(
     source: CommandSourceStack,
-    config: ConfigStore<CellulosesConfig>,
+    config: ConfigHandle<CellulosesConfig>,
     kernel: RuntimeKernel,
     messages: LocalizedMessages,
     adventure: AdventureRuntime,
@@ -72,7 +73,7 @@ private fun reload(
                     listOf(
                         MessageArgument(
                             result.errors.joinToString("; ") {
-                                "${it.path}: ${it.message}"
+                                it.describe()
                             }
                         )
                     ),

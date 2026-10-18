@@ -1,13 +1,13 @@
 package top.likoslupus.cellulosesz.foundation.config
 
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerializationException
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 
 /**
  * Typed, immutable, transactional config store. Decodes a candidate, validates the complete
@@ -26,25 +26,26 @@ public class ConfigStore<T>(
     private val codec: ConfigDecoder<T>,
     private val validate: (T) -> List<ValidationError>,
     private val ioDispatcher: CoroutineDispatcher,
-    private val validateTransition: (current: T, candidate: T) -> List<ValidationError> =
-        { _, _ -> emptyList() },
-) {
+    private val validateTransition: (current: T, candidate: T) -> List<ValidationError> = { _, _ ->
+        emptyList()
+    },
+) : ConfigHandle<T> {
 
     private val snapshot = AtomicReference<T?>(null)
     private val generationCounter = AtomicInteger(0)
 
-    public val initialized: Boolean
+    override val initialized: Boolean
         get() = snapshot.get() != null
 
-    public val current: T
+    override val current: T
         get() = snapshot.get()
             ?: error("configuration has not been loaded yet")
 
-    public val generation: Int
+    override val generation: Int
         get() = generationCounter.get()
 
     /** Blocking, one-shot boot load. Call from the startup lifecycle, never on the server thread. */
-    public fun initialLoadBlocking(): ConfigReloadResult =
+    override fun initialLoadBlocking(): ConfigReloadResult =
         if (!Files.exists(path)) {
             ConfigReloadResult.Failure(
                 listOf(
@@ -59,7 +60,7 @@ public class ConfigStore<T>(
         }
 
     /** Transactional reload on the IO dispatcher. A failure keeps the previous snapshot. */
-    public suspend fun reload(): ConfigReloadResult =
+    override suspend fun reload(): ConfigReloadResult =
         withContext(ioDispatcher) {
             applyCandidate()
         }

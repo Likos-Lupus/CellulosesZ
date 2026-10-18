@@ -287,16 +287,25 @@ behaviour.
 
 ## Configuration and storage
 
-The config file is created on first start at:
+The config is a directory of TOML files, created on first start at:
 
 ```text
-<config-dir>/cellulosesz/cellulosesz.toml
+<config-dir>/cellulosesz/
+  cellulosesz.toml        # diagnostics, database, localization, text, commands, api, backup
+  movement.toml           # [movement]
+  messaging.toml          # [messaging]
+  administration.toml     # [administration]
+  utility.toml            # [utility]
+  players.toml            # [players]
+  economy.toml            # [economy]
 ```
 
-It is TOML, strictly validated, and rejects unknown keys. The active storage backend is selected by
-`[database].type` — `sqlite` (default), `h2`, `mysql`, `mariadb`, or `postgresql`; each backend has
-its own `[database.<backend>]` section and only the active one is initialized. Business data lives
-in fixed `cz_*` tables (with a `namespace` column) rather than files:
+Each file is an independent unit: only the tables it owns are read, so a table placed in the wrong
+file is ignored. Unknown keys inside an owned table are rejected. Every key is documented inline in
+its template. The active storage backend is selected by `[database].type` — `sqlite` (default),
+`h2`, `mysql`, `mariadb`, or `postgresql`; each backend has its own `[database.<backend>]` section
+and only the active one is initialized. Business data lives in fixed `cz_*` tables (with a
+`namespace` column) rather than files:
 
 ```text
 cz_players, cz_player_names            # durable player identity

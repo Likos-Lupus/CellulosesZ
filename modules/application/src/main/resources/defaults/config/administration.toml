@@ -1,0 +1,216 @@
+# CellulosesZ — administration.toml
+# Scope: [administration] · Owner: modules/administration · Reload: hot
+# Only the top-level [administration] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# Moderation, jail, operator player-state, entity/world tools, /editsign and vanish.
+
+[administration]
+
+# =============================================================================
+# [administration.moderation] — kick, ban, mute, social spy, login protection
+# =============================================================================
+[administration.moderation]
+
+# Enable the moderation commands. Reload: hot.
+enabled = true
+
+# Refuse to kick/ban/mute operators and players with a higher permission level.
+# Reload: hot.
+protectOperators = true
+
+# Default reason used when /kick has no reason. Must be non-empty, no control
+# characters. Reload: hot.
+defaultKickReason = "Kicked by an administrator"
+
+# Default reason used when /ban or /tempban has no reason. Reload: hot.
+defaultBanReason = "Banned by an administrator"
+
+# Default reason used when /mute or /tempmute has no reason. Reload: hot.
+defaultMuteReason = "Muted by an administrator"
+
+# Maximum length of any moderation reason. Range: 1..1024. Reload: hot.
+maxReasonLength = 256
+
+# Optional: cap for a single /tempban duration, in seconds. Omit for no cap.
+# Default: unset. Range: > 0 when set. Reload: hot.
+# maxTemporaryBanSeconds = 2592000
+
+# Optional: cap for a single /mute duration, in seconds. Omit for no cap.
+# cellulosesz.mute.unlimited bypasses it.
+# Default: unset. Range: > 0 when set. Reload: hot.
+# maxMuteSeconds = 3600
+
+# Notify online moderators about moderation actions. Reload: hot.
+notifyModerators = true
+
+# Record moderation actions in the audit table. Reload: hot.
+auditEnabled = true
+
+# Command roots a muted player may not run. Matched on the canonical CellulosesZ
+# command name; "*" blocks every command. Empty disables the gate. Reload: hot.
+mutedCommands = ["msg", "reply", "mail", "me", "helpop"]
+
+# Login PvP protection window, in seconds. A player who joined less than this many
+# seconds ago may not deal damage. 0 disables it.
+# Range: 0..3600. Reload: hot. Bypass: cellulosesz.pvpdelay.exempt.
+loginAttackDelaySeconds = 5
+
+# Report command executions to social spies (root command only). Reload: hot.
+socialSpyCommands = true
+
+# =============================================================================
+# [administration.jail] — /jail, /unjail, /togglejail, /setjail, /deljail
+# =============================================================================
+[administration.jail]
+
+# Enable jails. Reload: hot.
+enabled = true
+
+# Jail used when /jail has no jail name. Empty = the first configured jail.
+# Must match [a-z0-9_-]{1,32} or be empty. Reload: hot.
+defaultJail = ""
+
+# Maximum number of configured jails. Range: 1..256. Reload: hot.
+maxJails = 32
+
+# Allowed distance from the jail anchor, in blocks. Range: 0.0..256.0.
+# Reload: hot.
+allowedRadius = 8.0
+
+# Return the player to their pre-jail position on release. Reload: hot.
+returnOnRelease = true
+
+# How often confinement is re-checked, in ticks. Range: 1..1200. Reload: hot.
+confinementCheckIntervalTicks = 20
+
+# Block commands outside the allowlist while confined. Reload: hot.
+restrictCommands = false
+
+# Commands a confined player may still run when restrictCommands is true.
+# Matched on the first token; the namespaced cellulosesz:<entry> form is accepted
+# automatically. At most 64 entries, each [a-z0-9_:-]+. Reload: hot.
+allowedCommands = ["helpop"]
+
+# Count only online time for timed sentences. Existing wall-clock sentences keep
+# their original mode. Reload: hot.
+jailOnlineTime = false
+
+# =============================================================================
+# [administration.playerAdjustments] — /exp, /speed, /heal, /god, /fly
+# =============================================================================
+[administration.playerAdjustments]
+
+# Upper bound for one /exp give|take|set amount. Larger values are clamped.
+# Range: 1..100000000. Reload: hot.
+maximumExperienceAdjustment = 1000000
+
+# Allowed /speed multiplier range (walk and fly). Values outside are clamped.
+# minimumSpeedMultiplier >= 0, maximumSpeedMultiplier <= 10,
+# and minimum <= maximum. Reload: hot.
+# Minimum allowed /speed multiplier. Range: >= 0. Reload: hot.
+minimumSpeedMultiplier = 0.1
+# Maximum allowed /speed multiplier. Range: <= 10, >= minimumSpeedMultiplier.
+# Reload: hot.
+maximumSpeedMultiplier = 3.0
+
+# Seconds between /heal uses. 0 disables the cooldown.
+# Range: 0..86400. Reload: hot.
+# Bypass: cellulosesz.heal.cooldown.bypass.
+healCooldownSeconds = 0
+
+# Remove all mob effects from the healed player. Reload: hot.
+removeEffectsOnHeal = false
+
+# Dimension ids where /god is refused and stripped on entry.
+# Example: ["minecraft:the_nether"]. Reload: hot.
+noGodWorlds = []
+
+# Disable god mode when the player disconnects. Reload: hot.
+removeGodOnDisconnect = true
+
+# Enable flight on join for players holding cellulosesz.fly.onjoin. Reload: hot.
+flyOnJoin = false
+
+# Disable flight when changing dimension unless the player is creative/spectator.
+# Reload: hot.
+resetFlyOnWorldChange = false
+
+# Keep flight when changing game mode. Reload: hot.
+preserveFlyOnGamemodeChange = true
+
+# =============================================================================
+# [administration.entityTools] — /spawnmob and /remove
+# =============================================================================
+[administration.entityTools]
+
+# Maximum amount one /spawnmob call may spawn. Range: 1..1024. Reload: hot.
+maxSpawnAmount = 64
+
+# Maximum radius accepted by /remove <selector> <radius>. Range: 0.0..1024.0.
+# Reload: hot.
+maxRemoveRadius = 128.0
+
+# =============================================================================
+# [administration.worldTools] — /nuke, /firework, /burn
+# =============================================================================
+[administration.worldTools]
+
+# Largest /nuke explosion radius, in blocks. Range: 0.0..128.0. Reload: hot.
+maxNukeRadius = 16.0
+
+# Largest firework flight power accepted by /firework fire. Range: 0..32.
+# Reload: hot.
+maxFireworkPower = 4
+
+# Largest number of rockets one /firework fire call may launch. Range: 0..128.
+# Reload: hot.
+maxFireworkAmount = 8
+
+# Largest /burn duration, in seconds. Range: 0.0..3600.0. Reload: hot.
+maxBurnSeconds = 60.0
+
+# =============================================================================
+# [administration.fun] — /antioch, /beezooka, /kittycannon
+# =============================================================================
+[administration.fun]
+
+# Enable the amusement commands. Reload: hot.
+enabled = true
+
+# =============================================================================
+# [administration.signEditing] — /editsign
+# =============================================================================
+[administration.signEditing]
+
+# Enable /editsign. Reload: hot.
+enabled = true
+
+# Maximum characters per sign line. Longer input is rejected, not truncated.
+# Range: 1..4096. Reload: hot.
+maxLineLength = 384
+
+# Allow &/§ colour codes in edited text (still requires cellulosesz.editsign.colors).
+# Click and hover events are always stripped. Reload: hot.
+allowColors = true
+
+# Allow editing the back of a sign. Reload: hot.
+allowBack = false
+
+# Maximum distance, in blocks, the editor may stand from the sign.
+# Range: 0.0..64.0. Reload: hot.
+maxDistance = 6.0
+
+# =============================================================================
+# [administration.vanish] — /vanish
+# =============================================================================
+[administration.vanish]
+
+# Prevent vanished players from picking up items. Reload: hot.
+preventItemPickup = true
+
+# Prevent vanished players from dropping items. Reload: hot.
+preventItemDrop = false
+
+# Hide the join/quit announcement of a vanished player. Reload: hot.
+hideJoinQuit = true

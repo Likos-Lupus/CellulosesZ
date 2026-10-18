@@ -15,7 +15,7 @@ import top.likoslupus.cellulosesz.core.text.i18n.LocalizedMessages
 import top.likoslupus.cellulosesz.core.text.i18n.TranslationCatalog
 import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePreferences
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
-import top.likoslupus.cellulosesz.foundation.config.ConfigStore
+import top.likoslupus.cellulosesz.foundation.config.ConfigHandle
 
 /**
  * The `/cellulosesz` root: metadata plus the sub-command groups, each declared in its own file.
@@ -26,7 +26,7 @@ internal object RootCommand {
     const val ROOT_LITERAL: String = "cellulosesz"
 
     fun definition(
-        config: ConfigStore<CellulosesConfig>,
+        config: ConfigHandle<CellulosesConfig>,
         kernel: RuntimeKernel,
         health: ApplicationHealth,
         messages: LocalizedMessages,

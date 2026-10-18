@@ -1,0 +1,150 @@
+# CellulosesZ — utility.toml
+# Scope: [utility] · Owner: modules/utility · Reload: hot
+# Only the top-level [utility] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# Kits, item utilities, item editing, /give, powertools, inventory inspection and
+# workstation access.
+
+[utility]
+
+# =============================================================================
+# [utility.kits] — /kit, /kits, /showkit, /createkit, /updatekit, /delkit
+# =============================================================================
+[utility.kits]
+
+# Enable kits. Reload: hot.
+enabled = true
+
+# Maximum number of configured kits. Range: 1..10000. Reload: hot.
+maxKits = 128
+
+# Maximum items in one kit. Range: 1..1000. Reload: hot.
+maxItemsPerKit = 64
+
+# Behaviour when the target inventory cannot hold the whole kit:
+#   REJECT — claim only if everything fits; nothing is inserted otherwise
+#   DROP   — insert what fits and drop the remainder at the player's feet
+# Reload: hot.
+overflowPolicy = "REJECT"
+
+# Optional: maximum cooldown a kit author may set, in seconds. Omit for no cap.
+# Default: unset. Range: > 0 when set. Reload: hot.
+# maxCooldownSeconds = 604800
+
+# Move delivered armor/offhand items into empty equipment slots on claim.
+# Reload: hot.
+autoEquip = true
+
+# Hide one-time kits that the player has already claimed from /kits.
+# Reload: hot.
+hideClaimedOnce = false
+
+# =============================================================================
+# [utility.items] — /repair, /more, /condense
+# =============================================================================
+[utility.items]
+
+# Enable /repair. Reload: hot.
+repairEnabled = true
+
+# Allow /repair to keep enchantments on an enchanted item. Reload: hot.
+repairEnchanted = false
+
+# /repair all also repairs worn armor. Reload: hot.
+repairAllIncludesArmor = true
+
+# Enable /more. Reload: hot.
+moreEnabled = false
+
+# Enable /condense. Reload: hot.
+condenseEnabled = false
+
+# =============================================================================
+# [utility.itemEditing] — /itemname, /itemlore, /hat, /clearinventory
+# =============================================================================
+[utility.itemEditing]
+
+# Maximum characters of a custom item name. Range: 1..256. Reload: hot.
+maxItemNameLength = 64
+
+# Maximum lore lines per item. Range: 1..100. Reload: hot.
+maxLoreLines = 10
+
+# Maximum characters per lore line. Range: 1..256. Reload: hot.
+maxLoreLineLength = 80
+
+# When false, /hat only accepts items with an equipment capability (for example
+# armor). Reload: hot.
+allowAnyItemAsHat = false
+
+# How long a /clearinventory confirmation code stays valid, in seconds.
+# Range: 1..300. Reload: hot.
+clearConfirmationSeconds = 15
+
+# Whether /clearinventory requires a confirmation code until the player disables it
+# with /clearinventoryconfirmtoggle. Reload: hot.
+confirmClear = true
+
+# =============================================================================
+# [utility.give] — /give and /item
+# =============================================================================
+[utility.give]
+
+# Amount used by /give and /item when no amount is given. Range: 1..maxAmount.
+# Reload: hot.
+defaultAmount = 1
+
+# Maximum explicit amount accepted by /give and /item. Range: 1..100000.
+# Reload: hot.
+maxAmount = 2304
+
+# Registry ids refused by /give and /item (namespace optional), for example
+# ["minecraft:command_block", "barrier"]. Reload: hot.
+blacklist = []
+
+# Drop what does not fit at the target's feet instead of failing the command.
+# Reload: hot.
+dropIfFull = false
+
+# =============================================================================
+# [utility.powertools] — /powertool, /powertoollist, /powertooltoggle
+# =============================================================================
+[utility.powertools]
+
+# Enable powertools. Reload: hot.
+enabled = true
+
+# Minimum seconds between two powertool firings by one player. Range: 0..60.
+# Reload: hot.
+throttleSeconds = 1
+
+# =============================================================================
+# [utility.inspection] — /invsee
+# =============================================================================
+[utility.inspection]
+
+# When true, /invsee opens the target's real inventory for viewers holding
+# cellulosesz.invsee.edit. When false it stays read-only for everyone. Reload: hot.
+editable = true
+
+# =============================================================================
+# [utility.workstations] — /workbench, /anvil, /grindstone, ...
+# =============================================================================
+[utility.workstations]
+
+# Enable the workstation commands. Reload: hot.
+enabled = false
+
+# Workstations the commands may open. Supported values:
+#   CRAFTING, ANVIL, GRINDSTONE, STONECUTTER, LOOM, CARTOGRAPHY, SMITHING
+# Reload: hot.
+allowed = [
+    "CRAFTING",
+    "ANVIL",
+    "GRINDSTONE",
+    "STONECUTTER",
+    "LOOM",
+    "CARTOGRAPHY",
+    "SMITHING",
+]

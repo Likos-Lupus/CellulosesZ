@@ -1,7 +1,5 @@
 package top.likoslupus.cellulosesz.application.bootstrap
 
-import java.nio.file.Path
-import java.util.concurrent.atomic.AtomicReference
 import top.likoslupus.cellulosesz.administration.AdministrationFeature
 import top.likoslupus.cellulosesz.api.extension.ExtensionsApi
 import top.likoslupus.cellulosesz.application.api.ApiRequestDispatcher
@@ -37,11 +35,13 @@ import top.likoslupus.cellulosesz.core.text.i18n.preference.PlayerLanguagePrefer
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.theme.TextTheme
 import top.likoslupus.cellulosesz.economy.EconomyFeature
-import top.likoslupus.cellulosesz.foundation.config.ConfigStore
+import top.likoslupus.cellulosesz.foundation.config.ConfigHandle
 import top.likoslupus.cellulosesz.foundation.database.DeferredDatabaseRuntime
 import top.likoslupus.cellulosesz.movement.MovementFeature
 import top.likoslupus.cellulosesz.player.PlayerFeature
 import top.likoslupus.cellulosesz.utility.UtilityFeature
+import java.nio.file.Path
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * The graph assembled by the composition root. Each bootstrap phase fills the fields it owns in the
@@ -54,7 +54,7 @@ internal class BootstrapState(
     val kernel: RuntimeKernel,
     val permissions: PermissionService,
     val configDirectory: Path,
-    val config: ConfigStore<CellulosesConfig>,
+    val config: ConfigHandle<CellulosesConfig>,
     val database: DeferredDatabaseRuntime,
     val namespace: String,
     val known: MinecraftKnownPlayerResolver,

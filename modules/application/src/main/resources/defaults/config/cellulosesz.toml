@@ -1,0 +1,349 @@
+# =============================================================================
+# CellulosesZ — cellulosesz.toml
+# Core and operations configuration.
+# Scope: core/ops · Owner: modules/application · Reload: mixed (see [commands] and [database])
+#
+# This file owns the foundational scopes:
+#   [diagnostics] [database] [localization] [text] [commands] [api] [backup]
+#
+# Feature scopes are independent files in the same directory:
+#   movement.toml        [movement]
+#   messaging.toml       [messaging]
+#   administration.toml  [administration]
+#   utility.toml         [utility]
+#   players.toml         [players]
+#   economy.toml         [economy]
+#
+# A feature table placed in this file is ignored; edit its owning file instead.
+# Unknown keys inside an owned table are rejected. Every file is optional: a
+# missing file (or a missing table) falls back to that scope's defaults.
+# =============================================================================
+
+# =============================================================================
+# [diagnostics] — operator diagnostics
+# =============================================================================
+[diagnostics]
+
+# Log storage/permission/health diagnostics more verbosely. Secrets are never logged.
+# Reload: hot.
+verboseLogging = false
+
+# =============================================================================
+# [database] — storage backend
+# =============================================================================
+# Only the backend named by `type` is initialized. Every backend has its own
+# section, so an alternative can be prepared and activated by changing `type`.
+# Switching the active endpoint migrates data on the next cold start; the previous
+# endpoint is recorded in <world>/cellulosesz/.storage/last-successful.json.
+# Reload: restart (the active connection cannot be hot-swapped).
+[database]
+
+# One of: sqlite, h2, mysql, mariadb, postgresql. Reload: restart.
+type = "sqlite"
+
+# Logical namespace stored alongside every row. Use distinct values to share one
+# database/schema between several servers. Must match [a-z0-9_]{1,32}.
+# Reload: restart when it changes the active endpoint.
+namespace = "default"
+
+# Shared Hikari pool settings. A backend's own [database.<backend>.pool] may
+# override any of these; unspecified override keys inherit the shared value.
+[database.pool]
+# Maximum number of pooled connections. Range: >= 1. Reload: restart.
+maximum-pool-size = 10
+# Milliseconds to wait for a connection from the pool. Range: >= 1. Reload: restart.
+connection-timeout-ms = 10000
+# Milliseconds allowed for connection validation. Range: >= 1. Reload: restart.
+validation-timeout-ms = 5000
+# Milliseconds a connection may sit idle before it is retired. 0 = no idle timeout.
+# Reload: restart.
+idle-timeout-ms = 600000
+# Maximum lifetime of a pooled connection, in milliseconds. 0 = unlimited.
+# Reload: restart.
+max-lifetime-ms = 1800000
+# Keepalive interval, in milliseconds. 0 = disabled. Reload: restart.
+keepalive-time-ms = 0
+
+# --- SQLite (default) --------------------------------------------------------
+[database.sqlite]
+# Database file. A relative path resolves under <world>/cellulosesz/.
+# Reload: restart.
+path = "cellulosesz.db"
+# Milliseconds the driver waits for a locked database. Range: >= 0.
+# Reload: restart.
+busy-timeout-ms = 5000
+# Journal mode: delete, truncate, persist, memory, wal, off.
+# `wal` is the safe default for a single writer. Reload: restart.
+journal-mode = "wal"
+# Synchronous mode: off, normal, full, extra. Reload: restart.
+synchronous = "normal"
+# Enforce SQLite foreign keys. Reload: restart.
+foreign-keys = true
+
+# Pool override for SQLite; unspecified keys inherit [database.pool].
+[database.sqlite.pool]
+# SQLite needs a single writer connection; keep this at 1 unless you know why.
+# Range: >= 1. Reload: restart.
+maximum-pool-size = 1
+# Optional overrides; omit to inherit [database.pool].
+# connection-timeout-ms = 10000
+# validation-timeout-ms = 5000
+# idle-timeout-ms = 600000
+# max-lifetime-ms = 1800000
+# keepalive-time-ms = 0
+
+# --- H2 ----------------------------------------------------------------------
+[database.h2]
+# Database file base path (relative paths resolve under <world>/cellulosesz/).
+# Reload: restart.
+path = "cellulosesz"
+# Database user. Reload: restart.
+username = "sa"
+# Password. Set at most one of password / password-env. Reload: restart.
+password = ""
+# Name of an environment variable holding the password. Preferred over a literal.
+# Set at most one of password / password-env. Reload: restart.
+password-env = ""
+
+# Pool override for H2; unspecified keys inherit [database.pool].
+[database.h2.pool]
+# H2 supports a small pool; two connections cover the loader plus a command.
+# Range: >= 1. Reload: restart.
+maximum-pool-size = 2
+# Optional overrides; omit to inherit [database.pool].
+# connection-timeout-ms = 10000
+# validation-timeout-ms = 5000
+# idle-timeout-ms = 600000
+# max-lifetime-ms = 1800000
+# keepalive-time-ms = 0
+
+# --- MySQL -------------------------------------------------------------------
+[database.mysql]
+# Hostname or IP address. Reload: restart.
+host = "127.0.0.1"
+# TCP port. Range: 1..65535. Reload: restart.
+port = 3306
+# Database/schema name. Reload: restart.
+database = "cellulosesz"
+# Database user. Reload: restart.
+username = "cellulosesz"
+# Password. Set at most one of password / password-env. Reload: restart.
+password = ""
+# Name of an environment variable holding the password. Preferred over a literal.
+# Set at most one of password / password-env. Reload: restart.
+password-env = ""
+# TLS mode: disabled, preferred, required, verify_ca, verify_identity.
+# Reload: restart.
+ssl-mode = "preferred"
+
+# Pool override for MySQL; unspecified keys inherit [database.pool].
+[database.mysql.pool]
+# Maximum pooled connections for this backend. Range: >= 1. Reload: restart.
+maximum-pool-size = 10
+# Optional overrides; omit to inherit [database.pool].
+# connection-timeout-ms = 10000
+# validation-timeout-ms = 5000
+# idle-timeout-ms = 600000
+# max-lifetime-ms = 1800000
+# keepalive-time-ms = 0
+
+# --- MariaDB -----------------------------------------------------------------
+[database.mariadb]
+# Hostname or IP address. Reload: restart.
+host = "127.0.0.1"
+# TCP port. Range: 1..65535. Reload: restart.
+port = 3306
+# Database/schema name. Reload: restart.
+database = "cellulosesz"
+# Database user. Reload: restart.
+username = "cellulosesz"
+# Password. Set at most one of password / password-env. Reload: restart.
+password = ""
+# Name of an environment variable holding the password. Preferred over a literal.
+# Set at most one of password / password-env. Reload: restart.
+password-env = ""
+# TLS mode: disabled, preferred, required, verify_ca, verify_identity.
+# Reload: restart.
+ssl-mode = "preferred"
+
+# Pool override for MariaDB; unspecified keys inherit [database.pool].
+[database.mariadb.pool]
+# Maximum pooled connections for this backend. Range: >= 1. Reload: restart.
+maximum-pool-size = 10
+# Optional overrides; omit to inherit [database.pool].
+# connection-timeout-ms = 10000
+# validation-timeout-ms = 5000
+# idle-timeout-ms = 600000
+# max-lifetime-ms = 1800000
+# keepalive-time-ms = 0
+
+# --- PostgreSQL --------------------------------------------------------------
+[database.postgresql]
+# Hostname or IP address. Reload: restart.
+host = "127.0.0.1"
+# TCP port. Range: 1..65535. Reload: restart.
+port = 5432
+# Database name. Reload: restart.
+database = "cellulosesz"
+# Schema searched first. Reload: restart.
+schema = "public"
+# Database user. Reload: restart.
+username = "cellulosesz"
+# Password. Set at most one of password / password-env. Reload: restart.
+password = ""
+# Name of an environment variable holding the password. Preferred over a literal.
+# Set at most one of password / password-env. Reload: restart.
+password-env = ""
+# TLS mode, passed to the PostgreSQL driver (for example prefer, require, verify-ca,
+# verify-full). Reload: restart.
+ssl-mode = "prefer"
+
+# Pool override for PostgreSQL; unspecified keys inherit [database.pool].
+[database.postgresql.pool]
+# Maximum pooled connections for this backend. Range: >= 1. Reload: restart.
+maximum-pool-size = 10
+# Optional overrides; omit to inherit [database.pool].
+# connection-timeout-ms = 10000
+# validation-timeout-ms = 5000
+# idle-timeout-ms = 600000
+# max-lifetime-ms = 1800000
+# keepalive-time-ms = 0
+
+# =============================================================================
+# [localization] — bundled message language
+# =============================================================================
+[localization]
+
+# Default language for players without an explicit /cellulosesz language choice.
+# Must be one of the bundled languages (en_us, zh_cn). Reload: hot.
+defaultLanguage = "en_us"
+
+# =============================================================================
+# [text] — presentation theme
+# =============================================================================
+[text]
+
+# Theme preset: default, high-contrast, minimal. Reload: hot.
+theme = "default"
+
+# Layout density: comfortable, compact. Reload: hot.
+density = "comfortable"
+
+# Optional per-token colour overrides. Uncomment and edit individual tokens; the
+# selected preset supplies any token you leave commented. Values are #RRGGBB or
+# #AARRGGBB. Reload: hot.
+# [text.colors]
+# body = "#E8EDF4"
+# secondary = "#B8C4D2"
+# muted = "#8D9DB1"
+# brand = "#78AFFF"
+# heading = "#F5C86B"
+# value = "#F8DB98"
+# action = "#85C9FF"
+# success = "#86D7A0"
+# warning = "#FFCF79"
+# error = "#FF858B"
+# code = "#C4B3F5"
+# divider = "#71819A"
+
+# =============================================================================
+# [commands] — registration-time command policy
+# =============================================================================
+# Every key in this table is a registration-time binding: changing any value
+# requires a restart. The namespaced form /cellulosesz:<command> is always
+# available, even when a short name is disabled or owned by another mod.
+[commands]
+
+# Register short canonical names (for example /home). An occupied name is skipped
+# and the namespaced form remains. Reload: restart.
+shortNamesEnabled = true
+
+# Register short aliases (for example /r). Same conflict rule. Protected /cz*
+# fallbacks are not gated by this switch. Reload: restart.
+aliasesEnabled = true
+
+# Enhance vanilla /help <command> for CellulosesZ commands only. Plain /help and
+# every non-CellulosesZ query stay vanilla. Reload: restart.
+vanillaHelpOverlayEnabled = true
+
+# Persist command cooldowns across restarts. Reload: restart.
+cooldownPersistence = true
+
+# Canonical CellulosesZ command names that must not be registered. Reload: restart.
+disabled = []
+
+# Exact per-command cost, charged through the economy ledger. Requires
+# [economy] enabled = true. Keys are canonical command names; values are quoted
+# exact decimals with at most two fractional digits.
+# Example:
+# "home" = "5.00"
+[commands.costs]
+
+# Per-command cooldowns in seconds. "*" is the default for every command.
+# Example:
+# "*" = 0
+# "home" = 5
+[commands.cooldowns]
+
+# Take over vanilla command literals. Disabled by default: vanilla keeps /me,
+# /tp, ... and CellulosesZ uses the protected /cz* and /cellulosesz:* entries.
+# When enabled, only the listed and version-verified names are taken over;
+# unsupported names are rejected at startup. Reload: restart.
+[commands.vanillaOverrides]
+# Enable the vanilla takeover policy. Reload: restart.
+enabled = false
+# Literals to take over; unsupported names are rejected at startup. Reload: restart.
+commands = []
+
+# =============================================================================
+# [api] — public API for trusted addons
+# =============================================================================
+# System-level capabilities are deny-by-default: an addon receives nothing until
+# it is listed here. The addon id is attribution only, not a security token.
+[api]
+
+# Enable the public API provider. Reload: hot.
+enabled = false
+
+# Per-addon grants. The key is the addon id; allowedCapabilities is the exact set
+# of capabilities the addon may request. Example:
+# [api.addons."example_shop"]
+# allowedCapabilities = ["economy.balance.read", "economy.pay.as-player"]
+#
+# Economy: balance.read, ranking.read, history.read, pay.as-player, grant, take,
+#          set, worth.read, worth.write
+# Player:  preferences.read, preferences.write
+# Movement: location.read (world list/find/canAccess are ungated)
+# Kits:    kit.grant
+# Mail:    mail.send.system
+# Moderation: moderation.mute, moderation.unmute
+# An economy write capability is powerful: grant it only to an addon you trust to
+# move funds with a durable, idempotent requestKey.
+
+# =============================================================================
+# [backup] — external world backup
+# =============================================================================
+# The command is an argument vector and is executed directly, never through a
+# shell. /backup triggers a run manually; intervalMinutes schedules one.
+[backup]
+
+# Enable /backup and the periodic schedule. Reload: hot.
+enabled = false
+
+# Executable and arguments. Example: command = ["rdiff-backup", "world", "backups/world"]
+# The executable must exist on PATH or be an absolute path. Reload: hot.
+command = []
+
+# Periodic interval in minutes. 0 disables the schedule (manual /backup still works).
+# Range: >= 0. Reload: hot.
+intervalMinutes = 30
+
+# Run the scheduled backup even when no player is online. Reload: hot.
+alwaysRun = false
+
+# Maximum duration of one backup run, in seconds. Range: >= 1. Reload: hot.
+timeoutSeconds = 300
+
+# Maximum number of output characters captured for the log. Range: >= 1.
+# Reload: hot.
+maxOutputChars = 2000

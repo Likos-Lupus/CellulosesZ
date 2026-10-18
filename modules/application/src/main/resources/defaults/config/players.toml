@@ -1,0 +1,157 @@
+# CellulosesZ — players.toml
+# Scope: [players] · Owner: modules/player · Reload: hot
+# Only the top-level [players] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# AFK, play sessions, nicknames, /list groups and /near.
+
+[players]
+
+# =============================================================================
+# [players.afk] — /afk and automatic AFK detection
+# =============================================================================
+[players.afk]
+
+# Enable AFK tracking. Reload: hot.
+enabled = true
+
+# Seconds without movement before a player is marked AFK. Range: >= 1.
+# Reload: hot.
+autoAfterSeconds = 300
+
+# How often AFK detection runs, in ticks. Range: >= 1. Reload: hot.
+checkIntervalTicks = 20
+
+# Movement distance, in blocks, that counts as activity. Range: >= 0.
+# Reload: hot.
+movementThreshold = 0.15
+
+# Camera rotation, in degrees, that counts as activity. Range: >= 0.
+# Reload: hot.
+rotationThresholdDegrees = 3.0
+
+# Clear AFK only on explicit activity rather than on the generic activity probe.
+# Reload: hot.
+manualClearOnActivity = false
+
+# Broadcast AFK state changes to the server. Reload: hot.
+announceStateChanges = false
+
+# Kick an AFK player after this many seconds. 0 = disabled. Range: >= 0.
+# Bypass: cellulosesz.afk.bypass. Reload: hot.
+kickAfterSeconds = 0
+
+# Freeze an AFK player's movement packets until they become active again.
+# Reload: hot.
+freezeWhileAfk = false
+
+# Prevent an AFK player from picking up items. Reload: hot.
+disableItemPickup = false
+
+# Interaction (block/entity/air) clears AFK. Reload: hot.
+cancelOnInteract = false
+
+# Sending a chat message clears AFK. Reload: hot.
+cancelOnChat = false
+
+# Fishing clears AFK. Reload: hot.
+cancelOnFish = false
+
+# AFK players do not count towards the sleep vote. Reload: hot.
+sleepIgnoresAfk = false
+
+# Marker shown for AFK players in /list. Reload: hot.
+listName = "[AFK]"
+
+# =============================================================================
+# [players.sessions] — playtime and presence sessions
+# =============================================================================
+[players.sessions]
+
+# Enable play-session tracking. Reload: hot.
+enabled = true
+
+# Heartbeat interval for an open session, in seconds. Range: >= 1. Reload: hot.
+heartbeatIntervalSeconds = 60
+
+# Maximum number of buffered session events while storage is unavailable.
+# Range: >= 1. Reload: hot.
+maxRetryBufferSize = 1024
+
+# =============================================================================
+# [players.nicknames] — /nick, /realname
+# =============================================================================
+[players.nicknames]
+
+# Enable nicknames. Reload: hot.
+enabled = true
+
+# Minimum visible (colour-stripped) nickname length. Range: >= 1. Reload: hot.
+minimumVisibleLength = 2
+
+# Maximum visible nickname length. Range: >= minimumVisibleLength, <= 64.
+# Reload: hot.
+maximumVisibleLength = 24
+
+# Allow spaces inside a nickname. Reload: hot.
+allowSpaces = true
+
+# Apply the nickname to the vanilla display name. Reload: hot.
+applyToVanillaDisplay = false
+
+# Allow legacy &/§ colour codes. Requires cellulosesz.nick.colors as well.
+# Reload: hot.
+allowColors = false
+
+# Optional full-match regex on the visible nickname. "" disables it. Reload: hot.
+allowedPattern = ""
+
+# Nicknames that may never be used (case-insensitive). Reload: hot.
+blacklist = []
+
+# Optional prefix rendered before every nickname. Reload: hot.
+prefix = ""
+
+# Clear the nickname when the player's Mojang account name changes. Reload: hot.
+resetOnNameChange = false
+
+# =============================================================================
+# [players.list] — /list
+# =============================================================================
+[players.list]
+
+# Optional permission groups shown by /list, in priority order. A player joins the
+# first group whose permission they hold, otherwise defaultGroup.
+# Group ids must be unique; permissions must be dot-separated nodes.
+# Reload: hot.
+# [[players.list.groups]]
+# id = "staff"
+# permission = "cellulosesz.group.staff"
+# label = "Staff"
+groups = []
+
+# Group used when no configured group matches. An empty permission is allowed here.
+[players.list.defaultGroup]
+# Stable id used by /list <group>.
+id = "default"
+# Permission node; empty means the fallback group is always eligible.
+permission = ""
+# Display label.
+label = "Default"
+
+# =============================================================================
+# [players.nearby] — /near
+# =============================================================================
+[players.nearby]
+
+# Default radius when /near has no radius. Range: >= 1. Reload: hot.
+defaultRadius = 100
+
+# Maximum radius accepted by /near. Range: >= defaultRadius. Reload: hot.
+maximumRadius = 256
+
+# Maximum number of players returned. Range: >= 1. Reload: hot.
+maximumResults = 20
+
+# Hide spectators from /near. Reload: hot.
+hideSpectators = true

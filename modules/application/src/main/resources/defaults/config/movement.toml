@@ -1,0 +1,223 @@
+# CellulosesZ — movement.toml
+# Scope: [movement] · Owner: modules/movement · Reload: hot
+# Only the top-level [movement] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# The shared teleport pipeline is used by /home, /warp, /spawn, /tp, /tphere, /tppos,
+# /tpa, /tpr, /back, /world and the public API. Every move is resolved, permission-checked,
+# safety-checked and committed by the same coordinator.
+
+[movement]
+
+# =============================================================================
+# [movement.teleport] — delivery policy shared by every teleport
+# =============================================================================
+[movement.teleport]
+
+# Seconds the player waits after issuing the command before the move is applied.
+# 0 = immediate. Range: >= 0. Reload: hot.
+delaySeconds = 0
+
+# Seconds before the same player may teleport again. 0 = no cooldown.
+# The explicit-permission cooldowns and the /tpr cooldown are separate.
+# Range: >= 0. Reload: hot.
+cooldownSeconds = 0
+
+# Cancel a pending (delayed) teleport when the player moves more than
+# movementTolerance blocks. Reload: hot.
+cancelOnMove = true
+
+# Cancel a pending (delayed) teleport when the player takes damage. Reload: hot.
+cancelOnDamage = true
+
+# Maximum horizontal distance, in blocks, a player may move during the delay
+# without cancelling. Range: 0.0..64.0. Reload: hot.
+movementTolerance = 0.15
+
+# Dismount passengers before moving the player, then remount them at the
+# destination when possible. Reload: hot.
+dismountPassengers = true
+
+# Damage immunity granted after a committed teleport. 0 = disabled.
+# Range: >= 0. Reload: hot.
+invulnerabilitySeconds = 0
+
+# =============================================================================
+# [movement.teleport.safety] — destination resolution
+# =============================================================================
+[movement.teleport.safety]
+
+# Search for a safe standing position near the requested destination.
+# When false the exact destination is used and may be unsafe. Reload: hot.
+enabled = true
+
+# Horizontal search radius, in blocks. Range: 0..8. Reload: hot.
+searchHorizontalRadius = 3
+
+# Vertical search radius, in blocks. Range: 0..32. Reload: hot.
+searchVerticalRadius = 8
+
+# Allow a safe position whose feet are in water. Reload: hot.
+allowWater = false
+
+# =============================================================================
+# [movement.requests] — /tpa, /tpahere, /tpaccept, /tpdeny, /tpcancel, /tpauto
+# =============================================================================
+[movement.requests]
+
+# Seconds before an unanswered request expires. Range: > 0. Reload: hot.
+timeoutSeconds = 60
+
+# Maximum simultaneous incoming requests per target. Range: >= 1. Reload: hot.
+maxIncomingPerPlayer = 5
+
+# Maximum simultaneous outgoing requests per sender. Range: >= 1. Reload: hot.
+maxOutgoingPerPlayer = 16
+
+# Server-wide cap across every sender. Range: >= 1. Reload: hot.
+maxRequestsServerWide = 4096
+
+# Maximum recipients of one /tpaall batch. Range: >= 1. Reload: hot.
+maxBatchRecipients = 16
+
+# Seconds between two /tpaall batches by the same sender. 0 = no batch cooldown.
+# Range: >= 0. Reload: hot.
+batchCooldownSeconds = 120
+
+# Maximum number of players a single player may add to /tpauto. Range: >= 0.
+# Reload: hot.
+maxAutoAllowedPlayers = 128
+
+# Whether a player accepts incoming teleport requests until they change it with
+# /tptoggle. Players with cellulosesz.tptoggle.bypass ignore this preference.
+# Reload: hot.
+acceptByDefault = true
+
+# =============================================================================
+# [movement.homes] — /sethome, /home, /homes, /delhome, /renamehome
+# =============================================================================
+[movement.homes]
+
+# Fallback home limit when no entry in `limits` matches. Range: >= 0. Reload: hot.
+maxPerPlayer = 10
+
+# Default name used by /sethome and /home when no name is given. Must not be blank.
+# Reload: hot.
+defaultName = "home"
+
+# Optional per-group home limits. The highest matching entry wins; maxPerPlayer is
+# the fallback when none matches. Entries are checked in order.
+# Reload: hot.
+# [[movement.homes.limits]]
+# permission = "cellulosesz.homes.20"
+# max = 20
+limits = []
+
+# When true, using a home in another dimension also requires
+# cellulosesz.world.home.<dimension>. Reload: hot.
+worldHomePermissions = false
+
+# Ask for a second confirmation before /sethome overwrites an existing home.
+# The confirmation lasts 30 seconds and is cleared on disconnect. Reload: hot.
+confirmHomeOverwrite = true
+
+# =============================================================================
+# [movement.worlds.aliases] — short names accepted by /world
+# =============================================================================
+# Keys are aliases (pattern [a-z0-9._-]+); values are dimension ids
+# (namespace:path, for example minecraft:the_nether). Reload: hot.
+[movement.worlds.aliases]
+# Alias accepted by /world and shown in world listings; maps to minecraft:overworld.
+overworld = "minecraft:overworld"
+# Alias for the Nether dimension.
+nether = "minecraft:the_nether"
+# Alias for the End dimension.
+end = "minecraft:the_end"
+
+# =============================================================================
+# [movement.worldAccess] — cross-dimension permission gate
+# =============================================================================
+[movement.worldAccess]
+
+# When true, a teleport that changes dimension requires
+# cellulosesz.world.<dimension> for the player being moved. Applies to commands,
+# /world, homes, warps, spawn and the public API. Reload: hot.
+enabled = false
+
+# =============================================================================
+# [movement.warps] — /warp, /warps, /warpinfo
+# =============================================================================
+[movement.warps]
+
+# When true, each warp requires cellulosesz.warp.<name> and /warps only lists
+# warps the viewer may use. Warp names are normalized to [a-z0-9._-]. Reload: hot.
+perWarpPermission = false
+
+# =============================================================================
+# [movement.history] — /back
+# =============================================================================
+[movement.history]
+
+# Record the previous position of every committed teleport so /back can return
+# to it. A recorded death point is used with cellulosesz.back.ondeath. Reload: hot.
+enabled = true
+
+# Record the death position as a /back target (requires cellulosesz.back.ondeath).
+# Reload: hot.
+recordDeath = true
+
+# =============================================================================
+# [movement.randomTeleport] — /tpr and the region registry
+# =============================================================================
+[movement.randomTeleport]
+
+# Enable /tpr. When false the command reports that random teleport is disabled.
+# Reload: hot.
+enabled = true
+
+# Maximum destination attempts before /tpr gives up. Range: >= 1. Reload: hot.
+maxAttempts = 16
+
+# Maximum horizontal radius of a random search, in blocks. Range: >= 1. Reload: hot.
+maxRadius = 10000
+
+# Maximum number of configured regions. Range: >= 1. Reload: hot.
+maxRegions = 32
+
+# Seconds budget for one search across all attempts. Range: > 0. Reload: hot.
+searchTimeoutSeconds = 20
+
+# Per-player cooldown between /tpr uses. 0 = no cooldown. Range: >= 0. Reload: hot.
+cooldownSeconds = 120
+
+# Server-wide concurrent search limit. Range: >= 1. Reload: hot.
+maxConcurrentServerSearches = 2
+
+# Per-player concurrent search limit. Range: >= 1. Reload: hot.
+maxConcurrentPerPlayer = 1
+
+# Allow a search to generate new chunks. false = only already-loaded/generated
+# terrain is considered. Reload: hot.
+allowChunkGeneration = false
+
+# Allow destinations whose feet are in water. Reload: hot.
+allowWater = false
+
+# =============================================================================
+# [movement.terrain] — /top, /bottom, /jump
+# =============================================================================
+[movement.terrain]
+
+# Enable /top, /bottom and /jump. Reload: hot.
+enabled = true
+
+# Maximum vertical distance for /top and /bottom, in blocks. Range: 1..256.
+# Reload: hot.
+maxJumpDistance = 32
+
+# Refuse to scan unloaded chunks. When false the search may load chunks.
+# Reload: hot.
+requireLoadedChunks = true
+
+# Allow /top or /bottom to land with feet in water. Reload: hot.
+allowWater = false

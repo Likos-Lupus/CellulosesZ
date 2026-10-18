@@ -1,0 +1,183 @@
+# CellulosesZ — messaging.toml
+# Scope: [messaging] · Owner: modules/communication · Reload: hot
+# Only the top-level [messaging] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# This file covers private messages, mail, /helpop, announcements, server pages,
+# /me action messages, join/quit announcements and death messages.
+
+[messaging]
+
+# Master switch for the communication feature. When false, its commands report that
+# the feature is disabled; existing mail and preferences are never deleted.
+# Reload: hot.
+enabled = true
+
+# =============================================================================
+# [messaging.privateMessages] — /msg, /reply, /ignore, /msgtoggle, /rtoggle
+# =============================================================================
+[messaging.privateMessages]
+
+# Enable private messages. Reload: hot.
+enabled = true
+
+# Maximum characters in one private message. Range: > 0. Reload: hot.
+maxMessageLength = 512
+
+# Maximum number of players one player may ignore. Range: > 0. Reload: hot.
+maxIgnoredPlayers = 128
+
+# How /reply chooses its default recipient:
+#   LAST_INTERACTION — the most recent conversation partner, incoming or outgoing
+#   LAST_INCOMING    — the most recent player who messaged you
+# Reload: hot.
+defaultReplyMode = "LAST_INTERACTION"
+
+# Whether /reply may target the last conversation partner until the player changes
+# it with /rtoggle. Reload: hot.
+defaultReplyRecipient = true
+
+# Optional: seconds before the session reply target expires. Omit for no expiry.
+# Default: unset. Range: > 0 when set. Reload: hot.
+# replyTimeoutSeconds = 300
+
+# =============================================================================
+# [messaging.mail] — /mail read|send|sendtemp|clear
+# =============================================================================
+[messaging.mail]
+
+# Enable the mailbox feature. Reload: hot.
+enabled = true
+
+# Maximum characters in one mail message. Range: > 0. Reload: hot.
+maxMessageLength = 1000
+
+# Maximum messages stored per mailbox. Range: > 0. Reload: hot.
+maxMessagesPerMailbox = 100
+
+# Maximum mail sends per player per minute. Range: > 0. Reload: hot.
+maxSendsPerMinute = 10
+
+# Notify a player about unread mail when they join. Reload: hot.
+notifyOnJoin = true
+
+# Optional: maximum duration of /mail sendtemp, in seconds. Omit for no server cap.
+# Default: unset. Range: > 0 when set. Reload: hot.
+# maxTemporaryMailSeconds = 604800
+
+# =============================================================================
+# [messaging.helpOp] — /helpop
+# =============================================================================
+[messaging.helpOp]
+
+# Enable /helpop. Reload: hot.
+enabled = true
+
+# Maximum characters in one /helpop message. Range: > 0. Reload: hot.
+maxMessageLength = 512
+
+# Maximum /helpop messages per player per minute. Range: > 0. Reload: hot.
+maxMessagesPerMinute = 6
+
+# =============================================================================
+# [messaging.announcements] — /broadcast, /broadcastworld
+# =============================================================================
+[messaging.announcements]
+
+# Enable staff announcements. Reload: hot.
+enabled = true
+
+# Maximum characters in one announcement. Range: > 0. Reload: hot.
+maxMessageLength = 1000
+
+# =============================================================================
+# [messaging.serverPages] — /motd, /rules, /info, /customtext <page>
+# =============================================================================
+[messaging.serverPages]
+
+# Enable server pages. Reload: hot.
+enabled = true
+
+# Relative directory under <config-dir>/cellulosesz/ that holds the Markdown pages.
+# The directory must stay inside the config root (no absolute paths, no '..').
+# Reload: hot.
+rootDirectory = "pages"
+
+# Maximum size of one page file, in bytes. Range: > 0. Reload: hot.
+maxPageBytes = 65536
+
+# Maximum number of page files. Range: > 0. Reload: hot.
+maxPages = 128
+
+# Send the MOTD page automatically when a player joins. Reload: hot.
+showMotdOnJoin = false
+
+# =============================================================================
+# [messaging.actionMessage] — /me and its protected fallbacks
+# =============================================================================
+[messaging.actionMessage]
+
+# Enable the action-message service. Changing this value changes command
+# registration and therefore requires a restart.
+enabled = true
+
+# Who sees /me:
+#   same_dimension — only players in the same dimension
+#   server         — every online player
+# Reload: hot.
+audience = "same_dimension"
+
+# Maximum characters in one action message. Range: > 0. Reload: hot.
+maximumLength = 256
+
+# Maximum action messages per player per minute. Range: > 0. Reload: hot.
+messagesPerMinute = 8
+
+# =============================================================================
+# [messaging.joinQuit] — join, quit, first-join and rename announcements
+# =============================================================================
+[messaging.joinQuit]
+
+# Enable custom join/quit announcements. Reload: hot.
+enabled = true
+
+# Templates are strict MiniMessage. A malformed template is rejected at load/reload.
+# Supported tokens:
+#   {PLAYER} {USERNAME} {DISPLAYNAME} {PREVIOUS_NAME} {WORLD}
+#   {ONLINE} {UNIQUE} {UPTIME} {GROUP}
+# {PREFIX} and {SUFFIX} are intentionally unsupported.
+joinFormat = "<yellow>{PLAYER} joined the game</yellow>"
+# Quit announcement template (strict MiniMessage, same tokens as joinFormat).
+quitFormat = "<yellow>{PLAYER} left the game</yellow>"
+# First-join announcement template.
+firstJoinFormat = "<gold>{PLAYER} joined for the first time</gold>"
+# Announcement used when a player's account name changed since the last visit.
+newUsernameFormat = "<gray>{PLAYER} (previously {PREVIOUS_NAME}) joined the game</gray>"
+
+# A player with cellulosesz.silentjoin joins/quits without an announcement. With
+# cellulosesz.silentjoin.vanish they also enter vanish. Reload: hot.
+allowSilentJoinQuit = true
+
+# Suppress every join/quit announcement while the online count is above this value.
+# 0 = never suppress. Range: >= 0. Reload: hot.
+hideAbovePlayerCount = 0
+
+# =============================================================================
+# [messaging.death] — death messages and death coordinates
+# =============================================================================
+[messaging.death]
+
+# Enable custom death handling. When false, vanilla death messages and no custom
+# coordinates are used. Reload: hot.
+enabled = true
+
+# Optional: replace the vanilla death message. MiniMessage is supported.
+# Default: unset (vanilla message is kept). Reload: hot.
+# customFormat = "<red>{PLAYER} died</red>"
+
+# Send the death position to the dead player. Reload: hot.
+showCoordinates = true
+
+# Template for the death-position message. Tokens: {X} {Y} {Z} {WORLD}.
+# MiniMessage is supported. Reload: hot.
+coordinatesFormat = "<gray>You died at <white>{X}, {Y}, {Z}</white> in {WORLD}</gray>"

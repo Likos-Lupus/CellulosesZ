@@ -1,0 +1,98 @@
+# CellulosesZ — economy.toml
+# Scope: [economy] · Owner: modules/economy · Reload: hot
+# Only the top-level [economy] table is read from this file.
+# A table owned by another file is ignored here; edit its owning file instead.
+#
+# CellulosesZ is the only wallet owner: there is no Vault/Treasury/EconomyCraft
+# integration. Every balance change is one balanced ledger transaction. Amounts are
+# quoted exact decimals with at most two fractional digits; a TOML float is rejected.
+
+[economy]
+
+# When false, all economy commands report that the feature is disabled and no new
+# transaction is accepted. Existing tables and balances are never deleted.
+# Reload: hot.
+enabled = false
+
+# Display name of the currency. Display only; changing it never rescales balances.
+# Reload: hot.
+currency-name = "Coins"
+
+# Display symbol of the currency. Display only. Reload: hot.
+currency-symbol = "$"
+
+# Balance credited once when an account is first created. Exact decimal string,
+# >= 0, and <= maximum-balance. Does not re-credit an existing zero balance.
+# Reload: hot.
+starting-balance = "0.00"
+
+# Maximum balance an account may reach. Exact decimal string, > 0. Reload: hot.
+maximum-balance = "1000000000000.00"
+
+# Minimum amount accepted by /pay. Exact decimal string, > 0, and <= maximum-payment.
+# Reload: hot.
+minimum-payment = "0.01"
+
+# Maximum amount accepted by /pay. Exact decimal string, > 0, >= minimum-payment,
+# and <= maximum-balance. Reload: hot.
+maximum-payment = "1000000.00"
+
+# Allow /pay to an offline player (the account is still credited). Reload: hot.
+allow-offline-payments = true
+
+# Number of /transactions entries per page. Range: 1..50. Reload: hot.
+history-page-size = 10
+
+# Number of /balancetop entries per page. Range: 1..50. Reload: hot.
+balance-top-page-size = 10
+
+# Include zero-balance accounts in /balancetop. Reload: hot.
+show-zero-balances-in-top = false
+
+# =============================================================================
+# [economy.pay] — /pay, /paytoggle, /payconfirmtoggle
+# =============================================================================
+[economy.pay]
+
+# Whether a player accepts payments until they change it with /paytoggle.
+# Reload: hot.
+acceptByDefault = true
+
+# Whether /pay requires repeating the identical command before it executes.
+# Players can change it with /payconfirmtoggle. Reload: hot.
+confirmByDefault = false
+
+# Refuse payments to a player who ignores the payer. The ignore list is owned by
+# the communication module; enabling this never reveals who ignores whom.
+# Reload: hot.
+excludesIgnoreList = false
+
+# =============================================================================
+# [economy.worth] — /worth and /sell pricing
+# =============================================================================
+[economy.worth]
+
+# Import cellulosesz/worth/default.tsv once, and only while cz_economy_worth is
+# empty. Runtime edits go through /setworth. Reload: hot.
+seedBundledDefaults = true
+
+# =============================================================================
+# [economy.sell] — /sell
+# =============================================================================
+[economy.sell]
+
+# When false, /sell inventory and /sell blocks also need cellulosesz.sell.bulk.
+# Reload: hot.
+allowBulk = false
+
+# When false, a stack carrying a custom name is never sold. Reload: hot.
+allowNamedItems = false
+
+# Sell-price multipliers keyed by permission. The highest held factor wins; no
+# match pays face value. multiplier is an exact decimal string, >= 0.
+# Example:
+# [[economy.sell.multipliers]]
+# permission = "cellulosesz.sell.multiplier.2"
+# multiplier = "2.00"
+# Reload: hot.
+multipliers = []
