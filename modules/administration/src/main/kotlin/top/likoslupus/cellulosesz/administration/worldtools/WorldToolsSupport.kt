@@ -50,5 +50,7 @@ internal val TIME_SUGGESTIONS: List<String> = listOf(
 internal val WEATHER_SUGGESTIONS: List<String> = listOf(
     "clear",
     "rain",
-    "thunder"
+    "thunder",
+    "storm",
+    "sun"
 )

@@ -285,6 +285,48 @@ internal object AdministrationPermissionNodes {
         "Extinguish fire"
     )
 
+    internal val ICE_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.ice.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Freeze another player"
+    )
+
+    internal val EXT_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.ext.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Extinguish another player"
+    )
+
+    internal val BREAK_BEDROCK: PermissionSpec = PermissionSpec(
+        "cellulosesz.break.bedrock",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Break bedrock"
+    )
+
+    internal val LIGHTNING_OTHERS: PermissionSpec = PermissionSpec(
+        "cellulosesz.lightning.others",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Smite another player"
+    )
+
+    internal val FIREBALL_RIDE: PermissionSpec = PermissionSpec(
+        "cellulosesz.fireball.ride",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Ride a launched projectile"
+    )
+
+    internal val FIREWORK_FIRE: PermissionSpec = PermissionSpec(
+        "cellulosesz.firework.fire",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Launch held fireworks"
+    )
+
+    internal val SPAWN_MOB_STACK: PermissionSpec = PermissionSpec(
+        "cellulosesz.spawnmob.stack",
+        VanillaPermissionFallback.COMMANDS_MODERATOR,
+        "Spawn stacked or mounted mobs"
+    )
+
     internal val BURN: PermissionSpec = moderatorNode(
         "burn",
         "Set a player on fire"

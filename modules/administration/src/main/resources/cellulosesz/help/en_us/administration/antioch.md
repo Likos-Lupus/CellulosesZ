@@ -1,15 +1,16 @@
 # /antioch
 
-Spawn a primed TNT above you with a custom name.
+Spawn primed TNT at the block you are looking at.
 
 ## Behavior
 
-Drops a lit TNT above your head, named `ANTIOCH` unless you supply a message. The fuse is short, so
-keep your distance. The whole fun group is disabled with `[administration.fun].enabled = false`.
+Spawns lit TNT at the looked-at block. If you pass a message, the classic two-line Holy Hand Grenade
+message is broadcast to every online player; the text itself is not used as an item name. The whole
+fun group is disabled with `[administration.fun].enabled = false`.
 
 ## Parameters
 
-- `message`: optional name for the TNT.
+- `message`: optional; when present, triggers the broadcast.
 
 ## Example
 

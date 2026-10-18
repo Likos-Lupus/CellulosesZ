@@ -22,10 +22,11 @@ public object AdministrationSettingsValidation {
     private const val MAX_HEAL_COOLDOWN_SECONDS: Long = 86_400
     private const val MAX_SPAWN_AMOUNT: Int = 1_024
     private const val MAX_REMOVE_RADIUS: Double = 1_024.0
-    private const val MAX_NUKE_RADIUS: Double = 128.0
     private const val MAX_FIREWORK_POWER: Int = 32
     private const val MAX_FIREWORK_AMOUNT: Int = 128
     private const val MAX_BURN_SECONDS: Double = 3_600.0
+    private const val MAX_TREE_RANGE: Double = 1_024.0
+    private const val MAX_PROJECTILE_SPEED: Double = 64.0
     private const val MAX_SIGN_LINE_LENGTH: Int = 4_096
     private const val MAX_SIGN_DISTANCE: Double = 64.0
 
@@ -257,17 +258,6 @@ public object AdministrationSettingsValidation {
             }
 
             val worldTools = settings.worldTools
-            if (!worldTools.maxNukeRadius.isFinite()
-                || worldTools.maxNukeRadius <= 0.0
-                || worldTools.maxNukeRadius > MAX_NUKE_RADIUS
-            ) {
-                add(
-                    ValidationError(
-                        "administration.worldTools.maxNukeRadius",
-                        "must be a finite value in (0, $MAX_NUKE_RADIUS]",
-                    )
-                )
-            }
             if (worldTools.maxFireworkPower !in 1..MAX_FIREWORK_POWER) {
                 add(
                     ValidationError(
@@ -292,6 +282,28 @@ public object AdministrationSettingsValidation {
                     ValidationError(
                         "administration.worldTools.maxBurnSeconds",
                         "must be a finite value in (0, $MAX_BURN_SECONDS]",
+                    )
+                )
+            }
+            if (!worldTools.treeCommandRangeLimit.isFinite()
+                || worldTools.treeCommandRangeLimit <= 0.0
+                || worldTools.treeCommandRangeLimit > MAX_TREE_RANGE
+            ) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.treeCommandRangeLimit",
+                        "must be a finite value in (0, $MAX_TREE_RANGE]",
+                    )
+                )
+            }
+            if (!worldTools.maxProjectileSpeed.isFinite()
+                || worldTools.maxProjectileSpeed <= 0.0
+                || worldTools.maxProjectileSpeed > MAX_PROJECTILE_SPEED
+            ) {
+                add(
+                    ValidationError(
+                        "administration.worldTools.maxProjectileSpeed",
+                        "must be a finite value in (0, $MAX_PROJECTILE_SPEED]",
                     )
                 )
             }

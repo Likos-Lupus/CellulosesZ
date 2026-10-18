@@ -148,14 +148,6 @@ class AdministrationSettingsValidationTest {
                     )
         )
         assertTrue(
-            "administration.worldTools.maxNukeRadius" in
-                    paths(
-                        AdministrationSettings(
-                            worldTools = WorldToolsSettings(maxNukeRadius = -1.0)
-                        )
-                    )
-        )
-        assertTrue(
             "administration.worldTools.maxFireworkPower" in
                     paths(
                         AdministrationSettings(

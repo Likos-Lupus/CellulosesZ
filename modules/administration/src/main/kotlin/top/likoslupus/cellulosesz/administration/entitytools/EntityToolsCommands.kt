@@ -14,6 +14,9 @@ import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.integer
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
+import top.likoslupus.cellulosesz.core.permission.VanillaPermissionFallback
 import top.likoslupus.cellulosesz.core.player.PlayerResolver
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.model.Notice
@@ -29,11 +32,12 @@ internal object EntityToolsCommands {
     fun commands(
         service: EntityToolsService,
         settings: () -> EntityToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
-        spawnerCommand(service, adventure, presentation),
-        spawnMobCommand(service, settings, adventure, presentation),
+        spawnerCommand(service, permissions, adventure, presentation),
+        spawnMobCommand(service, settings, permissions, adventure, presentation),
         removeCommand(service, settings, adventure, presentation),
     )
 
@@ -52,6 +56,7 @@ internal object EntityToolsCommands {
 
     private fun spawnerCommand(
         service: EntityToolsService,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): CommandDefinition =
@@ -69,6 +74,7 @@ internal object EntityToolsCommands {
                         get(entity),
                         null,
                         service,
+                        permissions,
                         adventure,
                         presentation
                     )
@@ -84,6 +90,7 @@ internal object EntityToolsCommands {
                             get(entity),
                             get(delay),
                             service,
+                            permissions,
                             adventure,
                             presentation,
                         )
@@ -97,6 +104,7 @@ internal object EntityToolsCommands {
         rawType: String,
         delayTicks: Int?,
         service: EntityToolsService,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
@@ -107,6 +115,24 @@ internal object EntityToolsCommands {
                 presentation,
                 EntityToolsMessages.unknownEntityType(rawType)
             )
+        val key = BuiltInRegistries.ENTITY_TYPE.getKey(type)
+        val node = "cellulosesz.spawner.${key.path}"
+        if (!permissions.allows(
+                source,
+                PermissionSpec(
+                    node,
+                    VanillaPermissionFallback.COMMANDS_MODERATOR,
+                    "Use /spawner for ${key.path}",
+                )
+            )
+        ) {
+            return reply(
+                source,
+                adventure,
+                presentation,
+                EntityToolsMessages.spawnerForbidden(key.path)
+            )
+        }
         val pos = lookedAtBlock(source)
             ?: return reply(
                 source,
@@ -126,7 +152,7 @@ internal object EntityToolsCommands {
                 player.level(),
                 pos,
                 type,
-                delayTicks
+                delayTicks ?: 0
             )
         ) {
             return reply(
@@ -150,6 +176,7 @@ internal object EntityToolsCommands {
     private fun spawnMobCommand(
         service: EntityToolsService,
         settings: () -> EntityToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): CommandDefinition =
@@ -169,6 +196,7 @@ internal object EntityToolsCommands {
                         1,
                         service,
                         settings,
+                        permissions,
                         adventure,
                         presentation
                     )
@@ -182,6 +210,7 @@ internal object EntityToolsCommands {
                             get(amount),
                             service,
                             settings,
+                            permissions,
                             adventure,
                             presentation,
                         )
@@ -203,6 +232,7 @@ internal object EntityToolsCommands {
                                 get(amount),
                                 service,
                                 settings,
+                                permissions,
                                 adventure,
                                 presentation,
                             )
@@ -219,6 +249,7 @@ internal object EntityToolsCommands {
         amount: Int,
         service: EntityToolsService,
         settings: () -> EntityToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
@@ -230,13 +261,35 @@ internal object EntityToolsCommands {
                 EntityToolsMessages.playerNotFound()
             )
         }
-        val type = service.resolveEntityType(rawType)
+        // `mob[:data][,mount[:data]]`: entity data is accepted but ignored until entity-data
+        // editing is implemented; the mount half is supported.
+        val parts = rawType.split(',', limit = 2)
+        val mainRaw = parts[0].substringBefore(':').ifBlank { parts[0] }
+        val mountRaw = parts.getOrNull(1)?.substringBefore(':')?.takeIf { it.isNotBlank() }
+        val type = service.resolveEntityType(mainRaw)
             ?: return reply(
                 source,
                 adventure,
                 presentation,
-                EntityToolsMessages.unknownEntityType(rawType)
+                EntityToolsMessages.unknownEntityType(mainRaw)
             )
+        val mountType = mountRaw?.let { raw ->
+            service.resolveEntityType(raw)
+                ?: return reply(
+                    source,
+                    adventure,
+                    presentation,
+                    EntityToolsMessages.unknownEntityType(raw)
+                )
+        }
+        if (mountType != null && !permissions.allows(source, CommandPermissions.SPAWN_MOB_STACK)) {
+            return reply(
+                source,
+                adventure,
+                presentation,
+                EntityToolsMessages.spawnMobStackForbidden()
+            )
+        }
         val capped = minOf(amount, settings().maxSpawnAmount)
         val spawned = service.spawnMobs(
             player.level(),
@@ -247,6 +300,7 @@ internal object EntityToolsCommands {
             player.yRot,
             player.xRot,
             capped,
+            mountType,
         )
         val notice = when {
             capped < amount ->
@@ -254,9 +308,10 @@ internal object EntityToolsCommands {
                     amount,
                     spawned
                 )
+
             else ->
                 EntityToolsMessages.spawnMobSpawned(
-                    rawType.lowercase(),
+                    mainRaw.lowercase(),
                     spawned
                 )
         }

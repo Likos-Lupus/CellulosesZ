@@ -1,15 +1,13 @@
 package top.likoslupus.cellulosesz.administration.worldtools
 
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.server.level.ServerPlayer
 import top.likoslupus.cellulosesz.administration.config.WorldToolsSettings
 import top.likoslupus.cellulosesz.core.command.CommandCategory
-import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
-import top.likoslupus.cellulosesz.core.command.dsl.command
-import top.likoslupus.cellulosesz.core.command.dsl.double
-import top.likoslupus.cellulosesz.core.command.dsl.integer
-import top.likoslupus.cellulosesz.core.command.dsl.word
+import top.likoslupus.cellulosesz.core.command.dsl.*
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
+import top.likoslupus.cellulosesz.core.permission.PermissionSpec
+import top.likoslupus.cellulosesz.core.permission.VanillaPermissionFallback
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 
@@ -17,27 +15,39 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 internal object WorldProjectileCommands {
 
     private val FIREBALL_SUGGESTIONS: List<String> = listOf(
+        "fireball",
         "small",
         "large",
         "dragon",
-        "wither"
+        "skull",
+        "arrow",
+        "egg",
+        "snowball",
+        "expbottle",
+        "splashpotion",
+        "lingeringpotion",
+        "trident",
+        "windcharge",
     )
 
     fun commands(
         service: WorldToolsService,
         settings: () -> WorldToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
-        fireballCommand(service, adventure, presentation),
+        fireballCommand(service, settings, permissions, adventure, presentation),
         fireworkCommand(service, settings, adventure, presentation),
-        nukeCommand(service, settings, adventure, presentation),
+        nukeCommand(service, adventure, presentation),
     )
 
     // ---------------------------------------------------------------- /fireball
 
     private fun fireballCommand(
         service: WorldToolsService,
+        settings: () -> WorldToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): CommandDefinition =
@@ -50,35 +60,67 @@ internal object WorldProjectileCommands {
             executesPlayer {
                 launchFireball(
                     source,
-                    "large",
-                    1.0,
+                    "fireball",
+                    2.0,
+                    false,
+                    settings,
+                    permissions,
                     service,
                     adventure,
-                    presentation
+                    presentation,
                 )
             }
             argument("type", word()) { type ->
-                suggests { suggestAll(FIREBALL_SUGGESTIONS) }
+                suggests {
+                    suggestAll(
+                        FIREBALL_SUGGESTIONS.filter { candidate ->
+                            FireballType.parse(candidate)?.let { parsed ->
+                                permissions.allows(source, fireballPermission(parsed))
+                            } ?: false
+                        }
+                    )
+                }
                 executesPlayer {
                     launchFireball(
                         source,
                         get(type),
-                        1.0,
+                        2.0,
+                        false,
+                        settings,
+                        permissions,
                         service,
                         adventure,
-                        presentation
+                        presentation,
                     )
                 }
-                argument("speed", double(0.1, 10.0)) { speed ->
+                argument("speed", double(0.0, 64.0)) { speed ->
                     executesPlayer {
                         launchFireball(
                             source,
                             get(type),
                             get(speed),
+                            false,
+                            settings,
+                            permissions,
                             service,
                             adventure,
-                            presentation
+                            presentation,
                         )
+                    }
+                    literal("ride", permission = CommandPermissions.FIREBALL_RIDE) {
+                        executesPlayer {
+                            launchFireball(
+                                source,
+                                get(type),
+                                get(speed),
+                                true,
+                                settings,
+                                permissions,
+                                service,
+                                adventure,
+                                presentation,
+                            )
+                        }
                     }
                 }
             }
@@ -88,6 +130,9 @@ internal object WorldProjectileCommands {
         source: CommandSourceStack,
         rawType: String,
         speed: Double,
+        ride: Boolean,
+        settings: () -> WorldToolsSettings,
+        permissions: PermissionService,
         service: WorldToolsService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
@@ -99,6 +144,14 @@ internal object WorldProjectileCommands {
                 presentation,
                 WorldToolsMessages.fireballInvalid()
             )
+        if (!permissions.allows(source, fireballPermission(type))) {
+            return reply(
+                source,
+                adventure,
+                presentation,
+                WorldToolsMessages.fireballForbidden(type)
+            )
+        }
         val player = source.player
             ?: return reply(
                 source,
@@ -106,7 +159,8 @@ internal object WorldProjectileCommands {
                 presentation,
                 WorldToolsMessages.playerNotFound()
             )
-        service.launchFireball(player, type, speed)
+        val capped = minOf(speed, settings().maxProjectileSpeed)
+        service.launchFireball(player, type, capped, ride)
         return reply(
             source,
             adventure,
@@ -114,6 +168,13 @@ internal object WorldProjectileCommands {
             WorldToolsMessages.fireballLaunched(type)
         )
     }
+
+    private fun fireballPermission(type: FireballType): PermissionSpec =
+        PermissionSpec(
+            "cellulosesz.fireball.${type.name.lowercase()}",
+            VanillaPermissionFallback.COMMANDS_MODERATOR,
+            "Use /fireball ${type.name.lowercase()}",
+        )
 
     // ---------------------------------------------------------------- /firework
 
@@ -168,7 +229,7 @@ internal object WorldProjectileCommands {
                     }
                 }
             }
-            literal("fire") {
+            literal("fire", permission = CommandPermissions.FIREWORK_FIRE) {
                 executesPlayer {
                     val launched = service.launchFireworks(source.player!!, 1, 1)
                     reply(
@@ -178,13 +239,23 @@ internal object WorldProjectileCommands {
                         WorldToolsMessages.fireworkFired(launched)
                     )
                 }
-                argument("amount", integer(1, 128)) { amount ->
+                argument("amountOrDirection", word()) { target ->
+                    suggests {
+                        suggestAll((1..settings().maxFireworkAmount).map(Int::toString))
+                    }
                     executesPlayer {
-                        val capped = minOf(get(amount), settings().maxFireworkAmount)
+                        val raw = get(target)
+                        val amount = raw.toIntOrNull()
+                        val direction = amount == null
+                        val capped = when {
+                            direction -> 1
+                            else -> minOf(amount, settings().maxFireworkAmount)
+                        }
                         val launched = service.launchFireworks(
                             source.player!!,
                             1,
-                            capped
+                            capped,
+                            direction,
                         )
                         reply(
                             source,
@@ -201,7 +272,6 @@ internal object WorldProjectileCommands {
 
     private fun nukeCommand(
         service: WorldToolsService,
-        settings: () -> WorldToolsSettings,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): CommandDefinition =
@@ -211,60 +281,53 @@ internal object WorldProjectileCommands {
             permission = CommandPermissions.NUKE,
             documentation = "administration/nuke",
         ) {
-            executesPlayer {
-                detonate(
-                    source,
-                    source.player,
-                    service,
-                    settings,
-                    adventure,
-                    presentation
-                )
-            }
-            argument("player", word()) { target ->
-                executes {
-                    val source = context.source
-                    detonate(
+            executes {
+                val source = context.source
+                val targets = source.server.playerList.players.toList()
+                if (targets.isEmpty()) {
+                    return@executes reply(
                         source,
-                        resolveTarget(source, get(target)),
-                        service,
-                        settings,
                         adventure,
                         presentation,
+                        WorldToolsMessages.playerNotFound(),
+                    )
+                }
+                targets.forEach { target ->
+                    service.nuke(target.level(), target.x, target.z)
+                }
+                reply(
+                    source,
+                    adventure,
+                    presentation,
+                    WorldToolsMessages.nukeDetonated(),
+                )
+            }
+            argument("players", greedyString()) { players ->
+                executes {
+                    val source = context.source
+                    val targets = get(players)
+                            .split(' ')
+                            .filter { it.isNotBlank() }
+                            .mapNotNull(source.server.playerList::getPlayerByName)
+                    if (targets.isEmpty()) {
+                        return@executes reply(
+                            source,
+                            adventure,
+                            presentation,
+                            WorldToolsMessages.playerNotFound(),
+                        )
+                    }
+                    targets.forEach { target ->
+                        service.nuke(target.level(), target.x, target.z)
+                    }
+                    reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.nukeDetonated(),
                     )
                 }
             }
         }
-
-    private fun detonate(
-        source: CommandSourceStack,
-        player: ServerPlayer?,
-        service: WorldToolsService,
-        settings: () -> WorldToolsSettings,
-        adventure: AdventureRuntime,
-        presentation: TextPresentation,
-    ): Int {
-        if (player == null) {
-            return reply(
-                source,
-                adventure,
-                presentation,
-                WorldToolsMessages.playerNotFound()
-            )
-        }
-        service.nuke(
-            player.level(),
-            player.x,
-            player.y,
-            player.z,
-            settings().maxNukeRadius
-        )
-        return reply(
-            source,
-            adventure,
-            presentation,
-            WorldToolsMessages.nukeDetonated()
-        )
-    }
 
 }

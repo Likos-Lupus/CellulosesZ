@@ -4,13 +4,14 @@ Strike lightning.
 
 ## Behavior
 
-Strikes one or more lightning bolts at the target. Without a target the command strikes where you
-stand. The optional power is the number of bolts, from 1 to 10.
+Without a target, strikes real lightning at the block you are looking at (up to 600 blocks). With a
+target, strikes a visual-only bolt and deals the optional damage; players in god mode are not
+damaged. The power argument is damage, not a bolt count.
 
 ## Parameters
 
-- `player`: optional target; defaults to yourself.
-- `power`: optional number of bolts, 1 to 10.
+- `player`: optional target. This branch requires `cellulosesz.lightning.others`.
+- `power`: optional damage, 1 to 100; defaults to 5. Requires a target.
 
 ## Example
 
@@ -20,6 +21,7 @@ stand. The optional power is the number of bolts, from 1 to 10.
 
 ## Failures
 
+- You are not looking at a block (no-target form).
 - The target is not online.
 
 ## Related commands

@@ -209,6 +209,13 @@ public object CommandPermissions {
     public val BREAK: PermissionSpec = AdministrationPermissionNodes.BREAK
     public val ICE: PermissionSpec = AdministrationPermissionNodes.ICE
     public val EXT: PermissionSpec = AdministrationPermissionNodes.EXT
+    public val ICE_OTHERS: PermissionSpec = AdministrationPermissionNodes.ICE_OTHERS
+    public val EXT_OTHERS: PermissionSpec = AdministrationPermissionNodes.EXT_OTHERS
+    public val BREAK_BEDROCK: PermissionSpec = AdministrationPermissionNodes.BREAK_BEDROCK
+    public val LIGHTNING_OTHERS: PermissionSpec = AdministrationPermissionNodes.LIGHTNING_OTHERS
+    public val FIREBALL_RIDE: PermissionSpec = AdministrationPermissionNodes.FIREBALL_RIDE
+    public val FIREWORK_FIRE: PermissionSpec = AdministrationPermissionNodes.FIREWORK_FIRE
+    public val SPAWN_MOB_STACK: PermissionSpec = AdministrationPermissionNodes.SPAWN_MOB_STACK
     public val BURN: PermissionSpec = AdministrationPermissionNodes.BURN
     public val GC: PermissionSpec = AdministrationPermissionNodes.GC
     public val ANTIOCH: PermissionSpec = AdministrationPermissionNodes.ANTIOCH
@@ -433,6 +440,13 @@ public object CommandPermissions {
         BREAK,
         ICE,
         EXT,
+        ICE_OTHERS,
+        EXT_OTHERS,
+        BREAK_BEDROCK,
+        LIGHTNING_OTHERS,
+        FIREBALL_RIDE,
+        FIREWORK_FIRE,
+        SPAWN_MOB_STACK,
         BURN,
         GC,
         ANTIOCH,

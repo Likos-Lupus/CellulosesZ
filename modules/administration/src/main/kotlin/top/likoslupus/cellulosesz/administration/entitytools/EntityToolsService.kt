@@ -55,6 +55,7 @@ internal class EntityToolsService {
         yaw: Float,
         pitch: Float,
         amount: Int,
+        mountType: EntityType<*>? = null,
     ): Int {
         val random = level.random
         var spawned = 0
@@ -72,6 +73,27 @@ internal class EntityToolsService {
             if (entity is Mob) {
                 entity.setPersistenceRequired()
             }
+            if (mountType != null) {
+                val mount = try {
+                    mountType.create(level, EntitySpawnReason.COMMAND)
+                } catch (exception: Exception) {
+                    LOGGER.warn(
+                        "failed to create mount entity type {}",
+                        EntityType.getKey(mountType),
+                        exception,
+                    )
+                    null
+                }
+                if (mount != null) {
+                    mount.snapTo(x + dx, y, z + dz, yaw, pitch)
+                    if (mount is Mob) {
+                        mount.setPersistenceRequired()
+                    }
+                    if (level.addFreshEntity(mount)) {
+                        entity.startRiding(mount)
+                    }
+                }
+            }
             if (level.addFreshEntity(entity)) {
                 spawned++
             }
@@ -80,44 +102,36 @@ internal class EntityToolsService {
     }
 
     /**
-     * Points the spawner at [pos] at [type] and, when [delayTicks] is non-null, overrides its
-     * spawn delay. Returns false when the block is not a spawner.
+     * Points the spawner at [pos] at [type] and applies [delayTicks] (0 means Essentials' immediate
+     * reset). Returns false when the block is not a spawner.
      */
     fun configureSpawner(
         level: ServerLevel,
         pos: BlockPos,
         type: EntityType<*>,
-        delayTicks: Int?,
+        delayTicks: Int,
     ): Boolean {
         val blockEntity = level.getBlockEntity(pos)
         if (blockEntity !is SpawnerBlockEntity) {
             return false
         }
         val spawner = blockEntity.spawner
-        if (delayTicks != null) {
-            val tag = CompoundTag()
-            tag.putShort(
-                "Delay",
-                delayTicks.coerceIn(1, Short.MAX_VALUE.toInt()).toShort()
-            )
-            tag.putShort(
-                "MinSpawnDelay",
-                delayTicks.coerceIn(1, Short.MAX_VALUE.toInt()).toShort()
-            )
-            tag.putShort(
-                "MaxSpawnDelay",
-                delayTicks.coerceIn(1, Short.MAX_VALUE.toInt()).toShort()
-            )
-            spawner.load(
-                level,
-                pos,
-                TagValueInput.create(
-                    ProblemReporter.DISCARDING,
-                    level.registryAccess(),
-                    tag,
-                ),
-            )
+        val delay = delayTicks.coerceIn(0, Short.MAX_VALUE.toInt())
+        val tag = CompoundTag()
+        tag.putShort("Delay", delay.toShort())
+        if (delay > 0) {
+            tag.putShort("MinSpawnDelay", delay.toShort())
+            tag.putShort("MaxSpawnDelay", delay.toShort())
         }
+        spawner.load(
+            level,
+            pos,
+            TagValueInput.create(
+                ProblemReporter.DISCARDING,
+                level.registryAccess(),
+                tag,
+            ),
+        )
         spawner.setEntityId(type, level, level.random, pos)
         blockEntity.setChanged()
         val state = level.getBlockState(pos)

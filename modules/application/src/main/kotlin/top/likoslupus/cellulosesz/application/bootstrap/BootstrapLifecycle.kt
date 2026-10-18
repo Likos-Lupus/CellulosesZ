@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.application.bootstrap
 import dev.architectury.event.EventResult
 import dev.architectury.event.events.common.*
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.level.Level
 import top.likoslupus.cellulosesz.administration.AdministrationSqlSchema
 import top.likoslupus.cellulosesz.application.ApplicationSqlSchema
 import top.likoslupus.cellulosesz.application.health.ApplicationHealth
@@ -145,6 +146,24 @@ internal object BootstrapLifecycle {
             EventResult.pass()
         }
 
+        // `/nuke` TNT is tagged; cancel its real explosion and replay a zero-power, non-destructive
+        // one. Passing a null source keeps this PRE handler from matching its own replay.
+        ExplosionEvent.PRE.register { level, explosion ->
+            if (state.administration.isNukeTntSource(explosion.directSourceEntity)) {
+                val center = explosion.center()
+                level.explode(
+                    null,
+                    center.x,
+                    center.y,
+                    center.z,
+                    0.0f,
+                    Level.ExplosionInteraction.NONE,
+                )
+                EventResult.interruptFalse()
+            } else {
+                EventResult.pass()
+            }
+        }
         PlayerEvent.PLAYER_JOIN.register { player ->
             state.administration.onPlayerJoined(player)
             state.communication.onPlayerJoined(player.uuid)

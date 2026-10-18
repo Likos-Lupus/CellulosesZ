@@ -25,6 +25,12 @@ internal object EntityToolsMessages : MessageSupport() {
     fun notASpawner(): Notice =
         error(MessageKey("administration.spawner.not_spawner"))
 
+    fun spawnerForbidden(type: String): Notice =
+        error(
+            MessageKey("administration.spawner.forbidden"),
+            identifier(type),
+        )
+
     fun spawnMobSpawned(type: String, count: Int): Notice =
         success(
             MessageKey("administration.spawnmob.success"),
@@ -38,6 +44,9 @@ internal object EntityToolsMessages : MessageSupport() {
             count(requested),
             count(spawned),
         )
+
+    fun spawnMobStackForbidden(): Notice =
+        error(MessageKey("administration.spawnmob.stack_forbidden"))
 
     fun removeSuccess(selector: String, count: Int): Notice =
         success(

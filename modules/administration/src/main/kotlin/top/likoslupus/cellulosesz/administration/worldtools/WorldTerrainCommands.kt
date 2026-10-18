@@ -4,6 +4,7 @@ import net.minecraft.commands.CommandSourceStack
 import net.minecraft.core.BlockPos
 import net.minecraft.data.worldgen.features.TreeFeatures
 import net.minecraft.resources.ResourceKey
+import net.minecraft.world.level.block.Blocks
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.HitResult
@@ -14,6 +15,7 @@ import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.double
 import top.likoslupus.cellulosesz.core.command.dsl.word
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.permission.PermissionService
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 
@@ -21,28 +23,45 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 internal object WorldTerrainCommands {
 
     private const val REACH: Double = 8.0
+    private const val BREAK_REACH: Double = 20.0
 
     private val TREE_SUGGESTIONS: List<String> = listOf(
         "tree",
-        "birch",
+        "oak",
+        "bigtree",
         "redwood",
+        "spruce",
+        "tallredwood",
+        "megaredwood",
+        "pine",
+        "megapine",
+        "birch",
+        "tallbirch",
+        "jungle",
+        "smalljungle",
+        "cocoa",
+        "junglebush",
         "redmushroom",
         "brownmushroom",
-        "jungle",
-        "junglebush",
         "swamp",
+        "acacia",
+        "darkoak",
+        "megajungle",
+        "crimsonfungus",
+        "warpedfungus",
+        "cherry",
+        "mangrove",
+        "tallmangrove",
+        "azalea",
+        "paleoak",
     )
 
-    private val BIG_TREE_SUGGESTIONS: List<String> = listOf(
-        "tree",
-        "redwood",
-        "jungle",
-        "darkoak",
-    )
+    private val BIG_TREE_SUGGESTIONS: List<String> = TREE_SUGGESTIONS
 
     fun commands(
         service: WorldToolsService,
         settings: () -> WorldToolsSettings,
+        permissions: PermissionService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
@@ -60,6 +79,7 @@ internal object WorldTerrainCommands {
                         get(type),
                         false,
                         service,
+                        settings,
                         adventure,
                         presentation
                     )
@@ -80,6 +100,7 @@ internal object WorldTerrainCommands {
                         get(type),
                         true,
                         service,
+                        settings,
                         adventure,
                         presentation
                     )
@@ -93,14 +114,24 @@ internal object WorldTerrainCommands {
             documentation = "administration/break",
         ) {
             executesPlayer {
-                val pos = lookedAtBlock(source)
+                val player = source.player!!
+                val pos = lookedAtBlock(source, BREAK_REACH)
                     ?: return@executesPlayer reply(
                         source,
                         adventure,
                         presentation,
                         WorldToolsMessages.lookAtBlock(),
                     )
-                val player = source.player!!
+                if (player.level().getBlockState(pos).`is`(Blocks.BEDROCK)
+                    && !permissions.allows(source, CommandPermissions.BREAK_BEDROCK)
+                ) {
+                    return@executesPlayer reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.bedrockDenied(),
+                    )
+                }
                 service.breakBlock(player.level(), pos, player)
                 reply(
                     source,
@@ -117,18 +148,32 @@ internal object WorldTerrainCommands {
             documentation = "administration/ice",
         ) {
             executesPlayer {
-                val player = source.player!!
-                val frozen = service.freezeWater(
-                    player.level(),
-                    player.blockPosition(),
-                    2
-                )
+                service.freezePlayer(source.player!!)
                 reply(
                     source,
                     adventure,
                     presentation,
-                    WorldToolsMessages.iceFrozen(frozen)
+                    WorldToolsMessages.iceFrozen()
                 )
+            }
+            argument("player", word(), permission = CommandPermissions.ICE_OTHERS) { target ->
+                executes {
+                    val source = context.source
+                    val player = resolveTarget(source, get(target))
+                        ?: return@executes reply(
+                            source,
+                            adventure,
+                            presentation,
+                            WorldToolsMessages.playerNotFound(),
+                        )
+                    service.freezePlayer(player)
+                    reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.iceFrozenOther(player.gameProfile.name)
+                    )
+                }
             }
         },
         command(
@@ -138,8 +183,7 @@ internal object WorldTerrainCommands {
             documentation = "administration/ext",
         ) {
             executesPlayer {
-                val player = source.player!!
-                service.extinguish(player, 3)
+                service.extinguishPlayer(source.player!!)
                 reply(
                     source,
                     adventure,
@@ -147,16 +191,35 @@ internal object WorldTerrainCommands {
                     WorldToolsMessages.extinguished()
                 )
             }
+            argument("player", word(), permission = CommandPermissions.EXT_OTHERS) { target ->
+                executes {
+                    val source = context.source
+                    val player = resolveTarget(source, get(target))
+                        ?: return@executes reply(
+                            source,
+                            adventure,
+                            presentation,
+                            WorldToolsMessages.playerNotFound(),
+                        )
+                    service.extinguishPlayer(player)
+                    reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.extinguishedOther(player.gameProfile.name)
+                    )
+                }
+            }
         },
         burnCommand(service, settings, adventure, presentation),
     )
 
     // ---------------------------------------------------------------- helpers
 
-    private fun lookedAtBlock(source: CommandSourceStack): BlockPos? {
+    private fun lookedAtBlock(source: CommandSourceStack, reach: Double = REACH): BlockPos? {
         val player = source.player
             ?: return null
-        return blockPos(player.pick(REACH, 0f, false))
+        return blockPos(player.pick(reach, 0f, false))
     }
 
     private fun blockPos(hit: HitResult?): BlockPos? =
@@ -169,6 +232,7 @@ internal object WorldTerrainCommands {
         rawType: String,
         big: Boolean,
         service: WorldToolsService,
+        settings: () -> WorldToolsSettings,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
@@ -179,7 +243,7 @@ internal object WorldTerrainCommands {
                 presentation,
                 WorldToolsMessages.treeInvalid()
             )
-        val pos = lookedAtBlock(source)
+        val pos = lookedAtBlock(source, settings().treeCommandRangeLimit)
             ?: return reply(
                 source,
                 adventure,
@@ -193,8 +257,17 @@ internal object WorldTerrainCommands {
                 presentation,
                 WorldToolsMessages.playerNotFound()
             )
+        val base = pos.above()
+        if (player.level().getBlockState(base).isSolid) {
+            return reply(
+                source,
+                adventure,
+                presentation,
+                WorldToolsMessages.treeFailed()
+            )
+        }
         return when {
-            service.growTree(player.level(), pos, key) ->
+            service.growTree(player.level(), base, key) ->
                 reply(
                     source,
                     adventure,
@@ -255,27 +328,36 @@ internal object WorldTerrainCommands {
 
     // ---------------------------------------------------------------- tree registry
 
-    private fun treeFeature(raw: String, big: Boolean): ResourceKey<ConfiguredFeature<*, *>>? =
-        when {
-            big -> when (raw.lowercase()) {
-                "tree", "oak" -> TreeFeatures.FANCY_OAK
-                "redwood", "spruce" -> TreeFeatures.MEGA_SPRUCE
-                "jungle" -> TreeFeatures.MEGA_JUNGLE_TREE
-                "darkoak", "dark_oak" -> TreeFeatures.DARK_OAK
-                else -> null
-            }
-
-            else -> when (raw.lowercase()) {
-                "tree", "oak" -> TreeFeatures.OAK
-                "birch" -> TreeFeatures.BIRCH
-                "redwood", "spruce" -> TreeFeatures.MEGA_SPRUCE
-                "redmushroom", "red_mushroom" -> TreeFeatures.HUGE_RED_MUSHROOM
-                "brownmushroom", "brown_mushroom" -> TreeFeatures.HUGE_BROWN_MUSHROOM
-                "jungle" -> TreeFeatures.JUNGLE_TREE
-                "junglebush", "jungle_bush" -> TreeFeatures.JUNGLE_BUSH
-                "swamp", "swamp_oak" -> TreeFeatures.SWAMP_OAK
-                else -> null
-            }
+    private fun treeFeature(raw: String, big: Boolean): ResourceKey<ConfiguredFeature<*, *>>? {
+        val name = raw.lowercase().replace("_", "")
+        return when (name) {
+            "tree", "oak" -> if (big) TreeFeatures.FANCY_OAK else TreeFeatures.OAK
+            "bigtree" -> TreeFeatures.FANCY_OAK
+            "redwood", "spruce" -> if (big) TreeFeatures.MEGA_SPRUCE else TreeFeatures.SPRUCE
+            "tallredwood", "megaredwood", "megaspruce" -> TreeFeatures.MEGA_SPRUCE
+            "pine" -> if (big) TreeFeatures.MEGA_PINE else TreeFeatures.PINE
+            "megapine" -> TreeFeatures.MEGA_PINE
+            "birch" -> if (big) TreeFeatures.SUPER_BIRCH_BEES_0002 else TreeFeatures.BIRCH
+            "tallbirch", "superbirch" -> TreeFeatures.SUPER_BIRCH_BEES_0002
+            "jungle" -> if (big) TreeFeatures.MEGA_JUNGLE_TREE else TreeFeatures.JUNGLE_TREE
+            "smalljungle" -> TreeFeatures.JUNGLE_TREE_NO_VINE
+            "cocoa", "cocoatree" -> TreeFeatures.JUNGLE_TREE
+            "junglebush" -> TreeFeatures.JUNGLE_BUSH
+            "redmushroom" -> TreeFeatures.HUGE_RED_MUSHROOM
+            "brownmushroom" -> TreeFeatures.HUGE_BROWN_MUSHROOM
+            "swamp", "swampoak" -> TreeFeatures.SWAMP_OAK
+            "acacia" -> TreeFeatures.ACACIA
+            "darkoak" -> TreeFeatures.DARK_OAK
+            "megajungle" -> TreeFeatures.MEGA_JUNGLE_TREE
+            "crimsonfungus", "crimson" -> TreeFeatures.CRIMSON_FUNGUS
+            "warpedfungus", "warped" -> TreeFeatures.WARPED_FUNGUS
+            "cherry" -> TreeFeatures.CHERRY
+            "mangrove" -> TreeFeatures.MANGROVE
+            "tallmangrove" -> TreeFeatures.TALL_MANGROVE
+            "azalea" -> TreeFeatures.AZALEA_TREE
+            "paleoak" -> TreeFeatures.PALE_OAK
+            else -> null
         }
+    }
 
 }

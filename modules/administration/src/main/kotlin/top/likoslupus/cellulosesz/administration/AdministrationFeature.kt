@@ -1,6 +1,8 @@
 package top.likoslupus.cellulosesz.administration
 
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.entity.Entity
+import net.minecraft.world.entity.item.PrimedTnt
 import top.likoslupus.cellulosesz.administration.config.AdministrationSettings
 import top.likoslupus.cellulosesz.administration.entitytools.EntityToolsService
 import top.likoslupus.cellulosesz.administration.format.AdministrationMessages
@@ -24,6 +26,7 @@ import top.likoslupus.cellulosesz.administration.playerstate.PlayerStateService
 import top.likoslupus.cellulosesz.administration.sign.SignEditService
 import top.likoslupus.cellulosesz.administration.socialspy.SocialSpyService
 import top.likoslupus.cellulosesz.administration.vanish.VanishService
+import top.likoslupus.cellulosesz.administration.worldtools.NukeTntMarker
 import top.likoslupus.cellulosesz.administration.worldtools.PersonalViews
 import top.likoslupus.cellulosesz.administration.worldtools.WorldToolsService
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
@@ -396,6 +399,10 @@ public class AdministrationFeature internal constructor(
     /** Server-thread confined vanish query for join/quit announcement suppression. */
     public fun isVanished(playerId: UUID): Boolean =
         vanish.isVanished(playerId)
+
+    /** True when [entity] is TNT primed by `/nuke`; its explosion is rendered cosmetically. */
+    public fun isNukeTntSource(entity: Entity?): Boolean =
+        entity is PrimedTnt && entity.entityTags().contains(NukeTntMarker.TAG)
 
     /** Command roots blocked while muted, from live config. Server thread. */
     public fun mutedCommandRoots(): List<String> =

@@ -143,16 +143,19 @@ internal class AdministrationCommandFactory(
         ) + EntityToolsCommands.commands(
             entityTools,
             { settings().entityTools },
+            permissions,
             adventure,
             presentation
         ) + WorldToolsCommands.commands(
             worldTools,
             personalViews,
             { settings().worldTools },
+            permissions,
             adventure,
             presentation
         ) + FunCommands.commands(
             { settings().amusement },
+            kernel,
             adventure,
             presentation
         ) + SignCommands.commands(

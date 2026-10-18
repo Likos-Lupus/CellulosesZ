@@ -152,12 +152,9 @@ maxSpawnAmount = 64
 maxRemoveRadius = 128.0
 
 # =============================================================================
-# [administration.worldTools] — /nuke, /firework, /burn
+# [administration.worldTools] — /firework, /burn
 # =============================================================================
 [administration.worldTools]
-
-# Largest /nuke explosion radius, in blocks. Range: 0.0..128.0. Reload: hot.
-maxNukeRadius = 16.0
 
 # Largest firework flight power accepted by /firework fire. Range: 0..32.
 # Reload: hot.
@@ -169,6 +166,12 @@ maxFireworkAmount = 8
 
 # Largest /burn duration, in seconds. Range: 0.0..3600.0. Reload: hot.
 maxBurnSeconds = 60.0
+
+# Largest distance /tree and /bigtree may target, in blocks. Range: (0, 1024]. Reload: hot.
+treeCommandRangeLimit = 300.0
+
+# Largest projectile speed accepted by /fireball, in blocks per tick. Range: (0, 64]. Reload: hot.
+maxProjectileSpeed = 8.0
 
 # =============================================================================
 # [administration.fun] — /antioch, /beezooka, /kittycannon

@@ -1,12 +1,15 @@
 # /tree
 
-Grow a tree at the block you are looking at.
+Grow a tree at the block above the block you are looking at.
 
 ## Behavior
 
-Places and grows a named tree. The supported kinds are `tree` (oak), `birch`, `redwood` (spruce),
-`redmushroom`, `brownmushroom`, `jungle`, `junglebush` and `swamp`. The tree is grown at the block
-you are looking at.
+The tree is placed one block above the looked-at block, inside the distance limit set by
+`[administration.worldTools].treeCommandRangeLimit`. The block at the placement position must not be
+solid. Supported kinds include `tree`/`oak`, `bigtree`, `redwood`/`spruce`, `tallredwood`,
+`megaredwood`, `pine`, `megapine`, `birch`, `tallbirch`, `jungle`, `smalljungle`, `cocoa`,
+`junglebush`, `redmushroom`, `brownmushroom`, `swamp`, `acacia`, `darkoak`, `megajungle`,
+`crimsonfungus`, `warpedfungus`, `cherry`, `mangrove`, `tallmangrove`, `azalea` and `paleoak`.
 
 ## Parameters
 
@@ -15,13 +18,14 @@ you are looking at.
 ## Example
 
 - `/tree tree`
-- `/tree birch`
-- `/tree redmushroom`
+- `/tree acacia`
+- `/tree cherry`
 
 ## Failures
 
 - The tree type is unrecognized.
-- You are not looking at a block, or the tree cannot grow there.
+- You are not looking at a block within the configured range.
+- The block above is solid, or the tree cannot grow there.
 
 ## Related commands
 

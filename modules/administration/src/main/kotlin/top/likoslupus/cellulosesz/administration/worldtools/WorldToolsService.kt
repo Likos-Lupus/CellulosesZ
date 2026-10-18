@@ -15,18 +15,15 @@ import net.minecraft.world.clock.WorldClock
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.LivingEntity
+import net.minecraft.world.entity.item.PrimedTnt
 import net.minecraft.world.entity.projectile.FireworkRocketEntity
-import net.minecraft.world.entity.projectile.hurtingprojectile.DragonFireball
-import net.minecraft.world.entity.projectile.hurtingprojectile.LargeFireball
-import net.minecraft.world.entity.projectile.hurtingprojectile.SmallFireball
-import net.minecraft.world.entity.projectile.hurtingprojectile.WitherSkull
+import net.minecraft.world.entity.projectile.Projectile
 import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.Items
 import net.minecraft.world.item.component.Fireworks
-import net.minecraft.world.level.Level
-import net.minecraft.world.level.block.BaseFireBlock
-import net.minecraft.world.level.block.Blocks
+import net.minecraft.world.level.levelgen.Heightmap
 import net.minecraft.world.level.levelgen.feature.ConfiguredFeature
+import kotlin.math.floor
 
 /** The three server weather states shared by `/weather` and `/pweather`. */
 internal enum class WeatherType {
@@ -51,13 +48,22 @@ internal enum class WeatherType {
 
 }
 
-/** The projectile kinds accepted by `/fireball`. */
+/** The projectile kinds accepted by `/fireball`, mirroring Essentials' type table. */
 internal enum class FireballType {
 
+    FIREBALL,
     SMALL,
     LARGE,
     DRAGON,
-    WITHER,
+    SKULL,
+    ARROW,
+    EGG,
+    SNOWBALL,
+    EXP_BOTTLE,
+    SPLASH_POTION,
+    LINGERING_POTION,
+    TRIDENT,
+    WIND_CHARGE,
 
     ;
 
@@ -65,10 +71,19 @@ internal enum class FireballType {
 
         fun parse(raw: String): FireballType? =
             when (raw.lowercase()) {
+                "fireball", "big" -> FIREBALL
                 "small", "smallfireball" -> SMALL
-                "large", "fireball", "big" -> LARGE
+                "large", "largefireball" -> LARGE
                 "dragon", "dragonfireball" -> DRAGON
-                "wither", "witherskull", "skull" -> WITHER
+                "skull", "wither", "witherskull" -> SKULL
+                "arrow" -> ARROW
+                "egg" -> EGG
+                "snowball" -> SNOWBALL
+                "expbottle", "experiencebottle" -> EXP_BOTTLE
+                "splashpotion", "splash" -> SPLASH_POTION
+                "lingeringpotion", "lingering" -> LINGERING_POTION
+                "trident" -> TRIDENT
+                "windcharge" -> WIND_CHARGE
                 else -> null
             }
 
@@ -92,6 +107,7 @@ internal data class WorldStats(
     val players: Int,
     val chunks: Int,
     val entities: Int,
+    val blockEntities: Int,
 )
 
 /**
@@ -235,16 +251,68 @@ internal class WorldToolsService {
         player: ServerPlayer,
         type: FireballType,
         speed: Double,
+        ride: Boolean,
     ): Boolean {
         val level = player.level()
-        val direction = player.lookAngle.normalize().scale(speed)
-        val projectile = when (type) {
-            FireballType.SMALL -> SmallFireball(level, player, direction)
-            FireballType.LARGE -> LargeFireball(level, player, direction, 1)
-            FireballType.DRAGON -> DragonFireball(level, player, direction)
-            FireballType.WITHER -> WitherSkull(level, player, direction)
+        val entity = when (type) {
+            FireballType.FIREBALL,
+            FireballType.LARGE ->
+                EntityType.FIREBALL.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.SMALL ->
+                EntityType.SMALL_FIREBALL.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.DRAGON ->
+                EntityType.DRAGON_FIREBALL.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.SKULL ->
+                EntityType.WITHER_SKULL.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.ARROW ->
+                EntityType.ARROW.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.EGG ->
+                EntityType.EGG.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.SNOWBALL ->
+                EntityType.SNOWBALL.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.EXP_BOTTLE ->
+                EntityType.EXPERIENCE_BOTTLE.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.SPLASH_POTION ->
+                EntityType.SPLASH_POTION.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.LINGERING_POTION ->
+                EntityType.LINGERING_POTION.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.TRIDENT ->
+                EntityType.TRIDENT.create(level, EntitySpawnReason.COMMAND)
+
+            FireballType.WIND_CHARGE ->
+                EntityType.WIND_CHARGE.create(level, EntitySpawnReason.COMMAND)
+        } ?: return false
+        entity.snapTo(
+            player.x,
+            player.eyeY,
+            player.z,
+            player.yRot,
+            player.xRot,
+        )
+        entity.setOwner(player)
+        entity.shootFromRotation(
+            player,
+            player.xRot,
+            player.yRot,
+            0f,
+            speed.toFloat(),
+            0f,
+        )
+        val added = level.addFreshEntity(entity)
+        if (added && ride) {
+            player.startRiding(entity)
         }
-        return level.addFreshEntity(projectile)
+        return added
     }
 
     /** Sets the flight power of the held firework rocket; returns false when the hand is empty. */
@@ -285,17 +353,30 @@ internal class WorldToolsService {
     fun launchFireworks(
         player: ServerPlayer,
         power: Int,
-        amount: Int
+        amount: Int,
+        direction: Boolean = false,
     ): Int {
         val level = player.level()
         val template = ItemStack(Items.FIREWORK_ROCKET)
         template.set(
             FIREWORKS,
-            Fireworks(power, emptyList())
+            Fireworks(if (direction) minOf(power, 1) else power, emptyList())
         )
         var launched = 0
         repeat(amount) {
-            val rocket = FireworkRocketEntity(level, template.copy(), player)
+            val rocket = if (direction) {
+                FireworkRocketEntity(
+                    level,
+                    player.x,
+                    player.eyeY,
+                    player.z,
+                    template.copy(),
+                ).apply {
+                    deltaMovement = player.lookAngle.normalize().scale(0.07)
+                }
+            } else {
+                FireworkRocketEntity(level, template.copy(), player)
+            }
             if (level.addFreshEntity(rocket)) {
                 launched++
             }
@@ -303,21 +384,30 @@ internal class WorldToolsService {
         return launched
     }
 
-    fun nuke(
-        level: ServerLevel,
-        x: Double,
-        y: Double,
-        z: Double,
-        radius: Double
-    ) {
-        level.explode(
-            null,
-            x,
-            y,
-            z,
-            radius.toFloat(),
-            Level.ExplosionInteraction.TNT,
-        )
+    /**
+     * Essentials-style nuke: a 5x5 grid of primed TNT spawned 64 blocks above the highest block at
+     * each column. The TNT is tagged so the `ExplosionEvent.PRE` handler registered in
+     * `BootstrapLifecycle` turns its explosion into a zero-power, non-destructive effect.
+     */
+    fun nuke(level: ServerLevel, x: Double, z: Double) {
+        val centerX = floor(x).toInt()
+        val centerZ = floor(z).toInt()
+        NukePattern.offsets.forEach { (dx, dz) ->
+            val top = level.getHeight(
+                Heightmap.Types.MOTION_BLOCKING,
+                centerX + dx,
+                centerZ + dz,
+            )
+            val tnt = PrimedTnt(
+                level,
+                (centerX + dx).toDouble(),
+                (top + 64).toDouble(),
+                (centerZ + dz).toDouble(),
+                null,
+            )
+            tnt.addTag(NukeTntMarker.TAG)
+            level.addFreshEntity(tnt)
+        }
     }
 
     fun growTree(
@@ -342,49 +432,31 @@ internal class WorldToolsService {
     ): Boolean =
         level.destroyBlock(
             pos,
-            true,
+            false,
             player,
             512
         )
 
-    fun freezeWater(
-        level: ServerLevel,
-        center: BlockPos,
-        radius: Int
-    ): Int {
-        val ice = Blocks.ICE.defaultBlockState()
-        var changed = 0
-        for (dx in -radius..radius) {
-            for (dy in -radius..radius) {
-                for (dz in -radius..radius) {
-                    val pos = center.offset(dx, dy, dz)
-                    if (level.getBlockState(pos).`is`(Blocks.WATER)) {
-                        level.setBlockAndUpdate(pos, ice)
-                        changed++
-                    }
-                }
-            }
-        }
-        return changed
+    /** Applies the full powder-snow freeze effect without touching any water blocks. */
+    fun freezePlayer(player: ServerPlayer) {
+        player.ticksFrozen = player.ticksRequiredToFreeze
     }
 
-    fun extinguish(player: ServerPlayer, radius: Int): Int {
+    /** Clears the player's fire only, matching Essentials' `/ext`. */
+    fun extinguishPlayer(player: ServerPlayer) {
         player.clearFire()
-        val level = player.level()
-        val center = player.blockPosition()
-        var changed = 0
-        for (dx in -radius..radius) {
-            for (dy in -radius..radius) {
-                for (dz in -radius..radius) {
-                    val pos = center.offset(dx, dy, dz)
-                    if (level.getBlockState(pos).block is BaseFireBlock) {
-                        level.removeBlock(pos, false)
-                        changed++
-                    }
-                }
-            }
+    }
+
+    /** Visual-only lightning plus the manual damage Essentials applies unless the target is in god mode. */
+    fun smite(player: ServerPlayer, power: Int) {
+        if (player.isInvulnerable) {
+            return
         }
-        return changed
+        player.hurtServer(
+            player.level(),
+            player.level().damageSources().lightningBolt(),
+            power.toFloat(),
+        )
     }
 
     fun burn(target: LivingEntity, seconds: Double): Boolean {
@@ -400,11 +472,16 @@ internal class WorldToolsService {
             else -> minOf(20.0, 1_000_000_000.0 / averageNanos.toDouble())
         }
         val worlds = server.allLevels.map { level ->
+            var blockEntities = 0
+            level.chunkSource.chunkMap.forEachReadyToSendChunk { chunk ->
+                blockEntities += chunk.blockEntities.size
+            }
             WorldStats(
                 dimension = level.dimension().identifier().toString(),
                 players = level.players().size,
                 chunks = level.chunkSource.loadedChunksCount,
                 entities = level.allEntities.count(),
+                blockEntities = blockEntities,
             )
         }
         return ServerStats(

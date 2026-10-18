@@ -4,12 +4,11 @@ Freeze nearby water.
 
 ## Behavior
 
-Converts water source blocks in a small radius around you into ice, and reports how many were
-changed. This is a terrain edit; it does not touch non-water blocks.
+Freezes the target player with the full powder-snow freeze effect. It changes no water blocks.
 
 ## Parameters
 
-- None.
+- `player`: optional target; defaults to yourself. Requires `cellulosesz.ice.others`.
 
 ## Example
 
@@ -17,7 +16,7 @@ changed. This is a terrain edit; it does not touch non-water blocks.
 
 ## Failures
 
-- None; a dry area simply changes nothing.
+- None; the target simply stays frozen or the permission check denies it.
 
 ## Related commands
 

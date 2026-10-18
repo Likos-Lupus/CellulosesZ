@@ -1,20 +1,23 @@
 package top.likoslupus.cellulosesz.administration.amusement
 
 import net.minecraft.commands.CommandSourceStack
-import net.minecraft.network.chat.Component
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.world.entity.AgeableMob
 import net.minecraft.world.entity.Entity
 import net.minecraft.world.entity.EntitySpawnReason
 import net.minecraft.world.entity.EntityType
 import net.minecraft.world.entity.item.PrimedTnt
+import net.minecraft.world.level.Level
+import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 import top.likoslupus.cellulosesz.administration.config.FunSettings
 import top.likoslupus.cellulosesz.core.command.CommandCategory
+import top.likoslupus.cellulosesz.core.command.CommandFeedbackTarget
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
 import top.likoslupus.cellulosesz.core.command.dsl.greedyString
 import top.likoslupus.cellulosesz.core.permission.CommandPermissions
+import top.likoslupus.cellulosesz.core.runtime.RuntimeKernel
 import top.likoslupus.cellulosesz.core.text.MessageKey
 import top.likoslupus.cellulosesz.core.text.adventure.AdventureRuntime
 import top.likoslupus.cellulosesz.core.text.model.LocalizedText
@@ -22,16 +25,19 @@ import top.likoslupus.cellulosesz.core.text.model.Notice
 import top.likoslupus.cellulosesz.core.text.model.NoticeTone
 import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.replyNotice
+import kotlin.time.Duration.Companion.milliseconds
+import kotlinx.coroutines.delay
 
 /** `/antioch`, `/beezooka` and `/kittycannon`, gated by `[administration.fun].enabled`. */
 internal object FunCommands {
 
-    private const val DEFAULT_ANTIOCH_NAME: String = "ANTIOCH"
-    private const val ANTIOCH_FUSE_TICKS: Int = 80
-    private const val PROJECTILE_SPEED: Double = 1.6
+    private const val PROJECTILE_SPEED: Double = 2.0
+    private const val PROJECTILE_LIFETIME_MILLIS: Long = 1_000
+    private const val ANTIOCH_REACH: Double = 100.0
 
     fun commands(
         settings: () -> FunSettings,
+        kernel: RuntimeKernel,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): List<CommandDefinition> = listOf(
@@ -45,7 +51,7 @@ internal object FunCommands {
                 if (settings().enabled) {
                     detonate(
                         source,
-                        DEFAULT_ANTIOCH_NAME,
+                        false,
                         adventure,
                         presentation
                     )
@@ -58,12 +64,12 @@ internal object FunCommands {
                     )
                 }
             }
-            argument("message", greedyString()) { message ->
+            argument("message", greedyString()) {
                 executesPlayer {
                     if (settings().enabled) {
                         detonate(
                             source,
-                            get(message),
+                            true,
                             adventure,
                             presentation
                         )
@@ -86,7 +92,7 @@ internal object FunCommands {
         ) {
             executesPlayer {
                 if (settings().enabled) {
-                    launch(source, EntityType.BEE, false)
+                    launch(source, EntityType.BEE, false, kernel)
                     reply(
                         source,
                         adventure,
@@ -111,7 +117,7 @@ internal object FunCommands {
         ) {
             executesPlayer {
                 if (settings().enabled) {
-                    launch(source, EntityType.CAT, true)
+                    launch(source, EntityType.CAT, true, kernel)
                     reply(
                         source,
                         adventure,
@@ -132,7 +138,7 @@ internal object FunCommands {
 
     private fun detonate(
         source: CommandSourceStack,
-        message: String,
+        announce: Boolean,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
@@ -144,17 +150,19 @@ internal object FunCommands {
                 error(MessageKey("administration.playerstate.player_not_found")),
             )
         val level = player.level()
+        val pos = (player.pick(ANTIOCH_REACH, 0f, false) as? BlockHitResult)?.blockPos
+            ?: player.blockPosition()
         val tnt = PrimedTnt(
             level,
-            player.x,
-            player.y + 1.0,
-            player.z,
+            pos.x + 0.5,
+            pos.y.toDouble(),
+            pos.z + 0.5,
             player
         )
-        tnt.fuse = ANTIOCH_FUSE_TICKS
-        tnt.customName = Component.literal(message)
-        tnt.isCustomNameVisible = true
         level.addFreshEntity(tnt)
+        if (announce) {
+            broadcastAntioch(source, adventure, presentation)
+        }
         return reply(
             source,
             adventure,
@@ -163,10 +171,32 @@ internal object FunCommands {
         )
     }
 
+    private fun broadcastAntioch(
+        source: CommandSourceStack,
+        adventure: AdventureRuntime,
+        presentation: TextPresentation,
+    ) {
+        val lines = listOf("line1", "line2").map { suffix ->
+            Notice(
+                LocalizedText(MessageKey("administration.fun.antioch.$suffix")),
+                NoticeTone.INFO
+            )
+        }
+        source.server.playerList.players.forEach { target ->
+            lines.forEach { notice ->
+                presentation.renderFor(target.uuid, notice).forEach { rendered ->
+                    adventure.audience(CommandFeedbackTarget.Player(target.uuid))
+                            .sendMessage(rendered)
+                }
+            }
+        }
+    }
+
     private fun launch(
         source: CommandSourceStack,
         type: EntityType<*>,
-        baby: Boolean
+        baby: Boolean,
+        kernel: RuntimeKernel,
     ) {
         val player: ServerPlayer = source.player ?: return
         val level = player.level()
@@ -183,7 +213,26 @@ internal object FunCommands {
         if (baby && entity is AgeableMob) {
             entity.isBaby = true
         }
-        level.addFreshEntity(entity)
+        if (!level.addFreshEntity(entity)) {
+            return
+        }
+        kernel.launch {
+            delay(PROJECTILE_LIFETIME_MILLIS.milliseconds)
+            kernel.onServerThread {
+                if (!entity.isRemoved) {
+                    val location = entity.position()
+                    entity.discard()
+                    level.explode(
+                        null,
+                        location.x,
+                        location.y,
+                        location.z,
+                        0.0f,
+                        Level.ExplosionInteraction.NONE
+                    )
+                }
+            }
+        }
     }
 
     private fun reply(

@@ -4,8 +4,9 @@ Fire a bee from wherever you are looking.
 
 ## Behavior
 
-Launches a bee with a short burst of velocity in the direction you are facing. The whole fun group
-is disabled with `[administration.fun].enabled = false`.
+Launches a bee at twice the normal projectile speed in the direction you are facing. One second
+later the bee is removed and a zero-power, non-destructive explosion is shown at its position. The
+whole fun group is disabled with `[administration.fun].enabled = false`.
 
 ## Parameters
 

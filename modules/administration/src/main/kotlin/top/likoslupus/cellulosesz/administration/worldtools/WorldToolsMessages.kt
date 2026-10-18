@@ -58,10 +58,14 @@ internal object WorldToolsMessages : MessageSupport() {
             literal(enabled.toString()),
         )
 
-    fun lightningStruck(count: Int): Notice =
+    fun lightningStruck(): Notice =
+        success(MessageKey("administration.lightning.struck"))
+
+    fun lightningSmitten(target: String, power: Int): Notice =
         success(
-            MessageKey("administration.lightning.struck"),
-            count(count),
+            MessageKey("administration.lightning.smitten"),
+            playerName(target),
+            count(power),
         )
 
     fun fireballLaunched(type: FireballType): Notice =
@@ -72,6 +76,12 @@ internal object WorldToolsMessages : MessageSupport() {
 
     fun fireballInvalid(): Notice =
         error(MessageKey("administration.fireball.invalid"))
+
+    fun fireballForbidden(type: FireballType): Notice =
+        error(
+            MessageKey("administration.fireball.forbidden"),
+            literal(type.name.lowercase()),
+        )
 
     fun fireworkPower(power: Int): Notice =
         success(
@@ -112,14 +122,26 @@ internal object WorldToolsMessages : MessageSupport() {
     fun lookAtBlock(): Notice =
         error(MessageKey("administration.tools.look_at_block"))
 
-    fun iceFrozen(count: Int): Notice =
+    fun iceFrozen(): Notice =
+        success(MessageKey("administration.ice.frozen"))
+
+    fun iceFrozenOther(target: String): Notice =
         success(
-            MessageKey("administration.ice.frozen"),
-            count(count),
+            MessageKey("administration.ice.frozen_other"),
+            playerName(target),
         )
 
     fun extinguished(): Notice =
         success(MessageKey("administration.ext.success"))
+
+    fun extinguishedOther(target: String): Notice =
+        success(
+            MessageKey("administration.ext.other"),
+            playerName(target),
+        )
+
+    fun bedrockDenied(): Notice =
+        error(MessageKey("administration.break.bedrock_denied"))
 
     fun burned(target: String, seconds: Double): Notice =
         success(
@@ -222,6 +244,7 @@ internal object WorldToolsMessages : MessageSupport() {
                                     count(world.players),
                                     count(world.chunks),
                                     count(world.entities),
+                                    count(world.blockEntities),
                                 ),
                             ),
                         )

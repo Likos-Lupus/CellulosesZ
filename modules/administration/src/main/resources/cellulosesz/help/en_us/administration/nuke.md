@@ -4,13 +4,13 @@ Create a large explosion.
 
 ## Behavior
 
-Detonates one large explosion at the target's position, or at your own position without a target.
-The radius is capped by `[administration.worldTools].maxNukeRadius`. This destroys terrain; use it
-with care.
+Drops a 5x5 grid of primed TNT 64 blocks above the highest block at each target column. The TNT is
+tagged so its explosions are cosmetic: they produce the effect but destroy no blocks and deal no
+damage. Without a target, every online player is nuked; otherwise each named player is.
 
 ## Parameters
 
-- `player`: optional target; defaults to yourself.
+- `players`: optional space-separated player names; omit to target every online player.
 
 ## Example
 
@@ -19,7 +19,7 @@ with care.
 
 ## Failures
 
-- The target is not online.
+- None of the named players are online.
 
 ## Related commands
 

@@ -4,12 +4,11 @@ Extinguish fire.
 
 ## Behavior
 
-Puts out the fire on the target and clears fire blocks in a small radius around them. Without a
-target the command acts on yourself.
+Clears the target player's remaining fire ticks. It does not remove fire blocks in the world.
 
 ## Parameters
 
-- `player`: optional target; defaults to yourself.
+- `player`: optional target; defaults to yourself. Requires `cellulosesz.ext.others`.
 
 ## Example
 

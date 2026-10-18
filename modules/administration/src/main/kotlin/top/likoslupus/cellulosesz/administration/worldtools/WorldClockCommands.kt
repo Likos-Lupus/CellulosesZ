@@ -1,8 +1,11 @@
 package top.likoslupus.cellulosesz.administration.worldtools
 
 import net.minecraft.commands.CommandSourceStack
+import net.minecraft.core.BlockPos
 import net.minecraft.server.level.ServerLevel
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.phys.BlockHitResult
+import net.minecraft.world.phys.HitResult
 import top.likoslupus.cellulosesz.core.command.CommandCategory
 import top.likoslupus.cellulosesz.core.command.dsl.CommandDefinition
 import top.likoslupus.cellulosesz.core.command.dsl.command
@@ -53,9 +56,32 @@ internal object WorldClockCommands {
             category = CommandCategory.ADMINISTRATION,
             permission = CommandPermissions.TIME,
             documentation = "administration/time",
+            aliases = setOf("day", "night"),
         ) {
             executes {
                 val source = context.source
+                val label = context.input.trim().substringBefore(' ').lowercase()
+                when (label) {
+                    "day" -> return@executes setTime(
+                        source,
+                        "day",
+                        null,
+                        false,
+                        service,
+                        adventure,
+                        presentation,
+                    )
+
+                    "night" -> return@executes setTime(
+                        source,
+                        "night",
+                        null,
+                        false,
+                        service,
+                        adventure,
+                        presentation,
+                    )
+                }
                 when (val ticks = service.currentTime(source.level)) {
                     null -> reply(
                         source,
@@ -234,7 +260,12 @@ internal object WorldClockCommands {
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
-        val type = WeatherType.parse(rawType)
+        val normalized = when (rawType.lowercase()) {
+            "storm" -> "rain"
+            "sun" -> "clear"
+            else -> rawType
+        }
+        val type = WeatherType.parse(normalized)
             ?: return reply(
                 source,
                 adventure,
@@ -313,6 +344,9 @@ internal object WorldClockCommands {
 
     // ---------------------------------------------------------------- /lightning
 
+    private const val LIGHTNING_LOOK_REACH: Double = 600.0
+    private const val DEFAULT_LIGHTNING_DAMAGE: Int = 5
+
     private fun lightningCommand(
         service: WorldToolsService,
         adventure: AdventureRuntime,
@@ -325,16 +359,35 @@ internal object WorldClockCommands {
             documentation = "administration/lightning",
         ) {
             executesPlayer {
-                strike(
+                val player = source.player
+                    ?: return@executesPlayer reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.playerNotFound(),
+                    )
+                val pos = blockPos(player.pick(LIGHTNING_LOOK_REACH, 0f, false))
+                    ?: return@executesPlayer reply(
+                        source,
+                        adventure,
+                        presentation,
+                        WorldToolsMessages.lookAtBlock(),
+                    )
+                service.strikeLightning(
+                    player.level(),
+                    pos.x + 0.5,
+                    pos.y.toDouble(),
+                    pos.z + 0.5,
+                    false,
+                )
+                reply(
                     source,
-                    source.player,
-                    1,
-                    service,
                     adventure,
-                    presentation
+                    presentation,
+                    WorldToolsMessages.lightningStruck(),
                 )
             }
-            argument("player", word()) { target ->
+            argument("player", word(), permission = CommandPermissions.LIGHTNING_OTHERS) { target ->
                 executes {
                     val source = context.source
                     val player = resolveTarget(source, get(target))
@@ -344,16 +397,16 @@ internal object WorldClockCommands {
                             presentation,
                             WorldToolsMessages.playerNotFound(),
                         )
-                    strike(
+                    strikeTarget(
                         source,
                         player,
-                        1,
+                        DEFAULT_LIGHTNING_DAMAGE,
                         service,
                         adventure,
-                        presentation
+                        presentation,
                     )
                 }
-                argument("power", integer(1, 10)) { power ->
+                argument("power", integer(1, 100)) { power ->
                     executes {
                         val source = context.source
                         val player = resolveTarget(source, get(target))
@@ -363,55 +416,44 @@ internal object WorldClockCommands {
                                 presentation,
                                 WorldToolsMessages.playerNotFound(),
                             )
-                        strike(
+                        strikeTarget(
                             source,
                             player,
                             get(power),
                             service,
                             adventure,
-                            presentation
+                            presentation,
                         )
                     }
                 }
             }
         }
 
-    private fun strike(
+    private fun strikeTarget(
         source: CommandSourceStack,
-        player: ServerPlayer?,
+        player: ServerPlayer,
         power: Int,
         service: WorldToolsService,
         adventure: AdventureRuntime,
         presentation: TextPresentation,
     ): Int {
-        if (player == null) {
-            return reply(
-                source,
-                adventure,
-                presentation,
-                WorldToolsMessages.playerNotFound()
-            )
-        }
-        var struck = 0
-        repeat(power) {
-            if (
-                service.strikeLightning(
-                    player.level(),
-                    player.x,
-                    player.y,
-                    player.z,
-                    false
-                )
-            ) {
-                struck++
-            }
-        }
+        service.strikeLightning(
+            player.level(),
+            player.x,
+            player.y,
+            player.z,
+            true,
+        )
+        service.smite(player, power)
         return reply(
             source,
             adventure,
             presentation,
-            WorldToolsMessages.lightningStruck(struck)
+            WorldToolsMessages.lightningSmitten(player.gameProfile.name, power),
         )
     }
+
+    private fun blockPos(hit: HitResult?): BlockPos? =
+        (hit as? BlockHitResult)?.blockPos
 
 }
