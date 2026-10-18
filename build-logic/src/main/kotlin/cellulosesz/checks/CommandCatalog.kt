@@ -48,21 +48,41 @@ fun commandCatalogTable(root: File): String {
     val aliasesPattern = Regex("""aliases\s*=\s*setOf\(([^)]*)\)""")
     val quotedPattern = Regex("\"([^\"]+)\"")
 
-    val permissionsFile = root.resolve(
-        "modules/minecraft-core/src/main/kotlin/top/likoslupus/cellulosesz/core/permission/CommandPermissions.kt"
+    val permissionPackage = root.resolve(
+        "modules/minecraft-core/src/main/kotlin/top/likoslupus/cellulosesz/core/permission"
     )
+    val permissionFiles = kotlinFiles(permissionPackage)
+    if (permissionFiles.isEmpty()) {
+        throw GradleException(
+            "no permission sources found under ${permissionPackage.path}; " +
+                    "the README command catalog cannot classify command access"
+        )
+    }
     val accessByConstant = mutableMapOf<String, String>()
-    if (permissionsFile.isFile) {
+    val nodePattern =
         Regex("""val\s+(\w+)\s*:\s*PermissionSpec\s*=\s*(playerNode|moderatorNode|adminNode)\(""")
-                .findAll(permissionsFile.readText())
-                .forEach { match ->
-                    accessByConstant[match.groupValues[1]] =
-                        when (match.groupValues[2]) {
-                            "playerNode" -> "Player"
-                            "moderatorNode" -> "Moderator"
-                            else -> "Admin"
-                        }
-                }
+    permissionFiles.forEach { file ->
+        nodePattern.findAll(file.readText()).forEach { match ->
+            val constant = match.groupValues[1]
+            val access = when (match.groupValues[2]) {
+                "playerNode" -> "Player"
+                "moderatorNode" -> "Moderator"
+                else -> "Admin"
+            }
+            val previous = accessByConstant.putIfAbsent(constant, access)
+            if (previous != null && previous != access) {
+                throw GradleException(
+                    "conflicting access for permission constant $constant: " +
+                            "$previous in an earlier file vs $access in ${file.name}"
+                )
+            }
+        }
+    }
+    if (accessByConstant.isEmpty()) {
+        throw GradleException(
+            "no PermissionSpec access definitions found under ${permissionPackage.path}; " +
+                    "the README command catalog would label every command as Player"
+        )
     }
 
     data class Row(
@@ -99,10 +119,19 @@ fun commandCatalogTable(root: File): String {
                                 .toList()
                     }
                 ?: emptyList()
+            val access = when {
+                constant.isEmpty() -> "Player"
+                else -> accessByConstant[constant]
+                    ?: throw GradleException(
+                        "no access mapping for CommandPermissions.$constant " +
+                                "(command /$name); checked " +
+                                permissionFiles.joinToString { it.name }
+                    )
+            }
             rows += Row(
                 moduleOrder.indexOf(module).coerceAtLeast(0),
                 name,
-                accessByConstant[constant] ?: "Player",
+                access,
                 documentation,
                 aliases,
             )
