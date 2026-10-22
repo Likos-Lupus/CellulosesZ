@@ -128,31 +128,31 @@ internal object BootstrapCommands {
             DocumentTheme.from(state.presentationTheme())
         }
         state.helpOverlay = helpOverlay
-        // The `/me` override is a mixin decision taken while vanilla builds its dispatcher, so the
-        // snapshot is published here at mod init, well before the server constructs its commands.
-        // The routing policy is a startup binding too: `commands` and the override allowlist cannot
-        // reload. Whether `/me` is taken over is derived from one place: the effective vanilla route.
+        // The routing policy is a startup binding: `commands` and the takeover settings cannot
+        // reload. Takeovers are derived from one place, so `/me`, `/tp`, ... never disagree about
+        // who owns their literal.
         val routingSettings = state.config.current.commands
-        val meRoute = effectiveVanillaRoute(
-            VanillaCommandId.ME,
-            featureEnabled = state.config.current.messaging.actionMessage.enabled,
-            overridesEnabled = routingSettings.vanillaOverrides.enabled,
-            overrides = routingSettings.vanillaOverrides.commands.toSet(),
-        )
+        val overrides = routingSettings.vanillaOverrides
+        val takeovers = VanillaCommandCatalog.all.mapNotNull { command ->
+            val featureEnabled = command != VanillaCommandId.ME || state.config.current.messaging.actionMessage.enabled
+            val route = effectiveVanillaRoute(
+                command = command,
+                featureEnabled = featureEnabled,
+                overridesEnabled = overrides.enabled,
+                overrides = overrides.commands.toSet(),
+            )
+            command.literal.takeIf {
+                route.mode == VanillaRouteMode.TAKE_OVER_VANILLA &&
+                        command.takeoverSupport == TakeoverSupport.VERIFIED
+            }
+        }.toSet()
         val routingPolicy = CommandRoutingPolicy(
             shortNamesEnabled = routingSettings.shortNamesEnabled,
             aliasesEnabled = routingSettings.aliasesEnabled,
-            vanillaTakeovers = if (meRoute.mode == VanillaRouteMode.TAKE_OVER_VANILLA) {
-                setOf(VanillaCommandId.ME.literal)
-            } else {
-                emptySet()
-            },
+            vanillaTakeovers = takeovers,
         )
         state.routingPolicy = routingPolicy
         state.helpOverlayEnabled = routingSettings.vanillaHelpOverlayEnabled
-        state.communication.applyVanillaMeOverride(
-            meRoute.mode == VanillaRouteMode.TAKE_OVER_VANILLA
-        )
 
         CommandRegistrationEvent.EVENT.register { dispatcher, buildContext, _ ->
             val report = commandRegistry.register(

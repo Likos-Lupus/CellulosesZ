@@ -53,7 +53,7 @@ class VanillaCommandCatalogTest {
             ).mode,
         )
         assertEquals(
-            VanillaRouteMode.PRESERVE_VANILLA,
+            VanillaRouteMode.TAKE_OVER_VANILLA,
             effectiveVanillaRoute(
                 VanillaCommandId.ME,
                 featureEnabled = true,
@@ -65,6 +65,15 @@ class VanillaCommandCatalogTest {
             VanillaRouteMode.TAKE_OVER_VANILLA,
             effectiveVanillaRoute(
                 VanillaCommandId.ME,
+                featureEnabled = true,
+                overridesEnabled = true,
+                overrides = setOf("me")
+            ).mode,
+        )
+        assertEquals(
+            VanillaRouteMode.PRESERVE_VANILLA,
+            effectiveVanillaRoute(
+                VanillaCommandId.TP,
                 featureEnabled = true,
                 overridesEnabled = true,
                 overrides = setOf("me")

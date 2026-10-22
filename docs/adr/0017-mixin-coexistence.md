@@ -15,9 +15,9 @@ could not be validated, reloaded atomically, or tested without Minecraft.
 
 1. **Classify each mixin.** Safety-critical (`CommandsRestrictionMixin`,
    `ServerPlayerVisibilityMixin`)
-   must fail closed; optional/display (`PlayerDisplayNameMixin`, `EmoteCommandsMixin`) may fail
-   open. `required: true` / `defaultRequire: 1` stays for all five. Lowering a require level is
-   never used to "make it start".
+   must fail closed; optional/display (`PlayerDisplayNameMixin`) may fail open. `required: true` /
+   `defaultRequire: 1` stays for all five. Lowering a require level is never used to "make it
+   start".
 2. **Move logic out of Java.** `CommandsRestrictionMixin` now reads an immutable
    `JailRestrictionSnapshot(enabled, allowedRoutes)` and asks `isAllowed(firstToken)`. The Java side
    is a narrow bridge; the allow-list derivation lives in Kotlin

@@ -1,7 +1,6 @@
 package top.likoslupus.cellulosesz.communication
 
 import top.likoslupus.cellulosesz.communication.action.ActionMessageService
-import top.likoslupus.cellulosesz.communication.action.MeOverrideState
 import top.likoslupus.cellulosesz.communication.action.command.ActionMessageCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementCommands
 import top.likoslupus.cellulosesz.communication.announcement.AnnouncementService
@@ -162,10 +161,6 @@ public class CommunicationFeature internal constructor(
      * registers its commands. `true` cancels the vanilla `/me`; `false` never touches it. Call this
      * from the composition root before the server builds its command dispatcher.
      */
-    public fun applyVanillaMeOverride(takeOver: Boolean) {
-        MeOverrideState.set(takeOver)
-    }
-
     public fun onPlayerJoined(playerId: UUID) {
         preferences.beginLoad(playerId)
         kernel.launch {

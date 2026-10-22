@@ -18,9 +18,10 @@ import top.likoslupus.cellulosesz.core.text.presentation.TextPresentation
 import top.likoslupus.cellulosesz.core.text.presentation.sendNotices
 
 /**
- * `/me <action>`: the CellulosesZ entry point for action messages. When the vanilla `/me` node is
- * cancelled by [top.likoslupus.cellulosesz.communication.mixin.EmoteCommandsMixin] this literal is
- * the only `/me`, so it keeps the vanilla `MessageArgument` node shape.
+ * `/me <action>`: the CellulosesZ entry point for action messages. When CellulosesZ takes over the
+ * vanilla literal, the registry replaces the vanilla `/me` node with this one and keeps the original
+ * reachable at `/minecraft:me`, so this definition must keep the vanilla `MessageArgument` node
+ * shape.
  *
  * The protected `/czme` fallback is not declared here: the route planner derives it from the vanilla
  * conflict catalog, so it survives even when ordinary aliases are disabled. When the action service

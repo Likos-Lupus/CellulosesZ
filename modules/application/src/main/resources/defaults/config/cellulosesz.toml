@@ -309,9 +309,11 @@ disabled = []
 # When enabled, only the listed and version-verified names are taken over;
 # unsupported names are rejected at startup. Reload: restart.
 [commands.vanillaOverrides]
-# Enable the vanilla takeover policy. Reload: restart.
-enabled = false
-# Literals to take over; unsupported names are rejected at startup. Reload: restart.
+# Take over vanilla command literals on a name collision: CellulosesZ owns the plain name and the
+# vanilla command stays reachable at /minecraft:<literal>. Reload: restart.
+enabled = true
+# Restrict the takeover to these literals. Empty = every catalogued command. Unsupported names are
+# rejected at startup. Reload: restart.
 commands = []
 
 # =============================================================================

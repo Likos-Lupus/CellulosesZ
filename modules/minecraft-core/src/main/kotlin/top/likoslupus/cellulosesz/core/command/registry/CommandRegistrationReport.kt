@@ -4,6 +4,7 @@ package top.likoslupus.cellulosesz.core.command.registry
 public enum class CommandRouteKind {
 
     ADMIN_ROOT,
+
     NAMESPACED,
 
     /** A protected single-segment fallback for a vanilla conflict, e.g. `/cztp`. */
@@ -13,6 +14,7 @@ public enum class CommandRouteKind {
     VANILLA_OVERRIDE,
 
     CANONICAL,
+
     ALIAS,
 
 }
@@ -50,6 +52,8 @@ public class CommandRouteResult(
     public val commandName: String,
     public val status: CommandRouteStatus,
     public val fallback: String?,
+    /** `/minecraft:<literal>` created when this route displaced a vanilla command, else null. */
+    public val vanillaAlias: String? = null,
 )
 
 /**

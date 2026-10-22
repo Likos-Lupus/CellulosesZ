@@ -31,13 +31,15 @@ public data class CommandRoutingSettings(
 )
 
 /**
- * Explicit opt-in for taking over vanilla command literals. Disabled by default so a fresh install
- * always leaves `/me`, `/tp`, ... to vanilla. [commands] is an allowlist of vanilla-conflicting
- * literals CellulosesZ may take over; only [TakeoverSupport.VERIFIED] targets are accepted (see
+ * Taking over vanilla command literals (EssentialsX-style): on a name collision CellulosesZ owns
+ * the plain literal and the vanilla command stays reachable at `/minecraft:<literal>`. Enabled by
+ * default; disabling it leaves every vanilla literal alone and keeps only the `cz`/namespaced
+ * fallbacks. [commands] restricts the takeover to the listed literals — an empty list means every
+ * catalogued command, and only [TakeoverSupport.VERIFIED] targets are eligible (see
  * [VanillaCommandCatalog]). A change needs a restart and cannot reload.
  */
 @Serializable
 public data class VanillaOverrideSettings(
-    public val enabled: Boolean = false,
+    public val enabled: Boolean = true,
     public val commands: List<String> = emptyList(),
 )

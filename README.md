@@ -279,6 +279,12 @@ for moderator commands), so installing no permission manager changes nothing. On
 are served through Fabric API's own `fabric-permission-api` (LuckPerms-compatible); on NeoForge
 through the NeoForge `PermissionAPI`.
 
+Command literals that collide with vanilla (`/me`, `/tp`, ...) are taken over by default: the plain
+name becomes CellulosesZ's, and the vanilla command stays callable at `/minecraft:<literal>`
+(argument tree, permissions and completion included). The protected `/cz<literal>` entry is always
+registered as well. `[commands.vanillaOverrides]` switches this off (`enabled = false`) or restricts
+it to the listed literals.
+
 The command catalog above (names, aliases, usage) is generated from the command declarations. The
 per-command help prose is hand-written under each module's `cellulosesz/help` resources and kept
 honest by a coverage check, not generated. Every command has an `en_us` and `zh_cn` document;

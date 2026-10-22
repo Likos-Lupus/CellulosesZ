@@ -42,7 +42,7 @@ fun artifactViolations(root: File): List<String> {
         "top/likoslupus/cellulosesz/administration/mixin/ServerPlayerVisibilityMixin.class",
         "top/likoslupus/cellulosesz/administration/mixin/CommandsRestrictionMixin.class",
         "top/likoslupus/cellulosesz/player/mixin/PlayerDisplayNameMixin.class",
-        "top/likoslupus/cellulosesz/communication/mixin/EmoteCommandsMixin.class",
+        "top/likoslupus/cellulosesz/communication/mixin/PlayerListMessageMixin.class",
     )
     requiredFlattened.forEach { entry ->
         if (entry !in fabricEntries) violations += "fabric jar is missing flattened class $entry"

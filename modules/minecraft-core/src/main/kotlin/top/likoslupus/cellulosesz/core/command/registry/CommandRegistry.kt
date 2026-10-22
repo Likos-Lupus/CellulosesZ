@@ -45,14 +45,19 @@ public class CommandRegistry(
     public val definitions: List<CommandDefinition>,
 ) {
 
-    internal var rootBuilder: CommandRootBuilder =
-        CommandRootBuilder(BrigadierCompiler::buildRoot)
+    internal var rootBuilder: CommandRootBuilder = CommandRootBuilder(
+        BrigadierCompiler::buildRoot
+    )
+
+    internal var treeMutator: CommandTreeMutator = ReflectiveCommandTreeMutator
 
     internal constructor(
         definitions: List<CommandDefinition>,
         rootBuilder: CommandRootBuilder,
+        treeMutator: CommandTreeMutator = ReflectiveCommandTreeMutator,
     ) : this(definitions) {
         this.rootBuilder = rootBuilder
+        this.treeMutator = treeMutator
     }
 
     private val generationCounter = AtomicInteger(0)
@@ -121,24 +126,37 @@ public class CommandRegistry(
         }
 
         val existing: CommandNode<CommandSourceStack>? = dispatcher.root.getChild(route.literal)
+        var vanillaAlias: String? = null
         if (existing != null) {
-            val status = statusForOccupiedRoute(route.kind)
-            if (route.kind.requiredRoute()) {
-                LOGGER.error(
-                    "command_route_conflict literal={} route={} reason=already_present fallback={} generation={}",
+            if (route.kind != CommandRouteKind.VANILLA_OVERRIDE) {
+                val status = statusForOccupiedRoute(route.kind)
+                if (route.kind.requiredRoute()) {
+                    LOGGER.error(
+                        "command_route_conflict literal={} route={} reason=already_present fallback={} generation={}",
+                        route.literal,
+                        route.kind,
+                        fallback ?: "-",
+                        generation,
+                    )
+                }
+                return CommandRouteResult(
                     route.literal,
                     route.kind,
-                    fallback ?: "-",
-                    generation,
+                    route.definition.name,
+                    status,
+                    fallback
                 )
             }
-            return CommandRouteResult(
-                route.literal,
-                route.kind,
-                route.definition.name,
-                status,
-                fallback
-            )
+            if (!takeOver(dispatcher, route, existing, generation)) {
+                return CommandRouteResult(
+                    route.literal,
+                    route.kind,
+                    route.definition.name,
+                    CommandRouteStatus.TAKEOVER_NOT_CONFIRMED,
+                    fallback,
+                )
+            }
+            vanillaAlias = VanillaCommandAliases.aliasFor(route.literal)
         }
 
         val node = rootBuilder.build(
@@ -172,8 +190,56 @@ public class CommandRegistry(
             route.kind,
             route.definition.name,
             status,
-            fallback
+            fallback,
+            vanillaAlias,
         )
+    }
+
+    /**
+     * Replaces a vanilla literal while keeping it callable at `/minecraft:<literal>`. The original
+     * node is detached first, then the alias redirecting to it is installed; if either step fails,
+     * vanilla is restored and the takeover is reported as unconfirmed.
+     */
+    private fun takeOver(
+        dispatcher: CommandDispatcher<CommandSourceStack>,
+        route: CommandRoute,
+        vanilla: CommandNode<CommandSourceStack>,
+        generation: Int,
+    ): Boolean {
+        val alias = VanillaCommandAliases.aliasFor(route.literal)
+        if (dispatcher.root.getChild(alias) != null) {
+            LOGGER.error(
+                "command_takeover literal={} reason=alias_already_present alias={} generation={}",
+                route.literal,
+                alias,
+                generation,
+            )
+            return false
+        }
+        if (!treeMutator.removeRootChild(dispatcher, route.literal)) {
+            LOGGER.error(
+                "command_takeover literal={} reason=remove_failed generation={}",
+                route.literal,
+                generation,
+            )
+            return false
+        }
+        if (!VanillaCommandAliases.install(dispatcher, route.literal, vanilla)) {
+            dispatcher.root.addChild(vanilla)
+            LOGGER.error(
+                "command_takeover literal={} reason=alias_install_failed generation={}",
+                route.literal,
+                generation,
+            )
+            return false
+        }
+        LOGGER.info(
+            "command_takeover literal={} alias={} generation={}",
+            route.literal,
+            alias,
+            generation,
+        )
+        return true
     }
 
     private fun fallbackFor(route: CommandRoute): String? =

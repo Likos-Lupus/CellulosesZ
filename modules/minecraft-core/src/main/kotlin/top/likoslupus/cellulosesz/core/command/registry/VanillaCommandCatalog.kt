@@ -60,7 +60,8 @@ public object VanillaCommandCatalog {
         val command = byLiteral[literal]
             ?: return "unknown vanilla command '$literal'"
         return when (command.takeoverSupport) {
-            TakeoverSupport.VERIFIED -> null
+            TakeoverSupport.VERIFIED ->
+                null
 
             TakeoverSupport.CANDIDATE ->
                 "the vanilla /$literal takeover is not verified for this version yet; use /${command.fallbackLiteral}"
@@ -105,9 +106,10 @@ public data class EffectiveVanillaRoute(
 )
 
 /**
- * Pure decision for one catalogued command. A takeover requires the feature to be enabled, the
- * global override switch to be on, and the command to be in the allowlist. Takeover support is
- * validated separately (configuration must not list [TakeoverSupport.NOT_SUPPORTED] targets).
+ * Pure decision for one catalogued command. A takeover requires the feature to be enabled and the
+ * global override switch to be on; an empty [overrides] allowlist means every catalogued command,
+ * while a non-empty list restricts the takeover to its members. Takeover support is validated
+ * separately (the policy only promotes [TakeoverSupport.VERIFIED] targets).
  */
 public fun effectiveVanillaRoute(
     command: VanillaCommandId,
@@ -118,10 +120,17 @@ public fun effectiveVanillaRoute(
     EffectiveVanillaRoute(
         command = command,
         mode = when {
-            !featureEnabled -> VanillaRouteMode.FEATURE_DISABLED
-            !overridesEnabled -> VanillaRouteMode.PRESERVE_VANILLA
-            command.literal !in overrides -> VanillaRouteMode.PRESERVE_VANILLA
-            else -> VanillaRouteMode.TAKE_OVER_VANILLA
+            !featureEnabled ->
+                VanillaRouteMode.FEATURE_DISABLED
+
+            !overridesEnabled ->
+                VanillaRouteMode.PRESERVE_VANILLA
+
+            overrides.isNotEmpty() && command.literal !in overrides ->
+                VanillaRouteMode.PRESERVE_VANILLA
+
+            else ->
+                VanillaRouteMode.TAKE_OVER_VANILLA
         },
         fallbackLiteral = command.fallbackLiteral,
     )
