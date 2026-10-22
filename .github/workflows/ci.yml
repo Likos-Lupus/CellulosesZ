@@ -52,7 +52,7 @@ jobs:
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"environment"'
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"*"'
-          for jar in HikariCP tomlkt fabric-permissions-api adventure-platform-fabric; do
+          for jar in HikariCP tomlkt adventure-platform-fabric; do
             unzip -l "$FABRIC_JAR" | grep -q "META-INF/jars/$jar" || { echo "missing nested runtime jar: $jar"; exit 1; }
           done
           for driver in sqlite-jdbc- h2- postgresql- mariadb-java-client- mysql-connector-j-; do

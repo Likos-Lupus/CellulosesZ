@@ -28,5 +28,8 @@
     "fabric-api": ">=${fabric_version}",
     "fabric-language-kotlin": ">=${fabric_language_kotlin_version}",
     "architectury": ">=${architectury_version}"
+  },
+  "suggests": {
+    "luckperms": "*"
   }
 }

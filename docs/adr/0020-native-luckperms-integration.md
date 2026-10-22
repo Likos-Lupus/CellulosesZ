@@ -7,12 +7,16 @@
 ## Context
 
 CellulosesZ already resolves every permission through the loader-standard bridge: the Fabric
-Permissions API (`me.lucko:fabric-permissions-api`) and the NeoForge `PermissionAPI`. Both of these
-transparently delegate to LuckPerms when it is installed, so command authorization is already
-correct with or without LuckPerms.
+permission API (`fabric-permission-api`, part of Fabric API) and the NeoForge `PermissionAPI`. Both
+of these transparently delegate to LuckPerms when it is installed, so command authorization is
+already correct with or without LuckPerms.
 
 Operators still need to answer "which backend decided this, and what did LuckPerms itself think?".
 That requires reading the native LuckPerms API — a value that the standard bridge never exposes.
+
+The Fabric side of that bridge is Fabric API's `fabric-permission-api`; a provider has to implement
+its v1 request event to be consulted (LuckPerms does since 2026-05). On an older LuckPerms the check
+falls back to the vanilla permission level instead of failing.
 
 ## Decision
 

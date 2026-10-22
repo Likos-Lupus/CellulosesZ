@@ -276,8 +276,8 @@ Each command has a stable permission node (`cellulosesz.command.<command>`). Whe
 undefined it falls back to the exact vanilla behaviour (`ALLOW_ALL` for player commands,
 `COMMANDS_MODERATOR`
 for moderator commands), so installing no permission manager changes nothing. On Fabric the nodes
-are served through `fabric-permissions-api` (LuckPerms-compatible); on NeoForge through the NeoForge
-`PermissionAPI`.
+are served through Fabric API's own `fabric-permission-api` (LuckPerms-compatible); on NeoForge
+through the NeoForge `PermissionAPI`.
 
 The command catalog above (names, aliases, usage) is generated from the command declarations. The
 per-command help prose is hand-written under each module's `cellulosesz/help` resources and kept

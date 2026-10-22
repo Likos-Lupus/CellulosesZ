@@ -34,7 +34,6 @@ val internalModules = listOf(
 val bundledRuntime = listOf(
     libs.hikari,
     libs.tomlkt,
-    libs.fabric.permissions.api,
     libs.adventure.platform.fabric,
     libs.commonmark,
 )

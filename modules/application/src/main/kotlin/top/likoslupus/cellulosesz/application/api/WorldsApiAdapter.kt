@@ -60,7 +60,7 @@ internal class WorldsApiAdapter(
             permissions.allows(
                 player.createCommandSourceStack(),
                 PermissionSpec(
-                    "cellulosesz.world.$worldId",
+                    "cellulosesz.world.${worldId.replace(':', '.')}",
                     VanillaPermissionFallback.DENY_ALL,
                     "Teleport into $worldId",
                 ),

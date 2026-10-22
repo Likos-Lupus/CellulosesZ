@@ -184,10 +184,11 @@ TeleportIntent → preflight → optional delay → late destination resolve
   `PermissionService`; commands check `source.hasPermission(permissions, spec)`. The node catalog is
   `CommandPermissions` (`cellulosesz.command.<primary>`). Undefined nodes fall back to the spec's
   `VanillaPermissionFallback`, so installing no permission manager changes nothing.
-- Fabric integrates via `fabric-permissions-api`; NeoForge registers every node with the NeoForge
-  `PermissionAPI` on `PermissionGatherEvent.Nodes`. LuckPerms is a compatibility target through
-  those APIs; common modules never import a loader or `net.luckperms.*`. Non-player sources
-  (console/RCON) use the vanilla fallback.
+- Fabric integrates via the Fabric API's `fabric-permission-api` (part of `fabric-api`, nothing
+  bundled); NeoForge registers every node with the NeoForge `PermissionAPI` on
+  `PermissionGatherEvent.Nodes`. LuckPerms is a compatibility target through those APIs; common
+  modules never import a loader or `net.luckperms.*`. Non-player sources (console/RCON) use the
+  vanilla fallback.
 - `ApplicationHealth` carries an explicit bootstrap state (UNINITIALIZED → CONFIG_READY →
   BOOTSTRAPPING_STORAGE → STORAGE_READY → LOADING_STATE → READY → STOPPING → STOPPED, or FAILED)
   plus a secret-free `summary()`. A fatal storage failure never reaches READY.
@@ -266,10 +267,10 @@ TeleportIntent → preflight → optional delay → late destination resolve
   `verifyCommandCatalog` and `verifyTranslations` tasks.
 - Loader cells compile only `platform/<loader>/` and flatten each internal module's compiled output
   into the distribution jar. Loader/API mods are never bundled. CellulosesZ's own runtime libraries
-  (HikariCP, tomlkt, commonmark, and — on Fabric — fabric-permissions-api) ship as controlled
-  nested/Jar-in-Jar dependencies (never flattened), so service metadata survives. NeoForge
-  additionally ships the Kotlin runtime as Jar-in-Jar. JDBC drivers are excluded on purpose: the
-  runtime provisioning manifest (`generateDriverManifest` →
+  (HikariCP, tomlkt, commonmark) ship as controlled nested/Jar-in-Jar dependencies (never
+  flattened), so service metadata survives. NeoForge additionally ships the Kotlin runtime as
+  Jar-in-Jar. JDBC drivers are excluded on purpose: the runtime provisioning manifest
+  (`generateDriverManifest` →
   `cellulosesz/drivers/drivers.properties`)
   is injected into the foundation resources, and `inspectArtifacts` fails if a driver is nested
   again.

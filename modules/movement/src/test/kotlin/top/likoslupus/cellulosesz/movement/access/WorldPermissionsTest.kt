@@ -30,11 +30,11 @@ class WorldPermissionsTest {
     @Test
     fun `world nodes keep the dimension resource id`() {
         assertEquals(
-            "cellulosesz.world.minecraft:the_nether",
+            "cellulosesz.world.minecraft.the_nether",
             WorldPermissions.teleportNode("minecraft:the_nether"),
         )
         assertEquals(
-            "cellulosesz.world.home.minecraft:the_end",
+            "cellulosesz.world.home.minecraft.the_end",
             WorldPermissions.homeNode("minecraft:the_end"),
         )
     }

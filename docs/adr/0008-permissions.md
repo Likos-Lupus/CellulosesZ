@@ -20,10 +20,12 @@ to `Permissions.COMMANDS_MODERATOR`. There was no way for a third-party permissi
 3. **A single seam:** `PermissionBridge.test(source, spec)` is the only loader/provider entry point.
    `PermissionService` wraps it, and commands check `source.hasPermission(permissions, spec)`.
    Common modules never import a loader or third-party permission API.
-4. **Fabric** uses `fabric-permissions-api`
-   (`me.lucko.fabric.api.permissions.v0.Permissions.check`), which transparently supports LuckPerms
-   and other providers and falls back to vanilla otherwise. The API jar is nested in the Fabric
-   distribution.
+4. **Fabric** uses the loader's own `fabric-permission-api` (part of Fabric API,
+   `PermissionContextOwner.checkPermission`), which providers such as LuckPerms answer through
+   `PermissionEvents`; when nobody answers, the check falls back to vanilla. Nothing is bundled: the
+   module ships with the Fabric API the mod already requires. Nodes are keyed as `namespace:path`
+   and read back by providers as `namespace.path`, so a spec such as `cellulosesz.command.home` is
+   split into (`cellulosesz`, `command.home`).
 5. **NeoForge** registers every node with the NeoForge `PermissionAPI` on
    `PermissionGatherEvent.Nodes`; the node default resolver reproduces the vanilla fallback. A
    LuckPerms NeoForge provider supplies values automatically. Non-player sources always use the

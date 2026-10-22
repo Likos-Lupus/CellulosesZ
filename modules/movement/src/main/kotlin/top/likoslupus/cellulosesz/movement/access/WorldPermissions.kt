@@ -22,11 +22,11 @@ internal object WorldPermissions {
 
     /** `cellulosesz.world.<dimension>` — may this player be teleported into [dimension]? */
     fun teleportNode(dimension: String): String =
-        WORLD_PREFIX + dimension
+        WORLD_PREFIX + normalizeDimension(dimension)
 
     /** `cellulosesz.world.home.<dimension>` — may this player use a home in [dimension]? */
     fun homeNode(dimension: String): String =
-        HOME_WORLD_PREFIX + dimension
+        HOME_WORLD_PREFIX + normalizeDimension(dimension)
 
     /** `cellulosesz.warp.<name>` — may this player use the warp [name]? */
     fun warpNode(name: String): String =
@@ -39,6 +39,13 @@ internal object WorldPermissions {
                 append(if (character in WARP_SAFE_CHARS) character else '_')
             }
         }
+
+    /**
+     * Permission nodes are identifier-safe on every loader: the dimension's `namespace:path`
+     * separator becomes a dot, so `minecraft:the_nether` reads `minecraft.the_nether`.
+     */
+    fun normalizeDimension(dimension: String): String =
+        dimension.lowercase(Locale.ROOT).replace(':', '.')
 
     /** True when [value] is a usable alias key. */
     fun isAliasKey(value: String): Boolean =

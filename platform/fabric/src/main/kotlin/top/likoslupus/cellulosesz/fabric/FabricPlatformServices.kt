@@ -1,6 +1,6 @@
 package top.likoslupus.cellulosesz.fabric
 
-import me.lucko.fabric.api.permissions.v0.Permissions
+import net.fabricmc.fabric.api.permission.v1.PermissionNode
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.commands.CommandSourceStack
 import top.likoslupus.cellulosesz.api.CellulosesZApiProvider
@@ -12,22 +12,41 @@ import top.likoslupus.cellulosesz.core.permission.vanillaFallback
 import top.likoslupus.cellulosesz.platform.luckperms.LuckPermsPermissionInspector
 
 /**
- * Fabric permission integration through the fabric-permissions-api, which transparently supports
- * LuckPerms and other providers, and falls back to vanilla when no provider is installed.
+ * Fabric permission integration through the loader's own `fabric-permission-api` (part of Fabric
+ * API). Providers such as LuckPerms answer through `PermissionEvents`; when nobody answers, the
+ * check falls back to the vanilla permission level.
+ *
+ * The API keys nodes as `namespace:path`, and providers render them as `namespace.path`, so a
+ * `cellulosesz.command.home` spec is split into (`cellulosesz`, `command.home`) and reads the same
+ * as before in a permissions plugin.
  */
 class FabricPermissionBridge : PermissionBridge {
 
-    override val backendName: String get() = "fabric-permissions-api"
+    override val backendName: String get() = "fabric-permission-api"
 
     override fun test(
         source: CommandSourceStack,
         spec: PermissionSpec
-    ): Boolean =
-        Permissions.check(
-            source,
-            spec.node,
-            vanillaFallback(source, spec)
-        )
+    ): Boolean {
+        val fallback = vanillaFallback(source, spec)
+        return source.checkPermission(
+            node(spec.node),
+            fallback
+        ) ?: fallback
+    }
+
+    private fun node(raw: String): PermissionNode<Boolean> {
+        val separator = raw.indexOf('.')
+        val namespace = if (separator > 0) raw.substring(0, separator) else MOD_ID
+        val path = if (separator > 0) raw.substring(separator + 1) else raw
+        return PermissionNode.of(namespace, path.replace(':', '.'))
+    }
+
+    private companion object {
+
+        private const val MOD_ID = "cellulosesz"
+
+    }
 
 }
 
