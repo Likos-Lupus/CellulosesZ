@@ -47,8 +47,9 @@ server migration. P0 replaces file machine state with JDBC and adds a cold-start
 
 ## Consequences
 
-- The loader jars embed HikariCP, the five JDBC drivers, and the TOML parser as nested/Jar-in-Jar
-  runtime dependencies (never flattened), so SQLite native resources and service metadata survive.
+- The loader jars embed HikariCP and the TOML parser as nested/Jar-in-Jar runtime dependencies
+  (never flattened), so service metadata survives. The five JDBC drivers are **not** embedded; they
+  are provisioned at cold start (see ADR 0024).
 - SQLite/H2 repository contract tests run on every build; MySQL/MariaDB/PostgreSQL share the same
   repository code through a thin `SqlDialect`.
 - Native account/IP bans remain vanilla's responsibility and are not mirrored into the database.

@@ -46,6 +46,25 @@ type = "sqlite"
 # Reload: restart when it changes the active endpoint.
 namespace = "default"
 
+# JDBC drivers are not packaged inside the mod jar. The driver for the active backend is taken
+# from the mod class path first, then from `directory`, and only downloaded when it is missing
+# and `auto-download` is on. A driver that cannot be obtained stops the server; it never falls
+# back to another backend.
+# Reload: restart.
+[database.driver]
+# Download a missing driver from `repository`. `false` disables all network access; the server
+# then refuses to start until the jar is present in `directory`.
+auto-download = true
+# Directory holding the driver jars, relative to the server root. The offline driver bundle
+# published with every release unpacks into this location.
+directory = "cellulosesz/drivers"
+# Maven repository used for downloads. Mirrors are allowed (https or file).
+repository = "https://repo1.maven.org/maven2"
+# Connect timeout for the download, in milliseconds. Range: > 0.
+connect-timeout-ms = 10000
+# Read timeout for the download, in milliseconds. Range: > 0.
+read-timeout-ms = 120000
+
 # Shared Hikari pool settings. A backend's own [database.<backend>.pool] may
 # override any of these; unspecified override keys inherit the shared value.
 [database.pool]

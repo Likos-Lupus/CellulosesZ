@@ -73,7 +73,7 @@ fun artifactViolations(root: File): List<String> {
         violations += "neoforge jar is missing the Kotlin stdlib Jar-in-Jar"
     }
 
-    val requiredNested = listOf("HikariCP", "sqlite-jdbc", "tomlkt", "commonmark")
+    val requiredNested = listOf("HikariCP", "tomlkt", "commonmark")
     requiredNested.forEach { jar ->
         if (
             fabricEntries.none {
@@ -109,6 +109,24 @@ fun artifactViolations(root: File): List<String> {
     ) {
         violations += "neoforge jar is missing nested adventure-platform-neoforge"
     }
+    // JDBC drivers are provisioned at runtime (ADR 0024) and must never be bundled again: a nested
+    // driver would silently win over the downloaded one and make the offline bundle pointless.
+    val unbundledDrivers = listOf(
+        "sqlite-jdbc-",
+        "h2-",
+        "postgresql-",
+        "mariadb-java-client-",
+        "mysql-connector-j-",
+    )
+    (fabricEntries + neoEntries)
+            .filter { entry ->
+                (entry.startsWith("META-INF/jars/") || entry.startsWith("META-INF/jarjar/")) &&
+                        unbundledDrivers.any {
+                            entry.substringAfterLast('/').startsWith(it)
+                        }
+            }
+            .forEach { violations += "distribution jar bundles a JDBC driver that must be provisioned: $it" }
+
     (fabricEntries + neoEntries)
             .filter { it.startsWith("net/kyori/") || it.startsWith("org/commonmark/") }
             .forEach { violations += "distribution jar flattens external class $it" }

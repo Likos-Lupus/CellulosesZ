@@ -66,6 +66,7 @@ public object StorageMigrator {
 
     public fun migrateBlocking(
         source: ResolvedDatabaseDescriptor,
+        sourceDataSource: javax.sql.DataSource? = null,
         target: DatabaseRuntime,
         contributors: List<SqlSchemaContributor>,
         sourceNamespace: String,
@@ -90,7 +91,7 @@ public object StorageMigrator {
         guardTargetEmpty(target, dialect, tables, targetNamespace)
 
         var totalRows = 0L
-        HikariDatabaseRuntime.create(source).use {
+        HikariDatabaseRuntime.create(source, sourceDataSource).use {
             target.transaction { targetConnection ->
                 it.read { sourceConnection ->
                     guardOptionalGroups(sourceConnection)

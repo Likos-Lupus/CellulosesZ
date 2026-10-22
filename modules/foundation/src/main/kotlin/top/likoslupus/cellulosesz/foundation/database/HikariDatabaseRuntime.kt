@@ -3,6 +3,7 @@ package top.likoslupus.cellulosesz.foundation.database
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import java.sql.Connection
+import javax.sql.DataSource
 
 /** The only place HikariCP types exist. Business code sees [DatabaseRuntime] + `java.sql` only. */
 public class HikariDatabaseRuntime private constructor(
@@ -36,17 +37,28 @@ public class HikariDatabaseRuntime private constructor(
 
     public companion object {
 
-        /** Creates and validates the pool. Fails fast: an unreachable backend throws. */
-        public fun create(descriptor: ResolvedDatabaseDescriptor): HikariDatabaseRuntime {
+        /**
+         * Creates and validates the pool. Fails fast: an unreachable backend throws. When the driver
+         * was loaded from an external jar, [external] supplies the connections instead of a JDBC
+         * URL, because such a driver is invisible to the pool's own class loader.
+         */
+        public fun create(
+            descriptor: ResolvedDatabaseDescriptor,
+            external: DataSource? = null,
+        ): HikariDatabaseRuntime {
             val pool = descriptor.pool
             val config = HikariConfig().apply {
                 poolName = "cellulosesz-${descriptor.type.name.lowercase()}"
-                jdbcUrl = descriptor.jdbcUrl
-                driverClassName = descriptor.driverClassName
-                if (descriptor.username.isNotEmpty()) {
-                    username = descriptor.username
+                if (external == null) {
+                    jdbcUrl = descriptor.jdbcUrl
+                    driverClassName = descriptor.driverClassName
+                    if (descriptor.username.isNotEmpty()) {
+                        username = descriptor.username
+                    }
+                    password = descriptor.secret.resolve()
+                } else {
+                    dataSource = external
                 }
-                password = descriptor.secret.resolve()
                 maximumPoolSize = pool.maximumPoolSize
                 connectionTimeout = pool.connectionTimeoutMs
                 validationTimeout = pool.validationTimeoutMs

@@ -4,6 +4,7 @@ plugins {
     id("org.jetbrains.kotlin.jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
     `java-library`
+    id("jdbc-drivers")
 }
 
 val javaVersion = libs.versions.java.get().toInt()

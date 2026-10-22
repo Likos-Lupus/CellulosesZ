@@ -323,6 +323,22 @@ is never deleted, and a password or pool change reconnects without moving data.
 `/cellulosesz reload`
 cannot hot-swap the active database — a change to it requires a restart.
 
+### JDBC drivers
+
+The mod does not ship database drivers. On the first start it takes the driver for the active
+backend from the mod class path, then from `cellulosesz/drivers/` next to the server jar, and only
+then downloads it from Maven Central (verified against a build-pinned SHA-256). The download happens
+once; later starts use the cached jar.
+
+```text
+<server root>/cellulosesz/drivers/    # cached / operator-provided driver jars
+```
+
+For a host that cannot reach Maven Central, unpack the release's
+`cellulosesz-drivers-<version>.zip` into the server root, or set `auto-download = false` under
+`[database.driver]` to disable network access entirely (startup then fails with the expected path
+and URL if the jar is missing).
+
 ## Building from Source
 
 The project uses [Stonecutter](https://stonecutter.kikugie.dev/)
@@ -344,6 +360,16 @@ versions/26.1.2-fabric/build/libs/cellulosesz-<version>+26.1.2-fabric.jar
 versions/26.1.2-neoforge/build/libs/cellulosesz-<version>+26.1.2-neoforge.jar
 ```
 
+The JDBC drivers are packaged as one loader-independent archive by
+`./gradlew packageDriverBundle`:
+
+```text
+build/driver-bundle/cellulosesz-drivers-<version>.zip
+```
+
+Unpack it into `<server root>/cellulosesz/drivers/` on hosts that cannot reach Maven Central; the
+archive's `README.txt` lists the SHA-256 of every driver and the backend it serves.
+
 ### Verification tasks
 
 | Task                      | Purpose                                                                                                        |
@@ -353,6 +379,7 @@ versions/26.1.2-neoforge/build/libs/cellulosesz-<version>+26.1.2-neoforge.jar
 | `checkModules`            | Unit tests of every architecture module, run once.                                                             |
 | `chiseledBuild`           | Builds both loader distributions.                                                                              |
 | `inspectArtifacts`        | Asserts flattened classes, no bundled externals, NeoForge Jar-in-Jar.                                          |
+| `packageDriverBundle`     | Packages the JDBC drivers as a reproducible offline archive (`build/driver-bundle/*.zip`).                     |
 
 CI runs all of the above on JDK 25.
 

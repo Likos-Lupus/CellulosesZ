@@ -7,6 +7,7 @@ plugins {
     id("module-dependencies")
     id("artifact-inspection")
     id("compat")
+    id("driver-bundle")
 }
 
 stonecutter active "26.1.2-fabric" /* [SC] DO NOT EDIT */

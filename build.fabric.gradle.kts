@@ -28,21 +28,25 @@ val internalModules = listOf(
     ":modules:application",
 )
 
-// Runtime libraries the distribution needs: Hikari/tomlkt and the JDBC drivers, plus the Fabric
-// permission helper and the Adventure platform mod. They are both depended on (dev launch
-// classpath) and nested (shipped jar). The Adventure platform jar is self-contained (its Adventure
-// libraries are nested inside it), so only the platform mod itself is nested here.
+// Runtime libraries shipped inside the mod jar: nested (never flattened) so SQLite native
+// resources and service metadata survive. JDBC drivers are deliberately absent: the mod
+// provisions the driver for the active backend at cold start (ADR 0024).
 val bundledRuntime = listOf(
     libs.hikari,
     libs.tomlkt,
+    libs.fabric.permissions.api,
+    libs.adventure.platform.fabric,
+    libs.commonmark,
+)
+
+// Drivers are only needed on the development class path (`runServer`) and by the module tests;
+// they are never nested into the shipped jar.
+val driverRuntime = listOf(
     libs.sqlite.jdbc,
     libs.h2,
     libs.postgresql,
     libs.mariadb,
     libs.mysql,
-    libs.fabric.permissions.api,
-    libs.adventure.platform.fabric,
-    libs.commonmark,
 )
 
 architectury {
@@ -103,6 +107,7 @@ dependencies {
     // Toml/Hikari/drivers. Nesting (not flattening) keeps SQLite natives and driver service files.
     bundledRuntime.forEach { implementation(it) }
     bundledRuntime.forEach { include(it) { isTransitive = false } }
+    driverRuntime.forEach { implementation(it) }
 
     // Optional native LuckPerms integration. compileOnly: the API is never bundled or nested; the
     // adapter class is only loaded when LuckPerms is actually present (see ADR 0020).

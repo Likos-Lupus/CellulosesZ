@@ -52,8 +52,13 @@ jobs:
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -q "top.likoslupus.cellulosesz.fabric.CellulosesZFabric"
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"environment"'
           unzip -p "$FABRIC_JAR" fabric.mod.json | grep -qF '"*"'
-          for jar in HikariCP sqlite-jdbc tomlkt fabric-permissions-api adventure-platform-fabric; do
+          for jar in HikariCP tomlkt fabric-permissions-api adventure-platform-fabric; do
             unzip -l "$FABRIC_JAR" | grep -q "META-INF/jars/$jar" || { echo "missing nested runtime jar: $jar"; exit 1; }
+          done
+          for driver in sqlite-jdbc- h2- postgresql- mariadb-java-client- mysql-connector-j-; do
+            if unzip -l "$FABRIC_JAR" | grep -q "META-INF/jars/$driver"; then
+              echo "JDBC drivers are provisioned at runtime and must not be bundled: $driver"; exit 1
+            fi
           done
 
       - name: Inspect NeoForge artifact Kotlin runtime (Jar-in-Jar)
@@ -62,10 +67,25 @@ jobs:
           NEOFORGE_JAR=$(ls versions/26.1.2-neoforge/build/libs/*-neoforge.jar)
           echo "Inspecting $NEOFORGE_JAR"
           unzip -p "$NEOFORGE_JAR" META-INF/neoforge.mods.toml | grep -q 'modLoader = "javafml"'
-          for module in kotlin-stdlib kotlinx-coroutines-core-jvm kotlinx-serialization-core-jvm kotlinx-serialization-json-jvm HikariCP sqlite-jdbc tomlkt adventure-platform-neoforge; do
+          for module in kotlin-stdlib kotlinx-coroutines-core-jvm kotlinx-serialization-core-jvm kotlinx-serialization-json-jvm HikariCP tomlkt adventure-platform-neoforge; do
             unzip -l "$NEOFORGE_JAR" | grep -q "META-INF/jars/$module" \
               || { echo "missing Jar-in-Jar: $module"; exit 1; }
           done
+          for driver in sqlite-jdbc- h2- postgresql- mariadb-java-client- mysql-connector-j-; do
+            if unzip -l "$NEOFORGE_JAR" | grep -q "META-INF/jars/$driver"; then
+              echo "JDBC drivers are provisioned at runtime and must not be bundled: $driver"; exit 1
+            fi
+          done
+
+      - name: Package offline JDBC driver bundle
+        run: ./gradlew --no-daemon packageDriverBundle --stacktrace
+
+      - name: Upload offline JDBC driver bundle
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: CellulosesZ-drivers
+          path: build/driver-bundle/*.zip
 
       - name: Upload test reports (always)
         if: always()

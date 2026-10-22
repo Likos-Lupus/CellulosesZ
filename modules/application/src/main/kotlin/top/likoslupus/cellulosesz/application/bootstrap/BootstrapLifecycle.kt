@@ -51,13 +51,20 @@ internal object BootstrapLifecycle {
 
             val bootstrap = StorageBootstrap(
                 BootstrapConfiguration.dataRoot(state.kernel),
+                BootstrapConfiguration.gameRoot(),
                 businessContributors
             )
-            val result = bootstrap.startBlocking(state.config.current.database)
+            val result = try {
+                bootstrap.startBlocking(state.config.current.database)
+            } catch (failure: Throwable) {
+                state.health.fail(failure.message ?: failure.javaClass.simpleName)
+                throw failure
+            }
             state.database.initialize(result.database)
             state.commandCooldowns.hydrateBlocking()
             state.health.storageType = result.descriptor.type.name.lowercase()
             state.health.storageEndpoint = result.descriptor.redactedEndpoint
+            state.health.driverSource = result.driverSource.name.lowercase()
             state.health.migration = result.migration
             state.health.transition(ApplicationHealth.State.STORAGE_READY)
 

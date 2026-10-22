@@ -158,6 +158,11 @@ TeleportIntent → preflight → optional delay → late destination resolve
 - Machine business state is stored through JDBC + HikariCP (`foundation.database.DatabaseRuntime`).
   Backends: SQLite (default, single-connection pool), H2, MySQL, MariaDB, PostgreSQL — each with its
   own independent `[database.<backend>]` TOML section; only `database.type` is initialized.
+- JDBC drivers are not packaged. The driver for the active backend is resolved at cold start from
+  the mod class loader, then from `<game dir>/cellulosesz/drivers/`, then (opt-in) from
+  `[database.driver] repository`, verified against a build-generated SHA-256 manifest and loaded in
+  an isolated class loader; see ADR 0024. A backend without a usable driver fails startup instead of
+  falling back, and the pending migration source's driver is provisioned as well.
 - Fixed `cz_*` tables carry a `namespace` column (never a per-namespace table name). Repositories
   own all SQL; commands and services never import `java.sql`, and only foundation knows Hikari.
 - The schema is created with `CREATE TABLE IF NOT EXISTS` and verified with a compatibility probe;
@@ -261,10 +266,19 @@ TeleportIntent → preflight → optional delay → late destination resolve
   `verifyCommandCatalog` and `verifyTranslations` tasks.
 - Loader cells compile only `platform/<loader>/` and flatten each internal module's compiled output
   into the distribution jar. Loader/API mods are never bundled. CellulosesZ's own runtime libraries
-  (HikariCP, tomlkt, the five JDBC drivers, and — on Fabric — fabric-permissions-api) ship as
-  controlled nested/Jar-in-Jar dependencies (never flattened), so SQLite native resources and
-  service metadata survive. NeoForge additionally ships the Kotlin runtime as Jar-in-Jar.
+  (HikariCP, tomlkt, commonmark, and — on Fabric — fabric-permissions-api) ship as controlled
+  nested/Jar-in-Jar dependencies (never flattened), so service metadata survives. NeoForge
+  additionally ships the Kotlin runtime as Jar-in-Jar. JDBC drivers are excluded on purpose: the
+  runtime provisioning manifest (`generateDriverManifest` →
+  `cellulosesz/drivers/drivers.properties`)
+  is injected into the foundation resources, and `inspectArtifacts` fails if a driver is nested
+  again.
 - Artifacts: `versions/<cell>/build/libs/cellulosesz-<version>+26.1.2-<loader>.jar`.
+- The same five drivers are published as one loader-independent archive,
+  `build/driver-bundle/cellulosesz-drivers-<version>.zip` (`packageDriverBundle`), so a host that
+  cannot reach Maven Central can be provisioned by unpacking it into
+  `<game dir>/cellulosesz/drivers/`. The archive is reproducible (fixed entry order and timestamps)
+  and its generated `README.txt` lists each file's SHA-256 and the backend it serves.
 
 ## Verification
 
@@ -274,4 +288,5 @@ TeleportIntent → preflight → optional delay → late destination resolve
 | `checkModuleDependencies` | Compile-time project-dependency allowlist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | `checkModules`            | Runs every module's `check` (including unit tests, incl. SQLite/H2 storage tests) once.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `chiseledBuild`           | Builds both loader distributions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `inspectArtifacts`        | Flattened classes present; loader/Minecraft classes absent; both cells carry the Hikari/sqlite/tomlkt nested runtimes; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `inspectArtifacts`        | Flattened classes present; loader/Minecraft classes absent; both cells carry the Hikari/tomlkt nested runtimes; no JDBC driver is nested; NeoForge Jar-in-Jar intact.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `packageDriverBundle`     | Builds the reproducible, loader-independent offline JDBC driver archive in `build/driver-bundle/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |

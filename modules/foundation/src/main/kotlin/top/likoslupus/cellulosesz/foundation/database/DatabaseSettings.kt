@@ -157,6 +157,8 @@ public data class DatabaseSettings(
     public val type: DatabaseType = DatabaseType.SQLITE,
     @SerialName("namespace")
     public val namespace: String = "default",
+    @SerialName("driver")
+    public val driver: DriverSettings = DriverSettings(),
     @SerialName("pool")
     public val pool: PoolSettings = PoolSettings(),
     @SerialName("sqlite")

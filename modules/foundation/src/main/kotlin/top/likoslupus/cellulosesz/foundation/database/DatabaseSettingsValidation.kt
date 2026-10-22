@@ -1,6 +1,8 @@
 package top.likoslupus.cellulosesz.foundation.database
 
 import top.likoslupus.cellulosesz.foundation.config.ValidationError
+import java.net.URI
+import java.nio.file.Path
 
 /** Structural validation for the whole `[database]` tree, independent of the active backend. */
 public object DatabaseSettingsValidation {
@@ -43,6 +45,7 @@ public object DatabaseSettingsValidation {
                 "database.pool",
                 settings.pool
             )
+            addDriver(settings.driver)
 
             if (settings.sqlite.path.isBlank()) {
                 add(
@@ -344,6 +347,55 @@ public object DatabaseSettingsValidation {
                 ValidationError(
                     "$path.ssl-mode",
                     "unsupported ssl mode"
+                )
+            )
+        }
+    }
+
+    private fun MutableList<ValidationError>.addDriver(driver: DriverSettings) {
+        if (driver.directory.isBlank()) {
+            add(
+                ValidationError(
+                    "database.driver.directory",
+                    "directory must not be blank"
+                )
+            )
+        } else {
+            val path = runCatching { Path.of(driver.directory) }.getOrNull()
+            if (path == null
+                || path.isAbsolute
+                || path.any { it.toString() == ".." }
+            ) {
+                add(
+                    ValidationError(
+                        "database.driver.directory",
+                        "directory must be a relative path without '..'"
+                    )
+                )
+            }
+        }
+        val scheme = runCatching { URI.create(driver.repository).scheme }.getOrNull()
+        if (scheme != "https" && scheme != "file") {
+            add(
+                ValidationError(
+                    "database.driver.repository",
+                    "repository must be an https or file URL"
+                )
+            )
+        }
+        if (driver.connectTimeoutMs <= 0) {
+            add(
+                ValidationError(
+                    "database.driver.connect-timeout-ms",
+                    "must be > 0"
+                )
+            )
+        }
+        if (driver.readTimeoutMs <= 0) {
+            add(
+                ValidationError(
+                    "database.driver.read-timeout-ms",
+                    "must be > 0"
                 )
             )
         }

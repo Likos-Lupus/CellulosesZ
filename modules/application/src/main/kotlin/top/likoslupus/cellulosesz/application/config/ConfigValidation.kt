@@ -125,6 +125,24 @@ internal object ConfigValidation {
                     candidate.database,
                     storageRoot()
                 ),
+            ) + validateDriverTransition(previous, candidate)
+        }
+
+    /**
+     * The driver is bound when the pool is created, so changing how it is obtained needs a restart
+     * even though the connection itself may not change.
+     */
+    fun validateDriverTransition(
+        previous: CellulosesConfig,
+        candidate: CellulosesConfig,
+    ): List<ValidationError> =
+        when (previous.database.driver) {
+            candidate.database.driver -> emptyList()
+            else -> listOf(
+                ValidationError(
+                    "database.driver",
+                    "driver settings changed; restart the server to apply",
+                )
             )
         }
 

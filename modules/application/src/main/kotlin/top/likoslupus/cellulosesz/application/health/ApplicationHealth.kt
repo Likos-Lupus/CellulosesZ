@@ -26,6 +26,7 @@ public class ApplicationHealth {
     @Volatile public var permissionBackend: String = "vanilla"
     @Volatile public var storageType: String? = null
     @Volatile public var storageEndpoint: String? = null
+    @Volatile public var driverSource: String? = null
     @Volatile public var migration: String = "NONE"
     @Volatile public var identityRecords: Int = 0
     @Volatile public var lastError: String? = null
@@ -57,6 +58,7 @@ public class ApplicationHealth {
             append(" permissionBackend=").append(permissionBackend)
             storageType?.let { append(" storage=").append(it) }
             storageEndpoint?.let { append(" storageEndpoint=").append(it) }
+            driverSource?.let { append(" driver=").append(it) }
             append(" migration=").append(migration)
             append(" identityRecords=").append(identityRecords)
             append(" commandGeneration=").append(commandGeneration)

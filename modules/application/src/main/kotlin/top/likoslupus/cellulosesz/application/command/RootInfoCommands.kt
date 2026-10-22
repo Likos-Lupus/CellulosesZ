@@ -99,6 +99,7 @@ private fun showStatus(
             field(MessageKey("core.status.permissions"), health.permissionBackend),
             field(MessageKey("core.status.storage"), health.storageType ?: "-"),
             field(MessageKey("core.status.endpoint"), health.storageEndpoint ?: "-"),
+            field(MessageKey("core.status.driver"), health.driverSource ?: "-"),
             field(MessageKey("core.status.identity"), health.identityRecords.toString()),
             field(MessageKey("core.status.migration"), health.migration),
         ),

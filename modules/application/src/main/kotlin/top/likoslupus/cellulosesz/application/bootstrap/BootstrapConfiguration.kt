@@ -147,6 +147,10 @@ internal object BootstrapConfiguration {
         Platform.getConfigFolder()
                 .resolve("cellulosesz")
 
+    /** The game/server directory; the driver cache lives underneath it, not under the configs. */
+    fun gameRoot(): Path =
+        Platform.getGameFolder()
+
     fun modVersion(): String =
         runCatching { Platform.getMod("cellulosesz").version }
                 .getOrDefault("unknown")
